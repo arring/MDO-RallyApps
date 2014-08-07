@@ -1,0 +1,16 @@
+<!-- copied from https://developer.mozilla.org/en-US/docs/Web/Guide/Performance/Using_web_workers -->
+<script type="text/js-worker">
+	var me = document.customMatrixRallyApp;
+	console.log('hi its a worker', me);
+	postMessage('woot');
+</script>
+<script>
+	//put this is launch function
+	var blob = new Blob(Array.prototype.map.call(document.querySelectorAll("script[type=\"text\/js-worker\"]"), 	
+		function (oScript) { return oScript.textContent; }),{type: "text/javascript"});
+
+	document.worker = new Worker(window.URL.createObjectURL(blob));
+	document.worker.onmessage = function (oEvent) {
+		console.log("Received message: ", oEvent);
+	};
+</script>
