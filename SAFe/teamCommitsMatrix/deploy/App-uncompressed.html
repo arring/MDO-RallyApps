@@ -259,13 +259,14 @@
 		});
 	},
 	
+	_reloadingStores: true,
+	
 	_reloadMatrixStores: function(){
 		var me = this;
 		if(me.MatrixFeatureStore) {
 			me.MatrixFeatureStore.load({
 				callback: function(){
-					if(me.featureTCAECache)
-						me.featureTCAECache = {};
+					me.featureTCAECache = {};
 					if(me.CustomMatrixStore)
 						me.CustomMatrixStore.load();
 				}

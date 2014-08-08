@@ -52,6 +52,8 @@
 				PUSName, //predecessor UserStory Name
 				PPID, //predecessor project ID
 				Desc, //description
+				REL, //release date
+				REL_S, //release start date
 				CP, //Checkpoint
 				Sup, //supported
 				A //assigned
@@ -65,8 +67,8 @@ Ext.define('CustomApp', {
     componentCls: 'app',
 	
 	layout: 'absolute',
-	height:2100,
-	width:1600,
+	height:1660,
+	width:1320,
 		
 	/****************************************************** SHOW ERROR MESSAGE ********************************************************/
 	_showError: function(text){
@@ -116,12 +118,12 @@ Ext.define('CustomApp', {
 		// so we have 2 different filters: for a team in a train, a team not in a train (DCD, HVE)
 		var filterString = Ext.create('Rally.data.wsapi.Filter', {
 			property:'Project.ObjectID',
-			value: me.ProjectRecord.data.ObjectID
+			value: me.ProjectRecord.get('ObjectID')
 		});
 		var filterString2, f2;
 		if(me.TrainRecord){
-			var teamName = me.ProjectRecord.data.Name;
-			var trainName = me.TrainRecord.data.Name.split(' ART ')[0];
+			var teamName = me.ProjectRecord.get('Name');
+			var trainName = me.TrainRecord.get('Name').split(' ART ')[0];
 			var trainNames = teamName.split(trainName)[1].split('-');
 			if(!trainNames[0]) trainNames[0] = trainName;
 			else trainNames.push(trainName); //accounts for alpha-bravo-charlie stuff
@@ -196,10 +198,10 @@ Ext.define('CustomApp', {
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART ');
+		var split = projectRecord.get('Name').split(' ART ');
 		if(split.length>1) cb(projectRecord);
 		else { 
-			var parent = projectRecord.data.Parent;
+			var parent = projectRecord.get('Parent');
 			if(!parent) cb();
 			else {
 				me._loadProject(parent, function(parentRecord){
@@ -215,7 +217,7 @@ Ext.define('CustomApp', {
 		var rs = me.ReleaseStore.getRecords();
 		if(!rs.length) return;
 		for(var i=0; i<rs.length; ++i){
-			if(new Date(rs[i].data.ReleaseDate) >= d && new Date(rs[i].data.ReleaseStartDate) <= d) 
+			if(new Date(rs[i].get('ReleaseDate')) >= d && new Date(rs[i].get('ReleaseStartDate')) <= d) 
 				return rs[i];
 		}
 		return rs[0]; //pick a random one then 
@@ -473,15 +475,20 @@ Ext.define('CustomApp', {
 	},
 			
 	_parseRisksData: function(){ 
-		var me = this;
+		var me = this;		
+		me.RisksCache = {};
 		var projectID = me.ProjectRecord.get('ObjectID');
+		
 		function getRisks(featureRecord){
-			var risks, riskString = featureRecord.get('c_Risks');
-			if(riskString === '') risks = {};
+			var FID = featureRecord.get('ObjectID');
+			var risks = featureRecord.get('c_Risks');
+			if(me.RisksCache[FID]) 
+				return me.RisksCache[FID];
 			else {
-				try{ risks = JSON.parse(riskString); }
+				try{ risks = JSON.parse(risks) || {}; }
 				catch(e) { risks = {}; }
 			}
+			me.RisksCache[FID] = risks;
 			return risks;
 		}
 		
@@ -631,63 +638,78 @@ Ext.define('CustomApp', {
 	
 	_getDependencies: function(userStoryRecord){
 		var me = this;
+		var USID = userStoryRecord.get('ObjectID');
+		if(me.DependenciesCache[USID])
+			return me.DependenciesCache[USID];
 		var dependencies, dependencyString = userStoryRecord.get('c_Dependencies');
 		if(dependencyString === '') dependencies = { Preds:{}, Succs:[] };
 		else {
 			try{ dependencies = JSON.parse(dependencyString); }
 			catch(e) { dependencies = { Preds:{}, Succs:[] }; }
-		}
+		}		
+		me.DependenciesCache[USID] = dependencies;
 		return dependencies;
 	},
 	
 	_buildDependenciesData: function(){	
 		var me = this;
+		
+		var startDate =	new Date(me.ReleaseRecord.get('ReleaseStartDate'));
+		var endDate =	new Date(me.ReleaseRecord.get('ReleaseDate'));
+		
+		me.DependenciesCache = {};
 		me.DependenciesReleaseUserStories = _.filter(me.DependenciesUserStoryStore.getRecords(), function(usr){
 			return usr.get('Release') && usr.get('Release').Name === me.ReleaseRecord.get('Name');
 		});
-		
+				
 		var predDepsList = [], succDepsList = [];
 		_.each(me.DependenciesUserStoryStore.getRecords(), function(userStoryRecord){ //load risks into custom Data Store
 			var deps = me._getDependencies(userStoryRecord);
 			var preds = deps.Preds;
 			var succs = deps.Succs;
-			for(var predDepID in preds){
-				var predDep = preds[predDepID];
-				predDepsList.push({
-					DependencyID: predDepID,
-					FormattedID: userStoryRecord.get('FormattedID'),
-					UserStoryName: userStoryRecord.get('Name'),
-					Description: predDep.Desc,
-					Checkpoint: predDep.CP,
-					Status: predDep.Sta,
-					Predecessors: predDep.Preds, //string array of (ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID)
-					Edited: false //not in pending edit mode
-				});
+			if(_.find(me.DependenciesReleaseUserStories, function(goodUS){ return goodUS.get('ObjectID')===userStoryRecord.get('ObjectID');})){
+				for(var predDepID in preds){
+					var predDep = preds[predDepID];
+					predDepsList.push({
+						DependencyID: predDepID,
+						FormattedID: userStoryRecord.get('FormattedID'),
+						UserStoryName: userStoryRecord.get('Name'),
+						Description: predDep.Desc,
+						Checkpoint: predDep.CP,
+						Status: predDep.Sta,
+						Predecessors: predDep.Preds, //string array of (ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID)
+						Edited: false //not in pending edit mode
+					});
+				}
 			}
 			for(var i=0; i<succs.length;++i){
 				var succDep = succs[i];
-				var FormattedID, UserStoryName;
-				if(succDep.A){ //if this was just placed on a random user story, or is assigned to this user story!
-					FormattedID = userStoryRecord.get('FormattedID');
-					UserStoryName = userStoryRecord.get('Name');
-				} 
-				else FormattedID = UserStoryName = '';
-					
-				succDepsList.push({
-					DependencyID: succDep.ID,
-					PredUserStoryName: succDep.PUSName,
-					PredFormattedID: succDep.PUSID,
-					PredProjectName: succDep.PPID,
-					Description: succDep.Desc,
-					Checkpoint: succDep.CP,
-					Supported: succDep.Sup,
-					Assigned: succDep.A,
-					FormattedID: FormattedID,
-					UserStoryName: UserStoryName,
-					_realFormattedID: userStoryRecord.get('FormattedID'),
-					_realUserStoryName: userStoryRecord.get('Name'),
-					Edited: false //not in pending edit mode
-				});
+				if(new Date(succDep.REL) >= startDate && new Date(succDep.REL_S) <= endDate){
+					var FormattedID, UserStoryName;
+					if(succDep.A){ //if this was just placed on a random user story, or is assigned to this user story!
+						FormattedID = userStoryRecord.get('FormattedID');
+						UserStoryName = userStoryRecord.get('Name');
+					} 
+					else FormattedID = UserStoryName = '';
+						
+					succDepsList.push({
+						DependencyID: succDep.ID,
+						PredUserStoryName: succDep.PUSName,
+						PredFormattedID: succDep.PUSID,
+						PredProjectName: succDep.PPID,
+						ReleaseDate: succDep.REL,
+						ReleaseStartDate: succDep.REL_S,
+						Description: succDep.Desc,
+						Checkpoint: succDep.CP,
+						Supported: succDep.Sup,
+						Assigned: succDep.A,
+						FormattedID: FormattedID,
+						UserStoryName: UserStoryName,
+						_realFormattedID: userStoryRecord.get('FormattedID'),
+						_realUserStoryName: userStoryRecord.get('Name'),
+						Edited: false //not in pending edit mode
+					});
+				}
 			}
 		});	
 		me.DependenciesParsedData = {Predecessors:predDepsList, Successors:succDepsList};
@@ -695,7 +717,26 @@ Ext.define('CustomApp', {
 	
 	/*************************************************** DEFINE MODELS ******************************************************/
 	_defineModels: function(){
-								
+			
+		Ext.define('IntelVelocity', {
+			extend: 'Ext.data.Model',
+			fields: [
+				{name: 'Name', type: 'string'},
+				{name: 'PlannedVelocity', type: 'string'},
+				{name: 'RealVelocity', type:'string'}
+			]
+		});
+		
+		Ext.define('IntelTeamCommits', {
+			extend: 'Ext.data.Model',
+			fields: [
+				{name: 'Name', type: 'string'},
+				{name: 'TeamCommits', type: 'string'},
+				{name: 'ObjectID', type: 'string'},
+				{name: 'FormattedID', type:'string'}
+			]
+		});
+		
 		Ext.define('IntelRisk', {
 			extend: 'Ext.data.Model',
 			fields: [
@@ -746,6 +787,8 @@ Ext.define('CustomApp', {
 				{name: 'PredProjectName', type: 'string'}, //of predecessor team
 				{name: 'UserStoryName', type: 'string'}, //can be null!!!!!!!!!!!!
 				{name: 'FormattedID',  type: 'string'},  //CAN BE NULL!!!!!!!!!!!!
+				{name: 'ReleaseStartDate',  type: 'string'}, 
+				{name: 'ReleaseDate',  type: 'string'}, 
 				{name: '_realUserStoryName', type: 'string'}, 
 				{name: '_realFormattedID',  type: 'string'},  
 				{name: 'Description', type: 'string'}, 
@@ -830,18 +873,12 @@ Ext.define('CustomApp', {
 	
 	_reloadTeamCommitsStores: function(){
 		var me = this;
-		if(me.TeamCommitsStoryStore && me._loadTeamCommitsStores) {
-			me.TeamCommitsStoryStore.load({ 
+		if(me.TeamCommitsFeatureStore && me._loadTeamCommitsStores) {
+			me.TeamCommitsFeatureStore.load({ 
 				callback: function(records, operation){
-					if(me.TeamCommitsFeatureStore && me._loadTeamCommitsStores) {
-						me.TeamCommitsFeatureStore.load({ 
-							callback: function(records, operation){
-								if(!me._isEditing){
-									if(me.CustomTeamCommitsStore && me._loadTeamCommitsStores)
-										me.CustomTeamCommitsStore.load();
-								}
-							}
-						});
+					if(!me._isEditing){
+						if(me.CustomTeamCommitsStore && me._loadTeamCommitsStores)
+							me.CustomTeamCommitsStore.load();
 					}
 				}
 			});
@@ -854,7 +891,6 @@ Ext.define('CustomApp', {
 			me.RisksFeatureStore.load({ 
 				callback: function(records, operation){
 					me._parseRisksData();
-					me.RisksCache = {};
 					if(!me._isEditing){
 						if(me.CustomRisksStore && me._loadRisksStores)					
 							me.CustomRisksStore.load();
@@ -927,7 +963,7 @@ Ext.define('CustomApp', {
 		setInterval(function(){ me._reloadVelocityStores();}, 10000); 
 		setInterval(function(){ me._reloadTeamCommitsStores();}, 10000); 
 		setInterval(function(){ me._reloadRisksStores();}, 10000); 
-		setInterval(function(){ me._reloadDependenciesStores();}, 10000); 
+		setInterval(function(){ me._reloadDependenciesStores();}, 15000); 
 		me._loadModels(function(){
 			me._loadValidProjects(function(){
 				var scopeProject = me.getContext().getProject();
@@ -980,8 +1016,8 @@ Ext.define('CustomApp', {
 				select: function(combo, records){
 					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
 					me.ReleaseRecord = me.ReleaseStore.findRecord('Name', records[0].get('Name'));						
-					me._reloadEverything();
-				}
+					setTimeout(function(){me._reloadEverything();}, 0);
+				}	
 			}
 		});
 	},
@@ -1009,10 +1045,14 @@ Ext.define('CustomApp', {
 			featureRecord.save();
 		}
 		
-		function getStoryCount(featureObjectID){	
+		me.TeamCommitsHash = {};	
+		function getStoryCount(FID){	
+			if(me.TeamCommitsHash[FID]) 
+				return me.TeamCommitsHash[FID];
 			var count = 0;
 			var uss = me.TeamCommitsStoryStore.getRecords();
-			uss.forEach(function(us){ if(us.get('Feature') && us.get('Feature').ObjectID == featureObjectID) ++count; });
+			uss.forEach(function(us){ if(us.get('Feature') && us.get('Feature').ObjectID == FID) ++count; });
+			me.TeamCommitsHash[FID] = count;
 			return count;
 		}
 		
@@ -1025,8 +1065,9 @@ Ext.define('CustomApp', {
 			};
 		});		
 
-		me.CustomTeamCommitsStore = Ext.create('Rally.data.custom.Store', {
+		me.CustomTeamCommitsStore = Ext.create('Ext.data.Store', {
 			data: customTeamCommitsRecords,
+			model:'IntelTeamCommits',
 			autoSync:true,
 			limit:Infinity,
 			proxy: {
@@ -1042,7 +1083,7 @@ Ext.define('CustomApp', {
 							var newVal = getTeamCommit(featureRecord);
 							if(newVal != teamCommitsRecord.get('TeamCommits')){
 								teamCommitsRecord.set('TeamCommits', newVal);
-								console.log('updated teamCommits record', teamCommitsRecord, featureRecord);
+								teamCommitsRecord.commit();
 							}
 						}
 					});
@@ -1056,17 +1097,20 @@ Ext.define('CustomApp', {
 				dataIndex:'FormattedID',
 				width:80,
 				editor:false,
-				sortable:true
+				sortable:true,
+				resizable:false
 			},{
 				text:'Feature', 
 				dataIndex:'Name',
-				width:240,
-				editor:false
+				width:340,
+				editor:false,
+				resizable:false
 			},{
 				text:'Stories', 
 				dataIndex:'ObjectID',
 				sortable:true, 
 				editor:false,
+				resizable:false,
 				doSort: function(direction){
 					var ds = this.up('grid').getStore();
 					var field = this.getSortParam();
@@ -1128,7 +1172,7 @@ Ext.define('CustomApp', {
 		me.TeamCommitsGrid = me.add({
 			xtype: 'rallygrid',
             title: "Team Commits",
-			width: 580,
+			width: 680,
 			height:300,
 			x:0, y:50,
 			scroll:'vertical',
@@ -1200,23 +1244,46 @@ Ext.define('CustomApp', {
             return us.get("Iteration").Name;
         });
         
-        var iterationGroupTotals = _.sortBy(_.map(_.keys(iterationGroups), function(key) {
+        var iterationGroupTotals = _.sortBy(_.map(me.VelocityIterationStore.getRecords(), function(iteration) {
+			var iName = iteration.get('Name');
             return {    
-                Name:key, 
-                PlannedVelocity: (iterationGroups[key][0].get('Iteration').PlannedVelocity || 0),
-                RealVelocity:_.reduce(iterationGroups[key], function(sum, us) {
+                Name:iName, 
+                PlannedVelocity: iteration.get('PlannedVelocity') || 0,
+                RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) {
                     return sum + us.get("PlanEstimate");
                 }, 0)
             };
         }), 'Name');
-		
+
+        me.CustomVelocityStore = Ext.create('Ext.data.Store', {
+			data: iterationGroupTotals,
+			model:'IntelVelocity',
+			autoSync:true,
+			limit:Infinity,
+			proxy: {
+				type:'intelcustomproxy',
+				keyField:'Name'
+			},
+			listeners:{
+				load: function(customVelocityStore, velocityRecords){
+					console.log('syncing velocity with current iterations', velocityRecords, me.VelocityIterationStore.getRecords());
+					velocityRecords.forEach(function(velocityRecord){
+						var iterationName = velocityRecord.get('Name');
+						var iteration = me.VelocityIterationStore.findRecord('Name', iterationName, 0, false, true, true);
+						velocityRecord.set('PlannedVelocity', iteration.get('PlannedVelocity') || 0);
+						velocityRecord.commit();
+					});
+				}
+			}
+		});
+				
         var columnCfgs = [
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', //the editable one
-				width:150,
+				width:310,
 				editor:'textfield',
-				resizable:true,
+				resizable:false,
 				sortable:true
 			},{
 				text: 'Estimated',
@@ -1237,33 +1304,13 @@ Ext.define('CustomApp', {
 				sortable:true
 			}
 		];
-        me.CustomVelocityStore = Ext.create('Rally.data.custom.Store', {
-			data: iterationGroupTotals,
-			autoSync:true,
-			limit:Infinity,
-			proxy: {
-				type:'intelcustomproxy',
-				keyField:'Name'
-			},
-			listeners:{
-				load: function(customVelocityStore, velocityRecords){
-					console.log('syncing velocity with current iterations', velocityRecords, me.VelocityIterationStore.getRecords());
-					velocityRecords.forEach(function(velocityRecord){
-						var iterationName = velocityRecord.data.Name;
-						var iteration = me.VelocityIterationStore.findRecord('Name', iterationName, 0, false, true, true);
-						velocityRecord.data.PlannedVelocity = iteration.get('PlannedVelocity') || 0;
-						velocityRecord.commit();
-					});
-				}
-			}
-		});
-		
         me.VelocityGrid = me.add({
             xtype: 'rallygrid',
             title: "Velocity",
+			scroll:'vertical',
+			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
-			x:680,
-			y:50,
+			x:780, y:50,
             showPagingToolbar: false,
 			showRowActionsColumn:false,
             viewConfig: {
@@ -1287,11 +1334,10 @@ Ext.define('CustomApp', {
 					me._isEditing = false;
 					if(!value || (value === originalValue)) return;
 					value = value*1 || 0; //value*1 || null to remove the 0's from teams
-					var iterationName = velocityRecord.data.Name;
+					var iterationName = velocityRecord.get('Name');
 					var iteration = me.VelocityIterationStore.findRecord('Name', iterationName, 0, false, true, true);
 					iteration.set('PlannedVelocity', value);
 					iteration.save();
-					velocityRecord.set('PlannedVelocity', value);
 				}
 			},
 			plugins: [
@@ -1347,11 +1393,9 @@ Ext.define('CustomApp', {
 			}
 		}
 		
-		me.RisksCache = {};
-		
 		function getRisks(featureRecord){
-			var FID = featureRecord.data.ObjectID;
-			var risks = featureRecord.data.c_Risks;
+			var FID = featureRecord.get('ObjectID');
+			var risks = featureRecord.get('c_Risks');
 			if(me.RisksCache[FID]) 
 				return me.RisksCache[FID];
 			else {
@@ -1363,7 +1407,7 @@ Ext.define('CustomApp', {
 		}
 		
 		function removeRisk(featureRecord, riskData){ 
-			var FID = featureRecord.data.ObjectID;
+			var FID = featureRecord.get('ObjectID');
 			var risks = getRisks(featureRecord);
 			if(risks[projectID]){
 				delete risks[projectID][riskData.RiskID];
@@ -1375,7 +1419,7 @@ Ext.define('CustomApp', {
 		}
 		
 		function addRisk(featureRecord, riskData){
-			var FID = featureRecord.data.ObjectID;
+			var FID = featureRecord.get('ObjectID');
 			var risks = getRisks(featureRecord);
 			if(!risks[projectID])
 				risks[projectID] = {};
@@ -1401,7 +1445,7 @@ Ext.define('CustomApp', {
 		
 		/*************************************************************************************************************/
 			
-		me.CustomRisksStore = Ext.create('Rally.data.custom.Store', { 
+		me.CustomRisksStore = Ext.create('Ext.data.Store', { 
 			data: me.RisksParsedData,
 			autoSync:true,
 			model:'IntelRisk',
@@ -1423,7 +1467,8 @@ Ext.define('CustomApp', {
 						else if(dirtyType == 'Deleted') // the currentRisksRecord was deleted by someone else, and we arent editing it
 							customRisksStore.remove(currentRisksRecord);
 						else { //we are not editing it and it still exists, so update current copy
-							currentRisksRecord.data = realRiskData;
+							for(var key in realRiskData)
+								currentRisksRecord.set(key, realRiskData[key]);
 							currentRisksRecord.commit();
 						}
 					}
@@ -1503,7 +1548,7 @@ Ext.define('CustomApp', {
 				text:'Risk Description', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
-				width:200,
+				width:195,
 				editor: 'textfield',
 				resizable:false,
 				sortable:true,
@@ -1625,10 +1670,19 @@ Ext.define('CustomApp', {
 					return ret;
 				},
 				handler: function(grid, row, col){
-					var store = grid.getStore();
-					var riskRecord = store.getAt(row);
+					if(!me._loadRisksStores) return;
+					var risksStore = grid.getStore();
+					var riskRecord = risksStore.getAt(row);
 					riskRecord.set('Edited', false);
-					store.load();
+					riskRecord.commit();
+					me._loadRisksStores = false;
+					grid.setLoading(true);
+					risksStore.load({
+						callback: function(){
+							me._loadRisksStores = true;
+							grid.setLoading(false);
+						}
+					});
 				}
 			},{
 				text:'',
@@ -1709,12 +1763,17 @@ Ext.define('CustomApp', {
 								addRisk(newFeatureRecord, riskRecordData);
 							
 							riskRecord.set('Edited', false);
+							riskRecord.commit();
 							
 							me.RisksFeatureStore.load({
 								callback: function(records, operation){
 									me._parseRisksData();
-									me._loadRisksStores = true;
-									me.RisksGrid.setLoading(false);
+									me.CustomRisksStore.load({
+										callback: function(){
+											me._loadRisksStores = true;
+											me.RisksGrid.setLoading(false);
+										}
+									});
 								}
 							});	
 						}
@@ -1781,8 +1840,12 @@ Ext.define('CustomApp', {
 								me.RisksFeatureStore.load({
 									callback: function(records, operation){
 										me._parseRisksData();
-										me._loadRisksStores = true;
-										me.RisksGrid.setLoading(false);
+										me.CustomRisksStore.load({
+											callback: function(){
+												me._loadRisksStores = true;
+												me.RisksGrid.setLoading(false);
+											}
+										});
 									}
 								});
 							}
@@ -1802,7 +1865,8 @@ Ext.define('CustomApp', {
 			listeners:{
 				click: function(){
 					var randomFeature = me.RisksFeatureStore.first();
-					if(me.CustomRisksStore) {
+					if(!randomFeature) alert('No Features for this Release!');
+					else if(me.CustomRisksStore) {
 						me.CustomRisksStore.suspendEvents();
 						var model = Ext.create('IntelRisk', {
 							RiskID: (new Date() * 1) + '' + (Math.random() * 10000000),
@@ -1830,7 +1894,7 @@ Ext.define('CustomApp', {
 			height:300,
 			x:0,
 			y:420,
-			scroll:'both',
+			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			plugins: [
 				Ext.create('Ext.grid.plugin.CellEditing', {
@@ -1840,7 +1904,7 @@ Ext.define('CustomApp', {
 			viewConfig:{
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-30px';}
+				getRowClass: function(){ return 'intel-row-35px';}
 			},
 			listeners: {
 				beforeedit: function(){
@@ -1914,8 +1978,10 @@ Ext.define('CustomApp', {
 			else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
 			return weeks;
 		}
+		var workweeks = getWorkweeks();
+		
+		/******************************** RISK PARSING/MANIPULATION FUNCTIONS ***************************/
 
-		/******************************** RISK PARSING/MANIPULATION FUNCTIONS ***************************/				
 		function removeDepFromList(dependencyID, dependencyList){ 
 			for(var i = 0; i<dependencyList.length; ++i){
 				if(dependencyList[i].DependencyID == dependencyID) {
@@ -1925,19 +1991,23 @@ Ext.define('CustomApp', {
 		}
 	
 		function removePredDep(userStoryRecord, predDepData){
+			var USID = userStoryRecord.get('ObjectID');
 			var dependencies = me._getDependencies(userStoryRecord);
 			delete dependencies.Preds[predDepData.DependencyID];
+			me.DependenciesCache[USID] = dependencies;
 			userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 			userStoryRecord.save();
 			console.log('removed pred from userStory:', userStoryRecord, predDepData, dependencies);
 		}
 		
 		function removeSuccDep(userStoryRecord, succDepData){
+			var USID = userStoryRecord.get('ObjectID');
 			var dependencies = me._getDependencies(userStoryRecord);
 			var succs = dependencies.Succs;
 			for(var i=0; i<succs.length; ++i){
 				if(succs[i].ID === succDepData.DependencyID){					
 					succs.splice(i, 1);
+					me.DependenciesCache[USID] = dependencies;
 					userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 					userStoryRecord.save();
 					console.log('removed succ from userStory:', userStoryRecord, succDepData, dependencies);
@@ -1947,6 +2017,7 @@ Ext.define('CustomApp', {
 		}
 
 		function addPredDep(userStoryRecord, predDepData){ 
+			var USID = userStoryRecord.get('ObjectID');
 			var dependencies = me._getDependencies(userStoryRecord);
 			var copy = {
 				Desc: predDepData.Description,
@@ -1955,12 +2026,14 @@ Ext.define('CustomApp', {
 				Preds: predDepData.Predecessors
 			};
 			dependencies.Preds[predDepData.DependencyID] = copy;
+			me.DependenciesCache[USID] = dependencies;
 			userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 			userStoryRecord.save();
 			console.log('added predecessor to userStory:', userStoryRecord, predDepData, dependencies);
 		}
 		
 		function addSuccDep(userStoryRecord, succDepData){ //overwrites if needed, else appends to list
+			var USID = userStoryRecord.get('ObjectID');
 			var dependencies = me._getDependencies(userStoryRecord);
 			var succs = dependencies.Succs;
 			var copy = {
@@ -1971,7 +2044,9 @@ Ext.define('CustomApp', {
 				Desc: succDepData.Description,
 				CP: succDepData.Checkpoint,
 				Sup: succDepData.Supported,
-				A: succDepData.Assigned
+				A: succDepData.Assigned,
+				REL: succDepData.ReleaseDate,
+				REL_S: succDepData.ReleaseStartDate
 			};
 			var replaced = false;
 			for(var i = 0; i<succs.length; ++i){
@@ -1982,6 +2057,7 @@ Ext.define('CustomApp', {
 				}
 			}
 			if(!replaced) succs.push(copy);
+			me.DependenciesCache[USID] = dependencies;
 			userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 			userStoryRecord.save();
 			console.log('added succ to userStory:', userStoryRecord, succDepData, dependencies);
@@ -1993,7 +2069,7 @@ Ext.define('CustomApp', {
 				if(predDepRecord.get) predecessors = JSON.parse(predDepRecord.get('Predecessors')) || []; 
 				else  predecessors = JSON.parse(predDepRecord.Predecessors) || []; 
 			}
-			catch(e){ predecessors = []; }		
+			catch(e){ predecessors = []; }			
 			return predecessors;
 		}
 	
@@ -2031,7 +2107,8 @@ Ext.define('CustomApp', {
 						else if(dirtyType == 'Deleted') // the depRec was deleted by someone else, and we arent editing it
 							customPredDepStore.remove(depRec);
 						else {
-							depRec.data = realDep;
+							for(var key in realDep)
+								depRec.set(key, realDep[key]);
 							depRec.commit();
 						}
 					}
@@ -2085,7 +2162,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
-				width:160,
+				width:155,
 				resizable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
@@ -2141,7 +2218,7 @@ Ext.define('CustomApp', {
 					width:80,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Week'],
-						data: getWorkweeks()
+						data: workweeks
 					}),
 					editable: false,
 					displayField: 'Week',
@@ -2160,28 +2237,28 @@ Ext.define('CustomApp', {
 				items: [
 					{
 						xtype:'text',
-						width:100,
+						width:90,
 						text:''
 					},{
 						xtype:'text',
-						width:200,
+						width:160,
 						text:'Team Name'
 					},{
 						xtype:'text',
-						width:80,
+						width:60,
 						text:'Supported'
 					},{
 						xtype:'text',
-						width:80,
+						width:60,
 						text:'US#'
 					},{
 						xtype:'text',
-						width:160,
+						width:130,
 						text:'UserStory'
 					}
 				],
 				dataIndex:'Predecessors',
-				width:700,
+				width:580,
 				resizable:false,
 				sortable:false,
 				renderer: function (val, meta, predDepRecord){
@@ -2190,7 +2267,6 @@ Ext.define('CustomApp', {
 						var predecessors = getPredecessorsObject(predDepRecord);				
 						var el = Ext.get(id);
 						if(el && el.isVisible()){
-							var panel;
 							var depID = predDepRecord.get('DependencyID');
 							//set up the store and add a record if needed
 							delete me.PredDepTeamStores[depID]; //delete store every time or else memory leak with event handlers
@@ -2246,7 +2322,7 @@ Ext.define('CustomApp', {
 							var teamColumnCfgs = [
 								{
 									dataIndex:'PID',
-									width:200,
+									width:160,
 									resizable:false,
 									renderer: function(val, meta, predDepRecord){
 										var projectRecord = _.find(me.ValidProjects, function(projectRecord){
@@ -2287,19 +2363,17 @@ Ext.define('CustomApp', {
 									}
 								},{
 									dataIndex:'Sup',
-									width:80,
+									width:50,
 									resizable:false,
 									editor: false,
 									renderer: function(val, meta, teamDepRecord){
-										if(!!teamDepRecord.get('USID')) {
-											if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
-											else meta.tdCls = 'intel-supported-cell';
-										}
+										if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
+										else meta.tdCls = 'intel-supported-cell';
 										return val;
 									}
 								},{
 									dataIndex:'USID',
-									width:80,
+									width:60,
 									resizable:false,
 									editor: false,
 									renderer: function(val, meta, depTeamRecord){
@@ -2308,7 +2382,7 @@ Ext.define('CustomApp', {
 									}
 								},{
 									dataIndex:'USName',
-									width:160,
+									width:130,
 									resizable:false,
 									editor: false,
 									renderer: function(val, meta, depTeamRecord){
@@ -2318,37 +2392,51 @@ Ext.define('CustomApp', {
 								},{
 									width:80,
 									resizable:false,
-									renderer: function (val, meta, depTeamRecord, row, col, store){
-										var id = Ext.id();
-										Ext.defer(function () {
-											var el = Ext.get(id);
-											if(el && el.isVisible()){
-												Ext.widget('button', {
-													renderTo: id,
-													text: 'Delete',
-													width: 70,
-													handler: function () {														
-														var predecessors = getPredecessorsObject(predDepRecord);
-														for(var i=0; i<predecessors.length; ++i)
-															if(predecessors[i].TID === depTeamRecord.get('TID')){
-																predecessors.splice(i, 1); break; }
-														predDepRecord.set('Predecessors', JSON.stringify(predecessors, null, '\t'));
-														me.PredDepTeamStores[depID].remove(depTeamRecord);	
-														predDepRecord.set('Edited', true);
-													}
-												});						
-												//update the grid height here because button changes row size when rendered
-												if(panel && store.findExact('TID', depTeamRecord.get('TID')) === (store.count()-1)) {
-													var grid = panel.down('rallygrid');
-													grid.setHeight(_.reduce(grid.items, function(sum, i){ return sum + i.getHeight(); }));
-												}
+									xtype:'actioncolumn',
+									defaultRenderer: function(v, meta, depTeamRecord, rowIdx, colIdx, store, view){
+										//most of this copied from the Extjs source...
+										var _me_col = this,
+											prefix = Ext.baseCSSPrefix,
+											scope = _me_col.origScope || _me_col,
+											items = _me_col.items,
+											len = items.length,
+											i = 0,
+											item, ret, disabled, tooltip;
+										ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+										meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+										for (; i < len; i++) {
+											item = items[i];
+											disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, depTeamRecord) : false);
+											tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+											if (!item.hasActionConfiguration) {
+												item.stopSelection = _me_col.stopSelection;
+												item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+												item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+												item.hasActionConfiguration = true;
 											}
-										}, 5);
-										return Ext.String.format('<div id="{0}"></div>', id);
+											ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Delete</div>', 
+												prefix,
+												i,
+												(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+											);
+										}
+										return ret;
+									},
+									handler: function(grid, row, col){
+										var store = grid.getStore();
+										var depTeamRecord = store.getAt(row);											
+										var predecessors = getPredecessorsObject(predDepRecord);
+										for(var i=0; i<predecessors.length; ++i)
+											if(predecessors[i].TID === depTeamRecord.get('TID')){
+												predecessors.splice(i, 1); break; }
+										predDepRecord.set('Predecessors', JSON.stringify(predecessors, null, '\t'));
+										me.PredDepTeamStores[depID].remove(depTeamRecord);	
+										predDepRecord.set('Edited', true);
+										predDepRecord.commit();
 									}
 								}
 							];
-							panel = Ext.widget('panel', {
+							Ext.widget('container', {
 								renderTo: id,
 								layout:'hbox',
 								pack:'start',
@@ -2393,7 +2481,8 @@ Ext.define('CustomApp', {
 										viewConfig: {
 											stripeRows:false,
 											getRowClass: function(teamDepRecord, index, rowParams, store){
-												if(!teamDepRecord.get('PID')) return 'intel-no-team-dep-selected';
+												if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-no-team-dep-selected';
+												else return 'intel-row-35px';
 											}
 										},
 										listeners: {
@@ -2479,345 +2568,398 @@ Ext.define('CustomApp', {
 			},{
 				text:'',
 				width:80,
+				xtype:'actioncolumn',
 				resizable:false,
-				renderer: function (val, meta, predDepRecord, r, c, s){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var realPredDepData = 
-							removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
-						var dirtyType = getDirtyType(predDepRecord, realPredDepData);
-						if(dirtyType === 'Edited')	dirtyType = 'Undo';
-						else						dirtyType = '';
-						var el = Ext.get(id);
-						if(el && el.isVisible() && dirtyType.length){
-							Ext.widget('button', {
-								renderTo: id,
-								text: dirtyType,
-								width: 70,
-								handler: function () {
-									predDepRecord.set('Edited', false);
-									s.load();
-								}
-							});
+				defaultRenderer: function(v, meta, predDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					var realDepData = removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
+					var dirtyType = getDirtyType(predDepRecord, realDepData);
+					if(dirtyType !== 'Edited') return ''; //don't render it!
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, predDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
 						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Undo</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var predDepRecord = store.getAt(row);
+					predDepRecord.set('Edited', false);
+					predDepRecord.commit();
+					me._loadDependenciesStores = false;
+					grid.setLoading(true);
+					store.load({
+						callback: function(){
+							me._loadDependenciesStores = true;
+							grid.setLoading(false);
+						}
+					});
 				}
 			},{
 				text:'',
 				width:80,
+				xtype:'actioncolumn',
 				resizable:false,
-				renderer: function (val, meta, predDepRecord){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var realPredDepData = 
-							removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
-						var dirtyType = getDirtyType(predDepRecord, realPredDepData);
-						if(dirtyType === 'New')				dirtyType = 'Save';
-						else if(dirtyType === 'Edited')		dirtyType = 'Resave';
-						else								dirtyType = '';
-						var el = Ext.get(id);
-						if(el && el.isVisible() && dirtyType.length){
-							Ext.widget('button', {
-								renderTo: id,
-								text: dirtyType,
-								width: 70,
-								handler: function () {
-									if(!me._loadDependenciesStores) return;
-									//validate fields first
-									if(predDepRecord.get('Description') === ''){
-										alert('Cannot Save: Description is empty'); return; }
-									if(predDepRecord.get('Checkpoint') === ''){
-										alert('Cannot Save: Checkpoint is empty'); return; }
-									var predecessors = getPredecessorsObject(predDepRecord);
-									if(predecessors.length === 0){
-										alert('Cannot Save: Must specify a team you depend on'); return; }
-									for(var i = 0;i<predecessors.length;++i)
-										if(predecessors[i].PID === ''){
-											alert('Cannot Save: All Team Names must be valid'); return; }
+				defaultRenderer: function(v, meta, predDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					var realDepData = removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
+					var dirtyType = getDirtyType(predDepRecord, realDepData);
+					if(dirtyType === 'New') dirtyType = 'Save';
+					else if(dirtyType === 'Edited') dirtyType = 'Resave';
+					else return ''; //don't render it!
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, predDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
+						}
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">{3}</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || '')),
+							dirtyType
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var predDepRecord = store.getAt(row);
+					if(!me._loadDependenciesStores) return;
+					//validate fields first
+					if(predDepRecord.get('Description') === ''){
+						alert('Cannot Save: Description is empty'); return; }
+					if(predDepRecord.get('Checkpoint') === ''){
+						alert('Cannot Save: Checkpoint is empty'); return; }
+					var predecessors = getPredecessorsObject(predDepRecord);
+					if(predecessors.length === 0){
+						alert('Cannot Save: Must specify a team you depend on'); return; }
+					for(var i = 0;i<predecessors.length;++i)
+						if(predecessors[i].PID === ''){
+							alert('Cannot Save: All Team Names must be valid'); return; }
+					
+					me._loadDependenciesStores = false; 
+					me.PredDepGrid.setLoading(true);
+					me.DependenciesUserStoryStore.load({
+						callback: function(userStoryRecords, operation){
+							me._buildDependenciesData();
+							var predDepData = predDepRecord.data;
+							var realPredDeps = me.DependenciesParsedData.Predecessors.slice(0);
+							var realDepData = removeDepFromList(predDepData.DependencyID, realPredDeps);
+							
+							/***************************** UPDATE THE PRED USER STORIES *********************/
+							var addedTeamDeps = [], removedTeamDeps = [], updatedTeamDeps = [];
+							var localPredTeams = getPredecessorsObject(predDepData),
+								realPredTeams  = getPredecessorsObject(realDepData);
+							Outer:
+							for(var i=0;i<localPredTeams.length;++i){
+								for(var j=0;j<realPredTeams.length;++j){
+									if(localPredTeams[i].TID === realPredTeams[j].TID){
+										updatedTeamDeps.push(realPredTeams.splice(j,1)[0]);
+										continue Outer;
+									}
+								}
+								addedTeamDeps.push(localPredTeams[i]); //teams we just added
+							}
+							removedTeamDeps = realPredTeams; //teams that we just removed			
+							
+							/** we have to do it this way, cuz added deps need to be assigned user stories first **/
+							var addedTeamDepsFinished = -1; 
+							var addedTeamDepsCallbacks = [];
+							var addedTeamDepsDone = function(){
+								if(++addedTeamDepsFinished === addedTeamDeps.length){
 									
-									me._loadDependenciesStores = false; 
-									me.PredDepGrid.setLoading(true);
-									me.DependenciesUserStoryStore.load({
-										callback: function(userStoryRecords, operation){
-											if(operation.wasSuccessful()){
-												me._buildDependenciesData();
-												var predDepData = predDepRecord.data;
-												var realPredDeps = me.DependenciesParsedData.Predecessors.slice(0);
-												var realDepData = removeDepFromList(predDepData.DependencyID, realPredDeps);
-												
-												/***************************** UPDATE THE PRED USER STORIES *********************/
-												var addedTeamDeps = [], removedTeamDeps = [], updatedTeamDeps = [];
-												var localPredTeams = getPredecessorsObject(predDepData),
-													realPredTeams  = getPredecessorsObject(realDepData);
-												Outer:
-												for(var i=0;i<localPredTeams.length;++i){
-													for(var j=0;j<realPredTeams.length;++j){
-														if(localPredTeams[i].TID === realPredTeams[j].TID){
-															updatedTeamDeps.push(realPredTeams.splice(j,1)[0]);
-															continue Outer;
-														}
-													}
-													addedTeamDeps.push(localPredTeams[i]); //teams we just added
+									var updatedTeamDepsFinished = -1; 
+									var updatedTeamDepsCallbacks = [];
+									var updatedTeamDepsDone = function(){
+										if(++updatedTeamDepsFinished === updatedTeamDeps.length){	
+										
+											/** 3) remove removed teams */
+											removedTeamDeps.forEach(function(teamDepData){ //execute the removed teams now
+												var project = _.find(me.ValidProjects, function(projectRecord){
+													return projectRecord.get('ObjectID') == teamDepData.PID;
+												});
+												me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
+													if(!us) return; // looks as if the userStory doesn't exist. so we ignore it
+													removeSuccDep(us, predDepData); //using predDepData cuz we only need DependencyID
+												});
+											});
+											addedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the added teams now 
+											updatedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the updated teams now 
+									
+											predDepData.Predecessors = JSON.stringify(localPredTeams, null, '\t');
+											//also, move to new user story if needed
+											if(realDepData && (realDepData.FormattedID != predDepData.FormattedID)){
+												console.log('moving predDep to new user story', realDepData.FormattedID, predDepData.FormattedID);
+												//we must remove risk from old userStory and add it to new userStory
+												var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData.FormattedID, 0, false, true, true);
+												if(oldUserStoryRecord) 
+													removePredDep(oldUserStoryRecord, realDepData);
+											}
+											var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', predDepData.FormattedID, 0, false, true, true);
+											if(newUserStoryRecord) 
+												addPredDep(newUserStoryRecord, predDepData);
+											
+											predDepRecord.set('Edited', false);
+											
+											me.DependenciesUserStoryStore.load({
+												callback: function(userStoryRecords, operation){
+													me._buildDependenciesData();
+													me._loadDependenciesStores = true; 
+													me.PredDepGrid.setLoading(false);
 												}
-												removedTeamDeps = realPredTeams; //teams that we just removed			
-												
-												/** we have to do it this way, cuz added deps need to be assigned user stories first **/
-												var addedTeamDepsFinished = -1; 
-												var addedTeamDepsCallbacks = [];
-												var addedTeamDepsDone = function(){
-													if(++addedTeamDepsFinished === addedTeamDeps.length){
-														
-														var updatedTeamDepsFinished = -1; 
-														var updatedTeamDepsCallbacks = [];
-														var updatedTeamDepsDone = function(){
-															if(++updatedTeamDepsFinished === updatedTeamDeps.length){	
-															
-																/** 3) remove removed teams */
-																removedTeamDeps.forEach(function(teamDepData){ //execute the removed teams now
-																	var project = _.find(me.ValidProjects, function(projectRecord){
-																		return projectRecord.get('ObjectID') == teamDepData.PID;
-																	});
-																	me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
-																		if(!us) return; // looks as if the userStory doesn't exist. so we ignore it
-																		removeSuccDep(us, predDepData); //using predDepData cuz we only need DependencyID
-																	});
-																});
-																addedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the added teams now 
-																updatedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the updated teams now 
-														
-																predDepData.Predecessors = JSON.stringify(localPredTeams, null, '\t');
-																//also, move to new user story if needed
-																if(realDepData && (realDepData.FormattedID != predDepData.FormattedID)){
-																	console.log('moving predDep to new user story', realDepData.FormattedID, predDepData.FormattedID);
-																	//we must remove risk from old userStory and add it to new userStory
-																	var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData.FormattedID, 0, false, true, true);
-																	if(oldUserStoryRecord) 
-																		removePredDep(oldUserStoryRecord, realDepData);
-																}
-																var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', predDepData.FormattedID, 0, false, true, true);
-																if(newUserStoryRecord) 
-																	addPredDep(newUserStoryRecord, predDepData);
-																
-																predDepRecord.set('Edited', false);
-																
-																me.DependenciesUserStoryStore.load({
-																	callback: function(userStoryRecords, operation){
-																		me._buildDependenciesData();
-																		me._loadDependenciesStores = true; 
-																		me.PredDepGrid.setLoading(false);
-																	}
-																});
-															}
-														};
-														
-														updatedTeamDepsDone();
-														
-														/** 2) update updated teams **/
-														updatedTeamDeps.forEach(function(teamDepData){ //have to update these here!
-															var project = _.find(me.ValidProjects, function(projectRecord){
-																return projectRecord.get('ObjectID') == teamDepData.PID;
-															});
-															me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
-																if(!us){
-																	me._loadRandomUserStory(project.get('_ref'), function(us){
-																		if(!us){
-																			me._loadDependenciesStores = true; 
-																			me.PredDepGrid.setLoading(false);
-																			alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
-																			return;
-																		}
-																		updatedTeamDepsCallbacks.push(function(){
-																			for(var i=0;i<localPredTeams.length;++i){
-																				if(localPredTeams[i].TID === teamDepData.TID){
-																					localPredTeams[i].USID = us.get('FormattedID');
-																					localPredTeams[i].USName = us.get('Name');
-																					localPredTeams[i].A = false;
-																					//leave Sup and PID fields the same
-																					break;
-																				}
-																			}
-																			var succDep = {
-																				DependencyID: predDepData.DependencyID,
-																				PredUserStoryName: predDepData.UserStoryName,
-																				PredFormattedID: predDepData.FormattedID,
-																				PredProjectName: me.ProjectRecord.get('Name'),
-																				Description: predDepData.Description,
-																				Checkpoint: predDepData.Checkpoint,
-																				UserStoryName: '',
-																				FormattedID: '',
-																				Supported: teamDepData.Sup,
-																				Assigned: false,
-																				Edited: false
-																			};
-																			addSuccDep(us, succDep);
-																		});
-																		updatedTeamDepsDone();
-																	});
-																}
-																else{
-																	updatedTeamDepsCallbacks.push(function(){
-																		var deps = me._getDependencies(us);
-																		var succs = deps.Succs;
-																		for(var i = 0;i<succs.length;++i){
-																			if(succs[i].ID == predDepData.DependencyID){
-																				succs[i].PUSName = predDepData.UserStoryName;
-																				succs[i].PUSID = predDepData.FormattedID;
-																				succs[i].CP = predDepData.Checkpoint;
-																				succs[i].Desc = predDepData.Description;
-																				us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
-																				us.save();
-																				return;
-																			}
-																		} //got deleted somehow, so re-add it, DONT CHANGE THE TeamDepData FIELDS--US didn't change!
-																		var succDep = {
-																			DependencyID: predDepData.DependencyID,
-																			PredUserStoryName: predDepData.UserStoryName,
-																			PredFormattedID: predDepData.FormattedID,
-																			PredProjectName: me.ProjectRecord.get('Name'),
-																			Description: predDepData.Description,
-																			Checkpoint: predDepData.Checkpoint,
-																			UserStoryName: teamDepData.USName,
-																			FormattedID: teamDepData.USID,
-																			Supported: teamDepData.Sup,
-																			Assigned: teamDepData.A,
-																			Edited: false
-																		};
-																		addSuccDep(us, succDep);
-																	});
-																	updatedTeamDepsDone();
-																}
-															});
-														});
-															
+											});
+										}
+									};
+									
+									updatedTeamDepsDone();
+									
+									/** 2) update updated teams **/
+									updatedTeamDeps.forEach(function(teamDepData){ //have to update these here!
+										var project = _.find(me.ValidProjects, function(projectRecord){
+											return projectRecord.get('ObjectID') == teamDepData.PID;
+										});
+										me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
+											if(!us){
+												me._loadRandomUserStory(project.get('_ref'), function(us){
+													if(!us){
+														me._loadDependenciesStores = true; 
+														me.PredDepGrid.setLoading(false);
+														alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
+														return;
 													}
-												};
-												addedTeamDepsDone();
-												
-												/** 1) add new teams. do this first, cuz if the team has no user stories we gotta stop **/
-												addedTeamDeps.forEach(function(teamDepData){ //have to update these here!
-													var project = _.find(me.ValidProjects, function(projectRecord){
-														return projectRecord.get('ObjectID') == teamDepData.PID;
+													updatedTeamDepsCallbacks.push(function(){ // got deleted from user story
+														for(var i=0;i<localPredTeams.length;++i){
+															if(localPredTeams[i].TID === teamDepData.TID){
+																localPredTeams[i].USID = us.get('FormattedID');
+																localPredTeams[i].USName = us.get('Name');
+																localPredTeams[i].A = false;
+																//leave Sup and PID fields the same
+																break;
+															}
+														}
+														var succDep = {
+															DependencyID: predDepData.DependencyID,
+															PredUserStoryName: predDepData.UserStoryName,
+															PredFormattedID: predDepData.FormattedID,
+															PredProjectName: me.ProjectRecord.get('Name'),
+															Description: predDepData.Description,
+															Checkpoint: predDepData.Checkpoint,
+															UserStoryName: '',
+															FormattedID: '',
+															Supported: teamDepData.Sup,
+															Assigned: false,
+															ReleaseStartDate: me.ReleaseRecord.get('ReleaseStartDate'),
+															ReleaseDate: me.ReleaseRecord.get('ReleaseDate'),
+															Edited: false
+														};
+														addSuccDep(us, succDep);
 													});
-													me._loadRandomUserStory(project.get('_ref'), function(us){
-														if(!us){
-															me._loadDependenciesStores = true; 
-															me.PredDepGrid.setLoading(false);
-															alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
+													updatedTeamDepsDone();
+												});
+											}
+											else{
+												updatedTeamDepsCallbacks.push(function(){
+													var deps = me._getDependencies(us);
+													var succs = deps.Succs;
+													for(var i = 0;i<succs.length;++i){
+														if(succs[i].ID == predDepData.DependencyID){
+															succs[i].PUSName = predDepData.UserStoryName;
+															succs[i].PUSID = predDepData.FormattedID;
+															succs[i].CP = predDepData.Checkpoint;
+															succs[i].Desc = predDepData.Description;
+															us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
+															us.save();
 															return;
 														}
-														addedTeamDepsCallbacks.push(function(){
-															teamDepData.USID = us.get('FormattedID');
-															teamDepData.USName = us.get('Name');
-															var succDep = {
-																DependencyID: predDepData.DependencyID,
-																PredUserStoryName: predDepData.UserStoryName,
-																PredFormattedID: predDepData.FormattedID,
-																PredProjectName: me.ProjectRecord.get('Name'),
-																UserStoryName: '',
-																FormattedID: '',
-																Description: predDepData.Description,
-																Checkpoint: predDepData.Checkpoint,
-																Supported: 'No',
-																Assigned: false,
-																Edited: false
-															};
-															addSuccDep(us, succDep);
-														});
-														addedTeamDepsDone();
-													});
+													} //got deleted somehow, so re-add it, DONT CHANGE THE TeamDepData FIELDS--US didn't change!
+													var succDep = {
+														DependencyID: predDepData.DependencyID,
+														PredUserStoryName: predDepData.UserStoryName,
+														PredFormattedID: predDepData.FormattedID,
+														PredProjectName: me.ProjectRecord.get('Name'),
+														Description: predDepData.Description,
+														Checkpoint: predDepData.Checkpoint,
+														UserStoryName: teamDepData.USName,
+														FormattedID: teamDepData.USID,
+														Supported: teamDepData.Sup,
+														Assigned: teamDepData.A,
+														ReleaseStartDate: me.ReleaseRecord.get('ReleaseStartDate'),
+														ReleaseDate: me.ReleaseRecord.get('ReleaseDate'),
+														Edited: false
+													};
+													addSuccDep(us, succDep);
 												});
-												
+												updatedTeamDepsDone();
 											}
-											else {
-												me._loadDependenciesStores = true; 
-												me.PredDepGrid.setLoading(false);
-												alert('Error: Could not delete Dependency!');
-											}
-										}
+										});
 									});
+										
 								}
+							};
+							addedTeamDepsDone();
+							
+							/** 1) add new teams. do this first, cuz if the team has no user stories we gotta stop **/
+							addedTeamDeps.forEach(function(teamDepData){ //have to update these here!
+								var project = _.find(me.ValidProjects, function(projectRecord){
+									return projectRecord.get('ObjectID') == teamDepData.PID;
+								});
+								me._loadRandomUserStory(project.get('_ref'), function(us){
+									if(!us){
+										me._loadDependenciesStores = true; 
+										me.PredDepGrid.setLoading(false);
+										alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
+										return;
+									}
+									addedTeamDepsCallbacks.push(function(){
+										teamDepData.USID = us.get('FormattedID');
+										teamDepData.USName = us.get('Name');
+										var succDep = {
+											DependencyID: predDepData.DependencyID,
+											PredUserStoryName: predDepData.UserStoryName,
+											PredFormattedID: predDepData.FormattedID,
+											PredProjectName: me.ProjectRecord.get('Name'),
+											UserStoryName: '',
+											FormattedID: '',
+											Description: predDepData.Description,
+											Checkpoint: predDepData.Checkpoint,
+											Supported: 'No',
+											Assigned: false,
+											ReleaseStartDate: me.ReleaseRecord.get('ReleaseStartDate'),
+											ReleaseDate: me.ReleaseRecord.get('ReleaseDate'),
+											Edited: false
+										};
+										addSuccDep(us, succDep);
+									});
+									addedTeamDepsDone();
+								});
 							});
+							
 						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+					});
 				}
 			},{
 				text:'',
 				width:80,
+				xtype:'actioncolumn',
 				resizable:false,
-				renderer: function (val, meta, predDepRecord){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var el = Ext.get(id);
-						if(el && el.isVisible()){
-							Ext.widget('button', {
-								renderTo: id,
-								text: 'Delete',
-								width: 70,
-								handler: function () {
-									if(!me._loadDependenciesStores) return; //already clicked save or delete
-									if(confirm('Confirm Dependency Deletion')){
-										me.PredDepGrid.setLoading(true);
-										me._loadDependenciesStores = false; // so interval reload doesn't do anything 
-										me.DependenciesUserStoryStore.load({
-											callback: function(userStoryRecords, operation){
-												if(operation.wasSuccessful()){
-													me._buildDependenciesData();
-													var predDeps = me.DependenciesParsedData.Predecessors.slice(0);
-													var predDepData = predDepRecord.data;
-													var realDepData = removeDepFromList(predDepData.DependencyID, predDeps);
-													
-													/***************************** REMOVE SELF FROM PREDECESSORS *********************/
-													var realTeamDeps = getPredecessorsObject(realDepData);
-													realTeamDeps.forEach(function(teamDepData){
-														if(teamDepData.PID === '') return;
-														var project = _.find(me.ValidProjects, function(projectRecord){
-															return projectRecord.get('ObjectID') == teamDepData.PID;
-														});
-														me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
-															if(!us) return; //us must have been deleted. ignore it
-															removeSuccDep(us, predDepData); //using teamDepData cuz we only need DependencyID
-														});
-													});
-													
-													/** remove from userStory, and previous user story if it was moved **/
-													if(realDepData && (realDepData.FormattedID != predDepData.FormattedID)){
-														console.log('moving predDep to new user story', realDepData.FormattedID, predDepData.FormattedID);
-														//we must remove risk from old feature and add it to new feature
-														var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData.FormattedID, 0, false, true, true);
-														if(oldUserStoryRecord) 
-															removePredDep(oldUserStoryRecord, realDepData);
-													}
-													var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', predDepData.FormattedID, 0, false, true, true);
-													if(newUserStoryRecord) 
-														removePredDep(newUserStoryRecord, predDepData);
-													
-													me.CustomPredDepStore.remove(predDepRecord);
-													me.DependenciesUserStoryStore.load({
-														callback: function(userStoryRecords, operation){
-															me._buildDependenciesData();
-															me.CustomPredDepStore.load({
-																callback: function(){
-																	me._loadDependenciesStores = true; 
-																	me.PredDepGrid.setLoading(false);
-																}
-															});
-														}
-													});
-												} else {
-													me._loadDependenciesStores = true;
-													me.PredDepGrid.setLoading(false);
-													alert('Error: Could not delete Dependency!');
-												}
+				defaultRenderer: function(v, meta, predDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, predDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
+						}
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Delete</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var predDepRecord = store.getAt(row);
+					if(!me._loadDependenciesStores) return; //already clicked save or delete
+					if(confirm('Confirm Dependency Deletion')){
+						me.PredDepGrid.setLoading(true);
+						me._loadDependenciesStores = false; // so interval reload doesn't do anything 
+						me.DependenciesUserStoryStore.load({
+							callback: function(userStoryRecords, operation){
+								me._buildDependenciesData();
+								var predDeps = me.DependenciesParsedData.Predecessors.slice(0);
+								var predDepData = predDepRecord.data;
+								var realDepData = removeDepFromList(predDepData.DependencyID, predDeps);
+								
+								/***************************** REMOVE SELF FROM PREDECESSORS *********************/
+								var realTeamDeps = getPredecessorsObject(realDepData);
+								realTeamDeps.forEach(function(teamDepData){
+									if(teamDepData.PID === '') return;
+									var project = _.find(me.ValidProjects, function(projectRecord){
+										return projectRecord.get('ObjectID') == teamDepData.PID;
+									});
+									me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
+										if(!us) return; //us must have been deleted. ignore it
+										removeSuccDep(us, predDepData); //using teamDepData cuz we only need DependencyID
+									});
+								});
+								
+								/** remove from userStory, and previous user story if it was moved **/
+								if(realDepData && (realDepData.FormattedID != predDepData.FormattedID)){
+									console.log('moving predDep to new user story', realDepData.FormattedID, predDepData.FormattedID);
+									//we must remove risk from old feature and add it to new feature
+									var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData.FormattedID, 0, false, true, true);
+									if(oldUserStoryRecord) 
+										removePredDep(oldUserStoryRecord, realDepData);
+								}
+								var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', predDepData.FormattedID, 0, false, true, true);
+								if(newUserStoryRecord) 
+									removePredDep(newUserStoryRecord, predDepData);
+								
+								me.CustomPredDepStore.remove(predDepRecord);
+								me.DependenciesUserStoryStore.load({
+									callback: function(userStoryRecords, operation){
+										me._buildDependenciesData();
+										me.CustomPredDepStore.load({
+											callback: function(){
+												me._loadDependenciesStores = true; 
+												me.PredDepGrid.setLoading(false);
 											}
 										});
 									}
-								}
-							});
-						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+								});
+							}
+						});
+					}
 				}
 			}
 		];
@@ -2831,7 +2973,8 @@ Ext.define('CustomApp', {
 			listeners:{
 				click: function(){
 					var randomUserStory = me.DependenciesReleaseUserStories[0];
-					if(me.CustomPredDepStore) {
+					if(!randomUserStory) alert('No User Stories for this Release!');
+					else if(me.CustomPredDepStore) {
 						var model = Ext.create('IntelPredDep', {
 							DependencyID: (new Date() * 1) + '' + (Math.random() * 10000000),
 							FormattedID: randomUserStory.get('FormattedID'),
@@ -2850,11 +2993,10 @@ Ext.define('CustomApp', {
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
             title: "Predecessor Dependencies",
-			width: 1600,
+			width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:400,
-			x:0,
-			y:800,
-			scroll:'both',
+			x:0, y:800,
+			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
 			plugins: [
 				Ext.create('Ext.grid.plugin.CellEditing', {
@@ -2863,7 +3005,11 @@ Ext.define('CustomApp', {
 			],
 			viewConfig:{
 				stripeRows:true,
-				preserveScrollOnRefresh:true
+				preserveScrollOnRefresh:true,
+				getRowClass: function(predDepRecord){ 
+					var cls = 'intel-row-' + (10 + (35*getPredecessorsObject(predDepRecord).length || 35)) + 'px';
+					return cls;
+				}
 			},
 			listeners: {
 				beforeedit: function(){
@@ -2897,6 +3043,7 @@ Ext.define('CustomApp', {
 							predDepRecord.set('Edited', previousEdit); //not edited
 						} else predDepRecord.set('UserStoryName', userStoryRecord.get('Name'));	
 					}
+					predDepRecord.commit();
 				}
 			},
 			showRowActionsColumn:false,
@@ -2932,7 +3079,8 @@ Ext.define('CustomApp', {
 						else if(dirtyType === 'Deleted') // the depRec was deleted by someone else, and we arent editing it
 							customSuccDepStore.remove(depRec);
 						else {
-							depRec.data = realDep;
+							for(var key in realDep)
+								depRec.set(key, realDep[key]);
 							depRec.commit();
 						}
 					}
@@ -2952,13 +3100,13 @@ Ext.define('CustomApp', {
 				resizable:false,
 				sortable:true
 			},{
-				text:'Predecesor US#', 
+				text:'Pred US#', 
 				dataIndex:'PredFormattedID',
-				width:80,
+				width:85,
 				resizable:false,
 				sortable:true
 			},{
-				text:'Predecesor UserStory', 
+				text:'Pred UserStory', 
 				dataIndex:'PredUserStoryName',
 				width:160,
 				resizable:false,
@@ -3094,184 +3242,235 @@ Ext.define('CustomApp', {
 				text:'',
 				width:130,
 				resizable:false,
-				renderer: function (val, meta, succDepRecord){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var currentFID = succDepRecord.get('FormattedID');
-						var btnText = (currentFID === '' ? '' : 'Remove UserStory');
-						var el = Ext.get(id);
-						if(el && el.isVisible() && btnText.length){
-							Ext.widget('button', {
-								renderTo: id,
-								text: btnText,
-								padding:3,
-								width: 120,
-								handler: function () {
-									succDepRecord.set('Edited', true);
-									succDepRecord.set('Assigned', false);
-									succDepRecord.set('FormattedID', '');
-									succDepRecord.set('UserStoryName', '');
-								}
-							});
+				xtype:'actioncolumn',
+				defaultRenderer: function(v, meta, succDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					if(!succDepRecord.get('FormattedID')) return '';
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, succDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
 						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Remove UserStory</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var succDepRecord = store.getAt(row);
+					succDepRecord.set('Edited', true);
+					succDepRecord.set('Assigned', false);
+					succDepRecord.set('FormattedID', '');
+					succDepRecord.set('UserStoryName', '');
+					succDepRecord.commit();
 				}
 			},{
 				text:'',
 				width:80,
+				xtype:'actioncolumn',
 				resizable:false,
-				renderer: function (val, meta, succDepRecord, r, c, s){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var realSuccDepData = 
-							removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
-						var dirtyType = getDirtyType(succDepRecord, realSuccDepData);
-						if(dirtyType === 'Edited')	dirtyType = 'Undo';
-						else						dirtyType = '';
-						var el = Ext.get(id);
-						if(el && el.isVisible() && dirtyType.length){
-							Ext.widget('button', {
-								renderTo: id,
-								text: dirtyType,
-								width: 70,
-								handler: function () {
-									s.remove(succDepRecord);
-									s.load();
-								}
-							});
+				defaultRenderer: function(v, meta, succDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					var realDepData = removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
+					var dirtyType = getDirtyType(succDepRecord, realDepData);
+					if(dirtyType !== 'Edited') return ''; //don't render it!
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, succDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
 						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Undo</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var succDepRecord = store.getAt(row);
+					succDepRecord.set('Edited', false);
+					succDepRecord.commit();
+					me._loadDependenciesStores = false;
+					grid.setLoading(true);
+					store.load({
+						callback: function(){
+							me._loadDependenciesStores = true;
+							grid.setLoading(false);
+						}
+					});
 				}
 			},{
 				text:'',
 				width:80,
+				xtype:'actioncolumn',
 				resizable:false,
-				renderer: function (val, meta, succDepRecord){
-					var id = Ext.id();
-					Ext.defer(function () {
-						var realSuccDepData = 
-							removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
-						var dirtyType = getDirtyType(succDepRecord, realSuccDepData);
-						if(dirtyType === 'Edited')			dirtyType = 'Update';
-						else								dirtyType = '';
-						var el = Ext.get(id);
-						if(el && el.isVisible() && dirtyType.length){
-							Ext.widget('button', {
-								renderTo: id,
-								text: dirtyType,
-								width: 70,
-								handler: function () {
-									if(!me._loadDependenciesStores) return;
-									//no field validation needed
-									me._loadDependenciesStores = false; 
-									me.SuccDepGrid.setLoading(true);
-									me.DependenciesUserStoryStore.load({
-										callback: function(userStoryRecords, operation){
-											if(operation.wasSuccessful()){
-												me._buildDependenciesData();
-												var succDepData = succDepRecord.data;
-												var realSuccDeps = me.DependenciesParsedData.Successors.slice(0);
-												var realDepData = removeDepFromList(succDepData.DependencyID, realSuccDeps);
+				defaultRenderer: function(v, meta, succDepRecord, rowIdx, colIdx, store, view){
+					//most of this copied from the Extjs source...
+					var _me_col = this,
+						prefix = Ext.baseCSSPrefix,
+						scope = _me_col.origScope || _me_col,
+						items = _me_col.items,
+						len = items.length,
+						i = 0,
+						item, ret, disabled, tooltip;
+					ret = Ext.isFunction(me.origRenderer) ? me.origRenderer.apply(scope, arguments) || '' : '';
+					meta.tdCls += ' ' + Ext.baseCSSPrefix + 'action-col-cell';
+					var realDepData = removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
+					var dirtyType = getDirtyType(succDepRecord, realDepData);
+					if(dirtyType !== 'Edited') return ''; //don't render it!
+					for (; i < len; i++) {
+						item = items[i];
+						disabled = item.disabled || (item.isDisabled ? item.isDisabled.call(item.scope || scope, view, rowIdx, colIdx, item, succDepRecord) : false);
+						tooltip = disabled ? null : (item.tooltip || (item.getTip ? item.getTip.apply(item.scope || scope, arguments) : null));
+						if (!item.hasActionConfiguration) {
+							item.stopSelection = _me_col.stopSelection;
+							item.disable = Ext.Function.bind(_me_col.disableAction, _me_col, [i], 0);
+							item.enable = Ext.Function.bind(_me_col.enableAction, _me_col, [i], 0);
+							item.hasActionConfiguration = true;
+						}
+						ret +=  Ext.String.format('<div class="{0}action-col-{1} {2} intel-button-cell">Save</div>', 
+							prefix,
+							i,
+							(Ext.isFunction(item.getClass) ? item.getClass.apply(item.scope || scope, arguments) : (item.iconCls || _me_col.iconCls || ''))
+						);
+					}
+					return ret;
+				},
+				handler: function(grid, row, col){
+					var store = grid.getStore();
+					var succDepRecord = store.getAt(row);
+					if(!me._loadDependenciesStores) return;
+					//no field validation needed
+					me._loadDependenciesStores = false; 
+					me.SuccDepGrid.setLoading(true);
+					me.DependenciesUserStoryStore.load({
+						callback: function(userStoryRecords, operation){
+							me._buildDependenciesData();
+							var succDepData = succDepRecord.data;
+							var realSuccDeps = me.DependenciesParsedData.Successors.slice(0);
+							var realDepData = removeDepFromList(succDepData.DependencyID, realSuccDeps);
+							
+							/***************************** UPDATE THE Pred USER STORy *********************/
+							var project = _.find(me.ValidProjects, function(projectRecord){
+								return projectRecord.get('Name') == succDepData.PredProjectName;
+							});
+							if(!project){
+								me._loadDependenciesStores = true; 
+								me.SuccDepGrid.setLoading(false);
+								alert('could not find project ' + succDepData.PredProjectName);
+								return;
+							}													
+							if(succDepData.FormattedID) {
+								succDepData._realFormattedID = succDepData.FormattedID;
+								succDepData._realUserStoryName = succDepData.UserStoryName;
+							}
+							
+							var reloadDeps = function(){
+								me.DependenciesUserStoryStore.load({
+									callback: function(userStoryRecords, operation){
+										me._buildDependenciesData();
+										me._loadDependenciesStores = true; 
+										me.SuccDepGrid.setLoading(false);
+									}
+								});
+							};
+							var alertAndDelete = function(msg){
+								alert(msg);
+								console.log('removing succDep from user story', realDepData._realFormattedID, succDepData._realFormattedID);
+								var userStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
+								if(userStoryRecord) 
+									removeSuccDep(userStoryRecord, realDepData);
+								me.DependenciesUserStoryStore.load({
+									callback: function(userStoryRecords, operation){
+										me._buildDependenciesData();
+										me._loadDependenciesStores = true; 
+										me.SuccDepGrid.setLoading(false);
+										me.CustomSuccDepStore.remove(succDepRecord);
+									}
+								});
+							};
+							me._loadUserStoryByFID(succDepData.PredFormattedID, project.get('_ref'), function(us){
+								if(!us) alertAndDelete('Successor UserStory has been deleted. Deleting Dependency Now');
+								else {
+									var deps = me._getDependencies(us);
+									var preds = deps.Preds;
+									var predDep = preds[succDepData.DependencyID];
+									if(predDep){
+										var predecessors;
+										try { predecessors = JSON.parse(predDep.Preds); }
+										catch(e) { predecessors = []; }
+										for(var i = 0;i<predecessors.length;++i){
+											//have to make sure this dep is actually in the JSON teamDep object
+											if(predecessors[i].PID == me.ProjectRecord.get('ObjectID')){ 
+												predecessors[i].Sup = succDepData.Supported;
+												predecessors[i].USID = succDepData._realFormattedID;
+												predecessors[i].USName = succDepData._realUserStoryName;
+												predecessors[i].A = succDepData.Assigned;
 												
-												/***************************** UPDATE THE Pred USER STORy *********************/
-												var project = _.find(me.ValidProjects, function(projectRecord){
-													return projectRecord.get('Name') == succDepData.PredProjectName;
-												});
-												if(!project){
-													me._loadDependenciesStores = true; 
-													me.SuccDepGrid.setLoading(false);
-													alert('could not find project ' + succDepData.PredProjectName);
-													return;
-												}													
-												if(succDepData.FormattedID) {
-													succDepData._realFormattedID = succDepData.FormattedID;
-													succDepData._realUserStoryName = succDepData.UserStoryName;
+												predDep.Preds = JSON.stringify(predecessors, null, '\t');
+												us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
+												us.save();
+										
+												/***************************** UPDATE THE SUCC USER STORIES *********************/				
+												//move succ dep to new user story if needed, don't change it if set to ''
+												if(realDepData && (realDepData._realFormattedID != succDepData._realFormattedID)){
+													console.log('moving succDep to new user story', realDepData._realFormattedID, succDepData._realFormattedID);
+													//we must remove risk from old userStory and add it to new userStory
+													var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
+													if(oldUserStoryRecord) 
+														removeSuccDep(oldUserStoryRecord, realDepData);
 												}
+												var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', succDepData._realFormattedID, 0, false, true, true);
+												if(newUserStoryRecord) 
+													addSuccDep(newUserStoryRecord, succDepData);
 												
-												var reloadDeps = function(){
-													me.DependenciesUserStoryStore.load({
-														callback: function(userStoryRecords, operation){
-															me._buildDependenciesData();
-															me._loadDependenciesStores = true; 
-															me.SuccDepGrid.setLoading(false);
-														}
-													});
-												};
-												var alertAndDelete = function(msg){
-													alert(msg);
-													console.log('removing succDep from user story', realDepData._realFormattedID, succDepData._realFormattedID);
-													var userStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
-													if(userStoryRecord) 
-														removeSuccDep(userStoryRecord, realDepData);
-													me.DependenciesUserStoryStore.load({
-														callback: function(userStoryRecords, operation){
-															me._buildDependenciesData();
-															me._loadDependenciesStores = true; 
-															me.SuccDepGrid.setLoading(false);
-															me.CustomSuccDepStore.remove(succDepRecord);
-														}
-													});
-												};
-												me._loadUserStoryByFID(succDepData.PredFormattedID, project.get('_ref'), function(us){
-													if(!us) alertAndDelete('Successor UserStory has been deleted. Deleting Dependency Now');
-													else {
-														var deps = me._getDependencies(us);
-														var preds = deps.Preds;
-														var predDep = preds[succDepData.DependencyID];
-														if(predDep){
-															var predecessors;
-															try { predecessors = JSON.parse(predDep.Preds); }
-															catch(e) { predecessors = []; }
-															for(var i = 0;i<predecessors.length;++i){
-																//have to make sure this dep is actually in the JSON teamDep object
-																if(predecessors[i].PID == me.ProjectRecord.get('ObjectID')){ 
-																	predecessors[i].Sup = succDepData.Supported;
-																	predecessors[i].USID = succDepData._realFormattedID;
-																	predecessors[i].USName = succDepData._realUserStoryName;
-																	predecessors[i].A = succDepData.Assigned;
-																	
-																	predDep.Preds = JSON.stringify(predecessors, null, '\t');
-																	us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
-																	us.save();
-															
-																	/***************************** UPDATE THE SUCC USER STORIES *********************/				
-																	//move succ dep to new user story if needed, don't change it if set to ''
-																	if(realDepData && (realDepData._realFormattedID != succDepData._realFormattedID)){
-																		console.log('moving succDep to new user story', realDepData._realFormattedID, succDepData._realFormattedID);
-																		//we must remove risk from old userStory and add it to new userStory
-																		var oldUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
-																		if(oldUserStoryRecord) 
-																			removeSuccDep(oldUserStoryRecord, realDepData);
-																	}
-																	var newUserStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', succDepData._realFormattedID, 0, false, true, true);
-																	if(newUserStoryRecord) 
-																		addSuccDep(newUserStoryRecord, succDepData);
-																	
-																	succDepRecord.set('Edited', false);
-																	reloadDeps();
-																	return;
-																}
-															}
-															alertAndDelete('Successor removed this dependency. Deleting your dependency now');
-														}
-														else alertAndDelete('Successor removed this dependency. Deleting your dependency now');
-													} 
-												});
-											}
-											else {
-												me._loadDependenciesStores = true; 
-												me.SuccDepGrid.setLoading(false);
-												alert('Error: Could not update Dependency!');
+												succDepRecord.set('Edited', false);
+												succDepRecord.commit();
+												reloadDeps();
+												return;
 											}
 										}
-									});
-								}
+										alertAndDelete('Successor removed this dependency. Deleting your dependency now');
+									}
+									else alertAndDelete('Successor removed this dependency. Deleting your dependency now');
+								} 
 							});
 						}
-					}, 5);
-					return Ext.String.format('<div id="{0}"></div>', id);
+					});
 				}
 			}
 		];
@@ -3279,11 +3478,10 @@ Ext.define('CustomApp', {
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
             title: "Successor Dependencies",
-			width: 1600,
+			width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:400,
-			x:0,
-			y:1240,
-			scroll:'both',
+			x:0, y:1240,
+			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
 			plugins: [
 				Ext.create('Ext.grid.plugin.CellEditing', {
@@ -3292,7 +3490,8 @@ Ext.define('CustomApp', {
 			],
 			viewConfig:{
 				stripeRows:true,
-				preserveScrollOnRefresh:true
+				preserveScrollOnRefresh:true,
+				getRowClass: function(predDepRecord){ return 'intel-row-35px'; }
 			},
 			listeners: {
 				beforeedit: function(editor, e){
@@ -3342,6 +3541,7 @@ Ext.define('CustomApp', {
 							succDepRecord.set('UserStoryName', '');
 						}
 					}
+					succDepRecord.commit();
 				}
 			},
 			showRowActionsColumn:false,
