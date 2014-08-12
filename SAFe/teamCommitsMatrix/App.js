@@ -98,7 +98,7 @@ Ext.define('CustomApp', {
 			model: 'PortfolioItem/Feature',
 			autoLoad:true,
 			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'Parent', 'FormattedID', 'UserStories', 'c_TeamCommits', 'DragAndDropRank'],
+			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 'UserStories', 'c_TeamCommits', 'DragAndDropRank'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -204,49 +204,6 @@ Ext.define('CustomApp', {
 				{name: 'FeatureName',  type: 'string'},
 				{name: 'ProductName', type:'string'}
 			]
-		});
-	
-		Ext.define('IntelCustomProxy', {
-			extend: 'Ext.data.proxy.Memory',
-			alias: 'proxy.intelcustomproxy',
-			keyField: 'ID', //OVERRIDE THIS!!!!
-			create: function(operation) { 
-				var me = this;
-				try{
-					operation.getRecords().forEach(function(record){ 
-						me.data.push(record.data); 
-					});
-				} catch(e){ console.log(e); }
-				this.updateOperation.apply(this, arguments);
-			},
-			update: function(operation) {
-				var me = this;
-				try{
-					operation.getRecords().forEach(function(record){
-						for(var i = 0;i<me.data.length;++i){
-							if(me.data[i][me.keyField] === record.data[me.keyField]){
-								me.data[i] = record.data;
-								return;
-							}
-						}
-					});
-				} catch(e){ console.log(e); }
-				this.updateOperation.apply(this, arguments);
-			},
-			destroy: function(operation) {
-				var me = this;
-				try{
-					operation.getRecords().forEach(function(record){
-						for(var i = 0;i<me.data.length;++i){
-							if(me.data[i][me.keyField] === record.data[me.keyField]){
-								me.data.splice(i, 1);
-								return;
-							}
-						}
-					});
-				} catch(e){ console.log(e); }
-				this.updateOperation.apply(this, arguments);
-			}
 		});
 	},
 	
@@ -393,8 +350,8 @@ Ext.define('CustomApp', {
 			autoSync:true,
 			limit:Infinity,
 			proxy: {
-				type:'intelcustomproxy',
-				keyField:'ObjectID'
+				type:'sessionstorage',
+				id: 'Session-proxy-' + Math.random()
 			}
 		});
 
@@ -405,7 +362,8 @@ Ext.define('CustomApp', {
 				width:50,
 				editor:false,
 				sortable:true,
-				renderer: function(oid, metaData, f1, row, col){
+				resizable:false,
+				renderer: function(oid, meta, f1){
 					var rank = 1;
 					var f1OID = f1.data.ObjectID;
 					f1 = me.MatrixFeatureStore.findRecord('ObjectID', f1OID);
@@ -421,18 +379,30 @@ Ext.define('CustomApp', {
 				dataIndex:'FormattedID',
 				width:50,
 				editor:false,
-				sortable:true
+				resizable:false,
+				sortable:true,
+				renderer:function(FID){
+					var feature = me.MatrixFeatureStore.findRecord('FormattedID', FID);
+					if(feature.get('Project')) {
+						var pid = feature.get('Project')._ref.split('/project/')[1];
+						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/portfolioitem/feature/' + 
+								feature.get('ObjectID') + '">' + FID + '</a>';
+					}
+					else return name;
+				}
 			},{
 				text:'Feature', 
 				dataIndex:'FeatureName',
 				width:250,
 				editor:false,
+				resizable:false,
 				sortable:true
 			},{
 				text:'Product', 
 				dataIndex:'ProductName',
 				width:100,
 				editor:false,
+				resizable:false,
 				sortable:true
 			}
 		];
@@ -446,6 +416,7 @@ Ext.define('CustomApp', {
 				align:'center',
 				tdCls: 'intel-editor-cell',
 				sortable:false,
+				resizable:false,
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var count = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || 0;
@@ -482,11 +453,14 @@ Ext.define('CustomApp', {
 						me._loadMatrixUserStoryBreakdown(function(){
 							me.removeAll();
 							me._loadMatrixGrid();
+							me.setLoading(true);
+							setTimeout(function(){me.setLoading(false); }, 2000);
 						});
 					});
 				}
 			}
 		});
+		
 		me.MatrixProductPicker = me.add({
 			xtype:'combobox',
 			x:300, y:0,
@@ -518,6 +492,7 @@ Ext.define('CustomApp', {
 				}
 			}
 		});
+		
 		me.MatrixLegend = me.add({
 			xtype:'container',
 			layout:'table',
@@ -542,6 +517,7 @@ Ext.define('CustomApp', {
 				};
 			})
 		});
+		
 		me.MatrixGrid = me.add({
 			xtype: 'rallygrid',
 			x:0, y:50,
@@ -562,7 +538,7 @@ Ext.define('CustomApp', {
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var tcae = getTeamCommitAndExpected(featureRecord, ProjectName);
 					setExpected(featureRecord, ProjectName, !tcae.expected);
-					matrixRecord.commit();
+					matrixRecord.commit(); //just so it rerenders this record 
 					return false;
 				}
 			},
