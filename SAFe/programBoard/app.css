@@ -14,16 +14,12 @@
 .x-grid-row .intel-editor-cell {  cursor:pointer !important; }
 .x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
 
-.intel-button-cell  {  
-	cursor:pointer !important; 
-	background:rgb(63, 132, 164) !important; 
-	color:white !important;
-	border-radius:3px !important; 
-	position: relative !important;
-	line-height:25px;
-	text-align:center;
-	height:25px !important;
+.pred-dep-header {
+	display: inline-block !important;
+	line-height:100% !important;
+	font-weight:500 !important;
 }
+
 
 .grey-row .x-grid-cell { background-color:rgba(224, 224, 224, 0.15) !important; }
 .grey-row.x-grid-row-selected .x-grid-cell { background-color:rgba(224, 224, 224, 0.25) !important; }
