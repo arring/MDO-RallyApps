@@ -1811,7 +1811,7 @@ Ext.define('CustomApp', {
 				html:	'<div class="pred-dep-header" style="width:200px !important;">Team Name</div>' +
 						'<div class="pred-dep-header" style="width:80px  !important;">Supported</div>' +
 						'<div class="pred-dep-header" style="width:80px  !important;">US#</div>' +
-						'<div class="pred-dep-header" style="width:160px !important;">User Story</div>',
+						'<div class="pred-dep-header" style="width:140px !important;">User Story</div>',
 				dataIndex:'DependencyID',
 				width:520,
 				resizable:false,
@@ -1916,6 +1916,7 @@ Ext.define('CustomApp', {
 						items: [
 							{
 								xtype: 'rallygrid',	
+								bodyCls: 'blend-in-grid',
 								width:_.reduce(teamColumnCfgs, function(sum, i){ return sum + i.width; }, 0),
 								rowLines:false,
 								flex:1,
