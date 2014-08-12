@@ -1251,6 +1251,41 @@ Ext.define('CustomApp', {
 		});
 	},
 	
+	/************************************************** DATE FUNCTIONS ***************************************************/
+		
+	_getWorkweek: function(date){ //calculates intel workweek, returns integer
+		var oneDay = 1000 * 60 * 60 * 24,
+			yearStart = new Date(date.getFullYear(), 0, 0),
+			dayIndex = yearStart.getDay(),
+			ww01Start = yearStart - dayIndex*oneDay,
+			timeDiff = date - ww01Start,
+			dayDiff = timeDiff / oneDay;
+		return Math.floor(dayDiff/7) + 1;
+	},
+	
+	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in
+		var leap = (date.getFullYear() % 4 === 0),
+			day = new Date(date.getFullYear(), 0, 0).getDay();
+		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+	},
+	
+	_getWorkweeks: function(){ //gets list of workweeks in the release
+		var me = this, i,
+			start = me.ReleaseRecord.get('ReleaseStartDate'),
+			end = me.ReleaseRecord.get('ReleaseDate'),
+			sd_week = me._getWorkweek(start),
+			ed_week = me._getWorkweek(end),
+			week_count = me._getWeekCount(start);
+
+		var weeks = [];
+		if(ed_week < sd_week){
+			for(i=sd_week; i<=week_count; ++i) weeks.push({'Week': 'ww' + i});
+			for(i = 1; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
+		}
+		else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
+		return weeks;
+	},
+	
 	/******************************************************* RENDER ********************************************************/
 	
 	_loadReleasePicker: function(){
@@ -1278,33 +1313,8 @@ Ext.define('CustomApp', {
 
 	_loadRisksGrid: function(){
 		var me = this;
-
-		function getWorkweeks(){
-			var i;
-			var oneDay = 1000 * 60 * 60 * 24;
-			var startDate = me.ReleaseRecord.get('ReleaseStartDate');
-			var endDate = me.ReleaseRecord.get('ReleaseDate');
-			
-			var sd_year = new Date(startDate.getFullYear(), 0, 0);
-			var sd_diff = startDate - sd_year;
-			var sd_day = sd_diff / oneDay;
-			var sd_week = Math.ceil(sd_day / 7);
-			
-			var ed_year = new Date(endDate.getFullYear(), 0, 0);
-			var ed_diff =  endDate - ed_year;
-			var ed_day = ed_diff / oneDay;
-			var ed_week = Math.ceil(ed_day / 7);
-			
-			var weeks = [];
-			if(ed_week < sd_week){
-				for(i = sd_week; i<=52;++i) weeks.push({'Week': 'ww' + i});
-				for(i = 0; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			}
-			else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			return weeks;
-		}
-		var workweeks = getWorkweeks();
-
+		var workweeks = me._getWorkweeks();	
+		
 		/******************************** RISK PARSING/MANIPULATION FUNCTIONS ***************************/
 		
 		function removeRiskFromList(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
@@ -1659,33 +1669,6 @@ Ext.define('CustomApp', {
 	
 	_loadDependenciesGrids: function(){
 		var me = this;
-
-		function getWorkweeks(){
-			var i;
-			var oneDay = 1000 * 60 * 60 * 24;
-			var startDate = me.ReleaseRecord.get('ReleaseStartDate');
-			var endDate = me.ReleaseRecord.get('ReleaseDate');
-			
-			var sd_year = new Date(startDate.getFullYear(), 0, 0);
-			var sd_diff = startDate - sd_year;
-			var sd_day = sd_diff / oneDay;
-			var sd_week = Math.ceil(sd_day / 7);
-			
-			var ed_year = new Date(endDate.getFullYear(), 0, 0);
-			var ed_diff =  endDate - ed_year;
-			var ed_day = ed_diff / oneDay;
-			var ed_week = Math.ceil(ed_day / 7);
-			
-			var weeks = [];
-			if(ed_week < sd_week){
-				for(i = sd_week; i<=52;++i) weeks.push({'Week': 'ww' + i});
-				for(i = 0; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			}
-			else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			return weeks;
-		}
-		var workweeks = getWorkweeks();
-
 	
 		/******************************** DEP PARSING/MANIPULATION FUNCTIONS ***************************/
 

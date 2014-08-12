@@ -1429,9 +1429,10 @@ Ext.define('CustomApp', {
 			extend: 'Ext.data.Model',
 			fields: [
 				{name: 'Name', type: 'string'},
-				{name: 'TeamCommits', type: 'string'},
 				{name: 'ObjectID', type: 'string'},
-				{name: 'FormattedID', type:'string'}
+				{name: 'FormattedID', type:'string'},
+				{name: 'Commitment', type: 'string'},
+				{name: 'Objective', type:'string'}
 			]
 		});
 		
@@ -1652,6 +1653,41 @@ Ext.define('CustomApp', {
 		});
 	},
 	
+	/************************************************** DATE FUNCTIONS ***************************************************/
+		
+	_getWorkweek: function(date){ //calculates intel workweek, returns integer
+		var oneDay = 1000 * 60 * 60 * 24,
+			yearStart = new Date(date.getFullYear(), 0, 0),
+			dayIndex = yearStart.getDay(),
+			ww01Start = yearStart - dayIndex*oneDay,
+			timeDiff = date - ww01Start,
+			dayDiff = timeDiff / oneDay;
+		return Math.floor(dayDiff/7) + 1;
+	},
+	
+	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in
+		var leap = (date.getFullYear() % 4 === 0),
+			day = new Date(date.getFullYear(), 0, 0).getDay();
+		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+	},
+	
+	_getWorkweeks: function(){ //gets list of workweeks in the release
+		var me = this, i,
+			start = me.ReleaseRecord.get('ReleaseStartDate'),
+			end = me.ReleaseRecord.get('ReleaseDate'),
+			sd_week = me._getWorkweek(start),
+			ed_week = me._getWorkweek(end),
+			week_count = me._getWeekCount(start);
+
+		var weeks = [];
+		if(ed_week < sd_week){
+			for(i=sd_week; i<=week_count; ++i) weeks.push({'Week': 'ww' + i});
+			for(i = 1; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
+		}
+		else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
+		return weeks;
+	},	
+	
 	/******************************************************* RENDER ********************************************************/
 	
 	_loadReleasePicker: function(){
@@ -1686,16 +1722,17 @@ Ext.define('CustomApp', {
 			var this_tc;
 			try{ this_tc = JSON.parse(tcs)[projectID] || {}; } 
 			catch(e){ this_tc = {}; }
-			return this_tc.status || 'Undecided';
+			return this_tc;
 		}
 		
-		function setTeamCommit(featureRecord, value, cb){
+		function setTeamCommit(featureRecord, tc, cb){
 			var tcs = featureRecord.get('c_TeamCommits');
 			var projectID = me.ProjectRecord.get('ObjectID');
 			try{ tcs = JSON.parse(tcs) || {}; }
 			catch(e){ tcs = {}; }
 			if(!tcs[projectID]) tcs[projectID] = {};
-			tcs[projectID].status = value;
+			tcs[projectID].Commitment = tc.Commitment;
+			tcs[projectID].Objective = tc.Objective;
 			featureRecord.set('c_TeamCommits', JSON.stringify(tcs, null, '\t'));
 			featureRecord.save({ callback:cb});
 		}
@@ -1712,8 +1749,10 @@ Ext.define('CustomApp', {
 		}
 		
 		var customTeamCommitsRecords = _.map(me.TeamCommitsFeatureStore.getRecords(), function(featureRecord){
+			var tc = getTeamCommit(featureRecord);
 			return {
-				TeamCommits: getTeamCommit(featureRecord),
+				Commitment: tc.Commitment || 'Undecided',
+				Objective: tc.Objective || '',
 				Name: featureRecord.get('Name'),
 				FormattedID: featureRecord.get('FormattedID'),
 				ObjectID: featureRecord.get('ObjectID')
@@ -1736,11 +1775,8 @@ Ext.define('CustomApp', {
 						var featureRecord = me.TeamCommitsFeatureStore.findRecord('ObjectID', teamCommitsRecord.get('ObjectID'));
 						if(featureRecord) {
 							var newVal = getTeamCommit(featureRecord);
-							if(newVal != teamCommitsRecord.get('TeamCommits')){
-								teamCommitsRecord.set('TeamCommits', newVal);
-								teamCommitsRecord.commit();
-								console.log('teamCommits record updated', teamCommitsRecord);
-							}
+							teamCommitsRecord.set('Commitment', newVal.Commitment || 'Undecided');
+							teamCommitsRecord.set('Objective', newVal.Objective || '');
 						}
 					});
 				}
@@ -1766,7 +1802,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Feature', 
 				dataIndex:'Name',
-				width:340,
+				width:240,
 				editor:false,
 				resizable:false
 			},{
@@ -1791,9 +1827,9 @@ Ext.define('CustomApp', {
 					return getStoryCount(oid);
 				}
 			},{
-				dataIndex:'TeamCommits',
+				dataIndex:'Commitment',
 				text:'Status',	
-				width:160,
+				width:130,
 				tdCls: 'intel-editor-cell',	
 				sortable:true, 
 				resizable:false,
@@ -1830,13 +1866,23 @@ Ext.define('CustomApp', {
 						}
 					}
 				}
+			},{
+				text:'Objective', 
+				dataIndex:'Objective',
+				width:240,
+				editor:'textfield',
+				resizable:false,
+				sortable:false,
+				renderer: function(val){
+					return val || '-';
+				}
 			}
 		];
 		
 		me.TeamCommitsGrid = me.add({
 			xtype: 'rallygrid',
             title: "Team Commits",
-			width: 680,
+			width: 790,
 			height:300,
 			x:0, y:50,
 			scroll:'vertical',
@@ -1850,7 +1896,7 @@ Ext.define('CustomApp', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(customTeamCommitsRecords, index, rowParams, store){
-					var val = customTeamCommitsRecords.get('TeamCommits');					
+					var val = customTeamCommitsRecords.get('Commitment') || 'Undecided';					
 					if(val == 'N/A') return 'grey-row';
 					if(val == 'Committed') return 'green-row';
 					if(val == 'Not Committed') return 'red-row';
@@ -1865,23 +1911,25 @@ Ext.define('CustomApp', {
 				},
 				edit: function(editor, e){
 					var grid = e.grid,
-						teamCommitsRecord = e.record,
+						tcRecord = e.record,
 						field = e.field,
 						value = e.value,
 						originalValue = e.originalValue;	
 					me._isEditing = false;
 					if(value == originalValue) return;
 					if(!me._loadTeamCommitsStores) return;
-						
+					
+					var tc = {Commitment: tcRecord.get('Commitment'), Objective: tcRecord.get('Objective') };
+					
 					me._isEditing = true;
 					me._loadTeamCommitsStores = false;
 					me.TeamCommitsGrid.setLoading(true);
 					me.TeamCommitsFeatureStore.load({
 						callback:function(records, operation){
-							var oid = teamCommitsRecord.get('ObjectID');
+							var oid = tcRecord.get('ObjectID');
 							var realFeature = me.TeamCommitsFeatureStore.findRecord('ObjectID', oid, 0, false, true, true);
 							if(!realFeature) console.log('ERROR: realFeature not found, ObjectID: ' + oid);
-							else setTeamCommit(realFeature, value, function(){						
+							else setTeamCommit(realFeature, tc, function(){						
 								me.TeamCommitsFeatureStore.load({
 									callback: function(records, operation){
 										me._isEditing = false;
@@ -1949,7 +1997,7 @@ Ext.define('CustomApp', {
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
-				width:310,
+				width:240,
 				editor:false,
 				resizable:false,
 				sortable:true,
@@ -1987,7 +2035,7 @@ Ext.define('CustomApp', {
 			scroll:'vertical',
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
-			x:780, y:50,
+			x:850, y:50,
             showPagingToolbar: false,
 			showRowActionsColumn:false,
             viewConfig: {
@@ -2030,35 +2078,9 @@ Ext.define('CustomApp', {
     },
 
 	_loadRisksGrid: function(){
-		var me = this;
-		
+		var me = this;	
 		var projectID = me.ProjectRecord.get('ObjectID');
-		
-		function getWorkweeks(){
-			var i;
-			var oneDay = 1000 * 60 * 60 * 24;
-			var startDate = me.ReleaseRecord.get('ReleaseStartDate');
-			var endDate = me.ReleaseRecord.get('ReleaseDate');
-			
-			var sd_year = new Date(startDate.getFullYear(), 0, 0);
-			var sd_diff = startDate - sd_year;
-			var sd_day = sd_diff / oneDay;
-			var sd_week = Math.ceil(sd_day / 7);
-			
-			var ed_year = new Date(endDate.getFullYear(), 0, 0);
-			var ed_diff =  endDate - ed_year;
-			var ed_day = ed_diff / oneDay;
-			var ed_week = Math.ceil(ed_day / 7);
-			
-			var weeks = [];
-			if(ed_week < sd_week){
-				for(i = sd_week; i<=52;++i) weeks.push({'Week': 'ww' + i});
-				for(i = 0; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			}
-			else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			return weeks;
-		}
-		var workweeks = getWorkweeks();
+		var workweeks = me._getWorkweeks();
 
 		/******************************** RISK PARSING/MANIPULATION FUNCTIONS ***************************/
 		
@@ -2554,31 +2576,7 @@ Ext.define('CustomApp', {
 	_loadDependenciesGrids: function(){
 		var me = this;
 
-		function getWorkweeks(){
-			var i;
-			var oneDay = 1000 * 60 * 60 * 24;
-			var startDate = me.ReleaseRecord.get('ReleaseStartDate');
-			var endDate = me.ReleaseRecord.get('ReleaseDate');
-			
-			var sd_year = new Date(startDate.getFullYear(), 0, 0);
-			var sd_diff = startDate - sd_year;
-			var sd_day = sd_diff / oneDay;
-			var sd_week = Math.ceil(sd_day / 7);
-			
-			var ed_year = new Date(endDate.getFullYear(), 0, 0);
-			var ed_diff =  endDate - ed_year;
-			var ed_day = ed_diff / oneDay;
-			var ed_week = Math.ceil(ed_day / 7);
-			
-			var weeks = [];
-			if(ed_week < sd_week){
-				for(i = sd_week; i<=52;++i) weeks.push({'Week': 'ww' + i});
-				for(i = 0; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			}
-			else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-			return weeks;
-		}
-		var workweeks = getWorkweeks();
+		var workweeks = me._getWorkweeks();
 		
 		function newTeamDep(){
 			return {
@@ -2980,7 +2978,7 @@ Ext.define('CustomApp', {
 							}
 						},{
 							dataIndex:'USName',
-							width:130,
+							width:138,
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta, depTeamRecord){
@@ -3020,6 +3018,7 @@ Ext.define('CustomApp', {
 					return {
 						xtype:'container',
 						layout:'hbox',
+						bodyCls: 'blend-in-grid',
 						pack:'start',
 						align:'stretch',
 						border:false,

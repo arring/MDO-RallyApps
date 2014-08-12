@@ -295,7 +295,7 @@ Ext.define('CustomApp', {
 
 		me.featureTCAECache = {};
 		
-		function getTeamCommitAndExpected(featureRecord, ProjectName){	
+		function getTeamCommit(featureRecord, ProjectName){	
 			var tcs = featureRecord.data.c_TeamCommits;
 			var featureID = featureRecord.data.ObjectID;
 			var projectID = me.MatrixProjectMap[ProjectName];
@@ -329,7 +329,7 @@ Ext.define('CustomApp', {
 			catch(e){ me.featureTCAECache[featureID] = this_tc = {}; }
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
-			tcs[projectID].expected = value;
+			tcs[projectID].Expected = value;
 			featureRecord.set('c_TeamCommits', JSON.stringify(tcs, null, '\t'));
 			featureRecord.save();
 		}
@@ -420,14 +420,14 @@ Ext.define('CustomApp', {
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var count = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || 0;
-					var tcae = getTeamCommitAndExpected(featureRecord, ProjectName);
-					var expected = tcae.expected || false;
-					var status = tcae.status || 'Undecided'; 
-					if(status === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
-					if(status === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
-					if(status === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
-					if(status === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
-					if(expected) metaData.tdCls += '-YELLOW';
+					var tcae = getTeamCommit(featureRecord, ProjectName);
+					var Expected = tcae.Expected || false;
+					var Commitment = tcae.Commitment || 'Undecided'; 
+					if(Commitment === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
+					if(Commitment === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
+					if(Commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
+					if(Commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
+					if(Expected) metaData.tdCls += '-YELLOW';
 					
 					return count;
 				}
@@ -536,8 +536,8 @@ Ext.define('CustomApp', {
 					var ProjectName = e.column.text,
 						matrixRecord = e.record;
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-					var tcae = getTeamCommitAndExpected(featureRecord, ProjectName);
-					setExpected(featureRecord, ProjectName, !tcae.expected);
+					var tcae = getTeamCommit(featureRecord, ProjectName);
+					setExpected(featureRecord, ProjectName, !tcae.Expected);
 					matrixRecord.commit(); //just so it rerenders this record 
 					return false;
 				}
