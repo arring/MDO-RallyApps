@@ -277,7 +277,7 @@ Ext.define('CustomApp', {
 								});
 							} else {
 								me.removeAll();
-								console.log('This ART has no releases');
+								me._showError('This ART has no releases');
 							}
 						});
 					} else{

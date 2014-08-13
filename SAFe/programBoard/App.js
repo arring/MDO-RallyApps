@@ -1639,7 +1639,7 @@ Ext.define('CustomApp', {
 									me._reloadEverything();
 								} else {
 									me.removeAll();
-									console.log('This team has no releases');
+									me._showError('This team has no releases');
 								}
 							});
 						});
@@ -1657,7 +1657,7 @@ Ext.define('CustomApp', {
 		
 	_getWorkweek: function(date){ //calculates intel workweek, returns integer
 		var oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 0),
+			yearStart = new Date(date.getFullYear(), 0, 1),
 			dayIndex = yearStart.getDay(),
 			ww01Start = yearStart - dayIndex*oneDay,
 			timeDiff = date - ww01Start,
@@ -1667,7 +1667,7 @@ Ext.define('CustomApp', {
 	
 	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in
 		var leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 0).getDay();
+			day = new Date(date.getFullYear(), 0, 1).getDay();
 		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
 	},
 	
@@ -1686,7 +1686,7 @@ Ext.define('CustomApp', {
 		}
 		else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
 		return weeks;
-	},	
+	},
 	
 	/******************************************************* RENDER ********************************************************/
 	
