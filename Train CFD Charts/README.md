@@ -1,13 +1,4 @@
-.
-=========================
+Train CFD Chart README
+======================
 
-## Overview
-
-
-## License
-
-AppTemplate is released under the MIT license.  See the file [LICENSE](./LICENSE) for the full text.
-
-##Documentation for SDK
-
-You can find the documentation on our help [site.](https://help.rallydev.com/apps/2.0rc3/doc/)
+note the stupid rally lookback feature that prevents you from actually pulling lookback data for a train directly (Forbidden 403 error)
