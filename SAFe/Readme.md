@@ -96,8 +96,14 @@ This app requires a few things set up in your Rally workspace for it to work as 
 
     Notice how I use fake values 'Dummy' and 'value' in the filters field. These are needed or else the filter injected into
     _hydrateModelAndLoad will not get sent to the server. This work around gets the job done, but is hacky none-the-less.
-    
-3.	CURRENTLY NOT FIXED YET: Grid refreshing Problem. When the rallygrid refreshes, and there are a lot of records, 
+
+3.	Proxy issue. I was using a memory proxy for the longest time before I realized that memory proxies are read-only, so 
+	I overrode the memory proxies update, destroy and create methods to update the records, but this was pretty much turning it
+	into a session storage proxy... which i later found out was what i needed. So i deleted my custom memory proxy class and
+	switched to sessionstorage proxy. NOTE: I had to randomize the sessionstorage proxy with Math.random(), becasue it would 
+	reuse the proxy on subsequent page refreshes, with all of its old data too.
+
+4.	CURRENTLY NOT FIXED YET: Grid refreshing Problem. When the rallygrid refreshes, and there are a lot of records, 
 	it does not preserve the scroll	on refresh. I checked online, and tried all the hacky solutions as well as using the 
 	'Extjs' solution of setting 
 	
