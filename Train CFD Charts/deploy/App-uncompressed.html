@@ -212,15 +212,19 @@
 	},
 		
 	/************************************************** DATE FUNCTIONS ***************************************************/
-		
+
 	_getWorkweek: function(date){ //calculates intel workweek, returns integer
-		var oneDay = 1000 * 60 * 60 * 24,
+		var me = this, oneDay = 1000 * 60 * 60 * 24,
 			yearStart = new Date(date.getFullYear(), 0, 1),
 			dayIndex = yearStart.getDay(),
 			ww01Start = yearStart - dayIndex*oneDay,
 			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay;
-		return Math.floor(dayDiff/7) + 1;
+			dayDiff = timeDiff / oneDay,
+			ww = Math.floor(dayDiff/7) + 1,
+			leap = (date.getFullYear() % 4 === 0),
+			day = new Date(date.getFullYear(), 0, 1).getDay(),
+			weekCount = ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52; //weeks in this year
+		return weekCount < ww ? 1 : ww;
 	},
 	
 	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in

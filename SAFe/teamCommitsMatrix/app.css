@@ -90,3 +90,17 @@
 	font-size:1.2em;
 	text-align:center;
 }
+
+.intel-tooltip {
+	padding:10px;
+	background-color:#C0D9FA;
+	border-radius:8px;
+}
+
+.intel-tooltip-triangle {
+	border-left: 10px solid transparent;
+	border-right: 10px solid transparent;
+	border-top: 10px solid #C0D9FA;
+	height: 0px;
+	width: 0px;
+}	

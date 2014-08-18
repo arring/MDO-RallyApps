@@ -1,6 +1,5 @@
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
-    componentCls: 'app',
 	layout:'absolute',
 		
 	/****************************************************** SHOW ERROR/TEXT MESSAGE ********************************************************/
@@ -155,7 +154,7 @@ Ext.define('CustomApp', {
 		fRecords.forEach(function(fRecord){
 			Ext.create('Rally.data.wsapi.Store',{
 				model:'HierarchicalRequirement',
-				fetch: ['ObjectID', 'Project', 'Name', 'Feature'],
+				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID'],
 				limit:Infinity,
 				autoLoad:true,
 				context:{
@@ -180,8 +179,8 @@ Ext.define('CustomApp', {
 								if(!me.MatrixUserStoryBreakdown[PName]) 
 									me.MatrixUserStoryBreakdown[PName] = {};
 								if(!me.MatrixUserStoryBreakdown[PName][FName]) 
-									me.MatrixUserStoryBreakdown[PName][FName] = 0;
-								++me.MatrixUserStoryBreakdown[PName][FName];	
+									me.MatrixUserStoryBreakdown[PName][FName] = [];
+								me.MatrixUserStoryBreakdown[PName][FName].push(sr);	
 								me.MatrixProjectMap[PName] = sr.data.Project.ObjectID;					
 							});
 							done();
@@ -290,10 +289,22 @@ Ext.define('CustomApp', {
 	},
 	
 	/******************************************************* RENDER ********************************************************/
-	_loadMatrixGrid: function(){
+	_clearToolTip: function(){
 		var me = this;
-
+		if(me.tooltip){
+			me.tooltip.panel.hide();
+			me.tooltip.triangle.hide();
+			me.tooltip.panel.destroy();
+			me.tooltip.triangle.destroy();
+			delete me.tooltip;
+		}
+	},
+	
+	_loadMatrixGrid: function(){
+		var me = this, mode='Flag'; //Flag and Details
+		
 		me.featureTCAECache = {};
+		me.showMatrix = {};
 		
 		function getTeamCommit(featureRecord, ProjectName){	
 			var tcs = featureRecord.data.c_TeamCommits;
@@ -419,7 +430,8 @@ Ext.define('CustomApp', {
 				resizable:false,
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-					var count = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || 0;
+					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [];
+					var count = array.length;
 					var tcae = getTeamCommit(featureRecord, ProjectName);
 					var Expected = tcae.Expected || false;
 					var Commitment = tcae.Commitment || 'Undecided'; 
@@ -428,7 +440,6 @@ Ext.define('CustomApp', {
 					if(Commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
 					if(Commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
 					if(Expected) metaData.tdCls += '-YELLOW';
-					
 					return count;
 				}
 			});
@@ -457,13 +468,14 @@ Ext.define('CustomApp', {
 							setTimeout(function(){me.setLoading(false); }, 2000);
 						});
 					});
+					me._clearToolTip();
 				}
 			}
 		});
 		
 		me.MatrixProductPicker = me.add({
 			xtype:'combobox',
-			x:300, y:0,
+			x:0, y:30,
 			fieldLabel:'Product Filter',
 			store: Ext.create('Ext.data.Store', {
 				fields:['ProductName'],
@@ -489,6 +501,31 @@ Ext.define('CustomApp', {
 							}
 						}));
 					}
+					me._clearToolTip();
+				}
+			}
+		});
+		
+		me.ModePicker = me.add({
+			xtype:'combobox',
+			x:0, y:60,
+			fieldLabel:'Click Mode',
+			store: Ext.create('Ext.data.Store', {
+				fields:['Mode'],
+				data: [
+					{'Mode':'Flag'},
+					{'Mode':'Details'}
+				]
+			}),
+			displayField: 'Mode',
+			editable:false,
+			value:mode,
+			listeners: {
+				select: function(combo, records){
+					var value = records[0].get('Mode');
+					if(value === mode) return;
+					else mode = value;
+					me._clearToolTip();
 				}
 			}
 		});
@@ -497,7 +534,7 @@ Ext.define('CustomApp', {
 			xtype:'container',
 			layout:'table',
 			columns:5,
-			width:800, x:600, y:0,
+			width:800, x:400, y:0,
 			border:true,
 			frame:false,
 			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected'], function(name){
@@ -520,8 +557,8 @@ Ext.define('CustomApp', {
 		
 		me.MatrixGrid = me.add({
 			xtype: 'rallygrid',
-			x:0, y:50,
-			height:1200,
+			x:0, y:100,
+			height:1800,
 			width: _.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20),
 			scroll:'both',
 			resizable:false,
@@ -535,11 +572,81 @@ Ext.define('CustomApp', {
 				beforeedit: function(editor, e){
 					var ProjectName = e.column.text,
 						matrixRecord = e.record;
-					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-					var tcae = getTeamCommit(featureRecord, ProjectName);
-					setExpected(featureRecord, ProjectName, !tcae.Expected);
-					matrixRecord.commit(); //just so it rerenders this record 
+					if(mode === 'Flag'){
+						var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
+						var tcae = getTeamCommit(featureRecord, ProjectName);
+						setExpected(featureRecord, ProjectName, !tcae.Expected);
+						matrixRecord.commit(); //just so it rerenders this record 
+					}
 					return false;
+				}, 
+				viewready: function (grid) {
+					var view = grid.view;			
+					// record the current cellIndex for tooltip stuff
+					grid.mon(view, {
+						uievent: function (type, view, cell, row, col, e) {
+							if(mode === 'Details' && type === 'mousedown') {
+								var matrixRecord = me.CustomMatrixStore.getAt(row);
+								var ProjectName = me.MatrixGrid.getColumnManager().columns[col].text;
+								var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
+								var tcae = getTeamCommit(featureRecord, ProjectName);
+								var pos = cell.getBoundingClientRect();
+								if(me.tooltip){
+									me.tooltip.panel.hide();
+									me.tooltip.triangle.hide();
+									me.tooltip.panel.destroy();
+									me.tooltip.triangle.destroy();
+									if(me.tooltip.row == row && me.tooltip.col == col) {
+										delete me.tooltip;
+										return;
+									}
+								}
+								
+								if(col <= 3) return;
+								var panelWidth = 300;
+								var theHTML = '<p><b>Team: </b>' + ProjectName + 
+											'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
+											'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
+											'<p><b>UserStories: </b><ol>';
+								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
+									theHTML += '<li>' + sr.get('FormattedID') + '</li>';
+								});
+								theHTML += '</ol>';
+								
+								me.tooltip = {
+									row:row,
+									col:col,
+									panel: Ext.widget('container', {
+										floating:true,
+										width: panelWidth,
+										cls: 'intel-tooltip',
+										focusOnToFront:false,
+										shadow:false,
+										renderTo:Ext.getBody(),
+										html:theHTML,
+										listeners:{
+											afterrender: function(panel){
+												panel.setPosition(pos.left-panelWidth, pos.top);
+											}
+										}
+									}),
+									triangle: Ext.widget('container', {
+										floating:true,
+										width:0, height:0,
+										cls: 'intel-tooltip-triangle',
+										focusOnToFront:false,
+										shadow:false,
+										renderTo:Ext.getBody(),
+										listeners:{
+											afterrender: function(panel){
+												panel.setPosition(pos.left -10, pos.top);
+											}
+										}
+									})	
+								};
+							}
+						}
+					});
 				}
 			},
 			showRowActionsColumn:false,
@@ -548,5 +655,13 @@ Ext.define('CustomApp', {
 			context: me.getContext(),
 			store: me.CustomMatrixStore
 		});	
-	}
+	},
+	listeners: {
+		afterrender: function() {
+			var me = this;
+			me.getEl().on('scroll', function(){
+				me._clearToolTip();
+			});
+		}
+    }
 });
