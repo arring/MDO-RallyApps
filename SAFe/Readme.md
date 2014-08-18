@@ -124,3 +124,5 @@ I ended up following my own design pattern in all the code.
 	stores. I refresh the *real* feature/userstory/project/etc.. stores every 10-15 seconds on a timer, and then I reload the 
 	custom stores to update the records that are not being edited or pending changes. 
 
+3. model.getCollection('model type').sync(...); sync does not call the callback unless there are CRUD operations to perform, so 
+	make sure to check for that. 
