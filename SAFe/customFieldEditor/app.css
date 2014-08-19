@@ -1,0 +1,19 @@
+.app {
+     /* Add app styles here */
+}
+/* .x-grid-row-alt {
+	background-color:gray !important;
+} */
+
+.intel-feature-not-committed .x-grid-cell {
+	background-color:rgba(255, 0, 0, 0.15) !important;
+}
+.intel-feature-not-committed.x-grid-row-selected .x-grid-cell {
+	background-color:rgba(255, 0, 0, 0.25) !important;
+}
+.intel-feature-committed .x-grid-cell{
+	background-color:rgba(0, 255, 0, 0.15) !important;
+}
+.intel-feature-committed.x-grid-row-selected .x-grid-cell {
+	background-color:rgba(0, 255, 0, 0.25) !important;
+}
