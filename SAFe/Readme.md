@@ -111,6 +111,13 @@ This app requires a few things set up in your Rally workspace for it to work as 
 	
 	in the config. But this did not fix anything.
 
+5.	TODO: Talk about how annoying it is to keep things consistent in the dependencies grids, especieally becasue user 
+	stories can get deleted, and dependencies are a many to one releationship, and can move between user stories. 
+	Lots of logic for consistency.
+
+6. 	TODO: talk about caching and how i messed it up for a long time, requireing me to reload EVERYTHING every single time 
+	things were synced with proxy. I fixed that now by actually updating the proxy correctly. 
+
 ## Other Notes, common design patters
 I ended up following my own design pattern in all the code. 
 
