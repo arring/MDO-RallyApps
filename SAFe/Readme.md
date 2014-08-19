@@ -113,7 +113,10 @@ This app requires a few things set up in your Rally workspace for it to work as 
 
 5.	TODO: Talk about how annoying it is to keep things consistent in the dependencies grids, especieally becasue user 
 	stories can get deleted, and dependencies are a many to one releationship, and can move between user stories. 
-	Lots of logic for consistency.
+	Lots of logic for consistency. It is actually probably not possible to keep c_dependencies field consistent with 
+	Predecessors and Successors fields on UserStories, becasue there are so many different ways these fields can be changed,
+	especially outside these SAFe apps. Right now i just clobber everything in the Predecessor and Successor fields and make
+	them match what the c_dependencies app contains.
 
 6. 	TODO: talk about caching and how i messed it up for a long time, requireing me to reload EVERYTHING every single time 
 	things were synced with proxy. I fixed that now by actually updating the proxy correctly. 
