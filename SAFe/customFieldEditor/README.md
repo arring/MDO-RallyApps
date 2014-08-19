@@ -1,13 +1,1 @@
-Random App Name70221
-=========================
-
-## Overview
-
-
-## License
-
-AppTemplate is released under the MIT license.  See the file [LICENSE](./LICENSE) for the full text.
-
-##Documentation for SDK
-
-You can find the documentation on our help [site.](https://help.rallydev.com/apps/2.0rc3/doc/)
+This is just used to edit the custom fields c_Risks, c_TeamCommits and c_Dependencies. Only for development and debugging purposes
