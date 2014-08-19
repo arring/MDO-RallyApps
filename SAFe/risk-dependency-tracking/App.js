@@ -1328,8 +1328,13 @@ Ext.define('CustomApp', {
 					var rpd = me.RisksParsedData[i];
 					if(rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID){
 						me.RisksParsedData.splice(i, 1); break; }
+				}			
+				var str = JSON.stringify(risks, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
 				}
-				featureRecord.set('c_Risks', JSON.stringify(risks, null, '\t'));
+				featureRecord.set('c_Risks', str);
 				featureRecord.save({
 					callback:function(){
 						console.log('removed risk from feature:', featureRecord, riskData, risks);
@@ -1361,7 +1366,12 @@ Ext.define('CustomApp', {
 					parseDataAdded = true; break;
 				}
 			}
-			featureRecord.set('c_Risks', JSON.stringify(risks, null, '\t'));
+			var str = JSON.stringify(risks, null, '\t');
+			if(str.length >= 32768){
+				alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			featureRecord.set('c_Risks', str);
 			featureRecord.save({
 				callback:function(){
 					console.log('added risk to feature:', featureRecord, riskData, risks);
@@ -1396,8 +1406,8 @@ Ext.define('CustomApp', {
 						var realRiskData = removeRiskFromList(currentRisksRecord.get('RiskID'), realRisksDatas);
 						
 						var dirtyType = getDirtyType(currentRisksRecord, realRiskData);
-						if(dirtyType === 'New' || dirtyType === 'Edited') continue; //we don't want to remove any pending changes on a record							
-						else if(dirtyType == 'Deleted') // the currentRisksRecord was deleted by someone else, and we arent editing it
+						if(dirtyType === 'Edited') continue; //we don't want to remove any pending changes on a record							
+						else if(dirtyType == 'Deleted' || dirtyType == 'New') // the currentRisksRecord was deleted by someone else, and we arent editing it
 							customRisksStore.remove(currentRisksRecord);
 						else { //we are not editing it and it still exists, so update current copy
 							for(var key in realRiskData)
@@ -1536,7 +1546,6 @@ Ext.define('CustomApp', {
 						text:'Undo',
 						width:70,
 						handler: function(){
-							if(!me._loadRisksStores) return;
 							var realRiskData = removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
 							for(var key in realRiskData)
 								riskRecord.set(key, realRiskData[key]);
@@ -1679,16 +1688,23 @@ Ext.define('CustomApp', {
 				Preds: predDepData.Predecessors
 			};
 
-			for(i=0;i<cachePreds.length; ++i){ //update or append to the cache, this predDepData
-				dpdp = cachePreds[i];
-				if(dpdp.DependencyID === predDepData.DependencyID && dpdp.FormattedID === predDepData.FormattedID){
-					cachePreds[i] = predDepData;
-					parseDataAdded = true; break;
+			//update or append to the cache, this predDepData
+			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+				for(i=0;i<cachePreds.length; ++i){
+					dpdp = cachePreds[i];
+					if(dpdp.DependencyID === predDepData.DependencyID){
+						cachePreds[i] = predDepData;
+						parseDataAdded = true; break;
+					}
 				}
+				if(!parseDataAdded) cachePreds.push(predDepData);	
 			}
-			if(!parseDataAdded) cachePreds.push(predDepData);
-			
-			userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
+			var str = JSON.stringify(dependencies, null, '\t');
+			if(str.length >= 32768){
+				alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			userStoryRecord.set('c_Dependencies', str);
 			userStoryRecord.save({
 				callback:function(){
 					console.log('added predecessor to userStory:', userStoryRecord, predDepData, dependencies);

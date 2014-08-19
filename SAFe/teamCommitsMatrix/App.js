@@ -206,8 +206,6 @@ Ext.define('CustomApp', {
 		});
 	},
 	
-	_reloadingStores: true,
-	
 	_reloadMatrixStores: function(){
 		var me = this;
 		if(me.MatrixFeatureStore) {
@@ -340,8 +338,13 @@ Ext.define('CustomApp', {
 			catch(e){ me.featureTCAECache[featureID] = this_tc = {}; }
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
-			tcs[projectID].Expected = value;
-			featureRecord.set('c_TeamCommits', JSON.stringify(tcs, null, '\t'));
+			tcs[projectID].Expected = value;		
+			var str = JSON.stringify(tcs, null, '\t');
+			if(str.length >= 32768){
+				alert('ERROR: TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			featureRecord.set('c_TeamCommits', str);
 			featureRecord.save();
 		}
 

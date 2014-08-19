@@ -1721,8 +1721,13 @@ Ext.define('CustomApp', {
 			catch(e){ tcs = {}; }
 			if(!tcs[projectID]) tcs[projectID] = {};
 			tcs[projectID].Commitment = tc.Commitment;
-			tcs[projectID].Objective = tc.Objective;
-			featureRecord.set('c_TeamCommits', JSON.stringify(tcs, null, '\t'));
+			tcs[projectID].Objective = tc.Objective;		
+			var str = JSON.stringify(tcs, null, '\t');
+			if(str.length >= 32768){
+				alert('ERROR: TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			featureRecord.set('c_TeamCommits', str);
 			featureRecord.save({ callback:cb});
 		}
 		
@@ -2113,7 +2118,12 @@ Ext.define('CustomApp', {
 					if(rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID){
 						me.RisksParsedData.splice(i, 1); break; }
 				}
-				featureRecord.set('c_Risks', JSON.stringify(risks, null, '\t'));
+				var str = JSON.stringify(risks, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
+				}
+				featureRecord.set('c_Risks', str);
 				featureRecord.save({
 					callback:function(){
 						console.log('removed risk from feature:', featureRecord, riskData, risks);
@@ -2145,7 +2155,12 @@ Ext.define('CustomApp', {
 				}
 			}
 			if(!parseDataAdded) me.RisksParsedData.push(riskData);
-			featureRecord.set('c_Risks', JSON.stringify(risks, null, '\t'));
+			var str = JSON.stringify(risks, null, '\t');
+			if(str.length >= 32768){
+				alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			featureRecord.set('c_Risks', str);
 			featureRecord.save({
 				callback:function(){
 					console.log('added risk to feature:', featureRecord, riskData, risks);
@@ -2663,7 +2678,12 @@ Ext.define('CustomApp', {
 			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
 			
 			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){ 
-				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
+				var str = JSON.stringify(dependencies, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
+				}
+				userStoryRecord.set('c_Dependencies', str);
 				userStoryRecord.save({
 					callback:function(){
 						console.log('removed pred from userStory:', userStoryRecord, predDepData, dependencies);
@@ -2702,7 +2722,12 @@ Ext.define('CustomApp', {
 			});
 			
 			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){ 
-				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
+				var str = JSON.stringify(dependencies, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
+				}
+				userStoryRecord.set('c_Dependencies', str);
 				userStoryRecord.save({
 					callback: function(){
 						console.log('removed succ from userStory:', userStoryRecord, succDepData, dependencies);
@@ -2746,7 +2771,12 @@ Ext.define('CustomApp', {
 			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
 			
 			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){
-				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
+				var str = JSON.stringify(dependencies, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
+				}
+				userStoryRecord.set('c_Dependencies', str);
 				userStoryRecord.save({
 					callback:function(){
 						console.log('added predecessor to userStory:', userStoryRecord, predDepData, dependencies);
@@ -2805,7 +2835,12 @@ Ext.define('CustomApp', {
 			});
 			
 			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){
-				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
+				var str = JSON.stringify(dependencies, null, '\t');
+				if(str.length >= 32768){
+					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					if(cb) cb();
+				}
+				userStoryRecord.set('c_Dependencies', str);
 				userStoryRecord.save({
 					callback:function(){
 						console.log('added succ to userStory:', userStoryRecord, succDepData, dependencies);
