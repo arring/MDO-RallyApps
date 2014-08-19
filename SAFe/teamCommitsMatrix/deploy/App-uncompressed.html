@@ -406,7 +406,7 @@
 					if(feature.get('Project')) {
 						var pid = feature.get('Project')._ref.split('/project/')[1];
 						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/portfolioitem/feature/' + 
-								feature.get('ObjectID') + '">' + FID + '</a>';
+								feature.get('ObjectID') + '" target="_blank">' + FID + '</a>';
 					}
 					else return name;
 				}
@@ -612,13 +612,15 @@
 								}
 								
 								if(col <= 3) return;
-								var panelWidth = 300;
+								var panelWidth = 400;
 								var theHTML = '<p><b>Team: </b>' + ProjectName + 
 											'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
 											'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
 											'<p><b>UserStories: </b><ol>';
 								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
-									theHTML += '<li>' + sr.get('FormattedID') + '</li>';
+									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
+										'd/detail/userstory/' + sr.get('ObjectID') + '" target="_blank">' + sr.get('FormattedID') + '</a>: ' + 
+										sr.get('Name').substring(0, 40) + (sr.get('Name').length>40 ? '...' : '') + '</li>';
 								});
 								theHTML += '</ol>';
 								
@@ -665,7 +667,8 @@
 			store: me.CustomMatrixStore
 		});	
 	},
-	listeners: {
+	
+	listeners: { //app listeners yo
 		afterrender: function() {
 			var me = this;
 			me.getEl().on('scroll', function(){

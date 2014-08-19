@@ -1220,13 +1220,13 @@ Ext.define('CustomApp', {
 	
 	//_____________________________________ DEPENDENCIES STUFF ___________________________________	
 	
-	_loadRandomUserStory: function(ProjectRef, cb){ 
+	_loadRandomUserStory: function(ProjectRef, cb){ //try to mix it up at least 
 		var me = this;
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
 			autoLoad:true,
-			limit:1,
-			pageSize:1,
+			limit:10,
+			pageSize:10,
 			fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
@@ -1235,7 +1235,7 @@ Ext.define('CustomApp', {
 			listeners: {
 				load: {
 					fn: function(userStoryStore, userStoryRecords){
-						cb(userStoryRecords.pop());
+						cb(userStoryRecords[Math.floor(Math.random()*userStoryRecords.length)]);
 					},
 					single:true
 				}
@@ -2593,38 +2593,76 @@ Ext.define('CustomApp', {
 			}
 		}
 		
-		/*************************************** THESE NEXT 4 METHODS ARE THE ONLY PLACE YOU HAVE TO WORRY ABOUT SUCESSORS AND 
+		/*************************************** THESE NEXT 5 METHODS ARE THE ONLY PLACE YOU HAVE TO WORRY ABOUT SUCESSORS AND 
 																PREDECESSOR FIELDS ON USER STORIES!!!!!!!!!!!!!!! *************************/
+		
+		function syncCollection(userStoryRecord, usList, type, callback){ //type == Predecessors || Successors
+			var collectionStore, collectionRecords, finished=-1, 
+				syncCollectionProxy = false;
+
+			userStoryRecord.getCollection(type).load({ // update the collection before saving user story
+				fetch:['FormattedID'],
+				callback: function(){
+					collectionStore = this, collectionRecords = collectionStore.getRange();
+					function collectionFuncDone(){ //when all dep userstories are added, call callback
+						if(++finished == usList.length){
+							if(collectionRecords.length){
+								syncCollectionProxy = true;
+								collectionRecords.forEach(function(cr){ collectionStore.remove(cr); }); 
+							}
+							if(syncCollectionProxy) collectionStore.sync({ callback:callback });
+							else callback();
+						}
+					}
+					collectionFuncDone(); //in case usList == []
+					usList.forEach(function(dep){ //have to load each user story to get its _ref :(
+						var realPred, project, i;
+						
+						for(i=0;i<collectionRecords.length;++i)
+							if(collectionRecords[i].get('FormattedID') === dep.USID){
+								realPred = collectionRecords.splice(i, 0)[0]; break; }
+						if(!realPred) {
+							project = _.find(me.ValidProjects, function(projectRecord){
+								return projectRecord.get('ObjectID') == dep.PID;
+							});
+							me._loadUserStoryByFID(dep.USID, project.get('_ref'), function(us){
+								if(us) {
+									syncCollectionProxy = true;
+									collectionStore.add(us);
+								}
+								collectionFuncDone();
+							});
+						} else collectionFuncDone();
+					});
+				}
+			});	
+		}
+		
 		function removePredDep(userStoryRecord, predDepData, cb){
 			var dependencies = me._getDependencies(userStoryRecord),
-				predDep = dependencies.Preds[predDepData.DependencyID],
 				cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
-				syncCollection = false, finshedFunc,
-				predUSlist, depID, preds, pred, i, store;
-				
-			if(!predDep){ cb(); return; }
-			predUSlist = _.reduce(predDep.Preds, function(list, pred){ //get all assigned pred user stories
-				if(pred.A) list.push(pred.USID);
-				return list;
-			}, []);
-			
-			delete dependencies.Preds[predDepData.DependencyID]; //delete from user story preds		
-			for(i=0;i<cachePreds.length; ++i){	//delete from cache
-				dpdp = cachePreds[i];
-				if(dpdp.DependencyID === predDepData.DependencyID && dpdp.FormattedID === predDepData.FormattedID){
-					cachePreds.splice(i, 1); break; }
-			}
-			
-			for(depID in dependencies.Preds){ //remove pred user stories that are in other dependencies (we want to keep them in the field)
-				preds = dependencies.Preds[depID].Preds;
-				for(i=0; i<preds.length; ++i){
-					pred = preds[i];
-					if(pred.A && predUSlist.indexOf(pred.USID) > -1)
-						predUSlist.splice(predUSlist.indexOf(pred.USID), 1);
+				predUSlist = [], depID, i;
+
+			delete dependencies.Preds[predDepData.DependencyID]; //delete from user story preds			
+			//update or append to the cache, this predDepData
+			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+				for(i=0;i<cachePreds.length; ++i){	//delete from cache
+					dpdp = cachePreds[i];
+					if(dpdp.DependencyID === predDepData.DependencyID){ 
+						cachePreds.splice(i, 1); break; }
 				}
-			} 
+			}
+
+			function appendPred(pred){  //only add each assigned userstory once
+				if(pred.A){
+					for(i=0;i<predUSlist.length; ++i)
+						if(predUSlist[i].USID === pred.USID) return;
+					predUSlist.push(pred);
+				}
+			}
+			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
 			
-			finshedFunc = function(){ //save the user story and call the callback
+			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){ 
 				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 				userStoryRecord.save({
 					callback:function(){
@@ -2632,51 +2670,38 @@ Ext.define('CustomApp', {
 						if(cb) cb();
 					}
 				});
-			};
-			userStoryRecord.getCollection('Predecessors').load({ // update the collection before saving user story
-				fetch:['FormattedID'],
-				callback: function(){
-					collectionStore = this;
-					predUSlist.forEach(function(fid){
-						pred = collectionStore.findRecord('FormattedID', fid);
-						if(pred) {
-							collectionStore.remove(pred);
-							syncCollection = true;
-						}
-					});
-					if(syncCollection) collectionStore.sync({ callback: finshedFunc });
-					else finshedFunc();
-				}
-			});		
+			});
+			
 		}
 		
 		function removeSuccDep(userStoryRecord, succDepData, cb){
 			var dependencies = me._getDependencies(userStoryRecord),
-				succs = dependencies.Succs, syncCollection = false, finshedFunc,
 				cacheSuccs = me.DependenciesParsedData.Successors, dpds,
-				succDep, succFID, i, collectionStore, succ;
+				succUSlist = [], i;
 				
-			for(i=0; i<succs.length; ++i){ //find the correct succDep. and remove it from the dependencies object
-				if(succs[i].ID === succDepData.DependencyID){					
-					succDep = succs.splice(i, 1)[0];
-					break;
+			for(i=0; i<dependencies.Succs.length; ++i) //find the correct succDep. and remove it from the dependencies object
+				if(dependencies.Succs[i].ID === succDepData.DependencyID){					
+					dependencies.Succs.splice(i, 1); break; }	
+					
+			//update or append to the cache, this predDepData
+			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+				for(i=0;i<cacheSuccs.length; ++i){ //remove suddDep from cache
+					dpds = cacheSuccs[i];
+					//need formattedID because can be multiple same succ DepIDs
+					if(dpds.DependencyID === succDepData.DependencyID && dpds.FormattedID === succDepData.FormattedID){
+						cacheSuccs.splice(i, 1); break; }
 				}
-			}		
-			if(!succDep) { cb(); return; }
-
-			for(i=0;i<cacheSuccs.length; ++i){ //remove suddDep from cache
-				dpds = cacheSuccs[i];
-				if(dpds.DependencyID === succDepData.DependencyID && dpds.FormattedID === succDepData.FormattedID){
-					cacheSuccs.splice(i, 1); break; }
-			}			
-			
-			succFID = succDep.SUSID;	//FormattedID of the successor user story	
-			for(i=0; i<succs.length; ++i){ //undefine succFID if other dependencies rely on it
-				if(succFID === succs[i].SUSID)
-					succFID = undefined;
 			}
 			
-			finshedFunc = function(){ //save user story and call callback
+			_.each(dependencies.Succs, function(succ){
+				if(succ.A){
+					for(i=0;i<succUSlist.length; ++i)
+						if(succUSlist[i].USID === succ.SUSID) return;
+					succUSlist.push({USID: succ.SUSID, PID: succ.SPID});
+				}
+			});
+			
+			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){ 
 				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 				userStoryRecord.save({
 					callback: function(){
@@ -2684,52 +2709,43 @@ Ext.define('CustomApp', {
 						if(cb) cb();
 					}
 				});
-			};
-			userStoryRecord.getCollection('Successors').load({ //update successor colleciton before saving user story
-				fetch:['FormattedID'],
-				callback: function(){
-					collectionStore = this;
-					succ = collectionStore.findRecord('FormattedID', succFID);
-					if(succ) {
-						collectionStore.remove(succ);
-						syncCollection = true;
-					}
-					if(syncCollection) collectionStore.sync({ callback: finshedFunc });
-					else finshedFunc();
-				}
-			});	
+			});
 		}
 
 		function addPredDep(userStoryRecord, predDepData, cb){ 
 			var dependencies = me._getDependencies(userStoryRecord),
-				predDep = dependencies.Preds[predDepData.DependencyID],	
 				cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
-				predUSlist, 
-				syncCollection = false, collectionStore, finished, usAddedFunc, finishedFunc,
-				parseDataAdded = false, i, realPred, project;
-				
-			predUSlist = _.reduce(predDepData.Predecessors, function(list, pred){//get all assigned pred user stories 
-				if(pred.A) list.push(pred);
-				return list;
-			}, []);	
-
-			finishedFunc = function(){ //save the user story, update the cache, and call the callback		
-				dependencies.Preds[predDepData.DependencyID] = {
-					Desc: predDepData.Description,
-					CP: predDepData.Checkpoint,
-					Sta: predDepData.Status,
-					Preds: predDepData.Predecessors
-				};
-
-				for(i=0;i<cachePreds.length; ++i){ //update or append to the cache, this predDepData
+				predUSlist = [], parseDataAdded = false, depID, i;
+			
+			dependencies.Preds[predDepData.DependencyID] = {
+				Desc: predDepData.Description,
+				CP: predDepData.Checkpoint,
+				Sta: predDepData.Status,
+				Preds: predDepData.Predecessors
+			};
+ 
+			//update or append to the cache, this predDepData
+			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+				for(i=0;i<cachePreds.length; ++i){
 					dpdp = cachePreds[i];
-					if(dpdp.DependencyID === predDepData.DependencyID && dpdp.FormattedID === predDepData.FormattedID){
+					if(dpdp.DependencyID === predDepData.DependencyID){
 						cachePreds[i] = predDepData;
 						parseDataAdded = true; break;
 					}
 				}
-				if(!parseDataAdded) cachePreds.push(predDepData);
-				
+				if(!parseDataAdded) cachePreds.push(predDepData);	
+			}
+			
+			function appendPred(pred){  //only add each assigned userstory once
+				if(pred.A){
+					for(i=0;i<predUSlist.length; ++i)
+						if(predUSlist[i].USID === pred.USID) return;
+					predUSlist.push(pred);
+				}
+			}			
+			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
+			
+			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){
 				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 				userStoryRecord.save({
 					callback:function(){
@@ -2737,78 +2753,58 @@ Ext.define('CustomApp', {
 						if(cb) cb();
 					}
 				});
-			};
-			userStoryRecord.getCollection('Predecessors').load({ // update the collection before saving user story
-				fetch:['FormattedID'],
-				callback: function(){
-					collectionStore = this, finished = -1; 
-					usAddedFunc = function(){ //when all pred userstories are added, call finishedFunc
-						if(++finished == predUSlist.length){
-							if(syncCollection) collectionStore.sync({ callback:finishedFunc });
-							else finishedFunc();
-						}
-					};
-					usAddedFunc();
-					predUSlist.forEach(function(pred){ //have to load each user story to get its _ref :(
-						realPred = collectionStore.findRecord('FormattedID', pred.USID);
-						if(!realPred) {
-							project = _.find(me.ValidProjects, function(projectRecord){
-								return projectRecord.get('ObjectID') == pred.PID;
-							});
-							me._loadUserStoryByFID(pred.USID, project.get('_ref'), function(us){
-								if(us) {
-									syncCollection = true;
-									collectionStore.add(us);
-								}
-								usAddedFunc();
-							});
-						} else usAddedFunc();
-					});
-					
-				}
-			});		
+			});
 		}
 		
 		function addSuccDep(userStoryRecord, succDepData, cb){ 
 			var dependencies = me._getDependencies(userStoryRecord),
 				cacheSuccs = me.DependenciesParsedData.Successors, dpds,
-				parseDataAdded = false, succFID,
-				succs = dependencies.Succs, finishedFunc, copy,
-				i, replaced = false, project, collectionStore, realSucc;
-
-			if(succDepData.Assigned) succFID = succDepData.SuccFormattedID;
-			
-			finishedFunc = function(){
-				copy = {
-					ID: succDepData.DependencyID,
-					SUSID: succDepData.SuccFormattedID,
-					SUSName: succDepData.SuccUserStoryName,
-					SPID: succDepData.SuccProjectID,
-					Desc: succDepData.Description,
-					CP: succDepData.Checkpoint,
-					Sup: succDepData.Supported,
-					A: succDepData.Assigned,
-					REL: succDepData.ReleaseDate,
-					REL_S: succDepData.ReleaseStartDate
-				};
-				for(i = 0; i<succs.length; ++i){
-					if(succs[i].ID === copy.ID){
-						succs[i] = copy;
-						replaced=true; 
-						break; 
-					}
+				replaced = false, succUSlist=[], 
+				parseDataAdded = false, i, newSucc;
+				
+			newSucc = {
+				ID: succDepData.DependencyID,
+				SUSID: succDepData.SuccFormattedID,
+				SUSName: succDepData.SuccUserStoryName,
+				SPID: succDepData.SuccProjectID,
+				Desc: succDepData.Description,
+				CP: succDepData.Checkpoint,
+				Sup: succDepData.Supported,
+				A: succDepData.Assigned,
+				REL: succDepData.ReleaseDate,
+				REL_S: succDepData.ReleaseStartDate
+			};
+			for(i = 0; i<dependencies.Succs.length; ++i){
+				if(dependencies.Succs[i].ID === newSucc.ID){
+					dependencies.Succs[i] = newSucc;
+					replaced=true; 
+					break; 
 				}
-				if(!replaced) succs.push(copy);
+			}
+			if(!replaced) dependencies.Succs.push(newSucc);
 
+			//update or append to the cache, this predDepData
+			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 				for(i=0;i<cacheSuccs.length; ++i){ //update or append to the cache, this succDepData
 					dpds = cacheSuccs[i];
+					//could be multiple succs with same DepID
 					if(dpds.DependencyID === succDepData.DependencyID && dpds.FormattedID === succDepData.FormattedID){
 						cacheSuccs[i] = succDepData;
 						parseDataAdded = true; break;
 					}
 				}
 				if(!parseDataAdded) cacheSuccs.push(succDepData);
+			}
 			
+			_.each(dependencies.Succs, function(succ){
+				if(succ.A){
+					for(i=0;i<succUSlist.length; ++i)
+						if(succUSlist[i].USID === succ.SUSID) return;
+					succUSlist.push({USID: succ.SUSID, PID: succ.SPID});
+				}
+			});
+			
+			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){
 				userStoryRecord.set('c_Dependencies', JSON.stringify(dependencies, null, '\t'));
 				userStoryRecord.save({
 					callback:function(){
@@ -2816,27 +2812,7 @@ Ext.define('CustomApp', {
 						if(cb) cb();
 					}
 				});
-			};
-			
-			userStoryRecord.getCollection('Successors').load({
-				fetch:['FormattedID'],
-				callback: function(){
-					collectionStore = this;
-					realSucc = collectionStore.findRecord('FormattedID', succFID);
-					if(!realSucc) {
-						project = _.find(me.ValidProjects, function(projectRecord){
-							return projectRecord.get('ObjectID') == succDepData.SuccProjectID;
-						});
-						me._loadUserStoryByFID(succDepData.SuccFormattedID, project.get('_ref'), function(us){
-							if(us) {
-								collectionStore.add(us);
-								collectionStore.sync({ callback: finishedFunc });
-							}
-							else finishedFunc();
-						});
-					} else finishedFunc();
-				}
-			});	
+			});
 		}
 
 		function getDirtyType(localDepRecord, realDepData){
@@ -3388,13 +3364,17 @@ Ext.define('CustomApp', {
 														});
 														me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
 															if(!us) return; // looks as if the userStory doesn't exist. so we ignore it
-															removeSuccDep(us, predDepData); //using predDepData cuz we only need DependencyID
+															var succDepData = {
+																FormattedID: teamDepData.USID,
+																DependencyID: predDepData.DependencyID
+															};
+															removeSuccDep(us, succDepData); 
 														});
 													});
 													addedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the added teams now 
 													updatedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the updated teams now 
 													
-													predDepData.Predecessors = localPredTeams;
+													predDepData.Predecessors = localPredTeams; //update these after 1) and 2) changed them
 													
 													var lastAction = function(){ //last thing to do!											
 														predDepRecord.set('Edited', false);	
@@ -3466,19 +3446,6 @@ Ext.define('CustomApp', {
 													}
 													else{
 														updatedTeamDepsCallbacks.push(function(){
-															var deps = me._getDependencies(us);
-															var succs = deps.Succs;
-															for(var i = 0;i<succs.length;++i){
-																if(succs[i].ID == predDepData.DependencyID){
-																	succs[i].SUSName = predDepData.UserStoryName;
-																	succs[i].SUSID = predDepData.FormattedID;
-																	succs[i].CP = predDepData.Checkpoint;
-																	succs[i].Desc = predDepData.Description;
-																	us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
-																	us.save();
-																	return;
-																}
-															} //got deleted somehow, so re-add it, DONT CHANGE THE TeamDepData FIELDS--US didn't change!
 															var succDep = {
 																DependencyID: predDepData.DependencyID,
 																SuccUserStoryName: predDepData.UserStoryName,
@@ -3526,6 +3493,8 @@ Ext.define('CustomApp', {
 													SuccProjectID: me.ProjectRecord.get('ObjectID'),
 													UserStoryName: '',
 													FormattedID: '',
+													_realUserStoryName: us.get('Name'), //not needed
+													_realFormattedID: us.get('FormattedID'), //not needed
 													Description: predDepData.Description,
 													Checkpoint: predDepData.Checkpoint,
 													Supported: 'No',
@@ -3573,7 +3542,11 @@ Ext.define('CustomApp', {
 											});
 											me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
 												if(!us) return; //us must have been deleted. ignore it
-												removeSuccDep(us, predDepData); //using teamDepData cuz we only need DependencyID
+												var succDepData = {
+													FormattedID: teamDepData.USID,
+													DependencyID: predDepData.DependencyID
+												};
+												removeSuccDep(us, succDepData); //using teamDepData cuz we only need DependencyID
 											});
 										});
 													
@@ -3714,9 +3687,9 @@ Ext.define('CustomApp', {
 						var realDep = removeDepFromList(depID, realSuccDepsData);	
 							
 						var dirtyType = getDirtyType(depRec, realDep);
-						if(dirtyType === 'New' || dirtyType === 'Edited') //we don't want to remove any pending changes
+						if(dirtyType === 'Edited') //we don't want to remove any pending changes
 							continue;						
-						else if(dirtyType === 'Deleted'){ // the depRec was deleted by someone else, and we arent editing it
+						else if(dirtyType === 'Deleted' || dirtyType === 'New'){ // the depRec was deleted by someone else, and we arent editing it
 							customSuccDepStore.remove(depRec);
 						} else {
 							for(var key in realDep)
@@ -3883,6 +3856,7 @@ Ext.define('CustomApp', {
 				}
 			},{
 				text:'',
+				dataIndex:'Edited',
 				width:130,
 				xtype:'componentcolumn',
 				resizable:false,
@@ -3902,6 +3876,7 @@ Ext.define('CustomApp', {
 				}
 			},{
 				text:'',
+				dataIndex:'Edited',
 				width:80,
 				xtype:'componentcolumn',
 				resizable:false,
@@ -3917,6 +3892,7 @@ Ext.define('CustomApp', {
 							var realDep = removeDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
 							for(var key in realDep)
 								succDepRecord.set(key, realDep[key]);
+							succDepRecord.set('Edited', false);
 						}
 					};
 				}
@@ -3980,9 +3956,19 @@ Ext.define('CustomApp', {
 										if(!us) alertAndDelete('Successor UserStory has been deleted. Deleting Dependency Now');
 										else {
 											var deps = me._getDependencies(us);
-											var predDep = deps.Preds[succDepData.DependencyID];
-											if(predDep){
-												var predecessors = predDep.Preds;
+											var rppData = deps.Preds[succDepData.DependencyID];
+											if(rppData){
+												var predDepData = {
+													DependencyID: succDepData.DependencyID,
+													FormattedID: us.get('FormattedID'),
+													UserStoryName: us.get('Name'),
+													Description: rppData.Desc,
+													Checkpoint: rppData.CP,
+													Status: rppData.Sta,
+													Predecessors: rppData.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
+													Edited: false //not in pending edit mode
+												};
+												var predecessors = predDepData.Predecessors;
 												for(var i = 0;i<predecessors.length;++i){
 													//have to make sure this dep is actually in the JSON teamDep object
 													if(predecessors[i].PID == me.ProjectRecord.get('ObjectID')){ 
@@ -3990,9 +3976,7 @@ Ext.define('CustomApp', {
 														predecessors[i].USID = succDepData._realFormattedID;
 														predecessors[i].USName = succDepData._realUserStoryName;
 														predecessors[i].A = succDepData.Assigned;
-														
-														us.set('c_Dependencies', JSON.stringify(deps, null, '\t'));
-														us.save();
+														addPredDep(us, predDepData);
 												
 														/***************************** UPDATE THE SUCC USER STORIES *********************/
 	
