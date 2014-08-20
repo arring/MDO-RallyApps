@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Portfolio Hierarchy</title>
+
+    <script type="text/javascript" src="/apps/2.0rc2/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                (function(){var Ext=window.Ext4||window.Ext;Ext.define("Rally.apps.portfoliohierarchy.ProjectUserStoryTreeItem",{extend:"Rally.ui.tree.UserStoryTreeItem",alias:"widget.projectuserstorytreeitem",config:{displayedFields:["Name","Project","ScheduleState"]},getContentTpl:function(){var me=this;return Ext.create("Ext.XTemplate",'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',"{[this.getActionsGear()]}",'<div class="textContent ellipses">[{[this.getProjectName()]}] - {[this.getFormattedId()]} - {Name}</div>','<div class="rightSide">',"{[this.getScheduleState(values)]}","</div>",{canDrag:function(){return me.getCanDrag()},getProjectName:function(){return me.getRecord().get("Project").Name},getActionsGear:function(){return me._buildActionsGearHtml()},getScheduleState:function(){return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(),"ScheduleState")},getFormattedId:function(){return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(),"FormattedID")}})}}),Ext.define("Rally.apps.portfoliohierarchy.IterationUserStoryTreeItem",{extend:"Rally.ui.tree.UserStoryTreeItem",alias:"widget.iterationuserstorytreeitem",config:{displayedFields:["Name","Iteration","ScheduleState"]},getContentTpl:function(){var me=this;return Ext.create("Ext.XTemplate",'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',"{[this.getActionsGear()]}",'<div class="textContent ellipses">{[this.getFormattedId()]} - {Name} - {[this.getIterationName()]}</div>','<div class="rightSide">',"{[this.getScheduleState(values)]}","</div>",{canDrag:function(){return me.getCanDrag()},getProjectName:function(){return me.getRecord().get("Project").Name},getIterationName:function(){return me.getRecord().get("Iteration").Name},getActionsGear:function(){return me._buildActionsGearHtml()},getScheduleState:function(){return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(),"ScheduleState")},getFormattedId:function(){return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(),"FormattedID")}})}})})();
+                (function(){var Ext=window.Ext4||window.Ext;Ext.define("Rally.apps.portfoliohierarchy.PortfolioHierarchyApp",{extend:"Rally.app.App",requires:["Rally.data.util.PortfolioItemHelper","Rally.ui.notify.Notifier","Rally.data.QueryFilter","Rally.util.Help","Rally.util.Test"],mixins:{messageable:"Rally.Messageable"},layout:"auto",items:[{xtype:"container",itemId:"header",cls:"header"},{xtype:"container",itemId:"bodyContainer"}],appName:"Portfolio Hierarchy",cls:"portfolio-hierarchy-app",onlyStoriesInCurrentProject:!0,filterOnRelease:!1,getSettingsFields:function(){return[{name:"type",xtype:"rallyportfolioitemtypecombobox"},{type:"query"}]},launch:function(){Rally.Message.self.portfolioTreeItemSelected="portfoliotreeitemselected",Rally.environment.getContext().getSubscription().isModuleEnabled("Rally Portfolio Manager")?Rally.data.util.PortfolioItemHelper.loadTypeOrDefault({typeRef:this.getSetting("type"),context:this.getContext().getDataContext(),defaultToLowest:!1,success:this.addTreeForType,scope:this}):(this.down("#bodyContainer").add({xtype:"container",html:'<div class="rpm-turned-off" style="padding: 50px; text-align: center;">You do not have RPM enabled for your subscription</div>'}),Rally.BrowserTest&&Rally.BrowserTest.publishComponentReady(this))},_drawHeader:function(){var header=this.down("#header");header.add(this._buildHelpComponent()),header.add(this._buildFilterInfo()),header.add(this._buildCurrentProjectOnlyCheckbox()),header.add(this._buildFilterOnReleaseCheckbox()),header.add(this._buildReleaseCombobox())},addTreeForType:function(record){this.typePath=record.get("Name"),this._drawHeader();var tree=this.buildTreeForType(record);this.down("#bodyContainer").add(tree),tree.on("initialload",function(){Rally.BrowserTest&&Rally.BrowserTest.publishComponentReady(this)},this)},_getGlobalContext:function(){return this.getContext().getGlobalContext&&this.getContext().getGlobalContext()||window.parent.Rally.environment.getContext()},buildTreeForType:function(typeRecord){var me=this,filters=[];if(this.getSetting("query"))try{filters.push(Rally.data.QueryFilter.fromQueryString(this.getSetting("query")))}catch(e){Rally.ui.notify.Notifier.showError({message:e.message})}var tree=Ext.create("Rally.ui.tree.PortfolioTree",{stateful:!0,stateId:this.getAppId()+"rallyportfoliotree",topLevelModel:typeRecord.get("TypePath"),topLevelStoreConfig:{filters:filters,context:this.getContext().getDataContext()},listeners:{itemselected:this._onTreeItemSelected,scope:this},childItemsStoreConfigForParentRecordFn:function(record){var storeConfig={context:{project:void 0,workspace:me.getContext().getDataContext().workspace},fetch:this._getDefaultTopLevelFetchFields().concat(["Parent","PortfolioItem","WorkProduct","TaskStatus","Project","Iteration"])};if(record.self.isPortfolioItem()&&0===record.self.ordinal)me.onlyStoriesInCurrentProject?Ext.apply(storeConfig.context,{project:me._getGlobalContext().getDataContext().project,projectScopeUp:!1,projectScopeDown:!1}):storeConfig.sorters=[{property:"Project",direction:"ASC"},{property:"Rank",direction:"ASC"}];else if(record.self.isPortfolioItem()&&1===record.self.ordinal&&me.filterOnRelease===!0){var selectedRelease=me.down("rallyreleasecombobox").getRecord(),releaseName=selectedRelease.get("Name"),endDate=selectedRelease.get("ReleaseDate");storeConfig.filters=[Rally.data.wsapi.Filter.and([{property:"Release",operator:"=",value:null},{property:"PlannedEndDate",operator:"<",value:Rally.util.DateTime.toIsoString(endDate)}]).or({property:"Release.Name",operator:"=",value:releaseName}).and({property:"Parent",operator:"=",value:record.get("_ref")})]}return storeConfig},treeItemConfigForRecordFn:function(record){var config=Rally.ui.tree.PortfolioTree.prototype.treeItemConfigForRecordFn.call(tree,record);return"hierarchicalrequirement"===record.self.typePath&&(config.xtype=me.onlyStoriesInCurrentProject?"iterationuserstorytreeitem":"projectuserstorytreeitem"),config},emptyText:"<p>No portfolio items of this type found.</p><p>Click the gear to set your project to match the location of your portfolio items or to filter further by type.</p>"});return tree},_onTreeItemSelected:function(treeItem){"rallyportfolioitemtreeitem"===treeItem.xtype&&this.publish("portfoliotreeitemselected",treeItem)},_buildHelpComponent:function(){return Ext.create("Ext.Component",{cls:Rally.util.Test.toBrowserTestCssClass("portfolio-hierarchy-help-container"),renderTpl:Rally.util.Help.getIcon({id:268})})},_buildFilterInfo:function(){return Ext.create("Rally.ui.tooltip.FilterInfo",{projectName:this.getSetting("project")&&this.getContext().get("project").Name||"Following Global Project Setting",typePath:this.typePath,scopeUp:this.getSetting("projectScopeUp"),scopeDown:this.getSetting("projectScopeDown"),query:this.getSetting("query")})},_buildCurrentProjectOnlyCheckbox:function(){return Ext.create("Rally.ui.CheckboxField",{boxLabel:"Only Stories in Current Project",value:this.onlyStoriesInCurrentProject,listeners:{change:this._onOnlyStoriesInCurrentProjectChanged,scope:this},componentCls:"current-project-only-float"})},_buildFilterOnReleaseCheckbox:function(){return{xtype:"rallycheckboxfield",boxLabel:"Filter Features on Release",value:this.filterOnRelease,listeners:{change:this._onFilterOnReleaseChanged,scope:this},componentCls:"filter-on-release-float"}},_buildReleaseCombobox:function(){return{xtype:"rallyreleasecombobox",listeners:{change:this._onReleaseComboboxChanged,scope:this}}},_onOnlyStoriesInCurrentProjectChanged:function(checkBox){this.onlyStoriesInCurrentProject=checkBox.getValue(),this._refreshTree()},_onFilterOnReleaseChanged:function(checkBox){this.filterOnRelease=checkBox.getValue(),this._refreshTree()},_onReleaseComboboxChanged:function(releaseCombobox){this.filterOnRelease&&this._refreshTree()},_refreshTree:function(){this.down("rallyportfoliotree")._refresh()}})})();
+
+            Rally.launchApp('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
+                name:"Portfolio Hierarchy",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+    <style type="text/css">
+        .portfolio-hierarchy-app {
+    width: 100% !important;
+}
+
+.portfolio-hierarchy-app .rallytree {
+    padding-top: 5px;
+    padding-bottom: 20px;
+}
+
+.portfolio-hierarchy-app .header {
+    border-bottom: 1px dotted #c6c6c6;
+}
+
+.portfolio-hierarchy-app .filterInfo {
+    float: right;
+    padding-right: 1px;
+    border-right: 1px solid #CCC;
+    margin-right: 5px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.portfolio-hierarchy-app .rally-help-icon {
+    float: right;
+}
+
+.portfolio-hierarchy-app .current-project-only-float {
+    float: left;
+}
+
+.portfolio-hierarchy-app .filter-on-release-float {
+    float: left;
+    margin-left: 10px;
+    margin-right: 8px;
+}
+    </style>
+</head>
+<body></body>
+</html>

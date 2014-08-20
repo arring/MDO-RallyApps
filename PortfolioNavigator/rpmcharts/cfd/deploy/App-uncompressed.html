@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Portfolio CFD</title>
+
+    <script type="text/javascript" src="/apps/2.0rc2/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowCalculator", {
+        extend: "Rally.data.lookback.calculator.TimeSeriesCalculator",
+
+        getDerivedFieldsOnInput: function () {
+            var chartAggregationType = this.config.chartAggregationType;
+
+            return _.map(this.config.scheduleStates, function(state) {
+                return {
+                    "as": state,
+                    "f": function (snapshot) {
+                        if (chartAggregationType === 'storycount') {
+                            if (snapshot.ScheduleState) {
+                                return snapshot.ScheduleState === state ? 1 : 0;
+                            }
+
+                            return 0;
+                        } else {
+                            if (snapshot.PlanEstimate) {
+                                return snapshot.ScheduleState === state ? snapshot.PlanEstimate : 0;
+                            }
+
+                            return 0;
+                        }
+
+                    }
+                };
+            }, this);
+        },
+
+        getMetrics: function () {
+            return _.map(this.config.scheduleStates, function(state) {
+                return {
+                    "field": state,
+                    "as": state,
+                    "f": "sum"
+                };
+            });
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.DateMixin", {
+
+        dateFormatters: [
+            {key: "MMM", value: "%b"},
+            {key: "MM", value: "%m"},
+            {key: "dd", value: "%d"},
+            {key: "yyyy", value: "%Y"}
+        ],
+
+        dateToStringDisplay: function (date) {
+            return Ext.Date.format(date, 'm/d/Y');
+        },
+
+        dateToString: function (date) {
+            return Ext.Date.format(date, 'Y-m-d\\TH:i:s.u\\Z');
+        },
+
+        dateStringToObject: function (dateStr) {
+            var finalIndex = dateStr.indexOf('T'),
+                dateObj;
+
+            if (finalIndex > -1) {
+                dateStr = dateStr.slice(0, dateStr.indexOf('T'));
+            }
+
+            dateObj = this._splitDateParts(dateStr);
+
+            return new Date(dateObj.year, dateObj.month, dateObj.day);
+        },
+
+        _splitDateParts: function (dateStr) {
+            if (this._shouldSplitOnDash(dateStr)) {
+                return this._objectFromYearFirstDate(dateStr.split('-'));
+            }
+            else {
+                return this._objectFromMonthFirstDate(dateStr.split('/'));
+            }
+        },
+
+        _objectFromYearFirstDate: function (dateArray) {
+            if (dateArray.length !== 3) {
+                return { year: 0, month: 0, day: 0 };
+            }
+
+            dateArray[1] = (parseInt(dateArray[1], 10) - 1).toString();
+
+            return {
+                year: dateArray[0],
+                month: dateArray[1],
+                day: dateArray[2]
+            };
+        },
+
+        _objectFromMonthFirstDate: function (dateArray) {
+            if (dateArray.length !== 3) {
+                return { year: 0, month: 0, day: 0 };
+            }
+
+            dateArray[0] = (parseInt(dateArray[0], 10) - 1).toString();
+
+            return {
+                month: dateArray[0],
+                day: dateArray[1],
+                year: dateArray[2]
+            };
+        },
+
+        _shouldSplitOnDash: function (dateStr) {
+            return dateStr.split('-').length === 3;
+        }
+
+    });
+
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.SettingsChangeMixin", {
+
+        sendSettingsChange: function(artifact) {
+            if (this.settingsParent) {
+                this.settingsParent.sendSettingsChange(artifact, this);
+            }
+        },
+
+        receiveSettingsChange: function(artifact) {
+
+        }
+
+    });
+}());
+
+                (function() {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.RadioGroupSetting", {
+        extend: "Ext.form.FieldContainer",
+
+        config: {
+            settingName: undefined
+        },
+
+        constructor: function(config) {
+            this.mergeConfig(config);
+            this.callParent(arguments);
+        },
+
+        getSetting: function() {
+            return this.settingsParent.app.getSetting(this.settingName);
+        },
+
+        setRadioValue: function (cmp) {
+            this.setRadioToCustomValue(cmp, this.getSetting());
+        },
+
+        setRadioToCustomValue: function (cmp, customValue) {
+            var value = {};
+            value[cmp.name] = customValue;
+            cmp.setValue(value);
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.DataTypePicker", {
+        extend: "Rally.apps.charts.settings.RadioGroupSetting",
+        alias: "widget.chartdatatypepicker",
+
+        mixins: [
+            "Ext.form.field.Field",
+            "Rally.apps.charts.settings.SettingsChangeMixin"
+        ],
+
+        config: {
+            settingName: "chartAggregationType"
+        },
+
+        settingsParent: undefined,
+
+        initComponent: function () {
+            this.callParent(arguments);
+            this.add(this._addRadioGroup());
+        },
+
+        _addRadioGroup: function () {
+            return {
+                xtype: "radiogroup",
+                name: this.settingName,
+                columns: [160, 100],
+                vertical: false,
+                items: [
+                    { boxLabel: "Story Plan Estimate", name: this.settingName, inputValue: "storypoints", checked: true },
+                    { boxLabel: "Story Count", name: this.settingName, inputValue: "storycount" }
+                ],
+                listeners: {
+                    beforerender: this.setRadioValue,
+                    scope: this
+                }
+            };
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.PortfolioDatePicker", {
+        extend: "Ext.form.FieldContainer",
+        alias: "widget.chartportfoliodatepicker",
+
+        requires: [
+            "Rally.ui.DateField"
+        ],
+
+        mixins: [
+            'Ext.form.field.Field',
+            'Rally.apps.charts.DateMixin',
+            'Rally.apps.charts.settings.SettingsChangeMixin'
+        ],
+
+        layout: {
+            type: "hbox"
+        },
+
+        items: [
+            {
+                xtype: "container",
+                minWidth: 250,
+                items: [
+                    {
+                        xtype: "label",
+                        text: "Start Date",
+                        cls: "settingsLabel"
+                    },
+                    {
+                        xtype: "radiogroup",
+                        name: "startdate",
+                        itemId: "startdategroup",
+                        columns: 1,
+                        vertical: true,
+                        items: [
+                            {
+                                name: "startdate",
+                                itemId: "actualstartdate",
+                                boxLabel: "Actual Start Date",
+                                baseLabel: "Actual Start Date",
+                                inputValue: "actualstartdate"
+                            },
+                            {
+                                name: "startdate",
+                                itemId: "plannedstartdate",
+                                boxLabel: "Planned Start Date",
+                                baseLabel: "Planned Start Date",
+                                inputValue: "plannedstartdate"
+                            },
+                            {
+                                xtype: "container",
+                                layout: {
+                                    type: "hbox"
+                                },
+                                items: [
+                                    {
+                                        xtype: "radiofield",
+                                        name: "startdate",
+                                        itemId: "startdatemanual",
+                                        boxLabel: " ",
+                                        inputValue: "selecteddate"
+                                    },
+                                    {
+                                        xtype: "rallydatefield",
+                                        name: "startdate",
+                                        itemId: "startdatefield",
+                                        inputValue: "selecteddate"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                xtype: "container",
+                minWidth: 250,
+                items: [
+                    {
+                        xtype: "label",
+                        text: "End Date",
+                        cls: "settingsLabel"
+                    },
+                    {
+                        xtype: "radiogroup",
+                        name: "enddate",
+                        itemId: "enddategroup",
+                        columns: 1,
+                        vertical: true,
+                        items: [
+                            {
+                                name: "enddate",
+                                itemId: 'today',
+                                boxLabel: "Today",
+                                inputValue: "today"
+                            },
+                            {
+                                name: "enddate",
+                                itemId: "actualenddate",
+                                boxLabel: "Actual End Date",
+                                baseLabel: "Actual End Date",
+                                inputValue: "actualenddate"
+                            },
+                            {
+                                name: "enddate",
+                                itemId: "plannedenddate",
+                                boxLabel: "Planned End Date",
+                                baseLabel: "Planned End Date",
+                                inputValue: "plannedenddate"
+                            },
+                            {
+                                xtype: "container",
+                                layout: {
+                                    type: "hbox"
+                                },
+                                items: [
+                                    {
+                                        xtype: "radiofield",
+                                        name: "enddate",
+                                        itemId: "enddatemanual",
+                                        boxLabel: " ",
+                                        inputValue: "selecteddate"
+                                    },
+                                    {
+                                        xtype: "rallydatefield",
+                                        name: "enddate",
+                                        itemId: "enddatefield",
+                                        inputValue: "selecteddate"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+
+        settingsParent: undefined,
+
+        /**
+         * @Override from SettingsChangeMixin
+         * Updates child components when a new portfolio item is chosen.
+         */
+        receiveSettingsChange: function (artifact) {
+            if (artifact) {
+                this._enableRadioGroups();
+                this._updateRadioLabel(this.actualStartDate, artifact.ActualStartDate);
+                this._updateRadioLabel(this.plannedStartDate, artifact.PlannedStartDate);
+                this._updateRadioLabel(this.actualEndDate, artifact.ActualEndDate);
+                this._updateRadioLabel(this.plannedEndDate, artifact.PlannedEndDate);
+                this._setDefaultValues();
+            }
+        },
+
+        initComponent: function () {
+            this.callParent(arguments);
+            this._saveComponentReferences();
+            this._setupChangeHandlers();
+        },
+
+        beforeRender: function () {
+            this._disableRadioGroups();
+            this._loadSavedSettingsIntoComponent(this.startDateGroup);
+            this._loadSavedSettingsIntoComponent(this.endDateGroup);
+        },
+
+        selectCustomDateRadioOption: function (cmp) {
+            var value = {};
+            value[cmp.name] = "selecteddate";
+            this._getDateGroup(cmp.name).setValue(value);
+        },
+
+        _setupChangeHandlers: function () {
+            this.startDatePicker.on('change', this.selectCustomDateRadioOption, this);
+            this.endDatePicker.on('change', this.selectCustomDateRadioOption, this);
+        },
+
+        _saveComponentReferences: function () {
+            this.actualStartDate = this.down("#actualstartdate");
+            this.actualEndDate = this.down("#actualenddate");
+            this.plannedStartDate = this.down("#plannedstartdate");
+            this.plannedEndDate = this.down("#plannedenddate");
+            this.startDateGroup = this.down("#startdategroup");
+            this.endDateGroup = this.down("#enddategroup");
+            this.startDatePicker = this.down("#startdatefield");
+            this.endDatePicker = this.down("#enddatefield");
+        },
+
+        _disableRadioGroups: function() {
+            this.startDateGroup.disable();
+            this.endDateGroup.disable();
+        },
+
+        _enableRadioGroups: function () {
+            this.startDateGroup.enable();
+            this.endDateGroup.enable();
+        },
+
+        _loadSavedSettingsIntoComponent: function (component) {
+            var settingValue = this._getSettingValue(component.name),
+                settingParts = settingValue.split(","),
+                selection = settingParts[0],
+                date = settingParts[1];
+
+            if (date) {
+                this._setSavedDate(component, date);
+            }
+
+            this._selectRadio(component, selection);
+        },
+
+        _setDefaultValues: function () {
+            if (this._dateGroupHasNoSelection(this.startDateGroup) && !this.actualStartDate.disabled) {
+                this._selectRadio(this.startDateGroup, "actualstartdate");
+            }
+
+            if (this._dateGroupHasNoSelection(this.endDateGroup)) {
+                if (!this.actualEndDate.disabled) {
+                    this._selectRadio(this.endDateGroup, "actualenddate");
+                }
+                else {
+                    this._selectRadio(this.endDateGroup, "today");
+                }
+            }
+        },
+
+        _dateGroupHasNoSelection: function (dateGroupCmp) {
+            return Ext.Object.getSize(dateGroupCmp.getValue()) === 0;
+        },
+
+        _selectRadio: function (component, selection) {
+            if (selection.length > 0) {
+                var componentValue = {};
+                componentValue[component.name] = selection;
+                component.setValue(componentValue);
+            }
+        },
+
+        _getSettingValue: function (setting) {
+            return this.settingsParent.app.getSetting(setting) || "";
+        },
+
+        _getCustomDateForGroup: function (groupName) {
+            return ({
+                startdate: this.startDatePicker,
+                enddate: this.endDatePicker
+            })[groupName];
+        },
+
+        _getDateGroup: function (groupName) {
+            return ({
+                startdate: this.startDateGroup,
+                enddate: this.endDateGroup
+            })[groupName];
+        },
+
+        _setSavedDate: function (component, dateString) {
+            if (component && dateString && dateString.length > 0) {
+                var datePicker = this._getCustomDateForGroup(component.name),
+                    date = this.dateStringToObject(dateString);
+
+                datePicker.setValue(date);
+            }
+        },
+
+        _updateRadioLabel: function (radioComponent, date) {
+            var newLabelValue = radioComponent.baseLabel,
+                formattedDate = this.dateToStringDisplay(date);
+
+            if (formattedDate) {
+                radioComponent.enable();
+                newLabelValue += " (" + formattedDate + ")";
+            }
+            else {
+                radioComponent.disable();
+                if (this._isActualDateRadioField(radioComponent)) {
+                    newLabelValue += ": Not Available";
+                }
+                else {
+                    newLabelValue += ": Not Set";
+                }
+            }
+
+            radioComponent.boxLabelEl.setHTML(newLabelValue);
+        },
+
+        _isActualDateRadioField: function (radioComponent) {
+            return radioComponent.getId().indexOf("actual") > -1;
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.PortfolioItemDataTypePicker", {
+        extend: "Rally.apps.charts.settings.DataTypePicker",
+        alias: "widget.chartportfoliodatatypepicker",
+
+        setRadioValue: function(cmp) {
+            this.callParent(arguments);
+
+            if(!this.getValue()) {
+                this.setRadioToCustomValue(cmp, "storycount");
+            }
+        },
+
+        _addRadioGroup: function () {
+            return {
+                xtype: "container",
+                minWidth: 250,
+                items: [
+                    {
+                        xtype: "label",
+                        text: "Data Type",
+                        cls: "settingsLabel",
+                        style: {
+                            display: "block",
+                            minHeight: "20px"
+                        }
+                    },
+                    {
+                        xtype: "radiogroup",
+                        name: this.settingName,
+                        columns: [100, 150],
+                        vertical: false,
+                        items: [
+                            { boxLabel: "Story Count", name: this.settingName, inputValue: "storycount" },
+                            { boxLabel: "Story Plan Estimate", name: this.settingName, inputValue: "storypoints" }
+                        ],
+                        listeners: {
+                            beforerender: this.setRadioValue,
+                            scope: this
+                        }
+                    }
+                ]
+            };
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.settings.PortfolioItemPicker", {
+        extend: "Ext.form.FieldContainer",
+        alias: "widget.chartportfolioitempicker",
+
+        settingsParent: undefined,
+        requestContext: undefined,
+
+        requires: [
+            'Deft.Deferred',
+            'Rally.util.Test',
+            'Rally.ui.EmptyTextFactory',
+            'Rally.ui.dialog.ChooserDialog',
+            'Rally.data.wsapi.Store'
+        ],
+
+        mixins: [
+            'Ext.form.field.Field',
+            'Rally.apps.charts.settings.SettingsChangeMixin'
+        ],
+
+        emptyText: '<p>No portfolio items match your search criteria.</p>',
+
+        items: [
+            {
+                xtype: "label",
+                text: "Portfolio Item",
+                cls: "settingsLabel"
+            },
+            {
+                xtype: "container",
+                name: "portfolioItemPicker",
+                layout: {
+                    type: "hbox"
+                },
+                items: [
+                    {
+
+                        xtype: 'rallybutton',
+                        text: 'Choose',
+                        itemId: 'portfolioItemButton',
+                        cls: 'piButton primary small'
+                    },
+                    {
+                        xtype: 'container',
+                        cls: 'piDisplayField',
+                        items: [
+                            {
+                                xtype: 'displayfield',
+                                itemId: 'portfolioItemDisplay',
+                                value: "&nbsp;"
+                            }
+                        ]
+                    }
+
+                ]
+            }
+        ],
+
+        initComponent: function () {
+            this.callParent(arguments);
+            this._addTestClass();
+        },
+
+        _addTestClass: function () {
+            this.addCls(Rally.util.Test.toBrowserTestCssClass('buttonChooser'));
+        },
+
+        beforeRender: function () {
+            this._configureButton();
+            this._configurePicker();
+        },
+
+        _configureButton: function () {
+            this.down('#portfolioItemButton').on('click', this._onButtonClick, this);
+        },
+
+        _configurePicker: function () {
+            this._setValueFromSettings();
+            this._setupRequestContext();
+            this._loadPortfolioItem();
+            this._configureChooser();
+        },
+
+        _setupRequestContext: function () {
+            this.requestContext = {
+                workspace: this.settingsParent.app.context.getWorkspaceRef(),
+                project: null
+            };
+        },
+
+        _setValueFromSettings: function () {
+            var newSettingsValue = this.settingsParent.app.getSetting("portfolioItemPicker"),
+                oldSettingsValue = this.settingsParent.app.getSetting("buttonchooser");
+
+            if (this._isSettingValid(newSettingsValue)) {
+                this.setValue(newSettingsValue);
+            } else if (this._isSettingValid(oldSettingsValue)) {
+                this.setValue(Ext.JSON.decode(oldSettingsValue).artifact._ref);
+            } else {
+                this.setValue("&nbsp;");
+            }
+        },
+
+        _isSettingValid: function (value) {
+            return value && value !== "undefined";
+        },
+
+        _loadPortfolioItem: function () {
+            if (this._isSavedValueValid()) {
+                this._createPortfolioItemStore();
+            }
+        },
+
+        _createPortfolioItemStore: function () {
+            Ext.create("Rally.data.wsapi.Store", {
+                model: "Portfolio Item",
+                filters: [
+                    {
+                        property: "ObjectID",
+                        operator: "=",
+                        value: Rally.util.Ref.getOidFromRef(this.value)
+                    }
+                ],
+                context: this.requestContext,
+                autoLoad: true,
+                listeners: {
+                    load: this._onPortfolioItemRetrieved,
+                    scope: this
+                }
+            });
+        },
+
+        _isSavedValueValid: function () {
+            return typeof this.value === "string" && this.value !== "undefined";
+        },
+
+        _onPortfolioItemRetrieved: function (store) {
+            var storeData = store.getAt(0);
+            this._handleStoreResults(storeData);
+        },
+
+        _setDisplayValue: function () {
+            this.down("#portfolioItemDisplay").setValue(this._getPortfolioItemDisplay());
+        },
+
+        _onButtonClick: function () {
+            this._destroyChooser();
+
+            this.dialog = Ext.create("Rally.ui.dialog.ChooserDialog", this.chooserConfig);
+            this.dialog.show();
+        },
+
+        _destroyChooser: function () {
+            if (this.dialog) {
+                this.dialog.destroy();
+            }
+        },
+
+        _getPortfolioItemDisplay: function () {
+            return this.portfolioItem.FormattedID + ': ' + this.portfolioItem.Name;
+        },
+
+        _onPortfolioItemChosen: function (resultStore) {
+            this._handleStoreResults(resultStore);
+            this._destroyChooser();
+        },
+
+        _handleStoreResults: function(store) {
+            if (store && store.data) {
+                this.portfolioItem = store.data;
+                this._setDisplayValue();
+                this.setValue(this.portfolioItem._ref);
+                this.sendSettingsChange(this.portfolioItem);
+            }
+        },
+
+        _configureChooser: function () {
+            this.chooserConfig = {
+                artifactTypes: ['portfolioitem'],
+                title: 'Choose a Portfolio Item',
+                closeAction: 'destroy',
+                selectionButtonText: 'Select',
+                listeners: {
+                    artifactChosen: this._onPortfolioItemChosen,
+                    scope: this
+                },
+                storeConfig: {
+                    project: null,
+                    context: this.requestContext,
+                    fetch: true
+                },
+                gridConfig: {
+                    viewConfig: {
+                        emptyText: Rally.ui.EmptyTextFactory.getEmptyTextFor(this.emptyText)
+                    }
+                }
+            };
+        },
+
+        setValue: function (value) {
+            if (value && value !== "undefined") {
+                this.value = value;
+            }
+            else {
+                this.value = this.settingsParent.app.getSetting("portfolioItemPicker");
+            }
+        },
+
+        getSubmitData: function () {
+            var returnObject = {};
+
+            if (this.portfolioItem) {
+                this.setValue(this.portfolioItem._ref);
+                returnObject.portfolioItemPicker = this.portfolioItem._ref;
+            }
+            else {
+                returnObject.portfolioItemPicker = "";
+            }
+
+            return returnObject;
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.rpm.ChartSettings", {
+
+        requires: [
+            "Rally.apps.charts.settings.PortfolioDatePicker",
+            "Rally.apps.charts.settings.PortfolioItemDataTypePicker",
+            "Rally.apps.charts.settings.PortfolioItemPicker"
+        ],
+
+        mixins: [
+            "Rally.apps.charts.settings.SettingsChangeMixin"
+        ],
+
+        config: {
+            app: undefined
+        },
+
+        constructor: function (config) {
+            this.mergeConfig(config);
+        },
+
+        getSettingsConfiguration: function () {
+            var self = this;
+
+            var componentJoiner = function () {
+                this.settingsParent = this.settingsParent || self;
+                self.addChildComponent(this);
+            };
+
+            return [
+                this._buildComponent("chartportfolioitempicker", componentJoiner),
+                this._buildComponent("chartportfoliodatepicker", componentJoiner),
+                this._buildComponent("chartportfoliodatatypepicker", componentJoiner)
+            ];
+        },
+
+        _buildComponent: function (type, componentJoiner) {
+            return {
+                xtype: type,
+                cls: "paddedSettingCmp",
+                listeners: {
+                    added: componentJoiner
+                }
+            };
+        },
+
+        sendSettingsChange: function (artifact, caller) {
+            for (var i = 0; i < this.childComponents.length; i++) {
+                var child = this.childComponents[i];
+                if (child !== caller) {
+                    child.receiveSettingsChange(artifact);
+                }
+            }
+        },
+
+        addChildComponent: function (component) {
+            this.childComponents = this.childComponents || [];
+            this.childComponents.push(component);
+        }
+    });
+}());
+
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.rpm.PortfolioChartAppBase", {
+        extend: "Rally.app.App",
+        settingsScope: "workspace",
+
+        requires: [
+            'Rally.apps.charts.rpm.ChartSettings',
+            'Rally.ui.combobox.ComboBox',
+            'Rally.util.Test',
+            'Deft.Deferred'
+        ],
+
+        mixins: [
+            'Rally.apps.charts.DateMixin',
+            'Rally.Messageable'
+        ],
+
+        scheduleStates: ["Defined", "In-Progress", "Completed", "Accepted"],
+
+        PI_SETTING: "portfolioItemPicker",
+        
+        layout: {
+            type:   'vbox',
+            align:  'stretch'
+        },
+
+        items: [
+            {
+                xtype:  'container',
+                itemId: 'top',
+                items: [{
+                    xtype:  'container',
+                    itemId: 'header',
+                    cls:    'header'
+                }],
+                height: 420
+            },
+            {
+                xtype:  'container',
+                itemId: 'bottom',
+                minHeight: 100
+            }
+        ],
+
+        getSettingsFields: function () {
+            return this.chartSettings.getSettingsConfiguration();
+        },
+
+        clientMetrics: {
+            beginEvent:     'updateBeforeRender',
+            endEvent:       'updateAfterRender',
+            description:    'pichartapp - elapsed chart load'
+        },
+
+        launch: function () {
+            this._setupEvents();
+            this._setupChartSettings();
+            this._drawHeader();
+            this._setDefaultConfigValues();
+            this._setupUpdateBeforeRender();
+            this._subscribeToPortfolioTree();
+        },
+
+        _setupChartSettings: function () {
+            this.chartSettings = Ext.create("Rally.apps.charts.rpm.ChartSettings", {
+                app: this
+            });
+        },
+
+        _subscribeToPortfolioTree: function() {
+            this.subscribe(this, 'portfoliotreeitemselected', this._onPortfolioTreeItemSelected, this);        
+        },
+        
+        _onPortfolioTreeItemSelected: function(treeItem) {
+            this.currentPiRecord = treeItem.getRecord();
+            
+            this._onPortfolioItemChanged();
+            //this._loadPortfolioItem(this.currentPiRecord.get('_ref'));
+        },
+        
+        _removeChildrenGridAndChart: function() {
+            var childGrid = this.down('rallygrid'),
+                chart = this.down('rallychart');
+                
+            if (childGrid) {
+                childGrid.destroy();
+            }
+            
+            if (chart) {
+                chart.destroy();
+            }
+        },
+
+        _setupUpdateBeforeRender: function () {
+            this.chartComponentConfig.updateBeforeRender = this._setupDynamicHooksWithEvents(
+                this.chartComponentConfig.updateBeforeRender,
+                'updateBeforeRender'
+            );
+
+            this.chartComponentConfig.updateAfterRender = this._setupDynamicHooksWithEvents(
+                this.chartComponentConfig.updateAfterRender,
+                'updateAfterRender'
+            );
+        },
+
+        //TODO: Do we really need to do this? It looks like its just calling the event handlers, 
+        //which ExtJS gives us for already
+        _setupDynamicHooksWithEvents: function (func, event) {
+            var self = this;
+
+            return function () {
+                self.fireEvent(event);
+                if ('function' === typeof func) {
+                    func.apply(this);
+                }
+            };
+        },
+
+        _setupEvents: function () {
+            this.addEvents(
+                'updateBeforeRender',
+                'updateAfterRender'
+            );
+        },
+
+        _addHelpComponent: function () {
+            this.down('#header').add(this._buildHelpComponent());
+        },
+
+        _setDefaultConfigValues: function () {
+            var config = Ext.clone(this.chartComponentConfig);
+            
+            config.storeConfig.find = config.storeConfig.find || {};
+            
+            config.calculatorConfig = config.calculatorConfig || {};
+
+            config.chartConfig = config.chartConfig || {};
+            config.chartConfig.title = config.chartConfig.title || {};
+            config.chartConfig.xAxis = config.chartConfig.xAxis || {};
+            config.chartConfig.xAxis.type = config.chartConfig.xAxis.type || "datetime";
+            config.chartConfig.yAxis = config.chartConfig.yAxis || [
+                {
+                    title: {}
+                }
+            ];
+
+            this.chartComponentConfig = config;
+        },
+
+        _buildHelpComponent: function () {
+            return Ext.create('Ext.Component', {
+                renderTpl: Rally.util.Help.getIcon({
+                    cls: Rally.util.Test.toBrowserTestCssClass(this.help.cls),
+                    id: this.help.id
+                })
+            });
+        },
+        
+        _validateSettingsChoices: function () {
+            var startDate = this._getSettingStartDate(),
+                endDate = this._getSettingEndDate(),
+                dataType = this.getSetting("chartAggregationType"),
+                invalid = function (value) {
+                    return !value || value === "undefined";
+                };
+
+            if (invalid(startDate) || invalid(endDate) || invalid(dataType)) {
+                return false;
+            }
+            return true;
+        },
+
+        _getSettingStartDate: function() {
+            return this.getSetting("startdate") || this.getSetting("startDate");
+        },
+
+        _getSettingEndDate: function() {
+            return this.getSetting("enddate") || this.getSetting("endDate");
+        },
+
+        _savedPortfolioItemValid: function (savedPi) {
+            return !!(savedPi && savedPi._type && savedPi.ObjectID && savedPi.Name);
+        },
+        
+        _onSelectionChange: function(grid, selected) {
+            this.down('rallychart').destroy();
+
+            this.chartComponentConfig.storeConfig.find._ItemHierarchy = {
+                $in: _.map(selected, function(record) {
+                    return record.getId();    
+                })
+            };
+            
+            this.down('#top').add(this.chartComponentConfig);
+        },
+        
+        _onChildrenRetrieved: function(store, records) {
+            this.gridMask.hide();
+            // var childrencount = store.config.model.getField('DirectChildrenCount');
+            // var childrencountcfg = Rally.ui.grid.FieldColumnFactory.getColumnConfigFromField(childrencount);
+            // childrencountcfg.header = 'Child Stories';
+            
+            var grid = this.down('#bottom').add({
+                xtype: 'rallygrid',
+                store: store,
+                columnCfgs: (store.config.model.indexOf('PortfolioItem') == -1) ? ['FormattedID', 'Name', 'PlanEstimate', 'Iteration', 'ScheduleState', 'Project', 'DirectChildrenCount'] : ['FormattedID', 'Name', 'Project'],
+                showRowActionsColumn: false,
+                selType: 'checkboxmodel',
+                selModel: {
+                    mode: 'SIMPLE'
+                },
+                enableEditing: false,
+                sortableColumns: false,
+                autoScroll: true,
+                height: 500,
+                showPagingToolbar: false
+            });
+            
+            //if(!this.onlyStoriesInCurrentProject){
+                grid.getSelectionModel().selectAll(true);
+            //}
+            grid.on('selectionchange', this._onSelectionChange, this);
+        },
+        
+        _showGrid: function() {
+            var piRecord = this.currentPiRecord,
+                piData = piRecord.data,
+                piLevel = piRecord.self.ordinal,
+                filters, sorters;
+            
+            if (this._getShowGridCheckbox().getValue() !== true) {
+                return;
+            }
+                
+            if (!this._savedPortfolioItemValid(piData)) {
+                this._portfolioItemNotValid();
+                return;
+            }
+            
+            if (piLevel === 0) {
+               sorters = {
+                   property: 'ScheduleState',
+                   direction: 'ASC'
+               };
+               if (this.onlyStoriesInCurrentProject) {
+                  filters = {
+                      property: 'Project',
+                      operator: '=',
+                      value: this._getGlobalContext().getDataContext().project
+                  };
+               }
+            }
+            
+            this.gridMask = this.gridMask || new Ext.LoadMask(this.down('#bottom'), {
+                msg:"Loading grid..."
+            });
+            this.gridMask.show();
+            
+            piRecord.getCollection(piLevel === 0 ? 'UserStories' : 'Children', {
+                autoLoad: true,
+                filters: filters,
+                sorters: sorters,
+                listeners: {
+                    load: this._onChildrenRetrieved,
+                    scope: this
+                },
+                limit: Infinity
+            });    
+        },
+        
+        _getShowGridCheckbox: function() {
+            return this.down('#show-grid-checkbox-element');
+        },
+        
+        _showChart: function() {
+            var piRecord = this.currentPiRecord,
+                piData = piRecord.data;
+                
+             
+            Rally.data.ModelFactory.getModel({
+                type: 'UserStory',
+                success: function (model) {
+                    this._onUserStoryModelRetrieved(model, piRecord);
+                },
+                scope: this
+            });
+        },
+
+        _onUserStoryModelRetrieved: function (model, piRecord) {
+            var piRecordData = piRecord.data,
+                dataContext = this.getContext().getDataContext();
+                
+            this._updateChartComponentConfig(model, piRecordData).then({
+                success: function (chartComponentConfig) {
+                    if( piRecord.self.ordinal === 0 && this.onlyStoriesInCurrentProject){
+                        this.chartComponentConfig.storeConfig.find.Project = Rally.util.Ref.getOidFromRef(dataContext.project);
+                    } else {
+                        delete this.chartComponentConfig.storeConfig.find.Project;
+                    }
+                    
+                    this.down('#top').add(chartComponentConfig);
+                    Rally.environment.getMessageBus().publish(Rally.Message.piChartAppReady);
+                },
+                scope: this
+            });
+        },
+
+        _updateChartComponentConfig: function (model, portfolioItem) {
+            var deferred = Ext.create('Deft.Deferred');
+
+            this._getScheduleStateValues(model).then({
+                success: function (scheduleStateValues) {
+                    this.chartComponentConfig.calculatorConfig.scheduleStates = scheduleStateValues;
+
+                    this._setDynamicConfigValues(portfolioItem);
+                    this._calculateDateRange(portfolioItem);
+                    this._updateQueryConfig(portfolioItem);
+
+                    deferred.resolve(this.chartComponentConfig);
+                },
+                scope: this
+            });
+
+            return deferred.promise;
+        },
+
+        _getScheduleStateValues: function (model) {
+            var deferred = Ext.create('Deft.Deferred');
+
+            if (model) {
+                model.getField('ScheduleState').getAllowedValueStore().load({
+                    callback: function (records, operation, success) {
+                        var scheduleStateValues = Ext.Array.map(records, function (record) {
+                            return record.get('StringValue');
+                        });
+                        deferred.resolve(scheduleStateValues);
+                    },
+                    scope: this
+                });
+            } else {
+                deferred.resolve(this.scheduleStates);
+            }
+
+            return deferred.promise;
+        },
+
+        _setDynamicConfigValues: function (portfolioItem) {
+            this._updateChartConfigDateFormat();
+            this.chartComponentConfig.chartConfig.title = this._buildChartTitle(portfolioItem);
+            //TODO: uncomment this line prior to deploy
+            //this.chartComponentConfig.chartConfig.subtitle = this._buildChartSubtitle(portfolioItem);
+
+            this.chartComponentConfig.calculatorConfig.chartAggregationType = this._getAggregationType();
+            this.chartComponentConfig.chartConfig.yAxis[0].title.text = this._getYAxisTitle();
+
+            this.chartComponentConfig.chartConfig.yAxis[0].labels = {
+                x: -5,
+                y: 4
+            };
+        },
+
+        _updateChartConfigDateFormat: function () {
+            var self = this;
+
+            this.chartComponentConfig.chartConfig.xAxis.labels = {
+                x: 0,
+                y: 20,
+                formatter: function () {
+                    return self._formatDate(self.dateStringToObject(this.value));
+                }
+            };
+        },
+
+        _parseRallyDateFormatToHighchartsDateFormat: function () {
+            var dateFormat = this._getUserConfiguredDateFormat() || this._getWorkspaceConfiguredDateFormat();
+
+            for (var i = 0; i < this.dateFormatters.length; i++) {
+                dateFormat = dateFormat.replace(this.dateFormatters[i].key, this.dateFormatters[i].value);
+            }
+
+            return dateFormat;
+        },
+
+        _formatDate: function (date) {
+            if (!this.dateFormat) {
+                this.dateFormat = this._parseRallyDateFormatToHighchartsDateFormat();
+            }
+
+            return Highcharts.dateFormat(this.dateFormat, date.getTime());
+        },
+
+        _calculateDateRange: function (portfolioItem) {
+            var calcConfig = this.chartComponentConfig.calculatorConfig;
+            calcConfig.startDate = this._getChartStartDate(portfolioItem);
+            calcConfig.endDate = this._getChartEndDate(portfolioItem);
+            calcConfig.timeZone = calcConfig.timeZone || this._getTimeZone();
+
+            this.chartComponentConfig.chartConfig.xAxis.tickInterval = this._configureChartTicks(calcConfig.startDate, calcConfig.endDate);
+        },
+
+        _updateQueryConfig: function (portfolioItem) {
+            this.chartComponentConfig.storeConfig.find._ItemHierarchy = portfolioItem.ObjectID;
+        },
+
+        _configureChartTicks: function (startDate, endDate) {
+            var pixelTickWidth = 125,
+                appWidth = this.getWidth(),
+                ticks = Math.floor(appWidth / pixelTickWidth);
+
+            var startDateObj = this.dateStringToObject(startDate),
+                endDateObj = this.dateStringToObject(endDate);
+
+            var days = Math.floor((endDateObj.getTime() - startDateObj.getTime()) / 86400000);
+
+            return Math.floor(days / ticks);
+        },
+
+        _getUserConfiguredDateFormat: function () {
+            return this.getContext().getUser().UserProfile.DateFormat;
+        },
+
+        _getWorkspaceConfiguredDateFormat: function () {
+            return this.getContext().getWorkspace().WorkspaceConfiguration.DateFormat;
+        },
+
+        _buildChartTitle: function (portfolioItem) {
+            var widthPerCharacter = 10,
+                totalCharacters = Math.floor(this.getWidth() / widthPerCharacter),
+                title = "Portfolio Item Chart",
+                align = "center";
+
+            if (portfolioItem) {
+                title = portfolioItem.FormattedID + ": " + portfolioItem.Name;
+            }
+
+            if (totalCharacters < title.length) {
+                title = title.substring(0, totalCharacters) + "...";
+                align = "left";
+            }
+
+            return {
+                text: title,
+                align: align,
+                margin: 30
+            };
+        },
+
+        _buildChartSubtitle: function (portfolioItem) {
+            var widthPerCharacter = 6,
+                totalCharacters = Math.floor(this.getWidth() / widthPerCharacter),
+                plannedStartDate = "",
+                plannedEndDate = "";
+
+            var template = Ext.create("Ext.XTemplate",
+                '<tpl if="plannedStartDate">' +
+                    '<span>Planned Start: {plannedStartDate}</span>' +
+                    '    <tpl if="plannedEndDate">' +
+                    '        <tpl if="tooBig">' +
+                    '            <br />' +
+                    '        <tpl else>' +
+                    '            &nbsp;&nbsp;&nbsp;' +
+                    '        </tpl>' +
+                    '    </tpl>' +
+                    '</tpl>' +
+                    '<tpl if="plannedEndDate">' +
+                    '    <span>Planned End: {plannedEndDate}</span>' +
+                    '</tpl>'
+            );
+
+            if (portfolioItem && portfolioItem.PlannedStartDate) {
+                plannedStartDate = this._formatDate(portfolioItem.PlannedStartDate);
+            }
+
+            if (portfolioItem && portfolioItem.PlannedEndDate) {
+                plannedEndDate = this._formatDate(portfolioItem.PlannedEndDate);
+            }
+
+            var formattedTitle = template.apply({
+                plannedStartDate: plannedStartDate,
+                plannedEndDate: plannedEndDate,
+                tooBig: totalCharacters < plannedStartDate.length + plannedEndDate.length + 60
+            });
+
+            return {
+                text: formattedTitle,
+                useHTML: true,
+                align: "center"
+            };
+        },
+
+        _getAggregationType: function () {
+            return this.getSetting("chartAggregationType");
+        },
+
+        _getYAxisTitle: function () {
+            return this._getAggregationType() === "storypoints" ?
+                "Points" :
+                "Count";
+        },
+
+        _getChartStartDate: function (portfolioItem) {
+            // var startDateSetting = this._getSettingStartDate().split(","),
+            //     settingValue = startDateSetting[0],
+            var    startDate;
+
+            if (portfolioItem.PlannedStartDate) {
+                startDate = portfolioItem.PlannedStartDate;
+            } else if (portfolioItem.ActualStartDate) {
+                startDate = portfolioItem.ActualStartDate;
+            } else {
+                startDate = new Date();
+            }
+
+            return this.dateToString(startDate);
+        },
+
+        _getChartEndDate: function (portfolioItem) {
+            var    endDate;
+
+            if (portfolioItem.ActualEndDate) {
+                endDate = portfolioItem.ActualEndDate;
+            } else {
+                endDate = new Date();
+            }
+
+            return this.dateToString(endDate);
+        },
+
+        _dateFromSettingValue: function (portfolioItem, settingValue) {
+            var settingsMap = {
+                "plannedstartdate": "PlannedStartDate",
+                "plannedenddate": "PlannedEndDate",
+                "actualstartdate": "ActualStartDate",
+                "actualenddate": "ActualEndDate"
+            };
+
+            if (settingValue === "today") {
+                return new Date();
+            }
+
+            if (settingsMap.hasOwnProperty(settingValue)) {
+                return portfolioItem[settingsMap[settingValue]];
+            }
+
+            return new Date(settingValue);
+        },
+
+        _getTimeZone: function () {
+            return this.getContext().getUser().UserProfile.TimeZone || this.getContext().getWorkspace().WorkspaceConfiguration.TimeZone;
+        },
+
+        _portfolioItemNotValid: function () {
+            this._setErrorTextMessage('Cannot find the chosen portfolio item.  Please click the gear and "Edit Settings" to choose another.');
+        },
+
+        _setErrorTextMessage: function (message) {
+            this.down('#header').add({
+                xtype: 'displayfield',
+                value: message
+            });
+        },
+        
+        //start of project filter functions
+        
+        _buildFilterInfo: function(){
+            return Ext.create('Rally.ui.tooltip.FilterInfo', {
+                projectName: this.getSetting('project') && this.getContext().get('project').Name || 'Following Global Project Setting',
+                typePath: this.typePath,
+                scopeUp: this.getSetting('projectScopeUp'),
+                scopeDown: this.getSetting('projectScopeDown'),
+                query: this.getSetting('query')
+            });
+        },
+        
+        _buildCurrentProjectOnlyCheckbox: function(){
+            return Ext.create('Rally.ui.CheckboxField', {
+                boxLabel: 'Only Stories in Current Project',
+                value: this.onlyStoriesInCurrentProject,
+                listeners: {
+                    change: this._onOnlyStoriesInCurrentProjectChanged,
+                    scope: this
+                },
+                componentCls: 'current-project-only-float',
+                id: 'only-stories-in-current-project-element'
+            });
+        },
+        
+        _buildShowGridCheckbox: function() {
+            return Ext.create('Rally.ui.CheckboxField', {
+                boxLabel: 'Show Grid',
+                listeners: {
+                    change: this._onShowGridClicked,
+                    scope: this
+                },
+                componentCls: 'show-grid-checkbox-only-float',
+                id: 'show-grid-checkbox-element'
+            });   
+        },
+        
+        _buildFilterOnReleaseCheckbox: function(){
+            return {
+                xtype: 'rallycheckboxfield',
+                boxLabel: 'Filter Features on Release',
+                value: this.filterOnRelease,
+                listeners: {
+                    change: this._onFilterOnReleaseChanged,
+                    scope: this
+                },
+                componentCls: 'filter-on-release-float'
+            };
+        },
+        
+        _buildReleaseCombobox: function(){
+             return {
+                xtype: 'rallyreleasecombobox',
+                listeners: {
+                    change: this._onReleaseComboboxChanged,
+                    scope: this
+                }
+                
+            };
+        },
+        
+        _onShowGridClicked: function(checkbox) {
+            var grid = this.down('rallygrid');
+            if (checkbox.getValue() === true) {
+                this._showGrid();    
+            } else if (grid) {
+                grid.destroy();
+            }
+        },
+        
+        _onOnlyStoriesInCurrentProjectChanged: function(checkBox) {
+            var grid = this.down('rallygrid'),
+                chart = this.down('rallychart');
+                
+            this.onlyStoriesInCurrentProject = checkBox.getValue();
+            
+            //this._refreshTree();
+            if (grid) {
+                grid.destroy();
+            }
+            if (chart) {
+                chart.destroy();
+            }
+            
+            this._onPortfolioItemChanged();
+        },
+        
+        _onPortfolioItemChanged: function() {
+            this._showOrHideCheckboxes();
+            this._removeChildrenGridAndChart();
+            this._showChart();
+            this._showGrid();
+        },
+        
+        _onFilterOnReleaseChanged: function(checkBox) {
+            this.filterOnRelease = checkBox.getValue();
+            //this._refreshTree();
+            this.down('rallygrid').destroy();
+            this.down('rallychart').destroy();
+            this._loadPortfolioItem(this.currentPiRecord.get('_ref'));
+        },
+        
+        _onReleaseComboboxChanged: function(releaseCombobox){
+            if(this.filterOnRelease) {
+                //this._refreshTree(); 
+                this.down('rallygrid').destroy();
+                this.down('rallychart').destroy();
+                this._loadPortfolioItem(this.currentPiRecord.get('_ref'));
+            }
+        },
+        
+        _showOrHideCheckboxes: function() {
+            var piLevel = this.currentPiRecord.self.ordinal,
+            currentProjectOnlyCheckbox = this.down('#only-stories-in-current-project-element');
+            
+            if (piLevel === 0) {
+                currentProjectOnlyCheckbox.show();
+            } else {
+                currentProjectOnlyCheckbox.hide();
+            }
+        },
+        
+        _refreshTree: function() {
+            this.down('rallyportfoliotree')._refresh();
+        },
+        
+        _drawHeader: function(){
+            var header = this.down('#header');
+            header.add(this._buildHelpComponent());
+            header.add(this._buildFilterInfo());
+            header.add(this._buildCurrentProjectOnlyCheckbox());
+            header.add(this._buildShowGridCheckbox());
+        },
+        
+        _getGlobalContext: function() {
+            return (this.getContext().getGlobalContext && 
+                this.getContext().getGlobalContext()) ||
+                //todo: ugly hack until Rally.app.Context.getGlobalContext is available in sdk 2.0
+                window.parent.Rally.environment.getContext();
+        }
+    });
+}());
+                (function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
+        extend: "Rally.apps.charts.rpm.PortfolioChartAppBase",
+        cls: "portfolio-cfd-app",
+        
+        requires: [
+            'Rally.ui.chart.Chart'
+        ],
+
+        help: {
+            cls: 'portfolio-cfd-help-container',
+            id: 274
+        },
+
+        chartComponentConfig: {
+            xtype: "rallychart",
+
+            updateBeforeRender: function () {
+                var calcConfig = this.calculatorConfig,
+                    chartColors = this.chartColors;
+
+                var scheduleStatesLength = calcConfig.scheduleStates.length,
+                    firstScheduleState = calcConfig.scheduleStates[0],
+                    lastScheduleState = calcConfig.scheduleStates[scheduleStatesLength - 1];
+
+                var firstColor = chartColors[0],
+                    lastColor = chartColors[chartColors.length - 1],
+                    firstCustomColor = '#B3B79A',
+                    secondCustomColor = '#5C9ACB';
+
+                if (firstScheduleState !== "Defined" && firstColor !== firstCustomColor) {
+                    chartColors.unshift(firstCustomColor);
+                }
+                if (lastScheduleState !== "Accepted" && lastColor !== secondCustomColor) {
+                    chartColors.push(secondCustomColor);
+                }
+            },
+
+            queryErrorMessage: "No data to display.<br /><br />Most likely, stories are either not yet available or started for this portfolio item.",
+            aggregationErrorMessage: "No data to display.<br /><br />Check the data type setting for displaying data based on count versus plan estimate.",
+
+            storeType: 'Rally.data.lookback.SnapshotStore',
+            storeConfig: {
+                find: {
+                    "_TypeHierarchy": -51038,
+                    "Children": null
+                },
+                fetch: ["ScheduleState", "PlanEstimate"],
+                hydrate: ["ScheduleState"],
+                sort: {
+                    "_ValidFrom": 1
+                }
+            },
+
+            calculatorType: "Rally.apps.charts.rpm.cfd.CumulativeFlowCalculator",
+
+            chartConfig: {
+                chart: {
+                    defaultSeriesType: "area",
+                    zoomType: "xy"
+                },
+                xAxis: {
+                    categories: [],
+                    tickmarkPlacement: "on",
+                    tickInterval: 5,
+                    title: {
+                        text: "Days",
+                        margin: 10
+                    }
+                },
+                yAxis: [
+                    {
+                        title: {
+                            text: "Count"
+                        }
+                    }
+                ],
+                tooltip: {
+                    formatter: function () {
+                        return "" + this.x + "<br />" + this.series.name + ": " + this.y;
+                    }
+                },
+                plotOptions: {
+                    series: {
+                        marker: {
+                            enabled: false,
+                            states: {
+                                hover: {
+                                    enabled: true
+                                }
+                            }
+                        },
+                        groupPadding: 0.01
+                    },
+                    area: {
+                        stacking: 'normal',
+                        lineColor: '#666666',
+                        lineWidth: 2,
+                        marker: {
+                            enabled: false
+                        }
+                    }
+                }
+            }
+        }
+    });
+}());
+
+
+            Rally.launchApp('Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp', {
+                name:"Portfolio CFD",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+    <style type="text/css">
+        .burndown-app .chartControls,
+.app-settings .settings-form .paddedSettingCmp {
+    margin: 15px;
+    border: 0px;
+    height: 100px;
+}
+
+.burndown-app .chartControls .rui-triggerfield {
+    display: inline-block;
+}
+
+.burndown-app .chartControls label {
+    display: inline-block;
+    font-size: 1.2em;
+    margin: 3px 8px;
+}
+
+.portfolio-cfd-app,
+.portfolio-burnup-app,
+.burndown-app {
+    margin: 10px;
+    padding-right: 20px;
+    background-color: transparent;
+}
+
+.portfolio-cfd-app .rally-help-icon,
+.burndown-app .rally-help-icon,
+.portfolio-burnup-app .rally-help-icon,
+.chart-app .rally-help-icon {
+    float: right;
+}
+
+.portfolio-cfd-app .chart,
+.portfolio-burnup-app .chart {
+    min-height: 2em;
+}
+
+.app-settings .settings-form .piButton {
+    padding: 5px 15px 7px 15px;
+    z-index: 101;
+    margin-bottom: 10px;
+}
+
+.app-settings .settings-form .piDisplayField {
+    background-color: #e2eff6;
+    margin-left: -10px;
+    min-width: 250px;
+    padding: 5px 20px 3px 25px;
+    z-index: 100;
+    -webkit-border-radius: 3px;
+    -moz-border-radius: 3px;
+    border-radius: 3px;
+}
+
+.app-settings .settings-form .settingsLabel {
+    text-transform: uppercase;
+    font-weight: bold;
+    display: block;
+    min-height: 20px;
+    width: 100px;
+}
+
+.schedule-state-selector .x4-boundlist-selected .x4-form-checkbox {
+    background-position: 0 -13px;
+}
+
+.x-boundlist-item img.stateFieldValue {
+    background: transparent url('checkbox.gif');
+    height: 13px;
+    width: 13px;
+}
+.x-boundlist-selected img.stateFieldValue{
+    background: transparent url('checkbox.gif');
+    height: 13px;
+    width: 13px;
+    background-position-x: 0px;
+    background-position-y: -13px;
+}
+
+    </style>
+    <style type="text/css">
+        .portfolio-cfd-app {
+    width: 100% !important;
+}
+
+.portfolio-cfd-app .rallytree {
+    padding-top: 5px;
+    padding-bottom: 20px;
+}
+
+.portfolio-cfd-app .header {
+    border-bottom: 1px dotted #c6c6c6;
+}
+
+.portfolio-cfd-app .filterInfo {
+    float: right;
+    padding-right: 1px;
+    border-right: 1px solid #CCC;
+    margin-right: 5px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.portfolio-cfd-app .rally-help-icon {
+    float: right;
+}
+
+.portfolio-cfd-app .current-project-only-float {
+    float: left;
+}
+
+.portfolio-cfd-app .show-grid-checkbox-only-float {
+    float: left;
+    margin-left: 10px;
+}
+
+.portfolio-cfd-app .filter-on-release-float {
+    float: left;
+    margin-left: 10px;
+    margin-right: 8px;
+}
+    </style>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,13 @@
+{
+   "name": "Portfolio Hierarchy",
+   "className": "Rally.apps.portfoliohierarchy.PortfolioHierarchyApp",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc2",
+   "javascript": [
+      "ProjectUserStoryTreeItem.js",
+      "PortfolioHierarchyApp.js"
+   ],
+   "css": [
+      "PortfolioHierarchyApp.css"
+   ]
+}
