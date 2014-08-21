@@ -197,7 +197,7 @@ Ext.define('CustomApp', {
 						field: 'PlanEstimate',
 						display: 'area'
 					};
-				}, this);
+				});
 			}
 		});
 	},
@@ -215,7 +215,7 @@ Ext.define('CustomApp', {
 			leap = (date.getFullYear() % 4 === 0),
 			day = new Date(date.getFullYear(), 0, 1).getDay(),
 			weekCount = ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
+		return weekCount < ww ? (ww - weekCount) : ww;
 	},
 	
 	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in

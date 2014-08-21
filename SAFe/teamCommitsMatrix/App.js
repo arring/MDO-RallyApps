@@ -154,7 +154,7 @@ Ext.define('CustomApp', {
 		fRecords.forEach(function(fRecord){
 			Ext.create('Rally.data.wsapi.Store',{
 				model:'HierarchicalRequirement',
-				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID'],
+				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID', 'PlanEstimate'],
 				limit:Infinity,
 				autoLoad:true,
 				context:{
@@ -610,6 +610,9 @@ Ext.define('CustomApp', {
 								var theHTML = '<p><b>Team: </b>' + ProjectName + 
 											'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
 											'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
+											'<p><b>PlanEstimate: </b>' + 
+											_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
+												return sum + (sr.get('PlanEstimate') || 0); }, 0) +
 											'<p><b>UserStories: </b><ol>';
 								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
 									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 

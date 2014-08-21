@@ -70,8 +70,22 @@
 
         _shouldSplitOnDash: function (dateStr) {
             return dateStr.split('-').length === 3;
-        }
-
+        },
+		
+		_getWorkweek: function(date){ //calculates intel workweek, returns integer
+			if(!(date instanceof Date)) return;
+			var me = this, oneDay = 1000 * 60 * 60 * 24,
+				yearStart = new Date(date.getFullYear(), 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01Start = yearStart - dayIndex*oneDay,
+				timeDiff = date - ww01Start,
+				dayDiff = timeDiff / oneDay,
+				ww = Math.floor(dayDiff/7) + 1,
+				leap = (date.getFullYear() % 4 === 0),
+				day = new Date(date.getFullYear(), 0, 1).getDay(),
+				weekCount = ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52; //intel weeks in this year
+			return weekCount < ww ? (ww - weekCount) : ww;
+		}
     });
 
 }());

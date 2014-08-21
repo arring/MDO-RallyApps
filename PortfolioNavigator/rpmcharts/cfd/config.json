@@ -2,7 +2,7 @@
    "name": "Portfolio CFD",
    "className": "Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp",
    "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc2",
+   "sdk": "2.0rc3",
    "javascript": [
       "CumulativeFlowCalculator.js",
       "../../DateMixin.js",

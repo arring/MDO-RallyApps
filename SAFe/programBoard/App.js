@@ -1220,22 +1220,28 @@ Ext.define('CustomApp', {
 	
 	//_____________________________________ DEPENDENCIES STUFF ___________________________________	
 	
-	_loadRandomUserStory: function(ProjectRef, cb){ //try to mix it up at least 
+	_loadRandomUserStory: function(ProjectRef, cb){ //get the most recent one!!
 		var me = this;
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
 			autoLoad:true,
-			limit:10,
-			pageSize:10,
-			fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+			limit:1,
+			pageSize:1,
+			fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: ProjectRef
 			},
+			sorters: [
+				{
+					property: 'CreationDate', 
+					direction:'DESC'
+				}
+			],
 			listeners: {
 				load: {
 					fn: function(userStoryStore, userStoryRecords){
-						cb(userStoryRecords[Math.floor(Math.random()*userStoryRecords.length)]);
+						cb(userStoryRecords.pop());
 					},
 					single:true
 				}
