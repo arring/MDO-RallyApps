@@ -343,8 +343,8 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 			autoLoad:true,
 			remoteSort:false,
 			fetch:(piLevel === 0 ? [
-				'FormattedID', 'Name', 'PlanEstimate', 'Iteration', 'ScheduleState', 'Project', 'DirectChildrenCount'] : [
-				'FormattedID', 'Name', 'Project']),
+				'ObjectID', 'FormattedID', 'Name', 'PlanEstimate', 'Iteration', 'ScheduleState', 'Project', 'DirectChildrenCount'] : [
+				'ObjectID', 'FormattedID', 'Name', 'Project']),
 			context:{
 				workspace:this.getContext().getWorkspace()._ref,
 				project:null
@@ -394,7 +394,7 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 					},
 					renderer: function(v, m ,r){
 						if(v) return '<a href="https://rally1.rallydev.com/#/' + r.data.Iteration.Project.ObjectID + 
-							'd/detail/userstory/' + r.data.Iteration.ObjectID + '" target="_blank">' + v.Name + '</a>';
+							'd/detail/iteration/' + r.data.Iteration.ObjectID + '" target="_blank">' + v.Name + '</a>';
 							
 					}
 				},{
@@ -415,7 +415,7 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 					dataIndex: 'DirectChildrenCount',
 					text:'Children',
 					renderer: function(v, m ,r){
-						return '<a href="https://rally1.rallydev.com/#/' + r.data.Project._ref.split('/')[2] + 
+						return '<a href="https://rally1.rallydev.com/#/' + r.data.Project.ObjectID + 
 							'd/detail/userstory/' + r.data.ObjectID + '/children" target="_blank">' + v + '</a>';
 					}
 				}
@@ -425,8 +425,11 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 				'Project'
 			],
 			showRowActionsColumn: false,
-			selType: 'checkboxmodel',
-			selModel:'SIMPLE',
+			selType:'checkboxmodel',
+			selModel:{
+				ignoreRightMouseSelection:true,
+				checkOnly:true
+			},
 			enableEditing: false,
 			autoScroll: true,
 			height: 500,

@@ -155,6 +155,9 @@ Ext.define('CustomApp', {
 					property:'Project.Name',
 					operator:'contains',
 					value:me.TrainRecord.get('Name').split(' ART ')[0]
+				},{
+					property:'Project.Children.Name',
+					value:''
 				}
 			],
 			listeners: {
