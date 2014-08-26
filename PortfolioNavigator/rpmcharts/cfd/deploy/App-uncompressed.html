@@ -157,7 +157,7 @@
 			runCalculation:function(items){
 				if(!this.scheduleStates || !this.startDate || !this.endDate) {
 					console.log('invalid constructor config', this); return; }
-				var dates = this._getDates();
+				var dates = this._getDates(), day=1000*3600*24;
 				var totals = _.reduce(this.scheduleStates, function(map, ss){ 
 					map[ss] = _.map(new Array(dates.length), function(){ return 0;}); 
 					return map; 
@@ -168,7 +168,7 @@
 						iEnd = new Date(item._ValidTo), 
 						state = item.ScheduleState, 
 						pe = item.PlanEstimate;
-					if(!pe) return; //no need to continue with this one
+					if(!pe || ((iStart/day>>0) === (iEnd/day>>0))) return; //no need to continue with this one
 					var startIndex = this._getIndexOnOrAfter(iStart, dates), 
 						endIndex = this._getIndexOnOrBefore(iEnd, dates);
 					if(startIndex===-1 || endIndex===-1) return; //no need to continue here

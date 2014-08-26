@@ -8,13 +8,13 @@ Ext.define('CustomApp', {
 	},
 	
 	/****************************************************** SOME CONFIG CONSTANTS *******************************************************/
+	_chartColors: ['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],
 	
 	_defaultChartConfig: {
 		chart: {
 			defaultSeriesType: "area",
 			zoomType: "xy"
 		},
-		colors:['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],
 		xAxis: {
 			tickmarkPlacement: "on",
 			title: {
@@ -301,7 +301,7 @@ Ext.define('CustomApp', {
 			runCalculation:function(items){
 				if(!this.scheduleStates || !this.startDate || !this.endDate) {
 					console.log('invalid constructor config', this); return; }
-				var dates = this._getDates();
+				var dates = this._getDates(), day=1000*3600*24;
 				var totals = _.reduce(this.scheduleStates, function(map, ss){ 
 					map[ss] = _.map(new Array(dates.length), function(){ return 0;}); 
 					return map; 
@@ -312,7 +312,7 @@ Ext.define('CustomApp', {
 						iEnd = new Date(item._ValidTo), 
 						state = item.ScheduleState, 
 						pe = item.PlanEstimate;
-					if(!pe) return; //no need to continue with this one
+					if(!pe || ((iStart/day>>0) === (iEnd/day>>0))) return; //no need to continue with this one
 					var startIndex = this._getIndexOnOrAfter(iStart, dates), 
 						endIndex = this._getIndexOnOrBefore(iEnd, dates);
 					if(startIndex===-1 || endIndex===-1) return; //no need to continue here
@@ -451,6 +451,7 @@ Ext.define('CustomApp', {
 			xtype:'rallychart',
 			columnWidth:0.66,
 			loadMask:false,
+			chartColors:me._chartColors,
 			chartData: me._updateChartData(calc.runCalculation(me.AllSnapshots), true),
 			chartConfig: Ext.Object.merge({
 				chart: {
@@ -487,6 +488,7 @@ Ext.define('CustomApp', {
 				loadMask:false,
 				height:400,
 				padding:"50px 0 0 0",
+				chartColors:me._chartColors,
 				chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName]), false),
 				chartConfig: Ext.Object.merge({
 					chart: {
