@@ -2617,7 +2617,7 @@ Ext.define('CustomApp', {
 		/*************************************** THESE NEXT 5 METHODS ARE THE ONLY PLACE YOU HAVE TO WORRY ABOUT SUCESSORS AND 
 																PREDECESSOR FIELDS ON USER STORIES!!!!!!!!!!!!!!! *************************/
 		
-		function syncCollection(userStoryRecord, usList, type, callback){ //type == Predecessors || Successors
+		function syncCollection(userStoryRecord, usAddList, usRemoveList, type, callback){ //type == Predecessors || Successors
 			var collectionStore, collectionRecords, finished=-1, 
 				syncCollectionProxy = false;
 
@@ -2626,22 +2626,16 @@ Ext.define('CustomApp', {
 				callback: function(){
 					collectionStore = this, collectionRecords = collectionStore.getRange();
 					function collectionFuncDone(){ //when all dep userstories are added, call callback
-						if(++finished == usList.length){
-							if(collectionRecords.length){
-								syncCollectionProxy = true;
-								collectionRecords.forEach(function(cr){ collectionStore.remove(cr); }); 
-							}
+						if(++finished == usAddList.length){
 							if(syncCollectionProxy) collectionStore.sync({ callback:callback });
 							else callback();
 						}
 					}
-					collectionFuncDone(); //in case usList == []
-					usList.forEach(function(dep){ //have to load each user story to get its _ref :(
+					usAddList.forEach(function(dep){ //have to load each user story to get its _ref :(
 						var realPred, project, i;
-						
 						for(i=0;i<collectionRecords.length;++i)
 							if(collectionRecords[i].get('FormattedID') === dep.USID){
-								realPred = collectionRecords.splice(i, 0)[0]; break; }
+								realPred = collectionRecords[i]; break; }
 						if(!realPred) {
 							project = _.find(me.ValidProjects, function(projectRecord){
 								return projectRecord.get('ObjectID') == dep.PID;
@@ -2655,6 +2649,15 @@ Ext.define('CustomApp', {
 							});
 						} else collectionFuncDone();
 					});
+					usRemoveList.forEach(function(dep){
+						for(var i=0;i<collectionRecords.length;++i)
+							if(collectionRecords[i].get('FormattedID') === dep.USID){
+								collectionStore.remove(collectionRecords[i]);
+								syncCollectionProxy = true; 
+								return; 
+							}
+					});
+					collectionFuncDone();
 				}
 			});	
 		}
@@ -2662,28 +2665,32 @@ Ext.define('CustomApp', {
 		function removePredDep(userStoryRecord, predDepData, cb){
 			var dependencies = me._getDependencies(userStoryRecord),
 				cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
-				predUSlist = [], depID, i;
+				addUSlist = [], removeUSlist = [], depID = predDepData.DependencyID, i;
 
-			delete dependencies.Preds[predDepData.DependencyID]; //delete from user story preds			
+			removeUSlist = dependencies.Preds[depID].Preds || [];
+			
+			delete dependencies.Preds[depID]; //delete from user story preds		
 			//update or append to the cache, this predDepData
 			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 				for(i=0;i<cachePreds.length; ++i){	//delete from cache
 					dpdp = cachePreds[i];
-					if(dpdp.DependencyID === predDepData.DependencyID){ 
+					if(dpdp.DependencyID === depID){ 
 						cachePreds.splice(i, 1); break; }
 				}
 			}
 
 			function appendPred(pred){  //only add each assigned userstory once
 				if(pred.A){
-					for(i=0;i<predUSlist.length; ++i)
-						if(predUSlist[i].USID === pred.USID) return;
-					predUSlist.push(pred);
+					for(i=0;i<removeUSlist.length; ++i)
+						if(removeUSlist[i].USID === pred.USID) removeUSlist.splice(i, 1);
+					for(i=0;i<addUSlist.length; ++i)
+						if(addUSlist[i].USID === pred.USID) return;
+					addUSlist.push(pred);
 				}
 			}
 			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
 			
-			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){ 
+			syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Predecessors', function(){ 
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
 					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
@@ -2703,12 +2710,13 @@ Ext.define('CustomApp', {
 		function removeSuccDep(userStoryRecord, succDepData, cb){
 			var dependencies = me._getDependencies(userStoryRecord),
 				cacheSuccs = me.DependenciesParsedData.Successors, dpds,
-				succUSlist = [], i;
+				addUSlist = [], removeUSlist = [], succDep, i;
 				
 			for(i=0; i<dependencies.Succs.length; ++i) //find the correct succDep. and remove it from the dependencies object
 				if(dependencies.Succs[i].ID === succDepData.DependencyID){					
-					dependencies.Succs.splice(i, 1); break; }	
-					
+					succDep = dependencies.Succs.splice(i, 1)[0]; break; }	
+			removeUSlist = succDep ? [{USID:succDep.SUSID, PID:succDep.SPID}] : [];
+			
 			//update or append to the cache, this predDepData
 			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 				for(i=0;i<cacheSuccs.length; ++i){ //remove suddDep from cache
@@ -2721,13 +2729,15 @@ Ext.define('CustomApp', {
 			
 			_.each(dependencies.Succs, function(succ){
 				if(succ.A){
+					for(i=0;i<removeUSlist.length; ++i)
+						if(removeUSlist[i].USID === succ.SUSID) removeUSlist.splice(i, 1);
 					for(i=0;i<succUSlist.length; ++i)
-						if(succUSlist[i].USID === succ.SUSID) return;
-					succUSlist.push({USID: succ.SUSID, PID: succ.SPID});
+						if(addUSlist[i].USID === succ.SUSID) return;
+					addUSlist.push({USID: succ.SUSID, PID: succ.SPID});
 				}
 			});
 			
-			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){ 
+			syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Successors', function(){ 
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
 					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
@@ -2761,6 +2771,7 @@ Ext.define('CustomApp', {
 					dpdp = cachePreds[i];
 					if(dpdp.DependencyID === predDepData.DependencyID){
 						cachePreds[i] = predDepData;
+						cachePreds[i].Edited = false;
 						parseDataAdded = true; break;
 					}
 				}
@@ -2776,7 +2787,7 @@ Ext.define('CustomApp', {
 			}			
 			for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
 			
-			syncCollection(userStoryRecord, predUSlist, 'Predecessors', function(){
+			syncCollection(userStoryRecord, predUSlist, [], 'Predecessors', function(){
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
 					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
@@ -2826,6 +2837,7 @@ Ext.define('CustomApp', {
 					//could be multiple succs with same DepID
 					if(dpds.DependencyID === succDepData.DependencyID && dpds.FormattedID === succDepData.FormattedID){
 						cacheSuccs[i] = succDepData;
+						cacheSuccs[i].Edited = false;
 						parseDataAdded = true; break;
 					}
 				}
@@ -2840,7 +2852,7 @@ Ext.define('CustomApp', {
 				}
 			});
 			
-			syncCollection(userStoryRecord, succUSlist, 'Successors', function(){
+			syncCollection(userStoryRecord, succUSlist, [], 'Successors', function(){
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
 					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
@@ -3035,9 +3047,9 @@ Ext.define('CustomApp', {
 			},{
 				text:'Teams Depended On',
 				html:	'<div class="pred-dep-header" style="width:80px !important;"></div>' +
-						'<div class="pred-dep-header" style="width:155px !important;">Team Name</div>' +
+						'<div class="pred-dep-header" style="width:140px !important;">Team Name</div>' +
 						'<div class="pred-dep-header" style="width:65px  !important;">Supported</div>' +
-						'<div class="pred-dep-header" style="width:55px  !important;">US#</div>' +
+						'<div class="pred-dep-header" style="width:70px  !important;">US#</div>' +
 						'<div class="pred-dep-header" style="width:130px !important;">User Story</div>',
 				dataIndex:'DependencyID',
 				width:580,
@@ -3092,7 +3104,7 @@ Ext.define('CustomApp', {
 					var teamColumnCfgs = [
 						{
 							dataIndex:'PID',
-							width:160,
+							width:145,
 							resizable:false,
 							renderer: function(val, meta, depTeamRecord){
 								var projectRecord = _.find(me.ValidProjects, function(projectRecord){
@@ -3143,7 +3155,7 @@ Ext.define('CustomApp', {
 							}
 						},{
 							dataIndex:'USID',
-							width:60,
+							width:75,
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta, depTeamRecord){
@@ -3362,7 +3374,7 @@ Ext.define('CustomApp', {
 							for(var i = 0;i<predecessors.length;++i)
 								if(predecessors[i].PID === ''){
 									alert('Cannot Save: All Team Names must be valid'); return; }
-							
+							me._isEditing = true;
 							me.PredDepGrid.setLoading(true);
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
@@ -3419,6 +3431,7 @@ Ext.define('CustomApp', {
 													
 													var lastAction = function(){ //last thing to do!											
 														predDepRecord.set('Edited', false);	
+														me._isEditing = false;
 														me.PredDepGrid.setLoading(false);		
 													};
 													
@@ -3452,6 +3465,7 @@ Ext.define('CustomApp', {
 														me._loadRandomUserStory(project.get('_ref'), function(us){
 															if(!us){
 																me.PredDepGrid.setLoading(false);
+																me._isEditing = false;
 																alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
 																return;
 															}
@@ -3521,6 +3535,7 @@ Ext.define('CustomApp', {
 										me._loadRandomUserStory(project.get('_ref'), function(us){
 											if(!us){
 												me.PredDepGrid.setLoading(false);
+												me._isEditing = false;
 												alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
 												return;
 											}
@@ -3567,6 +3582,7 @@ Ext.define('CustomApp', {
 						handler: function(){
 							if(confirm('Confirm Dependency Deletion')){
 								me.PredDepGrid.setLoading(true);
+								me._isEditing = true;
 								me.DependenciesUserStoryStore.load({
 									callback: function(userStoryRecords, operation){
 										me._buildDependenciesData();
@@ -3594,6 +3610,7 @@ Ext.define('CustomApp', {
 										var lastAction = function(){	//last thing to do!												
 											me.CustomPredDepStore.remove(predDepRecord);
 											me.PredDepGrid.setLoading(false);
+											me._isEditing = false;
 										};
 										
 										var nextAction = function(){
@@ -3952,6 +3969,7 @@ Ext.define('CustomApp', {
 						handler:function(){
 							//no field validation needed
 							me.SuccDepGrid.setLoading(true);
+							me._isEditing = true;
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
 									me._buildDependenciesData();
@@ -3965,6 +3983,7 @@ Ext.define('CustomApp', {
 									});
 									if(!project){
 										me.SuccDepGrid.setLoading(false);
+										me._isEditing = false;
 										alert('could not find project ' + succDepData.SuccProjectID);
 										return;
 									}													
@@ -3976,6 +3995,7 @@ Ext.define('CustomApp', {
 									var lastAction = function(){ //This is the last thing to do!
 										succDepRecord.set('Edited', false);
 										me.SuccDepGrid.setLoading(false);
+										me._isEditing = false;
 									};
 									
 									var nextAction = function(){ //2nd to last thing to do
@@ -3990,6 +4010,7 @@ Ext.define('CustomApp', {
 										var userStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
 										if(userStoryRecord) removeSuccDep(userStoryRecord, realDepData, function(){
 											me.SuccDepGrid.setLoading(false);
+											me._isEditing = false;
 											me.CustomSuccDepStore.remove(succDepRecord);
 										});
 									};

@@ -1,27 +1,18 @@
 .portfolio-cfd-app {
-    width: 100% !important;
-}
-
-.portfolio-cfd-app .rallytree {
-    padding-top: 5px;
-    padding-bottom: 20px;
+    width: 100% !important; /* for scrollbar */
+	overflow-y: scroll !important;
 }
 
 .portfolio-cfd-app .header {
     border-bottom: 1px dotted #c6c6c6;
-}
-
-.portfolio-cfd-app .filterInfo {
-    float: right;
-    padding-right: 1px;
-    border-right: 1px solid #CCC;
-    margin-right: 5px;
-    margin-top: 2px;
-    margin-bottom: 2px;
+	line-height:1.1em;
 }
 
 .portfolio-cfd-app .rally-help-icon {
     float: right;
+    padding-left: 1px;
+    border-left: 1px solid #CCC;
+    margin-left: 5px;
 }
 
 .portfolio-cfd-app .current-project-only-float {
@@ -31,10 +22,4 @@
 .portfolio-cfd-app .show-grid-checkbox-only-float {
     float: left;
     margin-left: 10px;
-}
-
-.portfolio-cfd-app .filter-on-release-float {
-    float: left;
-    margin-left: 10px;
-    margin-right: 8px;
 }
