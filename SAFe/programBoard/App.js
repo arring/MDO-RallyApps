@@ -1808,7 +1808,7 @@ Ext.define('CustomApp', {
 					var feature = me.TeamCommitsFeatureStore.findRecord('FormattedID', FID);
 					if(feature.get('Project')) {
 						return '<a href="https://rally1.rallydev.com/#/' + feature.get('Project').ObjectID + 'd/detail/portfolioitem/feature/' + 
-								feature.get('ObjectID') + '">' + FID + '</a>';
+								feature.get('ObjectID') + '" target="_blank">' + FID + '</a>';
 					}
 					else return FID;
 				}
@@ -2023,7 +2023,7 @@ Ext.define('CustomApp', {
 					if(iteration.get('Project')) {
 						var pid = iteration.get('Project')._ref.split('/project/')[1];
 						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/iteration/' + 
-								iteration.get('ObjectID') + '">' + name + '</a>';
+								iteration.get('ObjectID') + '" target="_blank">' + name + '</a>';
 					}
 					else return name;
 				}

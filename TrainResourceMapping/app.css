@@ -1,95 +1,16 @@
+.x-grid-row .intel-alt-color1 { background-color:rgba(158,242,255,0.4) !important; }
+.x-grid-row .intel-alt-color2  { background-color:rgba(242, 242, 242, 0.4) !important; }
+
 .x-grid-row .intel-editor-cell {  cursor:pointer !important; }
 .x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
 
-.x-grid-cell.intel-team-commits-WHITE { background-color:rgba(0,0,0,0) !important;  }
-.x-grid-row-over:not(.x-grid-row-selected) .x-grid-cell.intel-team-commits-WHITE { background-color:rgba(236, 248, 251, 1) !important; }
+.x-grid-cell.intel-red-cell {background-color:rgba(255, 0, 0, 0.30) !important; }
+.x-grid-row-selected .x-grid-cell.intel-red-cell,
+.x-grid-row-over .x-grid-cell.intel-red-cell {background-color:rgba(255, 0, 0, 0.50) !important; }
 
-.x-grid-cell.intel-team-commits-RED {background-color:rgba(255, 0, 0, 0.50) !important; }
-.x-grid-row-selected .x-grid-cell.intel-team-commits-RED,
-.x-grid-row-over .x-grid-cell.intel-team-commits-RED {background-color:rgba(255, 0, 0, 0.70) !important; }
-
-.x-grid-cell.intel-team-commits-GREEN {background-color:rgba(0, 255, 0, 0.50) !important;}
-.x-grid-row-selected .x-grid-cell.intel-team-commits-GREEN,
-.x-grid-row-over .x-grid-cell.intel-team-commits-GREEN {background-color:rgba(0, 255, 0, 0.70) !important;}
-
-.x-grid-cell.intel-team-commits-GREY {background-color:rgba(224, 224, 224, 0.50) !important;}
-.x-grid-row-selected .x-grid-cell.intel-team-commits-GREY,
-.x-grid-row-over .x-grid-cell.intel-team-commits-GREY {background-color:rgba(224, 224, 224, 0.70) !important;}
-
-.x-grid-cell.intel-team-commits-WHITE-YELLOW {
-	background-image: -webkit-gradient(
-		linear,
-		right top,
-		left bottom,
-		color-stop(0.5, rgba(251, 255, 0, 0.50)),
-		color-stop(0.5, rgba(0,0,0,0))
-	) !important;
-	background-image: -o-linear-gradient(right top,rgba(0,0,0,0) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -moz-linear-gradient(right top, rgba(0,0,0,0) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -webkit-linear-gradient(right top, rgba(0,0,0,0) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -ms-linear-gradient(right top, rgba(0,0,0,0) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: linear-gradient(to right top, rgba(0,0,0,0) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-}
-
-.x-grid-cell.intel-team-commits-RED-YELLOW {
-	background-image: -webkit-gradient(
-		linear,
-		right top,
-		left bottom,
-		color-stop(0.5, rgba(251, 255, 0, 0.50)),
-		color-stop(0.5, rgba(255, 0, 0, 0.50))
-	) !important;
-	background-image: -o-linear-gradient(right top, rgba(255, 0, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -moz-linear-gradient(right top, rgba(255, 0, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -webkit-linear-gradient(right top, rgba(255, 0, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -ms-linear-gradient(right top, rgba(255, 0, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: linear-gradient(to right top, rgba(255, 0, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-}
-
-.x-grid-cell.intel-team-commits-GREEN-YELLOW {
-	background-image: -webkit-gradient(
-		linear,
-		right top,
-		left bottom,
-		color-stop(0.5, rgba(251, 255, 0, 0.50)),
-		color-stop(0.5, rgba(0, 255, 0, 0.50))
-	) !important;
-	background-image: -o-linear-gradient(right top, rgba(0, 255, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -moz-linear-gradient(right top, rgba(0, 255, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -webkit-linear-gradient(right top, rgba(0, 255, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -ms-linear-gradient(right top, rgba(0, 255, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: linear-gradient(to right top, rgba(0, 255, 0, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-}
-
-.x-grid-cell.intel-team-commits-GREY-YELLOW {
-	background-image: -webkit-gradient(
-		linear,
-		right top,
-		left bottom,
-		color-stop(0.5, rgba(251, 255, 0, 0.50)),
-		color-stop(0.5, rgba(224, 224, 224, 0.50))
-	) !important;
-	background-image: -o-linear-gradient(right top, rgba(224, 224, 224, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -moz-linear-gradient(right top, rgba(224, 224, 224, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -webkit-linear-gradient(right top, rgba(224, 224, 224, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: -ms-linear-gradient(right top, rgba(224, 224, 224, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-	background-image: linear-gradient(to right top, rgba(224, 224, 224, 0.50) 75%, rgba(251, 255, 0, 0.50) 75%) !important;
-}
-
-
-.intel-legend-dot {
-	width:16px;
-	height:16px;
-	border-radius:8px;
-	border:1px solid black;
-	display:inline-block;
-	vertical-align:middle;
-}
-
-.intel-legend-item {
-	font-size:1.2em;
-	text-align:center;
-}
+.x-grid-cell.intel-green-cell {background-color:rgba(0, 255, 0, 0.30) !important;}
+.x-grid-row-selected .x-grid-cell.intel-green-cell,
+.x-grid-row-over .x-grid-cell.intel-green-cell {background-color:rgba(0, 255, 0, 0.50) !important;}
 
 .intel-tooltip {
 	padding:10px;
