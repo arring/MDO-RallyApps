@@ -24,6 +24,7 @@ Ext.define('CustomApp', {
       {
         xtype: 'container',
         itemId: 'gridsContainer',
+        padding: 25,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -34,6 +35,7 @@ Ext.define('CustomApp', {
             itemId: 'gridsLeft',
             width: 500,
             border: 1,
+           // padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid'
@@ -44,6 +46,7 @@ Ext.define('CustomApp', {
             itemId: 'gridsRight',
             width: 500,
             border: 1,
+           // padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid'
@@ -271,20 +274,57 @@ Ext.define('CustomApp', {
           }
         },
         {
-          title: 'Unsized Stories with Release',
-          model: 'User Story',
-          columns: ['FormattedID', 'Name', 'Owner', 'Release'],
+          title: 'Features with no stories',
+          model: 'PortfolioItem/Feature',
+          columns: ['FormattedID', 'Name', 'PlannedEndDate'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 5,
           filters: function() {
-            var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
-                property: 'Release', operator: '!=', value: 'null'
+            var userstoryFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'UserStories.ObjectID', operator: '=', value: 'null'
             });
             var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                property: 'PlanEstimate', operator: '=', value: 'null'
+                property: 'PlannedEndDate', operator: '<', value: 'NextWeek'
             });
 
-            return releaseFilter.and(noPlanEstimateFilter);
+            return userstoryFilter.and(noPlanEstimateFilter);
+          }
+        },
+        {
+          title: 'Features with no Iteration stories',
+          model: 'UserStory',
+          columns: ['FormattedID', 'Name', 'Feature'],
+          side: 'Left',    // TODO: ensure camelcase format to match itemId names
+          pageSize: 5,
+          filters: function() {
+            var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'Feature', operator: '!=', value: 'null'
+            });
+            var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'Iteration', operator: '=', value: 'null'
+            });
+
+            return featureFilter.and(noPlanEstimateFilter);
+          }
+        },
+        {
+          title: 'Features with unaccepted stories in past sprints',
+          model: 'UserStory',
+          columns: ['FormattedID', 'Name', 'Feature', 'ScheduleState'],
+          side: 'Right',    // TODO: ensure camelcase format to match itemId names
+          pageSize: 5,
+          filters: function() {
+            var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'Feature', operator: '!=', value: 'null'
+            });
+            var enddateFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'Iteration.EndDate', operator: '<', value: 'Today'
+            });
+            var unacceptedFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'ScheduleState', operator: '<', value: 'Accepted'
+            });
+
+            return featureFilter.and(unacceptedFilter).and(enddateFilter);
           }
         },
 
