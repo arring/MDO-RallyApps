@@ -357,7 +357,7 @@ Ext.define('CustomApp', {
       // show me the grid!
       gridContainer.add(grid);
 
-      /*
+      /* EXAMPLE for loading a store and viewing a Grid  (pre-template version)
       var blockedStoriesStore = Ext.create('Rally.data.wsapi.Store', {
         model: 'UserStory',
         context: this.context.getDataContext(),
