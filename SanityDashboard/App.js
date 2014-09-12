@@ -10,11 +10,12 @@ Ext.define('CustomApp', {
         xtype: 'container',
         itemId: 'ribbon',
         html: 'ribbon!',
-        width: 1000,
+        width: 1500,
         height: 250,
         border: 1,
         layout: {
-          type: 'hbox'
+          type: 'hbox',
+          pack: 'center'
         },
         style: {
           borderColor: '#AAA',
@@ -33,23 +34,25 @@ Ext.define('CustomApp', {
           {
             xtype: 'container',
             itemId: 'gridsLeft',
-            width: 500,
+            width: 750,
             border: 1,
-           // padding: 25,
+            padding: 25,
             style: {
               borderColor: '#AAA',
-              borderStyle: 'solid'
+              borderStyle: 'solid',
+              margin: '10px'
             }
           },
           {
             xtype: 'container',
             itemId: 'gridsRight',
-            width: 500,
+            width: 750,
             border: 1,
-           // padding: 25,
+            padding: 25,
             style: {
               borderColor: '#AAA',
-              borderStyle: 'solid'
+              borderStyle: 'solid',
+              margin: '10px'
             }
           }
         ]
@@ -67,6 +70,79 @@ Ext.define('CustomApp', {
       this._buildPieChart();
       this._buildBubbleChart();
       this._buildColumnChart();
+      this._buildBarChart();
+    },
+
+    
+    _buildBarChart: function() {
+        console.log('starting to build bar chart');
+        var chartCfg = {
+            chart: {
+                type: 'bar',
+                width: 300,
+                height: 250
+            },
+            title: {
+                text: 'Historic World Population by Region'
+            },
+            subtitle: {
+                text: 'Source: Wikipedia.org'
+            },
+            xAxis: {
+                categories: ['Africa', 'America', 'Asia', 'Europe', 'Oceania'],
+                title: {
+                    text: null
+                }
+            },
+            yAxis: {
+                min: 0,
+                title: {
+                text: 'Population (millions)',
+                    align: 'high'
+                },
+                labels: {
+                    overflow: 'justify'
+                }
+            },
+            tooltip: {
+                valueSuffix: ' millions'
+            },
+            plotOptions: {
+                bar: {
+                    dataLabels: {
+                        enabled: true
+                    }   
+                }
+            },
+            legend: {
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'top',
+                x: -40,
+                y: 100,
+                floating: true,
+                borderWidth: 1,
+                backgroundColor: '#FFFFFF',
+                shadow: true
+            },
+            credits: {
+            enabled: false
+            }
+        };
+        console.log('Chart Config', chartCfg);
+        var chartDt = {
+            series: [{
+                name: 'Mister Foobar',
+                data: [100, 40, 20, 80]
+            }]
+        };
+        console.log('Chart Data', chartDt);
+        this.down('#ribbon').add({
+            xtype: 'rallychart',
+            chartConfig: chartCfg,
+            chartData: chartDt
+        });
+
     },
 
     _buildPieChart: function() {
@@ -351,7 +427,14 @@ Ext.define('CustomApp', {
           context: this.context.getDataContext(),
           autoLoad: {start: 0, limit: pageSize},
           filters: myFilters()
-        }
+        },
+        padding: 10,
+        style: {
+          borderColor: '#AAA',
+          borderStyle: 'dotted',
+          borderWidth: '2px'
+        },
+        syncRowHeight: false
       });
       // show me the grid!
       gridContainer.add(grid);
