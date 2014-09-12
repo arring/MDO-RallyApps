@@ -13,6 +13,9 @@ Ext.define('CustomApp', {
         width: 1000,
         height: 250,
         border: 1,
+        layout: {
+          type: 'hbox'
+        },
         style: {
           borderColor: '#AAA',
           borderStyle: 'solid'
@@ -52,75 +55,22 @@ Ext.define('CustomApp', {
 
     // App entry point
     launch: function() {
-      this._buildGrids();
       this._buildCharts();
+      this._buildGrids();
     },
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
       this._buildPieChart();
       this._buildBubbleChart();
-    },
-    _buildPie2Chart: function() {
-
-      var pieChart = Ext.create('Rally.ui.chart.Chart', {
-        chartConfig: { // {{{
-          chart: {
-              plotBackgroundColor: null,
-              plotBorderWidth: 1,//null,
-              plotShadow: false,
-              width: 300,
-              height: 250,
-          },
-          title: {
-              text: ''
-          },
-          tooltip: {
-              pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
-          },
-          plotOptions: {
-            pie: {
-              allowPointSelect: true,
-              cursor: 'pointer',
-              dataLabels: {
-                enabled: true,
-                format: '<b>{point.name}</b>: {point.percentage:.1f} %',
-                style: {
-                    color: 'black'
-                }
-              }
-            }
-          }
-        }, // }}}
-        chartData: { // {{{
-          series: [{
-              type: 'pie',
-              name: 'Browser share',
-              data: [
-                  ['Firefox',   45.0],
-                  ['IE',       26.8],
-                  {
-                      name: 'Chrome',
-                      y: 12.8,
-                      sliced: true,
-                      selected: true
-                  },
-                  ['Safari',    8.5],
-                  ['Opera',     6.2],
-                  ['Others',   0.7]
-              ]
-          }]
-        } // }}}
-      });
-
-      var ribbonContainer = this.down('#ribbon');
-      ribbonContainer.add(pieChart);
-
+      this._buildColumnChart();
     },
 
     _buildPieChart: function() {
 
-      var pieChart = Ext.create('Rally.ui.chart.Chart', {
+       
+      this.down('#ribbon').add({
+        xtype: 'rallychart',
         chartConfig: { // {{{
           chart: {
               plotBackgroundColor: null,
@@ -169,15 +119,13 @@ Ext.define('CustomApp', {
           }]
         } // }}}
       });
-
-      var ribbonContainer = this.down('#ribbon');
-      ribbonContainer.add(pieChart);
 
     },
 
     _buildBubbleChart: function() {
 
-      var bubbleChart = Ext.create('Rally.ui.chart.Chart', {
+      this.down('#ribbon').add({
+        xtype: 'rallychart',
         chartConfig: {
           chart: {
               width: 300,
@@ -201,10 +149,77 @@ Ext.define('CustomApp', {
         }
       });
 
-      var ribbonContainer = this.down('#ribbon');
-      ribbonContainer.add(bubbleChart);
+    },
+
+    _buildColumnChart: function() {
+
+      this.down('#ribbon').add({
+        xtype: 'rallychart',
+        chartConfig: {
+          chart: {
+              type: 'column',
+              width: 300,
+              height: 250
+          },
+          title: {
+              text: 'Monthly Average Rainfall'
+          },
+          subtitle: {
+              text: 'Source: WorldClimate.com'
+          },
+          xAxis: {
+              categories: [
+                  'Jan',
+                  'Feb',
+                  'Mar',
+                  'Apr',
+                  'May',
+                  'Jun',
+                  'Jul',
+                  'Aug',
+                  'Sep',
+                  'Oct',
+                  'Nov',
+                  'Dec'
+              ]
+          },
+          yAxis: {
+              min: 0,
+              title: {
+                  text: 'Rainfall (mm)'
+              }
+          },
+          tooltip: {
+              headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
+              pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
+                  '<td style="padding:0"><b>{point.y:.1f} mm</b></td></tr>',
+              footerFormat: '</table>',
+              shared: true,
+              useHTML: true
+          },
+          plotOptions: {
+              column: {
+                  pointPadding: 0.2,
+                  borderWidth: 0
+              }
+          },
+        },
+        chartData: {
+          series: [{
+              name: 'Tokyo',
+              data: [49.9, 71.5, 106.4, 129.2, 144.0, 176.0, 135.6, 148.5, 216.4, 194.1, 95.6, 54.4]
+
+          }, {
+              name: 'New York',
+              data: [83.6, 78.8, 98.5, 93.4, 106.0, 84.5, 105.0, 104.3, 91.2, 83.5, 106.6, 92.3]
+
+          }]
+        }
+      });
 
     },
+
+
     // Create all grids in the left/right columns
     _buildGrids: function() {
 
@@ -289,6 +304,9 @@ Ext.define('CustomApp', {
         xtype: 'rallygrid',
         title: myTitle,
         columnCfgs: myColumns,
+        pagingToolbarCfg: {
+          pageSizes: [3,5,10,15]
+        },
         storeConfig: {
           model: myModel,
           context: this.context.getDataContext(),
