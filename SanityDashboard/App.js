@@ -9,7 +9,6 @@ Ext.define('CustomApp', {
       {
         xtype: 'container',
         itemId: 'ribbon',
-        html: 'ribbon!',
         width: 1500,
         height: 250,
         border: 1,
@@ -59,18 +58,20 @@ Ext.define('CustomApp', {
       }
     ],
 
+    globalGridCount: [],   // count entry for each grid
+
     // App entry point
     launch: function() {
-      this._buildCharts();
       this._buildGrids();
     },
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
+      console.log('now building charts');
+      this._buildBarChart();
       this._buildPieChart();
       this._buildBubbleChart();
       this._buildColumnChart();
-      this._buildBarChart();
     },
 
     
@@ -129,14 +130,13 @@ Ext.define('CustomApp', {
             enabled: false
             }
         };
-        console.log('Chart Config', chartCfg);
         var chartDt = {
             series: [{
-                name: 'Mister Foobar',
+                name: 'Grid Counts',
                 data: [100, 40, 20, 80]
             }]
         };
-        console.log('Chart Data', chartDt);
+        console.log('ribbon', this.down('#ribbon'), this.globalGridCount, chartDt);
         this.down('#ribbon').add({
             xtype: 'rallychart',
             chartConfig: chartCfg,
@@ -405,13 +405,43 @@ Ext.define('CustomApp', {
 
       ];
 
+      var allPromises = [];
       _.each(grids, function(grid) {
-        this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize);
+
+        promise.then({
+          success: function(count, data) {
+            this.globalGridCount.push(count);
+          },
+          error: function(error) {
+            console.log('single: error', error);
+          },
+          scope: this
+        }).always(function() {
+          console.log('single - always');
+        });
+
+        allPromises.push(promise);
       }, this);
+
+      Deft.promise.Promise.all(allPromises).then({
+        success: function() {
+          console.log('all counts finished!', this.globalGridCount);
+          this._buildCharts();
+        },
+        failure: function(error) {
+          console.log('all error!', error);
+        },
+        scope: this
+      });
+
     },
 
     // Utility function to generically build a grid and add to a container with given specs
     _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, pageSize) {
+
+      var deferred = Ext.create('Deft.Deferred');
+
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
       // new grid with store data
@@ -426,7 +456,13 @@ Ext.define('CustomApp', {
           model: myModel,
           context: this.context.getDataContext(),
           autoLoad: {start: 0, limit: pageSize},
-          filters: myFilters()
+          filters: myFilters(),
+          listeners: {
+            load: function(store) {
+              console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
+              deferred.resolve(store.getTotalCount());  // TODO more meta data?
+            }
+          }
         },
         padding: 10,
         style: {
@@ -438,6 +474,8 @@ Ext.define('CustomApp', {
       });
       // show me the grid!
       gridContainer.add(grid);
+
+      return deferred.promise;
 
       /* EXAMPLE for loading a store and viewing a Grid  (pre-template version)
       var blockedStoriesStore = Ext.create('Rally.data.wsapi.Store', {
