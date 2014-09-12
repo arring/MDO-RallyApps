@@ -1,6 +1,5 @@
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
-    itemId: 'rallyapp',
     componentCls: 'app',
     width: 800,
     layout:{
@@ -26,7 +25,6 @@ Ext.define('CustomApp', {
         xtype: 'container',
         itemId: 'gridsContainer',
         padding: 25,
-        flex: 1,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -74,7 +72,6 @@ Ext.define('CustomApp', {
       this._buildBubbleChart();
       this._buildPieChart();
       this._buildColumnChart();
-      this.setLoading(false);
     },
 
     
