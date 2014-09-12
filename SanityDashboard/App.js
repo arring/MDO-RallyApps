@@ -1,5 +1,6 @@
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
+    itemId: 'rallyapp',
     componentCls: 'app',
     width: 800,
     layout:{
@@ -11,20 +12,21 @@ Ext.define('CustomApp', {
         itemId: 'ribbon',
         width: 1500,
         height: 250,
+        hidden: true,
         border: 1,
         layout: {
           type: 'hbox',
-          pack: 'center'
+          align: 'stretch'
         },
         style: {
           borderColor: '#AAA',
           borderStyle: 'solid'
-        }
-      },
+        }      },
       {
         xtype: 'container',
         itemId: 'gridsContainer',
         padding: 25,
+        flex: 1,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -69,9 +71,10 @@ Ext.define('CustomApp', {
     _buildCharts: function() {
       console.log('now building charts');
       this._buildBarChart();
-      this._buildPieChart();
       this._buildBubbleChart();
+      this._buildPieChart();
       this._buildColumnChart();
+      this.setLoading(false);
     },
 
     
@@ -84,10 +87,7 @@ Ext.define('CustomApp', {
                 height: 250
             },
             title: {
-                text: 'Historic World Population by Region'
-            },
-            subtitle: {
-                text: 'Source: Wikipedia.org'
+                text: 'Story Counts by Grid'
             },
             xAxis: {
                 categories: ['Africa', 'America', 'Asia', 'Europe', 'Oceania'],
@@ -98,7 +98,7 @@ Ext.define('CustomApp', {
             yAxis: {
                 min: 0,
                 title: {
-                text: 'Population (millions)',
+                text: '# Artifacts',
                     align: 'high'
                 },
                 labels: {
@@ -106,7 +106,7 @@ Ext.define('CustomApp', {
                 }
             },
             tooltip: {
-                valueSuffix: ' millions'
+                valueSuffix: ' Stories'
             },
             plotOptions: {
                 bar: {
@@ -133,15 +133,18 @@ Ext.define('CustomApp', {
         var chartDt = {
             series: [{
                 name: 'Grid Counts',
-                data: [100, 40, 20, 80]
+                //data: [100, 40, 20, 80]
+                data: this.globalGridCount
             }]
         };
-        console.log('ribbon', this.down('#ribbon'), this.globalGridCount, chartDt);
+
         this.down('#ribbon').add({
             xtype: 'rallychart',
             chartConfig: chartCfg,
-            chartData: chartDt
+            chartData: chartDt,
+            flex: 1
         });
+        console.log('finished bar');
 
     },
 
@@ -150,6 +153,7 @@ Ext.define('CustomApp', {
        
       this.down('#ribbon').add({
         xtype: 'rallychart',
+        flex: 1,
         chartConfig: { // {{{
           chart: {
               plotBackgroundColor: null,
@@ -181,19 +185,16 @@ Ext.define('CustomApp', {
         chartData: { // {{{
           series: [{
               type: 'pie',
-              name: 'Browser share',
+              name: 'Team Block',
               data: [
-                  ['Firefox',   45.0],
-                  ['IE',       26.8],
+                  ['Alpha',   45.0],
+                  ['Beta',       26.8],
                   {
-                      name: 'Chrome',
+                      name: 'Gamma',
                       y: 12.8,
                       sliced: true,
                       selected: true
-                  },
-                  ['Safari',    8.5],
-                  ['Opera',     6.2],
-                  ['Others',   0.7]
+                  }
               ]
           }]
         } // }}}
@@ -205,6 +206,7 @@ Ext.define('CustomApp', {
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
+        flex: 1,
         chartConfig: {
           chart: {
               width: 300,
@@ -214,15 +216,18 @@ Ext.define('CustomApp', {
           },
 
           title: {
-              text: 'Foo Bubbles'
+              text: 'Team Analysis'
           },
         },
         chartData: {
           series: [{
+              name: 'Team Alpha',
               data: [[97, 36, 79], [94, 74, 60], [68, 76, 58], [64, 87, 56], [68, 27, 73], [74, 99, 42], [7, 93, 87], [51, 69, 40], [38, 23, 33], [57, 86, 31]]
           }, {
+              name: 'Team Beta',
               data: [[25, 10, 87], [2, 75, 59], [11, 54, 8], [86, 55, 93], [5, 3, 58], [90, 63, 44], [91, 33, 17], [97, 3, 56], [15, 67, 48], [54, 25, 81]]
           }, {
+              name: 'Team Gamma',
               data: [[47, 47, 21], [20, 12, 4], [6, 76, 91], [38, 30, 60], [57, 98, 64], [61, 17, 80], [83, 60, 13], [67, 78, 75], [64, 12, 10], [30, 77, 82]]
           }]
         }
@@ -234,6 +239,7 @@ Ext.define('CustomApp', {
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
+        flex: 1,
         chartConfig: {
           chart: {
               type: 'column',
@@ -241,10 +247,10 @@ Ext.define('CustomApp', {
               height: 250
           },
           title: {
-              text: 'Monthly Average Rainfall'
+              text: 'Story Counts By Team'
           },
           subtitle: {
-              text: 'Source: WorldClimate.com'
+              text: ''
           },
           xAxis: {
               categories: [
@@ -265,7 +271,7 @@ Ext.define('CustomApp', {
           yAxis: {
               min: 0,
               title: {
-                  text: 'Rainfall (mm)'
+                  text: 'Story Count'
               }
           },
           tooltip: {
@@ -285,14 +291,19 @@ Ext.define('CustomApp', {
         },
         chartData: {
           series: [{
-              name: 'Tokyo',
+              name: 'Alpha',
               data: [49.9, 71.5, 106.4, 129.2, 144.0, 176.0, 135.6, 148.5, 216.4, 194.1, 95.6, 54.4]
 
           }, {
-              name: 'New York',
+              name: 'Beta',
               data: [83.6, 78.8, 98.5, 93.4, 106.0, 84.5, 105.0, 104.3, 91.2, 83.5, 106.6, 92.3]
 
-          }]
+          }, {
+              name: 'Gamma',
+              data: [13.6, 72.8, 48.5, 83.4, 106.0, 84.5, 305.0, 74.3, 91.2, 53.5, 106.6, 12.3]
+
+          }
+          ]
         }
       });
 
@@ -427,6 +438,7 @@ Ext.define('CustomApp', {
       Deft.promise.Promise.all(allPromises).then({
         success: function() {
           console.log('all counts finished!', this.globalGridCount);
+          this.down('#ribbon').show();
           this._buildCharts();
         },
         failure: function(error) {
@@ -508,27 +520,5 @@ Ext.define('CustomApp', {
     }
 
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
