@@ -1844,7 +1844,7 @@ Ext.define('CustomApp', {
 						}
 					});
 				},
-				width:80,
+				width:60,
 				renderer:function(oid){
 					return getStoryCount(oid);
 				}
@@ -1872,7 +1872,7 @@ Ext.define('CustomApp', {
 			},{
 				dataIndex:'Commitment',
 				text:'Status',	
-				width:130,
+				width:110,
 				tdCls: 'intel-editor-cell',	
 				sortable:true, 
 				resizable:false,
@@ -1899,7 +1899,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
-				width:180,
+				width:200,
 				editor:'textfield',
 				resizable:false,
 				sortable:true,
@@ -1914,7 +1914,7 @@ Ext.define('CustomApp', {
             title: "Team Commits",
 			width: 790,
 			height:300,
-			x:0, y:50,
+			x:0, y:40,
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			plugins: [
@@ -2023,7 +2023,7 @@ Ext.define('CustomApp', {
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
-				width:240,
+				width:225,
 				editor:false,
 				resizable:false,
 				sortable:true,
@@ -2037,16 +2037,16 @@ Ext.define('CustomApp', {
 					else return name;
 				}
 			},{
-				text: 'Target',
+				text: 'Target Capacity (Planned Velocity)',
 				dataIndex: 'PlannedVelocity',
-				width:100,
+				width:115,
 				tdCls: 'intel-editor-cell',
 				xtype:'numbercolumn',
 				editor:'textfield',
 				resizable:false,
 				sortable:true
 			},{
-				text: 'Actual',
+				text: 'Actual Load (Plan Estimate)',
 				dataIndex: 'RealVelocity',
 				xtype:'numbercolumn',
 				width:100,
@@ -2061,7 +2061,7 @@ Ext.define('CustomApp', {
 			scroll:'vertical',
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
-			x:850, y:50,
+			x:850, y:40,
             showPagingToolbar: false,
 			showRowActionsColumn:false,
             viewConfig: {
@@ -2313,7 +2313,7 @@ Ext.define('CustomApp', {
 					return val || '-';
 				}		
 			},{
-				text:'Status',	
+				text:'Status(ROAM)',
 				dataIndex:'Status',
 				tdCls: 'intel-editor-cell',	
 				width:100,				
@@ -2511,7 +2511,7 @@ Ext.define('CustomApp', {
 			xtype:'button',
 			text:'+ Add Risk',
 			x:0,
-			y:380,
+			y:370,
 			width:80,
 			style:'margin-bottom:10px',
 			listeners:{
@@ -2542,7 +2542,7 @@ Ext.define('CustomApp', {
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:260,
 			x:0,
-			y:420,
+			y:400,
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			plugins: [
@@ -3673,10 +3673,10 @@ Ext.define('CustomApp', {
 		
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
-            title: "Predecessor Dependencies",
+            title: "Dependencies We Have on Other Teams",
 			width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
-			height:400,
-			x:0, y:760,
+			height:300,
+			x:0, y:750,
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
 			plugins: [
@@ -3773,7 +3773,7 @@ Ext.define('CustomApp', {
 		
 		var succDepColumnCfgs = [
 			{
-				text:'Predecesor Project', 
+				text:'Requested By', //'Predecesor Project',
 				dataIndex:'SuccProjectID',
 				width:160,
 				resizable:false,
@@ -3783,13 +3783,13 @@ Ext.define('CustomApp', {
 					return project ? project.get('Name') : pid;
 				}
 			},{
-				text:'Pred US#', 
+				text:'Req Team US#',
 				dataIndex:'SuccFormattedID',
 				width:85,
 				resizable:false,
 				sortable:true
 			},{
-				text:'Pred UserStory', 
+				text:'Req Team UserStory',
 				dataIndex:'SuccUserStoryName',
 				width:160,
 				resizable:false,
@@ -3802,7 +3802,7 @@ Ext.define('CustomApp', {
 				editor: false,
 				sortable:true					
 			},{
-				text:'Checkpoint', 
+				text:'Needed By',
 				dataIndex:'Checkpoint',
 				width:80,
 				resizable:false,
@@ -4078,10 +4078,10 @@ Ext.define('CustomApp', {
 		
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
-            title: "Successor Dependencies",
+            title: "Dependencies Other Teams Have on Us",
 			width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
-			height:400,
-			x:0, y:1200,
+			height:300,
+			x:0, y:1100,
 			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
 			plugins: [
@@ -4267,6 +4267,5 @@ Ext.define('CustomApp', {
 
     </style>
 </head>
-<body>
-</body>
+<body></body>
 </html>
