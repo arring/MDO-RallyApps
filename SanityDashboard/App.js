@@ -15,7 +15,8 @@ Ext.define('CustomApp', {
         border: 1,
         layout: {
           type: 'hbox',
-          align: 'stretch'
+          align: 'stretch',
+          pack: 'center'
         },
         style: {
           borderColor: '#AAA',
@@ -24,7 +25,7 @@ Ext.define('CustomApp', {
       {
         xtype: 'container',
         itemId: 'gridsContainer',
-        padding: 25,
+        //padding: 25,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -35,11 +36,11 @@ Ext.define('CustomApp', {
             itemId: 'gridsLeft',
             width: 750,
             border: 1,
-            padding: 25,
+            //padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid',
-              margin: '10px'
+              //margin: '10px'
             }
           },
           {
@@ -47,11 +48,11 @@ Ext.define('CustomApp', {
             itemId: 'gridsRight',
             width: 750,
             border: 1,
-            padding: 25,
+            //padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid',
-              margin: '10px'
+              //margin: '10px'
             }
           }
         ]
