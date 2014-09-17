@@ -32,6 +32,9 @@
 .x-grid-row .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
 .x-grid-row-selected .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
 
+.x-grid-row .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.15) !important; }
+.x-grid-row-selected .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.25) !important; }
+
 /************ dependencies stuff ******************/
 .intel-team-dep-not-selected .x-grid-cell,
 .x-grid-row-selected .intel-team-dep-not-selected .x-grid-cell { 	background-color:rgba(255, 0, 0, 0.15) !important; }

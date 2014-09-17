@@ -1,714 +1,3 @@
-/*!
- * CTemplate
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/ctemplate
- */
-Ext.define('Skirtle.CTemplate', {
-    extend: 'Ext.XTemplate',
-
-    statics: {
-        AUTO_ID: 0
-    },
-
-    // May need to be increased if components are included deeper in the data object
-    copyDepth: 10,
-
-    // Placeholder element template. Should be changed in tandem with getPlaceholderEl()
-    cTpl: '<p id="ctemplate-{0}-{1}"></p>',
-
-    // Flag
-    isCTemplate: true,
-
-    constructor: function() {
-        var me = this;
-
-        me.callParent(arguments);
-
-        me.id = ++me.statics().AUTO_ID;
-
-        me.reset();
-    },
-
-    /* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
-     * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
-     * components.
-     */
-    copyValues: function(values, depth) {
-        var me = this,
-            id,
-            copy = {},
-            copyDepth = depth || me.copyDepth;
-
-        if (copyDepth === 1) {
-            return values;
-        }
-
-        if (Ext.isArray(values)) {
-            return Ext.Array.map(values, function(value) {
-                return me.copyValues(value, copyDepth - 1);
-            });
-        }
-
-        if (!Ext.isObject(values)) {
-            return values;
-        }
-
-        // This is the key sleight-of-hand that makes the whole thing work
-        if (values.isComponent) {
-            id = values.getId();
-            me.ids.push(id);
-            return Ext.String.format(me.cTpl, id, me.id);
-        }
-
-        Ext.Object.each(values, function(key, value) {
-            // $comp is a special value for a renderTpl that references the current component
-            copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
-        });
-
-        return copy;
-    },
-
-    // Override
-    doInsert: function() {
-        var ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    /* We have to resort to polling for component injection as we don't have full control over when the generated HTML
-     * will be added to the DOM
-     */
-    doPolling: function(interval) {
-        var me = this;
-
-        me.pollInterval = interval;
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-        }
-
-        me.pollId = Ext.defer(me.injectComponents, interval, me);
-    },
-
-    getPlaceholderEl: function(id) {
-        return Ext.get('ctemplate-' + id + '-' + this.id);
-    },
-
-    /* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
-     * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
-     * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
-     * call this method directly as soon as the generated HTML is inserted into the DOM.
-     */
-    injectComponents: function() {
-        var me = this,
-            ids = me.ids,
-            index = ids.length - 1,
-            id,
-            cmp,
-            placeholderEl;
-
-        // Iterate backwards because we remove some elements in the loop
-        for ( ; index >= 0 ; --index) {
-            id = ids[index];
-            cmp = Ext.getCmp(id);
-            placeholderEl = me.getPlaceholderEl(id);
-
-            if (me.renderComponent(cmp, placeholderEl) || !cmp) {
-                // Either we've successfully done the switch or the component has been destroyed
-                Ext.Array.splice(ids, index, 1);
-
-                if (placeholderEl) {
-                    placeholderEl.remove();
-                }
-            }
-        }
-
-        if (ids.length) {
-            // Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
-            me.doPolling(me.pollInterval * 1.5);
-        }
-    },
-
-    // Override
-    overwrite: function(el) {
-        var dom,
-            firstChild,
-            ret;
-
-        /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-         * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
-         * but we can guard against the case where all updates come through this template.
-         */
-        if (Ext.isIE) {
-            dom = Ext.getDom(el);
-            while (dom.firstChild) {
-                dom.removeChild(dom.firstChild);
-            }
-        }
-
-        ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    renderComponent: function(cmp, placeholderEl) {
-        if (cmp && placeholderEl) {
-            var parent = placeholderEl.parent();
-
-            if (cmp.rendered) {
-                // Move a component that has been rendered previously
-                cmp.getEl().replace(placeholderEl);
-            }
-            else {
-                cmp.render(parent, placeholderEl);
-            }
-
-            if (Ext.isIE6) {
-                // Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
-                parent.repaint();
-            }
-
-            return true;
-        }
-
-        return false;
-    },
-
-    reset: function() {
-        var me = this;
-
-        // The ids of injected components that haven't yet been rendered
-        me.ids = [];
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-            me.pollId = null;
-        }
-    }
-}, function(ctemplate) {
-    var apply = function() {
-        var me = this,
-            args = Ext.Array.slice(arguments);
-
-        args[0] = me.copyValues(args[0]);
-
-        // As we're returning an HTML string/array we can't actually complete the injection here
-        me.doPolling(10);
-
-        return me.callParent(args);
-    };
-
-    // The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
-    if (ctemplate.prototype.applyOut) {
-        // 4.1+
-        ctemplate.override({
-            applyOut: apply
-        });
-    }
-    else {
-        // 4.0
-        ctemplate.override({
-            applyTemplate: apply
-        });
-
-        ctemplate.createAlias('apply', 'applyTemplate');
-    }
-});
-
-/*!
- * Component Column
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/component-column
- */
-Ext.define('Skirtle.grid.column.Component', {
-    alias: 'widget.componentcolumn',
-    extend: 'Ext.grid.column.Column',
-    requires: ['Skirtle.CTemplate'],
-
-    // Whether or not to automatically resize the components when the column resizes
-    autoWidthComponents: true,
-
-    // Whether or not to destroy components when they are removed from the DOM
-    componentGC: true,
-
-    // Override the superclass - this must always be true or odd things happen, especially in IE
-    hasCustomRenderer: true,
-
-    // The estimated size of the cell frame. This is updated once there is a cell where it can be measured
-    lastFrameWidth: 12,
-
-    /* Defer durations for updating the component width when a column resizes. Required when a component has an animated
-     * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
-     *
-     * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
-     */
-    widthUpdateDelay: [10, 400],
-
-    constructor: function(cfg) {
-        var me = this;
-
-        me.callParent(arguments);
-
-        // Array of component ids for both component queries and GC
-        me.compIds = [];
-
-        // We need a dataIndex, even if it doesn't correspond to a real field
-        me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
-
-        me.tpl = me.createTemplate(me.tpl);
-        me.renderer = me.createRenderer(me.renderer);
-
-        me.registerColumnListeners();
-    },
-
-    addRefOwner: function(child) {
-        var me = this,
-            fn = me.refOwnerFn || (me.refOwnerFn = function() {
-                return me;
-            });
-
-        if (me.extVersion < 40200) {
-            // Component queries for ancestors use getBubbleTarget in 4.1 ...
-            child.getBubbleTarget = fn;
-        }
-        else {
-            // ... and getRefOwner in 4.2+
-            child.getRefOwner = fn;
-        }
-    },
-
-    applyTemplate: function(data, value) {
-        if (Ext.isDefined(value)) {
-            data[this.dataIndex] = value;
-        }
-
-        return this.tpl.apply(data);
-    },
-
-    /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-     * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
-     * from the DOM just before the grid view is refreshed.
-     */
-    beforeViewRefresh: function() {
-        if (Ext.isIE) {
-            var ids = this.compIds,
-                index = 0,
-                len = ids.length,
-                item,
-                el,
-                parentEl;
-
-            for ( ; index < len ; index++) {
-                if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
-                    parentEl.removeChild(el);
-                }
-            }
-        }
-    },
-
-    calculateFrameWidth: function(component) {
-        var el = component.getEl(),
-            parentDiv = el && el.parent(),
-            // By default the TD has no padding but it is quite common to add some via a tdCls
-            parentTd = parentDiv && parentDiv.parent();
-
-        if (parentTd) {
-            // Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-            return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
-        }
-    },
-
-    createRenderer: function(renderer) {
-        var me = this;
-
-        return function(value, p, record) {
-            var data = Ext.apply({}, record.data, record.getAssociatedData());
-
-            if (renderer) {
-                // Scope must be this, not me
-                value = renderer.apply(this, arguments);
-            }
-
-            // Process the value even with no renderer defined as the record may contain a component config
-            value = me.processValue(value);
-
-            return me.applyTemplate(data, value);
-        };
-    },
-
-    createTemplate: function(tpl) {
-        return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
-    },
-
-    destroyChild: function(child) {
-        child.destroy();
-    },
-
-    getRefItems: function(deep) {
-        var items = this.callParent([deep]),
-            ids = this.compIds,
-            index = 0,
-            len = ids.length,
-            item;
-
-        for ( ; index < len ; index++) {
-			item = Ext.getCmp(ids[index]);
-            if (item) {
-                items.push(item);
-
-                if (deep && item.getRefItems) {
-                    items.push.apply(items, item.getRefItems(true));
-                }
-            }
-        }
-
-        return items;
-    },
-
-    onChildAfterRender: function(child) {
-        this.resizeChild(child);
-    },
-
-    onChildBoxReady: function(child) {
-        // Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
-        this.resizeChild(child, false);
-    },
-
-    onChildDestroy: function(child) {
-        Ext.Array.remove(this.compIds, child.getId());
-    },
-
-    onChildResize: function() {
-        this.redoScrollbars();
-    },
-
-    onColumnResize: function(column) {
-        column.resizeAll();
-    },
-
-    onColumnShow: function(column) {
-        column.resizeAll();
-    },
-
-    // This is called in IE 6/7 as the components can still be seen even when a column is hidden
-    onColumnVisibilityChange: function(column) {
-        var items = column.getRefItems(),
-            index = 0,
-            length = items.length,
-            visible = !column.isHidden();
-
-        // In practice this probably won't help but it shouldn't hurt either
-        if(Ext.suspendLayouts) Ext.suspendLayouts();
-
-        for ( ; index < length ; ++index) {
-            items[index].setVisible(visible);
-        }
-
-       if(Ext.resumeLayouts) Ext.resumeLayouts(true);
-    },
-
-    onDestroy: function() {
-        Ext.destroy(this.getRefItems());
-
-        this.callParent();
-    },
-
-    // Override
-    onRender: function() {
-        this.registerViewListeners();
-        this.callParent(arguments);
-    },
-
-    // View has changed, may be a full refresh or just a single row
-    onViewChange: function() {
-        var me = this,
-            tpl = me.tpl;
-
-        // Batch the resizing of child components until after they've all been injected
-        me.suspendResizing();
-
-        if (tpl.isCTemplate) {
-            // No need to wait for the polling, the sooner we inject the less painful it is
-            tpl.injectComponents();
-
-            // If the template picked up other components in the data we can just ignore them, they're not for us
-            tpl.reset();
-        }
-
-        // A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
-        me.redoScrollbars();
-
-        me.resumeResizing();
-        
-        me.performGC();
-    },
-
-    // Component GC, try to stop components leaking
-    performGC: function() {
-        var compIds = this.compIds,
-            index = compIds.length - 1,
-            comp,
-            el;
-
-        for ( ; index >= 0 ; --index) {
-            // Could just assume that the component id is the el id but that seems risky
-            comp = Ext.getCmp(compIds[index]);
-            el = comp && comp.getEl();
-
-            if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
-                // The component is no longer in the DOM
-                if (comp && !comp.isDestroyed) {
-                    comp.destroy();
-                }
-            }
-        }
-    },
-
-    processValue: function(value) {
-        var me = this,
-            compIds = me.compIds,
-            id, initialWidth, dom, parent;
-
-        if (Ext.isObject(value) && !value.isComponent && value.xtype) {
-            // Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
-            value = Ext.widget(value.xtype, value);
-        }
-
-        if (value && value.isComponent) {
-            id = value.getId();
-
-            // When the view is refreshed the renderer could return a component that's already in the list
-            if (!Ext.Array.contains(compIds, id)) {
-                compIds.push(id);
-            }
-
-            me.addRefOwner(value);
-            me.registerListeners(value);
-
-            if (value.rendered) {
-                /* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
-                 * The problem occurs when a record value is changed and the components in that same row are being
-                 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
-                 * one row. Unfortunately this nukes the existing components so we need to remove them first.
-                 */
-                if (Ext.isIE) {
-                    // TODO: Should this be promoted to CTemplate?
-                    dom = value.el.dom;
-                    parent = dom.parentNode;
-
-                    if (parent) {
-                        if (me.extVersion === 40101) {
-                            // Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
-                            Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
-                        }
-
-                        // TODO: Removing the element like this could fall foul of Element GC
-                        parent.removeChild(dom);
-                    }
-                }
-            }
-            else if (me.autoWidthComponents) {
-                /* Set the width to a 'best guess' before the component is rendered to ensure that the component's
-                 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
-                 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
-                 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
-                 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
-                 */
-                initialWidth = me.getWidth() - me.lastFrameWidth;
-
-                // Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
-                initialWidth = initialWidth > 4 ? initialWidth : 4;
-
-                value.setWidth(initialWidth);
-            }
-
-            // Part of the same IE 6/7 hack as onColumnVisibilityChange
-            if ((Ext.isIE6 || Ext.isIE7) && me.isHidden()) {
-                value.hide();
-            }
-        }
-
-        return value;
-    },
-
-    redoScrollbars: function() {
-        var me = this,
-            grid = me.up('tablepanel');
-
-        if (grid) {
-            // The presence of a resizeQueue signifies that we are currently suspended
-            if (me.resizeQueue) {
-                me.redoScrollbarsRequired = true;
-                return;
-            }
-
-            // After components are injected the need for a grid scrollbar may need redetermining
-            if (me.extVersion < 40100) {
-                // 4.0
-                grid.invalidateScroller();
-                grid.determineScrollbars();
-            }
-            else {
-                // 4.1+
-                grid.doLayout();
-            }
-        }
-    },
-
-    registerColumnListeners: function() {
-        var me = this;
-
-        if (me.autoWidthComponents) {
-            // Need to resize children when the column resizes
-            me.on('resize', me.onColumnResize);
-
-            // Need to resize children when the column is shown as they can't be resized correctly while it is hidden
-            me.on('show', me.onColumnShow);
-        }
-
-        if (Ext.isIE6 || Ext.isIE7) {
-            me.on({
-                hide: me.onColumnVisibilityChange,
-                show: me.onColumnVisibilityChange
-            });
-        }
-    },
-
-    registerListeners: function(component) {
-        var me = this;
-
-        // Remove the component from the child list when it is destroyed
-        component.on('destroy', me.onChildDestroy, me);
-
-        if (me.autoWidthComponents) {
-            // Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
-            component.on('afterrender', me.onChildAfterRender, me, {single: true});
-
-            // With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
-            if (me.extVersion >= 40100) {
-                component.on('boxready', me.onChildBoxReady, me, {single: true});
-            }
-        }
-
-        // Need to redo scrollbars when a child resizes
-        component.on('resize', me.onChildResize, me);
-    },
-
-    registerViewListeners: function() {
-        var me = this,
-            view = me.up('tablepanel').getView();
-
-        me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
-        me.mon(view, 'refresh', me.onViewChange, me);
-        me.mon(view, 'itemupdate', me.onViewChange, me);
-        me.mon(view, 'itemadd', me.onViewChange, me);
-        me.mon(view, 'itemremove', me.onViewChange, me);
-    },
-
-    resizeAll: function() {
-        var me = this;
-
-        me.suspendResizing();
-        me.resizeQueue = me.getRefItems();
-        me.resumeResizing();
-    },
-
-    resizeChild: function(component, defer) {
-        var me = this,
-            frameWidth,
-            newWidth,
-            oldWidth,
-            resizeQueue;
-
-        if (me.resizingSuspended) {
-            resizeQueue = me.resizeQueue;
-
-            if (!Ext.Array.contains(resizeQueue, component)) {
-                resizeQueue.push(component);
-            }
-
-            return;
-        }
-
-        frameWidth = me.calculateFrameWidth(component);
-
-        // TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
-        if (Ext.isNumber(frameWidth)) {
-            newWidth = me.getWidth() - frameWidth;
-            oldWidth = component.getWidth();
-
-            // Returns true if a resize actually happened
-            if (me.setChildWidth(component, newWidth, oldWidth)) {
-                // Avoid an infinite resizing loop, deferring will only happen once
-                if (defer !== false) {
-                    // Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
-                    Ext.each(me.widthUpdateDelay, function(delay) {
-                        Ext.defer(me.resizeChild, delay, me, [component, false]);
-                    });
-                }
-            }
-        }
-    },
-
-    resumeResizing: function() {
-        var me = this,
-            index = 0,
-            resizeQueue = me.resizeQueue,
-            len = resizeQueue.length;
-
-        if (!--me.resizingSuspended) {
-            for ( ; index < len ; ++index) {
-                me.resizeChild(resizeQueue[index]);
-            }
-
-            me.resizeQueue = null;
-
-            if (me.redoScrollbarsRequired) {
-                me.redoScrollbars();
-            }
-        }
-    },
-
-    setChildWidth: function(component, newWidth, oldWidth) {
-        if (oldWidth === newWidth) {
-            return false;
-        }
-
-        component.setWidth(newWidth);
-
-        return true;
-    },
-
-    suspendResizing: function() {
-        var me = this;
-
-        me.resizingSuspended = (me.resizingSuspended || 0) + 1;
-
-        if (!me.resizeQueue) {
-            me.resizeQueue = [];
-        }
-    }
-}, function(cls) {
-    var proto = cls.prototype,
-        version = Ext.getVersion();
-
-    // ExtJS version detection
-    proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch();
-
-    // 4.1.1 initially reported its version as 4.1.0
-    if (Ext.Element.prototype.syncContent && version.toString() === '4.1.0') {
-        proto.extVersion = 40101;
-    }
-});
-
 /** this app requires the following custom fields for your workspace:
 	c_TeamCommits on PortfolioItem/Feature, (type: 32 kB)
 	c_Risks on PortfolioItem/Feature, (type: 32 kB)
@@ -772,6 +61,15 @@ Ext.define('Skirtle.grid.column.Component', {
 	ALSO, this app depends on a specific naming convention for your ARTs and Scrums within them, otherwise the releases wont load correctly
 */
 
+/********************* PRODUCTION *****************/
+rootProject = "All Scrums";
+//console = { log: function(){} };		
+/********************* END PRODUCTION *****************/
+
+/******************* IF DEBUG *******************/
+//rootProject = "Sandbox/Experiments Only"; //for debug: 
+/****************** END DEBUG ********************************/
+
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -834,9 +132,12 @@ Ext.define('CustomApp', {
 		if(me.TrainRecord){
 			var teamName = me.ProjectRecord.get('Name');
 			var trainName = me.TrainRecord.get('Name').split(' ART ')[0];
-			var trainNames = teamName.split(trainName)[1].split('-');
+			var trainNames = teamName.split(trainName)[1].replace(/ \(.*\)/, '').split('-');//accounts for alpha-bravo-charlie stuff
 			if(!trainNames[0]) trainNames[0] = trainName;
-			else trainNames.push(trainName); //accounts for alpha-bravo-charlie stuff
+			else {
+				trainNames.push(trainName); //this should never get called
+				console.log('scrum ' + me.ProjectRecord.get('Name') + ' does not follow naming convention');
+			}
 			trainNames.forEach(function(trainName){
 				f2 = Ext.create('Rally.data.wsapi.Filter', { 
 					property:'Name',
@@ -848,7 +149,7 @@ Ext.define('CustomApp', {
 			});
 			filterString = filterString.and(filterString2);
 		} else {
-			filterString2 = Ext.create('Rally.data.wsapi.Filter', { 
+			filterString2 = Ext.create('Rally.data.wsapi.Filter', { //for non train scrums e.g: Q115
 				property:'ReleaseDate',
 				operator:'>=',
 				value: new Date().toISOString()
@@ -869,12 +170,7 @@ Ext.define('CustomApp', {
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
-			filters:[
-				{
-					property:'Dummy',
-					value:'value'
-				}
-			],
+			filters:[{ property:'Dummy', value:'value' }],
 			listeners: {
 				load: {
 					fn: function(releaseStore, releaseRecords){
@@ -887,20 +183,19 @@ Ext.define('CustomApp', {
 			}
 		});
 		store._hydrateModelAndLoad = function(options){
-            var deferred = new Deft.Deferred();
-
-            this.hydrateModel().then({
-                success: function(model) {
-					this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-						return filterString;
-					};
-                    this.load(options).then({
-                        success: Ext.bind(deferred.resolve, deferred),
-                        failure: Ext.bind(deferred.reject, deferred)
-                    });
-                },
-                scope: this
-            });
+			var deferred = new Deft.Deferred();
+			this.hydrateModel().then({
+					success: function(model) {
+						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
+							return filterString;
+						};
+						this.load(options).then({
+								success: Ext.bind(deferred.resolve, deferred),
+								failure: Ext.bind(deferred.reject, deferred)
+						});
+					},
+					scope: this
+			});
 		};
 		store.load();
 	},
@@ -922,27 +217,25 @@ Ext.define('CustomApp', {
 	},
 	
 	_getCurrentOrFirstRelease: function(){
-		var me = this;
-		var d = new Date();
-		var rs = me.ReleaseStore.getRecords();
-		if(!rs.length) return;
-		for(var i=0; i<rs.length; ++i){
-			if(new Date(rs[i].get('ReleaseDate')) >= d && new Date(rs[i].get('ReleaseStartDate')) <= d) 
-				return rs[i];
-		}
-		return rs[0]; //pick a random one then 
+		var me = this, d = new Date(),
+			rs = me.ReleaseStore.getRecords();
+		return _.find(rs, function(r){
+			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
+		}) || rs.pop(); //pick a random one then 
 	},
 	
 	_loadValidProjects: function(cb){
 		var me = this;
 		var scrums = [];
 		function loadChildren(project, _cb){
+			if(project.data.TeamMembers.Count > 0) //valid scrums have people
+				scrums.push(project);
 			Ext.create('Rally.data.wsapi.Store',{
 				model: 'Project',
 				autoLoad:true,
 				remoteSort:false,
 				limit:Infinity,
-				fetch: ['Name', 'ObjectID', 'Parent'],
+				fetch: ['Name', 'ObjectID', 'Parent', 'TeamMembers'],
 				context:{
 					workspace: me.getContext().getWorkspace()._ref,
 					project: null
@@ -955,10 +248,8 @@ Ext.define('CustomApp', {
 				listeners: {
 					load: {
 						fn: function(projectStore, projectRecords){
-							if(projectRecords.length === 0) {
-								scrums.push(project);
-								_cb();
-							} else {
+							if(projectRecords.length === 0) _cb();
+							else {
 								var finished = 0;
 								var done = function(){ if(++finished === projectRecords.length) _cb(); };
 								projectRecords.forEach(function(c){ loadChildren(c, function(){ done(); }); });
@@ -969,20 +260,21 @@ Ext.define('CustomApp', {
 				}
 			});
 		}
+
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'Project',
 			autoLoad:true,
 			remoteSort:false,
 			pageSize:1,
 			limit:1,
-			fetch: ['Name', 'ObjectID'],
+			fetch: ['Name', 'ObjectID', 'TeamMembers'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
 			filters:[{
 					property:'Name',
-					value: 'All Scrums'
+					value: rootProject
 				}
 			],
 			listeners:{
@@ -1046,7 +338,7 @@ Ext.define('CustomApp', {
 			autoLoad:true,
 			limit:Infinity,
 			remoteSort:false,
-			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'Project'],
+			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'Project', 'PlannedEndDate'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -1438,7 +730,8 @@ Ext.define('CustomApp', {
 				{name: 'ObjectID', type: 'string'},
 				{name: 'FormattedID', type:'string'},
 				{name: 'Commitment', type: 'string'},
-				{name: 'Objective', type:'string'}
+				{name: 'Objective', type:'string'},
+				{name: 'PlannedEnd', type:'string'}
 			]
 		});
 		
@@ -1507,17 +800,20 @@ Ext.define('CustomApp', {
 	
 	/******************************************************* STATE VARIABLES / Reloading ***********************************/
 
-	_isEditing: false,
+	_isEditingTeamCommits: false,
+	_isEditingVelocity: false,
+	_isEditingRisks: false,
+	_isEditingDeps: false,
 	
 	_reloadVelocityStores: function(){
 		var me = this;
-		if(me.VelocityIterationStore && !me._isEditing) {
+		if(me.VelocityIterationStore && !me._isEditingVelocity) {
 			me.VelocityIterationStore.load({ 
 				callback: function(records, operation){
-					if(me.VelocityUserStoryStore && !me._isEditing) {
+					if(me.VelocityUserStoryStore && !me._isEditingVelocity) {
 						me.VelocityUserStoryStore.load({ 
 							callback: function(records, operation){
-								if(me.CustomVelocityStore && !me._isEditing)
+								if(me.CustomVelocityStore && !me._isEditingVelocity)
 									me.CustomVelocityStore.load();
 							}
 						});
@@ -1529,10 +825,10 @@ Ext.define('CustomApp', {
 	
 	_reloadTeamCommitsStores: function(){
 		var me = this;
-		if(me.TeamCommitsFeatureStore && !me._isEditing) {
+		if(me.TeamCommitsFeatureStore && !me._isEditingTeamCommits) {
 			me.TeamCommitsFeatureStore.load({ 
 				callback: function(records, operation){
-					if(me.CustomTeamCommitsStore && !me._isEditing)
+					if(me.CustomTeamCommitsStore && !me._isEditingTeamCommits)
 						me.CustomTeamCommitsStore.load();
 				}
 			});
@@ -1541,11 +837,11 @@ Ext.define('CustomApp', {
 	
 	_reloadRisksStores: function(){
 		var me = this;						
-		if(me.RisksFeatureStore && !me._isEditing) {
+		if(me.RisksFeatureStore && !me._isEditingRisks) {
 			me.RisksFeatureStore.load({ 
 				callback: function(records, operation){
 					me._parseRisksData();
-					if(me.CustomRisksStore && !me._isEditing)					
+					if(me.CustomRisksStore && !me._isEditingRisks)					
 						me.CustomRisksStore.load();
 				}
 			});
@@ -1554,13 +850,13 @@ Ext.define('CustomApp', {
 	
 	_reloadDependenciesStores: function(){
 		var me = this;
-		if(me.DependenciesUserStoryStore && !me._isEditing) {
+		if(me.DependenciesUserStoryStore && !me._isEditingDeps) {
 			me.DependenciesUserStoryStore.load({ 
 				callback: function(records, operation){
 					me._buildDependenciesData(); //reparse the data
-					if(me.CustomPredDepStore && !me._isEditing)
+					if(me.CustomPredDepStore && !me._isEditingDeps)
 						me.CustomPredDepStore.load();
-					if(me.CustomSuccDepStore && !me._isEditing)
+					if(me.CustomSuccDepStore && !me._isEditingDeps)
 						me.CustomSuccDepStore.load();
 				}
 			});
@@ -1568,12 +864,15 @@ Ext.define('CustomApp', {
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-    _reloadEverything:function(){
+   
+	_reloadEverything:function(){
 		var me = this;
 		me.removeAll();
 		
-		me._loadDependenciesStores = true;
-		me._isEditing = false;
+		me._isEditingTeamCommits = false;
+		me._isEditingVelocity = false;
+		me._isEditingRisks = false;
+		me._isEditingDeps = false;
 		
 		//load the release picker
 		me._loadReleasePicker();
@@ -1607,6 +906,11 @@ Ext.define('CustomApp', {
 		var me = this;
 		me._showError('Loading Data...');
 		me._defineModels();
+		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+			me.removeAll();
+			me._showError('You do not have permissions to edit this project');
+			return;
+		}
 		setInterval(function(){ me._reloadVelocityStores();}, 12000); 
 		setInterval(function(){ me._reloadTeamCommitsStores();}, 12000); 
 		setInterval(function(){ me._reloadRisksStores();}, 12000); 
@@ -1614,8 +918,8 @@ Ext.define('CustomApp', {
 		me._loadModels(function(){
 			me._loadValidProjects(function(){
 				var scopeProject = me.getContext().getProject();
-				me._loadProject(scopeProject, function(scopeProjectRecord){
-					me.ProjectRecord = _.find(me.ValidProjects, function(validProject){
+				me._loadProject(scopeProject, function(scopeProjectRecord){ 
+					me.ProjectRecord = _.find(me.ValidProjects, function(validProject){ //must have people in it
 						return validProject.data.ObjectID === scopeProjectRecord.data.ObjectID;
 					});
 					if(me.ProjectRecord){
@@ -1762,13 +1066,14 @@ Ext.define('CustomApp', {
 		}
 		
 		var customTeamCommitsRecords = _.map(me.TeamCommitsFeatureStore.getRecords(), function(featureRecord){
-			var tc = getTeamCommit(featureRecord);
+			var tc = getTeamCommit(featureRecord), ed = featureRecord.get('PlannedEndDate');
 			return {
 				Commitment: tc.Commitment || 'Undecided',
 				Objective: tc.Objective || '',
 				Name: featureRecord.get('Name'),
 				FormattedID: featureRecord.get('FormattedID'),
-				ObjectID: featureRecord.get('ObjectID')
+				ObjectID: featureRecord.get('ObjectID'),
+				PlannedEnd: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-') //planned end in workweeks
 			};
 		});		
 
@@ -1815,7 +1120,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Feature', 
 				dataIndex:'Name',
-				width:220,
+				width:200,
 				editor:false,
 				resizable:false
 			},{
@@ -1861,6 +1166,10 @@ Ext.define('CustomApp', {
 					return getStoriesEstimate(oid);
 				}
 			},{
+				text:'Planned End',
+				dataIndex:'PlannedEnd',
+				width:80
+			},{
 				dataIndex:'Commitment',
 				text:'Status',	
 				width:110,
@@ -1869,7 +1178,6 @@ Ext.define('CustomApp', {
 				resizable:false,
 				editor:{
 					xtype:'combobox',
-					width:160,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Status'],
 						data:[
@@ -1890,7 +1198,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
-				width:200,
+				width:180,
 				editor:'textfield',
 				resizable:false,
 				sortable:true,
@@ -1903,7 +1211,7 @@ Ext.define('CustomApp', {
 		me.TeamCommitsGrid = me.add({
 			xtype: 'rallygrid',
             title: "Team Commits",
-			width: 790,
+			width: 810,
 			height:300,
 			x:0, y:40,
 			scroll:'vertical',
@@ -1925,33 +1233,33 @@ Ext.define('CustomApp', {
 			},
 			listeners: {
 				beforeedit: function(){
-					me._isEditing = true;				
+					me._isEditingTeamCommits = true;				
 				},
 				canceledit: function(){
-					me._isEditing = false;
+					me._isEditingTeamCommits = false;
 				},
 				edit: function(editor, e){
-					var grid = e.grid,
-						tcRecord = e.record,
-						field = e.field,
-						value = e.value,
-						originalValue = e.originalValue;	
-					me._isEditing = false;
+					var grid = e.grid, tcRecord = e.record,
+						field = e.field, value = e.value, originalValue = e.originalValue;	
+					me._isEditingTeamCommits = false;
 					if(value == originalValue) return;
 					
 					var tc = {Commitment: tcRecord.get('Commitment'), Objective: tcRecord.get('Objective') };
 					
-					me._isEditing = true;
+					me._isEditingTeamCommits = true;
 					me.TeamCommitsGrid.setLoading(true);
-					me.TeamCommitsFeatureStore.load({
+					me.TeamCommitsFeatureStore.load({ //get most recent features before overwriting
 						callback:function(records, operation){
 							var oid = tcRecord.get('ObjectID');
 							var realFeature = me.TeamCommitsFeatureStore.findRecord('ObjectID', oid, 0, false, true, true);
-							if(!realFeature) console.log('ERROR: realFeature not found, ObjectID: ' + oid);
-							else setTeamCommit(realFeature, tc, function(){						
+							if(!realFeature) {
+								console.log('ERROR: realFeature not found, ObjectID: ' + oid);
+								me._isEditingTeamCommits = false;
+								me.TeamCommitsGrid.setLoading(false);
+							} else setTeamCommit(realFeature, tc, function(){					
 								me.TeamCommitsFeatureStore.load({
 									callback: function(records, operation){
-										me._isEditing = false;
+										me._isEditingTeamCommits = false;
 										me.TeamCommitsGrid.setLoading(false);
 									}
 								});
@@ -1971,21 +1279,21 @@ Ext.define('CustomApp', {
 	_loadVelocityGrid: function() {
 		var me = this;	
 		var iterationGroups = _.groupBy(me.VelocityUserStoryStore.getRecords(), function(us) {
-            return us.get("Iteration").Name;
-        });
+      return us.get("Iteration").Name;
+    });
         
-        var iterationGroupTotals = _.sortBy(_.map(me.VelocityIterationStore.getRecords(), function(iteration) {
+    var iterationGroupTotals = _.sortBy(_.map(me.VelocityIterationStore.getRecords(), function(iteration) {
 			var iName = iteration.get('Name');
-            return {    
-                Name:iName, 
-                PlannedVelocity: iteration.get('PlannedVelocity') || 0,
-                RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) {
-                    return sum + us.get("PlanEstimate");
-                }, 0)
-            };
-        }), 'Name');
+			return {    
+				Name:iName, 
+				PlannedVelocity: iteration.get('PlannedVelocity') || 0,
+				RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) {
+						return sum + us.get("PlanEstimate");
+				}, 0)
+			};
+		}), 'Name');
 
-        me.CustomVelocityStore = Ext.create('Ext.data.Store', {
+		me.CustomVelocityStore = Ext.create('Ext.data.Store', {
 			data: iterationGroupTotals,
 			model:'IntelVelocity',
 			autoSync:true,
@@ -2010,7 +1318,7 @@ Ext.define('CustomApp', {
 			}
 		});
 				
-        var columnCfgs = [
+		var columnCfgs = [
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
@@ -2035,7 +1343,11 @@ Ext.define('CustomApp', {
 				xtype:'numbercolumn',
 				editor:'textfield',
 				resizable:false,
-				sortable:true
+				sortable:true,
+				renderer:function(n, m){
+					m.tdCls += (n*1===0 ? ' red-cell' : '');
+					return n;
+				}
 			},{
 				text: 'Actual Load (Plan Estimate)',
 				dataIndex: 'RealVelocity',
@@ -2043,29 +1355,34 @@ Ext.define('CustomApp', {
 				width:100,
 				editor:false,
 				resizable:false,
-				sortable:true
+				sortable:true,
+				renderer:function(realVel, m, r){
+					m.tdCls += ((realVel*1 < r.data.PlannedVelocity*0.9) ? ' yellow-cell' : '');
+					m.tdCls += ((realVel*1 > r.data.PlannedVelocity*1) ? ' red-cell' : '');
+					return realVel;
+				}
 			}
 		];
-        me.VelocityGrid = me.add({
-            xtype: 'rallygrid',
-            title: "Velocity",
+		me.VelocityGrid = me.add({
+			xtype: 'rallygrid',
+			title: "Velocity",
 			scroll:'vertical',
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
 			x:850, y:40,
-            showPagingToolbar: false,
+			showPagingToolbar: false,
 			showRowActionsColumn:false,
-            viewConfig: {
-                stripeRows: true,
+			viewConfig: {
+				stripeRows: true,
 				preserveScrollOnRefresh:true
-            },
+			},
 			listeners: {
 				beforeedit: function(editor, e){
-					me._isEditing = true;
+					me._isEditingVelocity = true;
 					return true;
 				},
 				canceledit: function(){
-					me._isEditing = false;
+					me._isEditingVelocity = false;
 				},
 				edit: function(editor, e){
 					var grid = e.grid,
@@ -2073,12 +1390,18 @@ Ext.define('CustomApp', {
 						value = e.value,
 						originalValue = e.originalValue;
 					
-					if(!value || (value === originalValue)) { me._isEditing = false; return; }
+					if(!value || (value === originalValue)) { me._isEditingVelocity = false; return; }
 					value = value*1 || 0; //value*1 || null to remove the 0's from teams
 					var iterationName = velocityRecord.get('Name');
 					var iteration = me.VelocityIterationStore.findRecord('Name', iterationName, 0, false, true, true);
 					iteration.set('PlannedVelocity', value);
-					iteration.save({ callback: function(){ me._isEditing = false; } });
+					me.VelocityGrid.setLoading(true);
+					iteration.save({ 
+						callback: function(){ 
+							me._isEditingVelocity = false;
+							me.VelocityGrid.setLoading(false);
+						} 
+					});
 				}
 			},
 			plugins: [
@@ -2088,10 +1411,10 @@ Ext.define('CustomApp', {
 			],
 			enableEditing:false,
 			context: this.getContext(),
-            columnCfgs: columnCfgs,
-            store: me.CustomVelocityStore
-        });
-    },
+			columnCfgs: columnCfgs,
+			store: me.CustomVelocityStore
+		});
+	},
 
 	_loadRisksGrid: function(){
 		var me = this;	
@@ -2182,7 +1505,9 @@ Ext.define('CustomApp', {
 		}
 		
 		/*************************************************************************************************************/
-			
+		
+		function riskSorter(o1, o2){ return o2.data.RiskID > o1.data.RiskID; } //new come first
+		
 		me.CustomRisksStore = Ext.create('Ext.data.Store', { 
 			data: Ext.clone(me.RisksParsedData),
 			autoSync:true,
@@ -2192,6 +1517,7 @@ Ext.define('CustomApp', {
 				type:'sessionstorage',
 				id:'RiskProxy' + Math.random()
 			},
+			sorters:[{ fn:riskSorter }],
 			listeners:{
 				load: function(customRisksStore, currentRisksRecords){
 					var realRisksDatas = me.RisksParsedData.slice(0); //'real' risks list
@@ -2212,7 +1538,7 @@ Ext.define('CustomApp', {
 					realRisksDatas.forEach(function(realRiskData){ //add all the new risks that other people have added since first load
 						console.log('adding real risk', realRiskData);
 						customRisksStore.add(Ext.create('IntelRisk', Ext.clone(realRiskData)));
-					});	
+					});
 				}
 			}
 		});
@@ -2331,6 +1657,7 @@ Ext.define('CustomApp', {
 				resizable:false,
 				sortable:true,
 				renderer:function(val, meta){
+					meta.tdCls += (val==='Undefined' ? ' red-cell' : '');
 					return val || '-';
 				}		
 			},{
@@ -2421,6 +1748,8 @@ Ext.define('CustomApp', {
 								alert('You must set the Contact date for this risk');
 								return;
 							}	
+							if(me._isEditingRisks) return;
+							me._isEditingRisks = true;
 							me.RisksGrid.setLoading(true);
 							me.RisksFeatureStore.load({
 								callback: function(records, operation){
@@ -2430,6 +1759,7 @@ Ext.define('CustomApp', {
 									
 									var lastAction = function(){
 										riskRecord.set('Edited', false);	
+										me._isEditingRisks = false;
 										me.RisksGrid.setLoading(false);			
 									};
 										
@@ -2463,6 +1793,8 @@ Ext.define('CustomApp', {
 						text:'Delete',
 						width:70,
 						handler: function(){
+							if(me._isEditingRisks) return;
+							me._isEditingRisks = true;
 							if(confirm('Confirm Risk Deletion')){
 								me.RisksGrid.setLoading(true);
 								me.RisksFeatureStore.load({
@@ -2473,6 +1805,7 @@ Ext.define('CustomApp', {
 										
 										var lastAction = function(){
 											me.CustomRisksStore.remove(riskRecord);
+											me._isEditingRisks = false;
 											me.RisksGrid.setLoading(false);
 										};
 										
@@ -2521,7 +1854,8 @@ Ext.define('CustomApp', {
 							Checkpoint: '',
 							Edited:true
 						});
-						me.CustomRisksStore.add(model);
+						me.CustomRisksStore.insert(0, [model]);
+						me.RisksGrid.getSelectionModel().select(model);
 					}
 				}
 			}
@@ -2529,7 +1863,7 @@ Ext.define('CustomApp', {
 		
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
-            title: 'Risks',
+      title: 'Risks',
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:260,
 			x:0,
@@ -2548,10 +1882,10 @@ Ext.define('CustomApp', {
 			},
 			listeners: {
 				beforeedit: function(){
-					me._isEditing = true;
+					me._isEditingRisks = true;
 				},
 				canceledit: function(){
-					me._isEditing = false;
+					me._isEditingRisks = false;
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -2560,7 +1894,7 @@ Ext.define('CustomApp', {
 						value = e.value,
 						originalValue = e.originalValue;					
 								
-					if(value === originalValue) { me._isEditing = false; return; }
+					if(value === originalValue) { me._isEditingRisks = false; return; }
 					var previousEdit = risksRecord.get('Edited');
 					risksRecord.set('Edited', true);
 					
@@ -2578,7 +1912,7 @@ Ext.define('CustomApp', {
 							risksRecord.set('Edited', previousEdit); //not edited
 						} else risksRecord.set('FeatureName', featureRecord.get('Name'));
 					}
-					me._isEditing = false;
+					me._isEditingRisks = false;
 				}
 			},
 			showRowActionsColumn:false,
@@ -2877,7 +2211,9 @@ Ext.define('CustomApp', {
 		/****************************** PREDECESSORS STUFF           ***********************************************/				
 		me.PredDepTeamStores = {}; //stores for each of the team arrays in the predecessors
 		me.PredDepContainers = {};
-
+		
+		function predDepSorter(o1, o2){ return o2.data.DependencyID > o1.data.DependencyID; } //new come first
+		
 		me.CustomPredDepStore = Ext.create('Ext.data.Store', { 
 			data: Ext.clone(me.DependenciesParsedData.Predecessors),
 			autoSync:true,
@@ -2886,6 +2222,7 @@ Ext.define('CustomApp', {
 				type:'sessionstorage',
 				id:'PredDepProxy' + Math.random()
 			},
+			sorters:[{ fn:predDepSorter }],
 			limit:Infinity,
 			listeners: {
 				load: function(customPredDepStore, customPredDepRecs){ 
@@ -3024,7 +2361,7 @@ Ext.define('CustomApp', {
 				width:80,
 				resizable:false,
 				tdCls: 'intel-editor-cell',
-				text:'Checkpoint',					
+				text:'Needed By',					
 				editor:{
 					xtype:'combobox',
 					width:80,
@@ -3181,7 +2518,6 @@ Ext.define('CustomApp', {
 									width:70,
 									text:'Delete',
 									handler: function(){
-										if(!me._loadDependenciesStores) return;
 										predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 										var predecessors = predDepRecord.get('Predecessors');
 										
@@ -3216,7 +2552,7 @@ Ext.define('CustomApp', {
 								padding:3,
 								margin:'0 4 0 0',
 								handler: function(){
-									if(me.PredDepTeamStores[depID] && me._loadDependenciesStores) {
+									if(me.PredDepTeamStores[depID]) {
 										predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 										var newItem = newTeamDep();
 										me.PredDepTeamStores[depID].add(Ext.create('IntelDepTeam', newItem));
@@ -3336,7 +2672,6 @@ Ext.define('CustomApp', {
 						xtype:'button',
 						text:'Undo',
 						handler: function(){
-							if(!me._loadDependenciesStores) return;
 							var depID = predDepRecord.get('DependencyID');
 							var realDep = removeDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));	
 							for(var key in realDep){
@@ -3353,7 +2688,7 @@ Ext.define('CustomApp', {
 				width:80,
 				xtype:'componentcolumn',
 				resizable:false,
-				renderer: function(value, meta, predDepRecord){			
+				renderer: function(value, meta, predDepRecord){				
 					var realDepData = removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
 					var dirtyType = getDirtyType(predDepRecord, realDepData);
 					if(dirtyType === 'New') dirtyType = 'Save';
@@ -3374,7 +2709,8 @@ Ext.define('CustomApp', {
 							for(var i = 0;i<predecessors.length;++i)
 								if(predecessors[i].PID === ''){
 									alert('Cannot Save: All Team Names must be valid'); return; }
-							me._isEditing = true;
+							if(me._isEditingDeps) return;
+							me._isEditingDeps = true;
 							me.PredDepGrid.setLoading(true);
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
@@ -3431,7 +2767,7 @@ Ext.define('CustomApp', {
 													
 													var lastAction = function(){ //last thing to do!											
 														predDepRecord.set('Edited', false);	
-														me._isEditing = false;
+														me._isEditingDeps = false;
 														me.PredDepGrid.setLoading(false);		
 													};
 													
@@ -3465,7 +2801,7 @@ Ext.define('CustomApp', {
 														me._loadRandomUserStory(project.get('_ref'), function(us){
 															if(!us){
 																me.PredDepGrid.setLoading(false);
-																me._isEditing = false;
+																me._isEditingDeps = false;
 																alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
 																return;
 															}
@@ -3580,9 +2916,10 @@ Ext.define('CustomApp', {
 						xtype:'button',
 						text:'Delete',
 						handler: function(){
+							if(me._isEditingDeps) return;
 							if(confirm('Confirm Dependency Deletion')){
 								me.PredDepGrid.setLoading(true);
-								me._isEditing = true;
+								me._isEditingDeps = true;
 								me.DependenciesUserStoryStore.load({
 									callback: function(userStoryRecords, operation){
 										me._buildDependenciesData();
@@ -3610,7 +2947,7 @@ Ext.define('CustomApp', {
 										var lastAction = function(){	//last thing to do!												
 											me.CustomPredDepStore.remove(predDepRecord);
 											me.PredDepGrid.setLoading(false);
-											me._isEditing = false;
+											me._isEditingDeps = false;
 										};
 										
 										var nextAction = function(){
@@ -3656,7 +2993,8 @@ Ext.define('CustomApp', {
 							Predecessors:[newTeamDep()],
 							Edited:true
 						});
-						me.CustomPredDepStore.add(model);
+						me.CustomPredDepStore.insert(0, [model]);	
+						me.PredDepGrid.getSelectionModel().select(model);
 					}
 				}
 			}
@@ -3685,10 +3023,10 @@ Ext.define('CustomApp', {
 			},
 			listeners: {
 				beforeedit: function(){
-					me._isEditing = true;
+					me._isEditingDeps = true;
 				},
 				canceledit: function(){
-					me._isEditing = false;
+					me._isEditingDeps = false;
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -3696,7 +3034,7 @@ Ext.define('CustomApp', {
 						field = e.field,
 						value = e.value,
 						originalValue = e.originalValue;					
-					me._isEditing = false;
+					me._isEditingDeps = false;
 					console.log('predDep edit:', predDepRecord, field, value, originalValue);
 					if(value === originalValue) return;
 					var previousEdit = predDepRecord.get('Edited');
@@ -3968,8 +3306,9 @@ Ext.define('CustomApp', {
 						text:'Save',
 						handler:function(){
 							//no field validation needed
+							if(me._isEditingDeps) return;
+							me._isEditingDeps = true;
 							me.SuccDepGrid.setLoading(true);
-							me._isEditing = true;
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
 									me._buildDependenciesData();
@@ -3983,7 +3322,7 @@ Ext.define('CustomApp', {
 									});
 									if(!project){
 										me.SuccDepGrid.setLoading(false);
-										me._isEditing = false;
+										me._isEditingDeps = false;
 										alert('could not find project ' + succDepData.SuccProjectID);
 										return;
 									}													
@@ -3995,7 +3334,7 @@ Ext.define('CustomApp', {
 									var lastAction = function(){ //This is the last thing to do!
 										succDepRecord.set('Edited', false);
 										me.SuccDepGrid.setLoading(false);
-										me._isEditing = false;
+										me._isEditingDeps = false;
 									};
 									
 									var nextAction = function(){ //2nd to last thing to do
@@ -4010,7 +3349,7 @@ Ext.define('CustomApp', {
 										var userStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
 										if(userStoryRecord) removeSuccDep(userStoryRecord, realDepData, function(){
 											me.SuccDepGrid.setLoading(false);
-											me._isEditing = false;
+											me._isEditingDeps = false;
 											me.CustomSuccDepStore.remove(succDepRecord);
 										});
 									};
@@ -4069,7 +3408,7 @@ Ext.define('CustomApp', {
 		
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
-            title: "Dependencies Other Teams Have on Us",
+      title: "Dependencies Other Teams Have on Us",
 			width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
 			x:0, y:1100,
@@ -4088,11 +3427,11 @@ Ext.define('CustomApp', {
 			listeners: {
 				beforeedit: function(editor, e){
 					if(e.record.get('Supported') == 'No' && e.field != 'Supported') return false; //don't user story stuff if not supported
-					me._isEditing = true;
+					me._isEditingDeps = true;
 					return true;
 				},
 				canceledit: function(){
-					me._isEditing = false;
+					me._isEditingDeps = false;
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -4101,7 +3440,7 @@ Ext.define('CustomApp', {
 						value = e.value,
 						originalValue = e.originalValue;
 						
-					me._isEditing = false;
+					me._isEditingDeps = false;
 					console.log('succDep edit:', succDepRecord, field, value, originalValue);
 					if(value === originalValue) return;
 					var previousEdit = succDepRecord.get('Edited');

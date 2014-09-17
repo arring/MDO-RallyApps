@@ -1,6 +1,14 @@
+/********************* PRODUCTION *****************/
+console = { log: function(){} };		
+/********************* END PRODUCTION *****************/
+
+/******************* IF DEBUG *******************
+****************** END DEBUG ********************************/
+
 Ext.define('CustomApp', {
-    extend: 'Rally.app.App',
+  extend: 'Rally.app.App',
 	layout:'absolute',
+	height:2000,
 		
 	/****************************************************** SHOW ERROR/TEXT MESSAGE ********************************************************/
 	_showError: function(text){
@@ -192,6 +200,63 @@ Ext.define('CustomApp', {
 		});
 	},	
 	
+	/****************************************************** PROJECTS ************************************/
+		
+	_getProjectsInScope:function(){
+		var projects = "__PROJECT_OIDS_IN_SCOPE__";
+		projects = projects.match(/^\d+/)? projects.split(','): [this.context.getProject().ObjectID];
+		projectsInScope = {};
+		_.each(projects,function(projectID){
+			projectsInScope[projectID] = true;
+		});
+		return projectsInScope;
+	},
+	
+	_addDefaultProjects:function(cb){
+		var processedProjects = {}, me=this,
+			cached = me._cachedDefaults,
+			inScope = me._getProjectsInScope(),
+			msub = me.MatrixUserStoryBreakdown,
+			feats = me.MatrixFeatureStore.getRange(),
+			mpm = me.MatrixProjectMap,
+			curProjRef = '/project/' + me.getContext().getProject().ObjectID;
+
+		function addDefaults(projects){
+			_.each(projects, function(p){ 
+				if(!msub[p.data.Name]){
+					msub[p.data.Name] = {}; 
+					_.each(feats, function(f){ 
+						msub[p.data.Name][f.data.Name] = [];
+						mpm[p.data.Name] = p.data.ObjectID;
+					});
+				}
+			});
+		}
+		if(cached) { addDefaults(cached); if(cb) cb(); }
+		
+		Ext.create('Rally.data.wsapi.Store', {
+			model: "Project",
+			fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
+			limit:Infinity,
+			context: {
+				workspace: '/workspace/' + this.getContext().getWorkspace().ObjectID,
+				project:null
+			}
+		})
+		.load({
+			callback: function(projects){
+				//filter here
+				projects = _.filter(projects, function(project){ 
+					return inScope[project.data.ObjectID] && project.data.TeamMembers.Count > 0; 
+				});
+				addDefaults(projects); //add some default projects
+				me._cachedDefaults = projects;
+				console.log('default projects', projects);
+				if(cb) cb();
+			}
+		});
+	},
+		
 	/*************************************************** DEFINE MODELS ******************************************************/
 	_defineModels: function(){								
 		Ext.define('IntelFeature', {
@@ -208,15 +273,11 @@ Ext.define('CustomApp', {
 	
 	_reloadMatrixStores: function(){
 		var me = this;
-		if(me.MatrixFeatureStore) {
-			me.MatrixFeatureStore.load({
-				callback: function(){
-					me.featureTCAECache = {};
-					if(me.CustomMatrixStore)
-						me.CustomMatrixStore.load();
-				}
-			});
-		}
+		me._loadMatrixFeatures(function(){
+			me.featureTCAECache = {};
+			if(me.CustomMatrixStore)
+				me.CustomMatrixStore.load();
+		});
 	},
 	
 	/*************************************************** RANDOM HELPERS ******************************************************/	
@@ -249,9 +310,23 @@ Ext.define('CustomApp', {
 	},
 	
 	/******************************************************* LAUNCH/UPDATE APP********************************************************/
+	_loadAllData: function(cb){
+		var me = this;
+		me._loadMatrixFeatures(function(){	
+			me._loadMatrixUserStoryBreakdown(function(){
+				me._addDefaultProjects(function(){ if(cb) cb(); });
+			});
+		});
+	},
+	
 	launch: function(){
 		var me = this;
 		me._defineModels();
+		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+			me.removeAll();
+			me._showError('You do not have permissions to edit this project');
+			return;
+		}
 		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
 		me._showError('Loading Data...');
 		me._loadModels(function(){
@@ -266,11 +341,9 @@ Ext.define('CustomApp', {
 							if(currentRelease){
 								me.ReleaseRecord = currentRelease;
 								console.log('release loaded', currentRelease);
-								me._loadMatrixFeatures(function(){	
-									me._loadMatrixUserStoryBreakdown(function(){
-										me.removeAll();
-										me._loadMatrixGrid();
-									});
+								me._loadAllData(function(){
+									me.removeAll();
+									me._loadMatrixGrid();
 								});
 							} else {
 								me.removeAll();
@@ -299,10 +372,9 @@ Ext.define('CustomApp', {
 	},
 	
 	_loadMatrixGrid: function(){
-		var me = this, mode='Flag'; //Flag and Details
+		var me = this, mode='Details'; //Flag and Details
 		
 		me.featureTCAECache = {};
-		me.showMatrix = {};
 		
 		function getTeamCommit(featureRecord, ProjectName){	
 			var tcs = featureRecord.data.c_TeamCommits;
@@ -335,7 +407,7 @@ Ext.define('CustomApp', {
 					me.featureTCAECache[featureID] = tcs;
 				}
 			} 
-			catch(e){ me.featureTCAECache[featureID] = this_tc = {}; }
+			catch(e){ me.featureTCAECache[featureID] = tcs = {}; }
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
 			tcs[projectID].Expected = value;		
@@ -377,6 +449,7 @@ Ext.define('CustomApp', {
 				editor:false,
 				sortable:true,
 				resizable:false,
+				locked:true,
 				renderer: function(oid, meta, f1){
 					var rank = 1;
 					var f1OID = f1.data.ObjectID;
@@ -395,6 +468,7 @@ Ext.define('CustomApp', {
 				editor:false,
 				resizable:false,
 				sortable:true,
+				locked:true,
 				renderer:function(FID){
 					var feature = me.MatrixFeatureStore.findRecord('FormattedID', FID);
 					if(feature.get('Project')) {
@@ -410,6 +484,7 @@ Ext.define('CustomApp', {
 				width:250,
 				editor:false,
 				resizable:false,
+				locked:true,
 				sortable:true
 			},{
 				text:'Product', 
@@ -417,6 +492,7 @@ Ext.define('CustomApp', {
 				width:100,
 				editor:false,
 				resizable:false,
+				locked:true,
 				sortable:true
 			}
 		];
@@ -462,16 +538,16 @@ Ext.define('CustomApp', {
 			listeners: {
 				select: function(combo, records){
 					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-					me.ReleaseRecord = me.MatrixReleaseStore.findRecord('Name', records[0].get('Name'));						
-					me._loadMatrixFeatures(function(){	
-						me._loadMatrixUserStoryBreakdown(function(){
+					me.ReleaseRecord = me.MatrixReleaseStore.findRecord('Name', records[0].get('Name'));	
+					me._clearToolTip();
+					me.setLoading(true);					
+					setTimeout(function(){
+						me._loadAllData(function(){
 							me.removeAll();
 							me._loadMatrixGrid();
-							me.setLoading(true);
-							setTimeout(function(){me.setLoading(false); }, 2000);
+							me.setLoading(false);		
 						});
-					});
-					me._clearToolTip();
+					}, 0);
 				}
 			}
 		});
@@ -561,8 +637,7 @@ Ext.define('CustomApp', {
 		me.MatrixGrid = me.add({
 			xtype: 'rallygrid',
 			x:0, y:100,
-			height:1800,
-			width: _.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20),
+			width: Math.min(_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-20),
 			scroll:'both',
 			resizable:false,
 			columnCfgs: columnCfgs,
@@ -671,6 +746,10 @@ Ext.define('CustomApp', {
 			me.getEl().on('scroll', function(){
 				me._clearToolTip();
 			});
+		},
+		resize: function(){
+			var me = this, mg = me.MatrixGrid;
+			if(mg)  mg.setWidth(Math.min(_.reduce(mg.config.columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-20));
 		}
-    }
+	}
 });
