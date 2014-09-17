@@ -1,8 +1,8 @@
 .x-grid-row .intel-alt-color1 { background-color:rgba(158,242,255,0.4) !important; }
 .x-grid-row .intel-alt-color2  { background-color:rgba(242, 242, 242, 0.4) !important; }
 
-.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
-.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
+.x-grid-row .intel-editor-cell, .intel-editor-cell {  cursor:pointer !important; }
+.x-grid-row .intel-editor-cell *, .intel-editor-cell *{ cursor:pointer !important; }
 
 .x-grid-cell.intel-red-cell {background-color:rgba(255, 0, 0, 0.30) !important; }
 .x-grid-row-selected .x-grid-cell.intel-red-cell,
@@ -11,6 +11,33 @@
 .x-grid-cell.intel-green-cell {background-color:rgba(0, 255, 0, 0.30) !important;}
 .x-grid-row-selected .x-grid-cell.intel-green-cell,
 .x-grid-row-over .x-grid-cell.intel-green-cell {background-color:rgba(0, 255, 0, 0.50) !important;}
+
+.x-grid-row .left-bordered, 
+.x-grid-row-summary .left-bordered,
+.x-column-header.left-bordered { border-left:1px solid grey !important; }
+.x-grid-row .left-bordered2, 
+.x-grid-row-summary .left-bordered2,
+.x-column-header.left-bordered2 { border-left:2px solid grey !important; }
+.x-grid-row .left-bordered4, 
+.x-grid-row-summary .left-bordered4,
+.x-column-header.left-bordered4 { border-left:4px solid grey !important; }
+.x-grid-row .double-bordered, 
+.x-grid-row-summary .double-bordered,
+.x-column-header.double-bordered { border-left:1px solid grey !important; border-right:1px solid grey !important; }
+.x-grid-row .double-bordered2, 
+.x-grid-row-summary .double-bordered2,
+.x-column-header.double-bordered2 { border-left:2px solid grey !important; border-right:2px solid grey !important; }
+.x-grid-row .double-bordered4, 
+.x-grid-row-summary .double-bordered4,
+.x-column-header.double-bordered4 { border-left:4px solid grey !important; border-right:4px solid grey !important; }
+
+.x-column-header.top-border { border-top:1px solid grey !important; }
+
+/* OVERRIDE RALLY */
+.x-grid-with-row-lines .x-grid-table { border-top:0px !important; }
+.rally-grid .x-grid-header-ct .x-box-inner .x-column-header:not(.double-bordered) { border-right:0px !important; }
+//.rally-grid .x-grid-header-ct .x-box-inner { border-bottom:0px !important; }
+/* END OVERRIDE RALLY */
 
 .intel-tooltip {
 	padding:10px;
@@ -25,3 +52,39 @@
 	height: 0px;
 	width: 0px;
 }	
+
+.inherit-overflow, .inherit-overflow * {
+	overflow:visible !important;
+}
+
+.dnd-item {
+	border:1px solid black;
+	padding:3px;
+	margin:3px;
+	font-size:1em;
+	background-color:#92FBFC;
+	z-index:80000;
+}
+
+.dnd-item.selected {
+	background-color:#08BCBF;
+}
+
+.dnd-empty-target {
+	padding:3px 20px 3px 20px;
+	margin:3px;
+}
+
+.dnd-target {
+	border:1px solid black;
+	padding:3px;
+	margin:3px;
+}
+
+.dnd-target.valid-zone, .dnd-empty-target.valid-zone {
+	border:1px solid red;
+	background-color:yellow;
+}
+
+.hide-cell { display:none !important; }
+.valign-child, .valign-child * { vertical-align:middle !important; }

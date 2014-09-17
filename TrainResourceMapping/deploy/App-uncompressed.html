@@ -20,7 +20,7 @@
 	
 	_loadAllProjects: function(cb){
 		var me = this, TSMap = {}, // {trainName: {train:<trainRecord>, scrums:[<scrumRecords>]}}
-			trainName, split;
+			peopleMap = {}, trainName, split;
 		function loadChildren(project, _cb){
 			Ext.create('Rally.data.wsapi.Store',{
 				model: 'Project',
@@ -42,11 +42,18 @@
 						fn: function(projectStore, projectRecords){
 							if(projectRecords.length === 0) {
 								split = project.get('Name').split(' - ');
-								if(split.length>1){
+								if(split.length>1){ 
 									trainName = split[1].split('-')[0];
-									if(TSMap[trainName]) TSMap[trainName].scrums.push(project);
+									if(TSMap[trainName]) TSMap[trainName].scrums.push(project); 
+									project.getCollection('TeamMembers').load({
+										fetch: ['EmailAddress'],
+										callback: function(records){
+											peopleMap[project.get('Name')] = _.map(records, function(r){ return r.get('EmailAddress'); });
+											_cb();
+										}
+									});
 								}
-								_cb();
+								else _cb();
 							} else {
 								split = project.get('Name').split(' ART ');
 								if(split.length > 1){
@@ -86,6 +93,8 @@
 						loadChildren(recs[0], function(){ 
 							me.TSMap = TSMap;
 							console.log('TSMap loaded', TSMap);
+							me.PeopleMap = peopleMap;
+							console.log('PeopleMap loaded', peopleMap);
 							cb(); 
 						});
 					},
@@ -94,7 +103,7 @@
 			}
 		});
 	},
-	
+
 	/* 
 		(string), <object/record/item>, [array]
 		TSMap = {
@@ -121,7 +130,7 @@
 		for(tn in oldTSMap){
 			oldTSMap[tn].scrums.forEach(function(scrum){
 				name = scrum.get('Name');
-				trains = _.filter(name.split(' - ')[1].split('-').slice(1), function(s){ return !s.match(/[\(\)\s]/); });
+				trains = _.filter(name.split(' - ')[1].split('-').slice(1), function(s){ return !s.match(/[\(\)\s]/); }); //weird names?
 				for(var type in map){
 					if(_.find(map[type].is, function(t){ return contains(name, t); })){
 						if(!_.find(map[type].isnot, function(t){ return contains(name, t); })){
@@ -161,7 +170,7 @@
 	
 	_orgMap: {
 		SCI	: ['TMM', 'TVPV', 'Fuse'],
-		DCD	: ['Reset', 'Scan', 'Func', 'Cache'],
+		DCD	: ['Func', 'Scan', 'Cache', 'Reset'],
 		ACD	: ['P/T', 'PLL', 'SIO','MIO'],
 		TPI	: ['S/C TPI'],
 		MPV	: ['MPV/PPV'],
@@ -170,7 +179,7 @@
 	
 	/************************************************** SAVING AND LOADING TO THE APP PREFS **********************************************/
 	
-	_defaultGroupings: [['Alpha', 'Charlie'], ['Bravo', 'Delta'], ['Romeo', 'Golf'], ['Hotel', 'Foxtrot'], ['Juliet', 'Kilo']],
+	_defaultGroupings: [['Alpha', 'Charlie'], ['Bravo', 'Delta'], ['Romeo', 'Golf'], ['Hotel'], ['Foxtrot'], ['Juliet', 'Kilo'], ['Echo']],
 
 	_getSettings: function(cb){ //parse all settings too
 		var me = this;
@@ -187,9 +196,8 @@
 		});
 	},
 	
-	_saveSettings: function(cb){ // stringify all settings too
-		var me = this, 
-			settings = Ext.clone(me.Settings);
+	_saveSettings: function(settings, cb){ // stringify and save only the updated settings
+		var me = this;
 		for(var key in settings) 
 			settings[key] = JSON.stringify(settings[key]);	
 		Rally.data.PreferenceManager.update({
@@ -212,9 +220,9 @@
 	},
 	
 	_setGroupings: function(groupings, cb){ //sets settings groupings
-		var me = this;
+		var me = this, settings = {groupings:groupings};
 		me.Settings.groupings = groupings;
-		me._saveSettings(cb);
+		me._saveSettings(settings, cb);
 	},
 	
 	_getExpected: function(tnsInGroup, type){
@@ -223,10 +231,12 @@
 	},
 	
 	_setExpected: function(tnsInGroup, type, expected, cb){
-		var me = this, name = tnsInGroup.sort().join('-');
+		var me = this, name = tnsInGroup.sort().join('-'), settings = {};
 		if(!me.Settings[name]) me.Settings[name] = {};
 		me.Settings[name][type] = expected;
-		me._saveSettings(cb);
+		settings[name] = {}; 
+		settings[name][type] = expected;
+		me._saveSettings(settings, cb);
 	},
 	
 	/******************************************************* LAUNCH/UPDATE APP********************************************************/
@@ -240,7 +250,9 @@
 					me.TrainGroupings = me._getGroupings();
 					//me._setGroupings(me.TrainGroupings); //for resetting groups
 					me.removeAll();
+					me._loadDnD();
 					me._loadGrid();
+					me._loadExperimentalStuff();
 				});
 			});
 		});
@@ -256,6 +268,106 @@
 			me.tooltip.triangle.destroy();
 			delete me.tooltip;
 		}
+	},
+
+	_loadDnD: function(){
+		var me = this;
+		me.add({
+			xtype:'container',
+			id:'top'
+		});
+		var redrawDnD = function() {
+			me.DnD = me.down('#top').add({
+				xtype:'panel',
+				layout:'hbox',
+				cls:'inherit-overflow',
+				margin:'0 0 10 0',
+				bodyPadding:'0 0 10 0',
+				border:false, frame:false,
+				title:'Train Groups',
+				items:_.reduce(me.TrainGroupings, function(cols, tnsInGroup, i){
+					cols.push({
+						xtype:'container',
+						layout:'hbox',
+						cls:'dnd-target',
+						items: _.map(tnsInGroup, function(tn){
+							return {
+								xtype:'container', 
+								cls:'intel-editor-cell dnd-item',
+								html:tn
+							};
+						})
+					});
+					cols.push({
+						xtype:'container',
+						height:'100%',
+						cls:'dnd-empty-target'
+					});
+					return cols;
+				}, [{
+					xtype:'container',
+					height:'100%',
+					cls:'dnd-empty-target'
+				}]),
+				listeners: {
+					afterrender: function(){
+						var overrides = {
+							startDrag: function(x, y) {
+								if (!this.el) this.el = Ext.get(this.getEl());
+								this.el.addCls('selected');
+								this.initXY = this.el.getXY();
+								this.offset = {x:x-this.initXY[0], y:y-this.initXY[1]};
+							},
+							onDrag: function(e) {
+								this.el.setXY([e.getPageX()-this.offset.x, e.getPageY()-this.offset.y]);
+							},
+							onDragEnter: function(e, id) {
+								Ext.fly(id).radioCls('valid-zone');
+							},
+							onDragOut: function(e, id) {
+								Ext.fly(id).removeCls('valid-zone');
+							},
+							onDragDrop: function(e, id) {
+								this.el.clearPositioning();
+								Ext.removeNode(this);
+								Ext.fly(id).appendChild(this.el);
+							},
+							endDrag: function(e) {
+								me.TrainGroupings = _.reduce(me.DnD.getEl().query('.dnd-target, .dnd-empty-target'), function(list, target){
+									var items = target.querySelectorAll('.dnd-item');
+									if(items.length===0) return list;
+									else return list.concat([_.map(items, function(item){ return item.children[0].children[0].innerHTML; })]);
+								}, []);
+								me._setGroupings(me.TrainGroupings, function(){
+									me.DnD.destroy();
+									redrawDnD();
+									if(me.Grid) {
+										me.Grid.destroy();
+										delete me.Grid;
+										me._loadGrid();
+									}
+								});
+							},
+							onInvalidDrop: function() {
+								this.el.removeCls('selected');
+								this.el.moveTo(this.initXY[0], this.initXY[1]);
+							}
+						};
+						Ext.each(Ext.Element.select('.dnd-item').elements, function(el) {
+							var dd = Ext.create('Ext.dd.DD', el, 'dndGroup', {
+								isTarget: false
+							});
+							Ext.apply(dd, overrides);
+							
+						});
+						Ext.each(Ext.Element.select('.dnd-target, .dnd-empty-target').elements, function(el) {
+							Ext.create('Ext.dd.DDTarget', el, 'dndGroup', { ignoreSelf: false });
+						});
+					}
+				}
+			});
+		};
+		redrawDnD();
 	},
 	
 	_loadGrid: function(){
@@ -295,6 +407,21 @@
 			return '<div style="white-space:normal !important;">'+ val +'</div>';
 		}
 
+		function updateSummaryRow(view){
+			_.each(view.el.down('tr.x-grid-row-summary').select('td').elements, function(el){
+				el = Ext.get(el);
+				var original = el;
+				original.removeCls('intel-editor-cell');
+				while(el.down('div'))el = el.down('div');
+				var count = parseInt(el.getHTML(), 10);
+				if(isNaN(count)) return;
+				else if(original.hasCls('intel-actual-cell')) 
+					original.addCls(count <=180 && count >=80 ? ' intel-green-cell' : ' intel-red-cell');
+				else if(original.hasCls('intel-short-over-cell'))
+					original.addCls(count >= 0 ? ' intel-green-cell' : ' intel-red-cell');
+			});
+		}
+		
 		/*********************************************************** Store/Data creation **********************************************/
 		var rowData = _.map(Object.keys(me._isMap), function(type){
 			return _.reduce(me.TrainGroupings, function(rowData, tnsInGroup, i){
@@ -307,7 +434,7 @@
 				return rowData;
 			},{
 				Org: _.find(Object.keys(me._orgMap), function(org){ 
-					return me._orgMap[org].indexOf(type) > -1; 
+					return me._orgMap[org].indexOf(type) === 0; 
 				}),
 				Type: type,
 				Groups: {}
@@ -328,34 +455,44 @@
 		
 		/*********************************************************** Grid config **********************************************/
 		
-		//TODO: next, color coding cells, add tooltip, add drag-n-drop to switch groupings, dont make it look ugly
+		//TODO: next, add drag-n-drop to switch groupings, dont make it look ugly, color coding cells
 		
 		var columnCfgs = _.reduce(me.TrainGroupings, function(cfgs, tnsInGroup, i){ 
 			return cfgs.concat([{ //dnd target is the super columns yo
 				text:tnsInGroup.join('/ '),
+				cls: 'left-bordered4 top-border',
 				columns: [{
 					text:'Expected',
 					dataIndex:'Expected/' + tnsInGroup.sort().join('-'),
 					tnsInGroup:tnsInGroup,
 					editor:'textfield',
 					menuDisabled:true,
-					tdCls: 'intel-editor-cell intel-alt-color' + ((i % 2)+1),
+					draggable:false,
+					resizable:false,
+					width:80,
+					tdCls: 'intel-editor-cell left-bordered4',
 					summaryRenderer: function(value, summaryData, summaryRecord, row, col, store) {
 						return _.reduce(store.getRange(), function(sum, r){ 
 							return sum + 1*r.get('Expected/' + tnsInGroup.sort().join('-'));
 						}, 0);
 					}
-				}].concat(tnsInGroup.length>1 ? [{
-					text:tnsInGroup.join('/ '),
+				}].concat([{
+					text:'Actual',
 					menuDisabled:true,
+					draggable:false,
+					resizable:false,
+					width:80,
 					dataIndex:'Groups',
 					tnsInGroup:tnsInGroup,
-					canHasTooltip:true,
-					tdCls: 'intel-alt-color' + ((i % 2)+1),
-					renderer:function(groups){
+					tdCls:'intel-actual-cell',
+					hasTooltip:true,
+					renderer:function(groups, meta, record){
 						var group = groups[i],
 							ret = getGroupCount(group), self = ret.self,
-							dep = Object.keys(ret.dep).join(', ');
+							dep = Object.keys(ret.dep).join(', '),
+							expected = me._getExpected(tnsInGroup, record.data.Type),
+							diff = self-expected;
+						meta.tdCls += (diff >= 0 ? ' intel-green-cell' : ' intel-red-cell');
 						return columnWrap(countString(dep, self));
 					},
 					summaryRenderer: function(value, summaryData, summaryRecord, row, col, store) {
@@ -369,68 +506,38 @@
 						dep = Object.keys(dep).join(', ');
 						return columnWrap(countString(dep, self));
 					}
-				}] : []).concat(_.map(tnsInGroup, function(tn){
-					return { 
-						dataIndex:tn,
-						canHasTooltip:true,
-						text:tn,
-						menuDisabled:true,
-						tdCls: 'intel-alt-color' + ((i % 2)+1),
-						renderer:function(scrums){ 
-							var dep = Object.keys(scrums.dep).join(', '), 
-								self = selfCount(scrums.self);
-							return columnWrap(countString(dep, self));
-						},
-						summaryRenderer: function(value, summaryData, summaryRecord, row, col, store) {
-							var tn = me.Grid.columns[col].dataIndex;
-							var self = 0, dep = {};
-							_.each(store.getRange(), function(row){
-								self += selfCount(row.data[tn].self);
-								Ext.apply(dep, row.data[tn].dep);
-							});
-							dep = Object.keys(dep).join(', ');
-							return columnWrap(countString(dep, self));
-						}
-					};
-				})).concat([{
-					text:'Short/Over',
-					menuDisabled:true,
-					dataIndex:'Groups',
-					tdCls: 'intel-alt-color' + ((i % 2)+1),
-					renderer:function(groups, meta, record){ 
-						var expected = me._getExpected(tnsInGroup, record.data.Type), 
-							group = groups[i],
-							ret = getGroupCount(group), 
-							self = ret.self,
-							diff = self-expected;
-						meta.tdCls += (diff >= 0 ? ' intel-green-cell' : ' intel-red-cell');
-						return diff;
-					},
-					summaryRenderer: function(value, summaryData, summaryRecord, row, col, store) {
-						var pairs = _.map(store.getRange(), function(r){ return {type:r.get('Type'), group:r.get('Groups')[i]}; });
-						var self = 0, expected = 0;
-						_.each(pairs, function(pair){ 
-							self += getGroupCount(pair.group).self;
-							expected += me._getExpected(_.map(pair.group, function(g){return g.tn; }), pair.type); 
-						});
-						return self-expected;
-					}
 				}])
 			}]);
 		},[{ 
 			dataIndex:'Org', 
 			text:'Orgs',
+			tdCls:'double-bordered',
+			cls:'double-bordered top-border',
+			width:80,
 			sortable:false,
-			resizable:false
+			draggable:false,
+			resizable:false,
+			renderer: function(v, m, r){
+				if(v) { m.tdAttr += ' rowspan=' + me._orgMap[v].length; m.tdCls += ' valign-child'; }
+				else m.tdCls += ' hide-cell';
+				return v;
+			}
 		},{ 
 			dataIndex:'Type', 
 			text:'Teams',
+			cls:'top-border',
+			width:80,
 			sortable:false,
+			draggable:false,
 			resizable:false
 		}]).concat([{ //last
-			text:'Total Short/Over',
+			text:'Short/Over By Function',
 			sortable:false,
+			draggable:false,
 			resizable:false,
+			tdCls:'left-bordered4 intel-short-over-cell',
+			cls:'left-bordered4 top-border',
+			width:80,
 			renderer: function(v, meta, row){
 				var expected = getSumOfExpecteds(row),
 					self = getSumOfGroupCounts(row), 
@@ -447,9 +554,13 @@
 				return self-expected;
 			}
 		},{
-			text:'Target Size',
+			text:'Function Target Size Sum',
 			sortable:false,
+			draggable:false,
 			resizable:false,
+			tdCls:'double-bordered',
+			cls:'double-bordered top-border',
+			width:80,
 			renderer: function(v, m, row){
 				return getSumOfExpecteds(row);
 			},
@@ -461,10 +572,14 @@
 		me.Grid = me.add({
 			xtype: 'rallygrid',
 			height:500,
+			padding:'0 0 0 80',
 			scroll:'horizontal',
 			resizable:false,
 			columnCfgs: columnCfgs,
 			columnLines:true,
+			viewConfig:{
+				border:false
+			},
 			plugins: [
 				Ext.create('Ext.grid.plugin.CellEditing', {
 					triggerEvent:'cellclick'
@@ -484,21 +599,24 @@
 						me._setExpected(tnsInGroup, row.data.Type, value*1, function(){
 							me.Grid.setLoading(false);
 							row.commit();
+							updateSummaryRow(e.view);
 						});
 					} else {
 						row.set(e.field, originalValue);
 						row.commit();
+						updateSummaryRow(e.view);
 					}
 				},
 				viewready: function (grid) {
-					var view = grid.view;			
+					var view = grid.view;
+					updateSummaryRow(view);
 					grid.mon(view, {
 						uievent: function (type, view, cell, rowIdx, colIdx, e) {
 							if(type !== 'mousedown') return;
 							var row = me.CustomStore.getAt(rowIdx),
 								column = me.Grid.getColumnManager().columns[colIdx],
 								pos = cell.getBoundingClientRect(),
-								html = '', panelWidth=240;
+								html = '', panelWidth=320;
 							if(me.tooltip){
 								me.tooltip.panel.hide();
 								me.tooltip.triangle.hide();
@@ -509,34 +627,44 @@
 									return;
 								}
 							}
-							if(column.canHasTooltip){
-								var getTooltipInfo = function(type, tn){
+							if(column.hasTooltip){
+								var listStyle = 'style="list-style:none;margin-left:15px;padding-left:0px;"', tti;
+								var getTooltipInfo = function(type, tn, tns){
 									var info = me.TSMap[tn].scrums[type], depTns = Object.keys(info.dep),
-										theHTML = '<p><b>Train: </b>' + tn + '<ol>';
-									if(info.self.length){
-										theHTML += '<p><b>Teams:</b><p><ol>';
-										_.each(info.self, function(scrum){
-											theHTML += '<li>' + scrum.get('Name') + '</li>';
-										});
-										theHTML += '</ol>';
-									}
-									if(depTns.length){
-										theHTML += '<p><b>Dependencies:</b><p><ol>';
-										_.each(depTns, function(tn2){ 
+										teams, dep;
+									teams = _.reduce(info.self, function(theHTML, scrum){
+										theHTML += '<li>' + scrum.get('Name');
+										var people = me.PeopleMap[scrum.get('Name')];
+										if(people.length) {
+											theHTML += '<ul ' + listStyle + '>';
+											_.each(people, function(name){ theHTML += '<li>' + name + '</li>'; });
+											theHTML += '</ul>';
+										}
+										else theHTML += ' (no members)';
+										return theHTML + '</li>';
+									}, '');
+									dep = _.reduce(depTns, function(theHTML, tn2){ 
+										if(!tns || tns.indexOf(tn2)===-1){
 											_.each(info.dep[tn2], function(scrum){
 												theHTML += '<li>' + scrum.get('Name') + '</li>';
 											});
-										});
-										theHTML += '</ol>';
-									}
-									return theHTML + '</ol>';
-								};
-								if(column.dataIndex==='Groups')
-									_.each(column.tnsInGroup, function(tn){
-										html += getTooltipInfo(row.data.Type, tn);
-									});
-								else html = getTooltipInfo(row.data.Type, column.dataIndex);
+										}
+										return theHTML;
+									}, '');
+									return {teams:teams, dep:dep};
+								};	
+								if(column.dataIndex==='Groups'){
+									tti = _.reduce(column.tnsInGroup, function(tti, tn){
+										var tti2 = getTooltipInfo(row.data.Type, tn, column.tnsInGroup);
+										tti.teams += tti2.teams; tti.dep += tti2.dep;
+										return tti;
+									}, {teams:'', dep:''});
+								}
+								else tti = getTooltipInfo(row.data.Type, column.dataIndex);
 								
+								html = (tti.teams.length ? '<b>Teams:</b><ul ' + listStyle + '>' + tti.teams + '</ul>' : '') +
+										(tti.dep.length ? '<b>Dependencies:</b><ul ' + listStyle + '>' + tti.dep + '</ul>' : '');
+										
 								me.tooltip = {
 									rowIdx:rowIdx,
 									colIdx:colIdx,
@@ -547,7 +675,7 @@
 										focusOnToFront:false,
 										shadow:false,
 										renderTo:Ext.getBody(),
-										html:html,
+										html: html,
 										listeners:{
 											afterrender: function(panel){
 												panel.setPosition(pos.left-panelWidth, pos.top);
@@ -571,6 +699,11 @@
 							}
 						}
 					});
+				},
+				afterrender: function() {
+					this.getView().getEl().on('scroll', function(){
+						me._clearToolTip();
+					});
 				}
 			},
 			showRowActionsColumn:false,
@@ -587,7 +720,12 @@
 		});	
 	},
 	
-	listeners: { //app listeners yo
+	_loadExperimentalStuff: function(){
+		var me = this;
+		console.log(me.getContext().getUser());
+	},
+	
+	listeners: { //app listeners 
 		afterrender: function() {
 			var me = this;
 			me.getEl().on('scroll', function(){
@@ -596,6 +734,747 @@
 		}
     }
 });
+                /** exported functions :
+  * rawSearch(uri, base, opts, callback(err, results))
+  * getPeople(fields, callback(err, people))
+  * getPerson(fields or String, callback(err, person))
+  * getManager(person, callback(err, person))
+  * getDirectReports(person, callback(err, [people]))
+  * getSiblings(person, callback(err, [people]))
+  * getManagerOfOrgUnit(orgUnit, callback(err, person))
+  * getWorkersOfOrgUnit(orgUnit, callback(err, [person]))
+  * getOrgUnits(fields, callback(err, [orgUnits]))
+  * getOrgUnit(fields or string, callback(err, orgUnit))
+  * getOrgUnitByID(string, callback(err, orgUnit))
+  * getParentOrgUnit(orgUnit, callback(err, orgUnit))
+  * getChildOrgUnits(orgUnit, callback(err, [orgUnits]))
+  * getPersonsOrgUnit(person, callback(err, orgUnit))
+  * getPersonsManagedOrgUnit(person, callback(err, orgUnit))
+  * authenticate(username, password, callback(err, person))
+  */
+
+module.exports = function(ldap, myUsername, myPassword){
+	if(!ldap || !myUsername || !myPassword) return;
+	
+	var ldap_intel = {};
+							 											
+	var rootWorkerBase = 'DC=corp,DC=intel,DC=com';						
+	var orgUnitBase = 'OU=Org Unit Number,OU=Application Managed,OU=Groups,DC=corp,DC=intel,DC=com';
+	var globalCatalogUri = 'ldap://corp.intel.com:3268';				
+	var workerDomains = ['amr', 'gar', 'ger', 'ccr']; 						
+
+	/********************************** Default Attrs and Field Mappings. *********************************/
+
+	/** personAttrs and orgUnitAddrs are the attributes returns when searching for org or person */
+	var personAttrs = [
+		'cn', 							// common name
+		'directReports', 				// semi-colon separated list of distinguishedNames of direct subordinates
+		'distinguishedName', 			// distinguished name of the person
+		'employeeBadgeType',			// BB or GB
+		'employeeID',					// 8 digit id
+		'intelDivisionCode',			// not in orgtree.intel.com
+		'intelDivisionDescr', 			// div in orgtree.intel.com
+		'intelGroupCode', 				// not in orgtree.intel.com
+		'intelGroupDescr',				// group field in orgTree.intel.com
+		'intelGroupShortName',			// not in orgtree.intel.com
+		'intelOrgUnitCode',				// orgUnitId in orgtree.intel.com
+		'intelOrgUnitDescr',			// orgUnit in orgtree.intel.com (org they are in, not head of)
+		'intelRegionCode',				// 2 (maybe 3) letter region code
+		'intelRegionDescr',				// Region Description
+		'intelSiteCode',				// 2 letter abbreviation
+		'intelSiteName',				// State, City
+		'intelSuperGroupCode',			// 6 letter code 10000*
+		'intelSuperGroupDescr',			// full name of supergroup (same supergroup as in orgTree.intel.com
+		'intelSuperGroupShortName', 	// 3 letter abbreviation
+		'mail', 						// email 
+		'memberOf', 					// groups (and OrgUnits ! person is member of 
+		'sAMAccountName', 				// login name prefix: <login name>@<domain name>
+		'mgrWWID', 						// 8 digit manager wwid
+		'manager', 						// distinguishedName of manager
+		'name',							// the name of the person
+	];
+	
+	var orgUnitAddrs = [
+		'member', 		//orgs and people below (and at current level of) this org
+		'memberOf',		//org above this org
+		'name'			//org name (same as CN)
+	];
+	
+	/** maps names used in this app to indexed attrs used by Active Directory for people and org units
+	  * ONLY USE THESE IF YOU PLAN ON BUILDING FILTERS. the other option is to use a DN string for getOrgUnit
+	  * or getPerson, and they will just use that string for the search
+	  */
+	var personIndex = {
+		'costCenterCode': 'intelCostCenterCode',
+		'campusCode': 'intelCampusCode',
+		'siteCode': 'intelSiteCode',
+		'badgeType': 'employeeBadgeType',
+		'wwid': 'employeeID',
+		'email': 'mail', 						//same as userPrincipalName
+		'login': 'sAMAccountName',
+		'name': 'name',
+		'surname':'sn',
+	};
+	
+	var orgUnitIndex = {
+		'name': 'name'
+	}
+	
+	/****************************************************** Filter Construction ***********************************************/
+	
+	/** ONLY TAKES AN OBJECT. all keys must map to a valid value in fieldToAttr Object above. The Rules Are:
+	  * $or keyword only takes an array of objects as value
+	  * $and keyword only takes an array of objects as value
+	  * $not keyword only takes an object as value
+	  * an object with more than one key is an IMPLICIT AND
+	  * an object key with an ARRAY OF (BOOLEAN|NUMBER|STRING) for value is an implicit OR
+	  * examples:
+	      * { name: 5 } 									==> '(name=5)'
+		  * { name: 5, age:3 } 								==> '(&(name=5)(age=3))'
+		  * { name: ['h', 'b'], age:3} 						==> '(&(|(name=h)(name=b))(age=3))'
+		  * { $not: {name: 3}} 								==> '(!(name=3))'
+		  * { $or: [ {name: 3}, {age: [ 1,2,3]} ] } 		==> '(|(name=3)(|(age=1)(age=2)(age=3)))'
+		  * { $and: [ {name: 3}, {age: [ 1 ]} ] } 			==> '(&(name=3)(age=1))'
+		  * { $and: [ {name: 3}], age: 1 } 					==> '(&(name=3)(age=1))'
+		  * { $and: [], age: 1} 							==> '(age=1)'
+	  */
+	function makeFilter(fields, indexMap){
+		if(!fields || !indexMap) return;
+		var specialKeys = ['$and', '$or', '$not'];
+		
+		function isNullOrUndefined(v){
+			return (v === undefined || v === null )
+		}
+		
+		// works for both literals and objects (eg: works for var x = new Boolean(true), and var y = true)
+		function getClass(obj){
+			if(isNullOrUndefined(obj)) return;
+			else return obj.constructor.name;
+		}
+		
+		function makeSingleFilter(fields){
+			if(isNullOrUndefined(fields) || getClass(fields) !== 'Object'){
+				console.log('invalid fields');
+				return;
+			}
+			var str = '';
+			var keys = Object.keys(fields);
+			for(var i = 0;i<keys.length;++i){
+				var key = keys[i];
+				var attr = indexMap[key];
+				var val = fields[key];
+				if((isNullOrUndefined(attr) && specialKeys.indexOf(key) === -1) || isNullOrUndefined(val)) {
+					console.log('invalid field. key: ' + key + ' value: ' + val);
+					return;
+				}
+				var tmpStr;
+				switch(key){
+					case '$and':
+						tmpStr = makeAndFilter(val);
+						break;
+					case '$or':
+						tmpStr = makeOrFilter(val);
+						break;
+					case '$not':
+						tmpStr = makeNotFilter(val);
+						break;
+					default:
+						switch(val.constructor.name){
+							case 'Array':
+								var arr = [];
+								for(var i = 0;i<val.length;++i){
+									var obj = {};
+									var constructor = getClass(val[i]);
+									if(	constructor !== 'String' && 
+										constructor !== 'Boolean' && 
+										constructor !== 'Number') 
+										return;
+									obj[key] = val[i];
+									arr.push(obj);
+								}
+								tmpStr = makeOrFilter(arr);
+								break;
+							case 'String':
+							case 'Number':
+							case 'Boolean':
+								tmpStr = '(' + attr + '=' + val + ')';
+								break;
+							default:
+								console.log('invalid constructor: ' + val.constructor.name);
+								return;
+						}
+						break;
+				}
+				if(isNullOrUndefined(tmpStr)) return;
+				else str += tmpStr;
+			}
+			if(keys.length>1) str = '(&' + str + ')';
+			return str;
+		}
+		
+		function makeNotFilter(fields){
+			var res = makeSingleFilter(fields);
+			if(isNullOrUndefined(res)) return;
+			else return '(!' + res + ')';
+		}
+		
+		function makeOrFilter(array){
+			var str = '';
+			for(var i = 0;i<array.length;++i){
+				var res = makeSingleFilter(array[i]);
+				if(isNullOrUndefined(res)) return;
+				else str += res;
+			}
+			if(array.length <= 1) return str;
+			else return '(|' + str + ')';
+		}
+		
+		function makeAndFilter(array){
+			var str = '';
+			for(var i = 0;i<array.length;++i){
+				var res = makeSingleFilter(array[i]);
+				if(isNullOrUndefined(res)) return;
+				else str += res;
+			}
+			if(array.length <= 1) return str;
+			else return '(&' + str + ')';
+		}
+		
+		
+		if(isNullOrUndefined(fields) || getClass(fields) !== 'Object'){
+			console.log('invalid fields');
+			return;
+		}
+		var res;
+		var fieldCount = Object.keys(fields).length;
+		if(fieldCount == 0) return '';
+		return makeSingleFilter(fields);
+	 }
+	
+	/******************************* SEARCHING. PUBLIC FUNCTIONS *************************************/
+	
+	
+	/** searches the ldap server at 'uri' with base 'base' with the options 'opts'. 'opts' is 
+	  * outlined in the documentation for ldap.js
+	  * callback(err, [entries]) 
+	  */
+	var currentUsername, currentPassword, currentUri, conns = 200, client;
+	ldap_intel.closeConnections = function(){ client.unbind(); } // user of this module must call this
+	ldap_intel.createConnections = function(){ 
+		if(client) { try{ client.unbind(); } catch(e){}}
+		currentUsername = myUsername;
+		currentPassword = myPassword;
+		currentUri = globalCatalogUri;
+		client = ldap.createClient({
+			url: currentUri, 
+			maxConnections:conns, 
+			bindDN:currentUsername, 
+			bindCredentials:currentPassword
+		});
+	} 
+	ldap_intel.createConnections();
+	
+	function search(username, password, uri, base, opts, callback){
+		if(!client) ldap_intel.createConnections();
+		if(uri != currentUri){
+			client.unbind();
+			client= ldap.createClient({
+				url: uri, 
+				maxConnections:conns, 
+				bindDN:currentUsername, 
+				bindCredentials:currentPassword
+			});
+			currentUri = uri;
+			search(username, password, uri, base, opts, callback);
+		} else if(username != currentUsername || password != currentPassword){
+			client.bind(currentUsername, currentPassword, function(err){
+				if(err){
+					client.unbind();
+					console.log(err);
+					search(username, password, uri, base, opts, callback);
+				} else {
+					currentUsername = username;
+					currentPassword = password;
+				}
+			});
+		}
+		else{
+			var resultEntries = [];
+			opts.timeLimit = 120; /* 2 minute timeout */
+
+			/**
+			  * gotta add this for referrals to other domains. There are never any 
+			  * referrals when searching the global catalog though. 
+			  */
+			var referralQueue = [];
+			function nextReferral(){
+				if(referralQueue.length >0){
+					var refUri = referralQueue.pop();
+					refUri = refUri.split('/');
+					var refBase = refUri.pop();
+					refUri = refUri.join('/');
+					_search(refUri, refBase);
+				}
+				else {
+					//console.log('ldap search success: ' + new Date()*1);
+					callback(null, resultEntries); 
+				}
+			}	
+			
+			function _search(uri, base){
+				try{
+					client.search(base, opts, function(err, res){
+						if(err) {
+							console.log('1 Trying uri:'+uri + ', base:' + base + ' again');
+							_search(uri, base);
+							return;
+						}
+						res.on('searchEntry', function(entry){
+							resultEntries.push(entry.object);
+						});
+						res.on('searchReference', function(referral){
+							for(var i = 0;i<referral.uris.length;++i)
+								referralQueue.splice(0, 0, referral.uris[i]);
+						});
+						res.on('error', function(err){
+							console.log('2 Trying uri:' + uri+', base:' + base + ' again');
+							_search(uri, base);
+						});
+						res.on('end', function(status){
+							nextReferral();
+						});
+					});
+				}
+				catch(err){	
+					console.log('3 Trying uri:' + uri + ', base:' + base + ' again');
+					_search(uri, base)
+				}
+			}
+			_search(uri, base);
+		}
+	}
+
+
+
+	/* searches global catalog for given distinguished name, and returns the specified attrs. 
+	 * callback(err, person)
+	 */
+	function searchByDistinguishedName(username, password, dn, attrs, callback){
+		if(!callback) return;
+		var base = dn;
+		var opts = {
+			scope: 'base',
+			attributes: attrs,
+		};
+		search(username, password, globalCatalogUri, base, opts, function(err, results){
+			if(err) callback(err);
+			else if(results.length != 1) callback('invalid search result count: ' + results.length);
+			else callback(null, results[0]);
+		});
+	}
+	
+	/******************************  RAW Filter SEARCHING.  **************************************/	
+	ldap_intel.rawSearch = function(uri, base, opts, callback){
+		if(!callback) return;
+		if(!uri || !base || !opts || !opts.filter) { callback('invalid args'); return; }
+		search(myUsername, myPassword, uri, base, opts, callback);
+	}
+	
+	/******************************  PEOPLE SEARCHING.  **************************************/
+	/** removes all groups from memberOf attribute unless it begins with ORGU (we only care about orgs and people)
+	  * args is either a single person or an array of people */
+	function removePeopleGroups(args){
+		if(!args) return;
+		var people = [];
+		var isSingle = false;
+		if(args.constructor.name != 'Array') {
+			people.push(args);
+			isSingle = true;
+		}
+		else people = args;
+		for(var i = 0;i<people.length;++i){
+			var person = people[i];
+			var memberOf = person.memberOf;
+			for(var j=memberOf.length-1; j>=0; --j){
+				if(memberOf[j].indexOf('CN=ORGU') !== 0)
+					memberOf.splice(j, 1);
+			}
+		}
+		if(isSingle) return people.pop();
+		else return people;
+	}
+	
+	/** searches global catalog with a given filter. Only looks in one level under the list of worker domains 
+	  * callback(err, [results]); Current implementation iterates through the 4 domains' OU=Workers in oneLevel
+	  * searches, and adds all the results from all 4. (its a global catalog search still )
+	  */
+	function searchPeopleByFilter(username, password, filter, callback){
+		//somebody explain to me why filter goes out of scope when nextBaseSearch calls itself
+		if(!callback) return;
+		
+		var opts = {
+			scope: 'one',
+			attributes: personAttrs,
+			filter: filter
+		};
+		var opts_copy = JSON.parse(JSON.stringify(opts));
+		var allResults = [];
+		
+		var doms = workerDomains.slice(0);
+		function getNextBase(){ 
+			if(doms.length==0) return;
+			else return 'OU=Workers,DC=' + doms.pop() + ',' + rootWorkerBase;
+		}
+		function nextBaseSearch(err, results){
+			if(err) callback(err);
+			else{
+				allResults = allResults.concat(results);
+				var nextBase = getNextBase();
+				var opts_copy = JSON.parse(JSON.stringify(opts));
+				if(!nextBase) callback(null, removePeopleGroups(allResults));
+				else search(username, password, globalCatalogUri, nextBase, opts_copy, nextBaseSearch);
+			}
+		}
+		var nextBase = getNextBase();
+		if(!nextBase) callback('there were no valid worker domains!');
+		else search(username, password, globalCatalogUri, nextBase, opts_copy, nextBaseSearch);
+	};
+		
+	/* callback(err, people) */
+	ldap_intel.getPeople = function(fields, callback){
+		if(!callback) return;
+		var filter = makeFilter(fields, personIndex);
+		if(!filter) callback('invalid fields');
+		else searchPeopleByFilter(myUsername, myPassword, filter, callback);
+	}
+	
+	/* callback(err, person) */
+	ldap_intel.getPerson = function(fields, callback){
+		if(!callback) return;
+		if(typeof fields === 'string') 
+			searchByDistinguishedName(myUsername, myPassword, fields, personAttrs, function(err, person){
+				if(err) callback(err);
+				else callback(null, removePeopleGroups(person));
+			});
+		else{
+			ldap_intel.getPeople(fields, function(err, results){
+				if(err) callback(err);
+				else if(results.length != 1) callback(results.length + ' results returned');
+				else callback(null, results[0]);
+			});
+		}
+	}
+	
+	ldap_intel.getManager = function(person, callback){
+		if(!callback) return;
+		ldap_intel.getPerson(person.manager, callback);
+	}
+
+	ldap_intel.getDirectReports = function(person, callback){
+		if(!callback) return;
+		var list = [];
+		var drs = person.directReports;
+		if(!drs) callback(null, list);
+		else{
+			for(var i = 0;i<drs.length;++i) 
+				list.push(drs[i].split(',OU')[0].split('=')[1].replace("\\,", ","));
+			ldap_intel.getPeople({'name': list}, callback);
+		}
+	}
+	
+	/* excluding the current person! */
+	ldap_intel.getSiblings = function(person, callback){
+		if(!callback) return;
+		ldap_intel.getManager(person, function(err, manager){
+			if(err) callback(err);
+			else {
+				ldap_intel.getDirectReports(manager, function(err, people){
+				if(err) callback(err);
+					var i;
+					for(var j=0;j<people.length;++j){
+						if(people[j].employeeID===person.employeeID){
+							people.splice(j, 1);
+							callback(null, people);
+							return;
+						}
+					}
+					callback('did not return self when should have');
+				});
+			}
+		});
+	}
+	
+	/******************************  ORG UNIT SEARCHING.  **************************************/
+	
+	// NOTE: fields is a query with the correct syntax and indexed fields (see top) (eg $and, $not, $or) 
+	ldap_intel.getOrgUnits = function(fields, callback){
+		if(!callback) return;
+		var filter = makeFilter(fields, orgUnitIndex);
+		if(!filter) callback('invalid fields');
+		else {		
+			var opts = {
+				scope: 'one',
+				attributes: orgUnitAddrs,
+				filter: filter
+			};
+			search(myUsername, myPassword, globalCatalogUri, orgUnitBase, opts, callback);
+		}
+	};
+	
+
+	// NOTE: fields is either a DN or a query with the correct syntax and indexed fields (see top)
+	ldap_intel.getOrgUnit = function(fields, callback){
+		if(!callback) return;
+		if(fields.constructor.name === 'String'){
+			searchByDistinguishedName(myUsername, myPassword, fields, orgUnitAddrs, callback);
+		}
+		else{
+			ldap_intel.getOrgUnits(fields, function(err, orgUnits){
+				if(err) callback(err);
+				else if(orgUnits.length != 1) callback('invalid number of search results');
+				else callback(null, orgUnits[0]);
+			});
+		}
+	};
+	
+	ldap_intel.getOrgUnitByID = function(orgID, callback){
+		if(!callback) return;
+		ldap_intel.getOrgUnit({'name':'ORGU' + orgID + '*'}, callback);
+	}
+	
+	ldap_intel.getParentOrgUnit = function(orgUnit, callback){
+		if(!callback) return;
+		ldap_intel.getOrgUnit(orgUnit.memberOf, callback);
+	}
+	
+	ldap_intel.getManagerOfOrgUnit = function(orgUnit, callback){
+		if(!callback) return;
+		ldap_intel.getOrgUnit(orgUnit.memberOf, function(err, parentOrgUnit){
+			if(err) callback(err);
+			else {
+				for(var i = 0;i<orgUnit.member.length;++i){
+					var dn = orgUnit.member[i];
+					if(parentOrgUnit.member.indexOf(dn) != -1){
+						ldap_intel.getPerson(dn, callback);
+						return;
+					}
+				}
+				callback('org has no manager');
+			}
+		});
+	}
+	
+	ldap_intel.getWorkersOfOrgUnit = function(orgUnit, callback){
+		if(!callback) return;
+		ldap_intel.getManagerOfOrgUnit(orgUnit, function(err, person){
+			if(err) callback(err);
+			else {
+				var members = orgUnit.member;
+					for(var i = members.length-1; i>=0; --i){
+					if(members[i] === person.distinguishedName || members[i].indexOf('CN=ORGU') === 0)
+						members.splice(i, 1);
+				}
+				var workers = [];
+				if(members.length==0) callback(null, workers);
+				else{
+					function getNextWorker(err, person){
+						if(err) callback(err);
+						else{
+							workers.push(person);
+							if(members.length==0) callback(null, workers);
+							else ldap_intel.getPerson(members.pop(), getNextWorker);
+						}
+					}
+					ldap_intel.getPerson(members.pop(), getNextWorker);
+				}
+			}
+		});
+	}
+	
+	ldap_intel.getChildOrgUnits = function(orgUnit, callback){
+		if(!callback) return;
+		var members = orgUnit.member;
+		for(var i = members.length-1; i>=0; --i){
+			if(members[i].indexOf('CN=ORGU') !== 0)
+				members.splice(i, 1);
+		}
+		var childOrgUnits = [];
+		if(members.length==0) callback(null, childOrgUnits);
+		else{
+			function getNextOrgUnit(err, childOrgUnit){
+				if(err) callback(err);
+				else{
+					childOrgUnits.push(childOrgUnit);
+					if(members.length==0) callback(null, childOrgUnits);
+					else ldap_intel.getOrgUnit(members.pop(), getNextOrgUnit);
+				}
+			}
+			ldap_intel.getOrgUnit(members.pop(), getNextOrgUnit);
+		}
+	}
+	
+	/** NOTE: THIS IS !NOT! THE ORG UNIT THEIR MAANGER OF. THAT IS getPersonsManagedOrgUnit */
+	ldap_intel.getPersonsOrgUnit = function(person, callback){
+		if(!callback) return;
+		if(!person || !person.memberOf || !person.employeeID) callback('invalid person');
+		var total = person.memberOf.length;
+		var returned = false;
+		if(total == 0) {  callback('there is no memberOf'); return; }
+		var tried = 0;
+		for(var i = 0;i<person.memberOf.length;++i){
+			ldap_intel.getOrgUnit(person.memberOf[i], function(err, orgUnit){
+				if(returned) return;
+				if(err) { returned = true; callback(err); }
+				else {
+					ldap_intel.getManagerOfOrgUnit(orgUnit, function(err, manager){
+						if(returned) return;
+						if(err) { returned = true; callback(err); }
+						else {
+							if(manager.employeeID != person.employeeID) {
+								returned = true; 
+								callback(null, orgUnit);
+							}
+							else if(++tried==total) callback('could not resolve query');
+						}
+					});
+				}
+			});
+		}
+	}
+
+	/** returns teh org unit the person is manager of */
+	ldap_intel.getPersonsManagedOrgUnit = function(person, callback){
+		if(!callback) return;
+		if(!person || !person.memberOf || !person.employeeID) callback('invalid person');
+		var total = person.memberOf.length;
+		var returned = false;
+		if(total == 0) {  callback('there is no memberOf'); return; }
+		var tried = 0;
+		for(var i = 0;i<person.memberOf.length;++i){
+			ldap_intel.getOrgUnit(person.memberOf[i], function(err, orgUnit){
+				if(returned) return;
+				if(err) { returned = true; callback(err); }
+				else {
+					ldap_intel.getManagerOfOrgUnit(orgUnit, function(err, manager){
+						if(returned) return;
+						if(err) { returned = true; callback(err); }
+						else {
+							if(manager.employeeID == person.employeeID) {
+								returned = true; 
+								callback(null, orgUnit);
+							}
+							else if(++tried==total) callback('could not resolve query');
+						}
+					});
+				}
+			});
+		}
+	}
+	
+	/******************************  AUTHENTICATION FUNCTION  **************************************/
+	function getDomainFromDistinguishedName(dn){
+		if(typeof dn !== 'string') return;
+		var split = dn.split(',');
+		if(split.length<4) {
+			console.log('ERROR: split.length == ' + split.length);
+			return;
+		}
+		var domain = split[split.length-4].split('=')[1].toLowerCase();
+		if(workerDomains.indexOf(domain) == -1) return;
+		else return domain;
+	}
+	
+	/** 
+	  * callback(err, person) 
+	  * username of form username, the Domain is not needed. 
+	  * password is login password
+	  */
+	ldap_intel.authenticate = function(username, password, callback){
+		if(!callback) {
+			console.log('authenticate: no callback!');
+			return;
+		}
+		if(!username || !password){
+			callback('invalid username or password');
+			return;
+		}
+		ldap_intel.getPerson({'login':username}, function(err, person){
+			if(err) callback(err);
+			else{
+				var domain = getDomainFromDistinguishedName(person.distinguishedName);	
+				var fullUsername = username + '@' + domain + '.corp.intel.com';	
+				searchByDistinguishedName(fullUsername, password, person.distinguishedName, 
+						personAttrs, function(err, person){
+					if(err) callback(err);
+					else callback(null, removePeopleGroups(person));
+				});
+			}
+		});
+	};
+
+	return ldap_intel;
+};
+
+                module.exports = function(fs, ldap_intel, config){
+	var intel_util = {};
+	
+	var outputFile = config.fsIntelData,
+		seed = config.rootOrgUnit;
+	
+	intel_util.pullData = function(finishedCallback){
+		console.log('starting intel pull data');
+		var people = {}, 
+			peopleIndex = {}, 	//indexes email -> DN
+			orgUnits = {},
+			orgUnitsIndex = {}; //indexes orgUnitDN -> parentOrgUnitDN
+		
+		function doOrg(dn, callback){
+			ldap_intel.getOrgUnit(dn, function(err, orgUnit){
+				if(err) {console.log(err); doOrg(dn, callback);}
+				else {
+					orgUnits[dn] = orgUnit;
+					if(orgUnit.member.constructor.name == 'String') orgUnit.member = [orgUnit.member];
+					var count = -1, total = orgUnit.member.length;
+					function cb(){ if(++count==total) callback(); } cb();
+					orgUnit.member.forEach(function(member){
+						if(member.indexOf('CN=ORGU') == 0) {
+							orgUnitsIndex[member] = dn;	//index
+							doOrg(member, cb);
+						}
+						else doPerson(member, cb);
+					});
+				}
+			});
+		}
+		function doPerson(dn, callback){
+			ldap_intel.getPerson(dn, function(err, person){
+				if(err) {console.log(err); doPerson(dn, callback); }
+				else{
+					people[dn] = person;
+					peopleIndex[person.mail] = dn; //index
+					callback();
+				}
+			});
+		}
+
+		ldap_intel.createConnections();		
+		doOrg(seed, function(){
+			var data = { 
+				people:people, 
+				peopleIndex:peopleIndex,
+				orgUnits:orgUnits, 
+				orgUnitsIndex:orgUnitsIndex
+			};
+			if(fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+			fs.writeFileSync(outputFile, JSON.stringify(data, null, '  '));
+			ldap_intel.closeConnections();
+			if(finishedCallback) finishedCallback();
+		});
+	}
+	
+	return intel_util;
+}
+
 
             Rally.launchApp('CustomApp', {
                 name:"Random App Name70221",
@@ -613,10 +1492,12 @@
 .x-grid-row .intel-alt-color2 {
   background-color: rgba(242, 242, 242, 0.4) !important;
 }
-.x-grid-row .intel-editor-cell {
+.x-grid-row .intel-editor-cell,
+.intel-editor-cell {
   cursor: pointer !important;
 }
-.x-grid-row .intel-editor-cell * {
+.x-grid-row .intel-editor-cell *,
+.intel-editor-cell * {
   cursor: pointer !important;
 }
 .x-grid-cell.intel-red-cell {
@@ -633,6 +1514,50 @@
 .x-grid-row-over .x-grid-cell.intel-green-cell {
   background-color: rgba(0, 255, 0, 0.5) !important;
 }
+.x-grid-row .left-bordered,
+.x-grid-row-summary .left-bordered,
+.x-column-header.left-bordered {
+  border-left: 1px solid grey !important;
+}
+.x-grid-row .left-bordered2,
+.x-grid-row-summary .left-bordered2,
+.x-column-header.left-bordered2 {
+  border-left: 2px solid grey !important;
+}
+.x-grid-row .left-bordered4,
+.x-grid-row-summary .left-bordered4,
+.x-column-header.left-bordered4 {
+  border-left: 4px solid grey !important;
+}
+.x-grid-row .double-bordered,
+.x-grid-row-summary .double-bordered,
+.x-column-header.double-bordered {
+  border-left: 1px solid grey !important;
+  border-right: 1px solid grey !important;
+}
+.x-grid-row .double-bordered2,
+.x-grid-row-summary .double-bordered2,
+.x-column-header.double-bordered2 {
+  border-left: 2px solid grey !important;
+  border-right: 2px solid grey !important;
+}
+.x-grid-row .double-bordered4,
+.x-grid-row-summary .double-bordered4,
+.x-column-header.double-bordered4 {
+  border-left: 4px solid grey !important;
+  border-right: 4px solid grey !important;
+}
+.x-column-header.top-border {
+  border-top: 1px solid grey !important;
+}
+/* OVERRIDE RALLY */
+.x-grid-with-row-lines .x-grid-table {
+  border-top: 0px !important;
+}
+.rally-grid .x-grid-header-ct .x-box-inner .x-column-header:not(.double-bordered) {
+  border-right: 0px !important;
+}
+/* END OVERRIDE RALLY */
 .intel-tooltip {
   padding: 10px;
   background-color: #C0D9FA;
@@ -644,6 +1569,42 @@
   border-top: 10px solid #C0D9FA;
   height: 0px;
   width: 0px;
+}
+.inherit-overflow,
+.inherit-overflow * {
+  overflow: visible !important;
+}
+.dnd-item {
+  border: 1px solid black;
+  padding: 3px;
+  margin: 3px;
+  font-size: 1em;
+  background-color: #92FBFC;
+  z-index: 80000;
+}
+.dnd-item.selected {
+  background-color: #08BCBF;
+}
+.dnd-empty-target {
+  padding: 3px 20px 3px 20px;
+  margin: 3px;
+}
+.dnd-target {
+  border: 1px solid black;
+  padding: 3px;
+  margin: 3px;
+}
+.dnd-target.valid-zone,
+.dnd-empty-target.valid-zone {
+  border: 1px solid red;
+  background-color: yellow;
+}
+.hide-cell {
+  display: none !important;
+}
+.valign-child,
+.valign-child * {
+  vertical-align: middle !important;
 }
 
     </style>
