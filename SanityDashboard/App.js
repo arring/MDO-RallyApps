@@ -60,7 +60,7 @@ Ext.define('CustomApp', {
     ],
 
     globalGridCount: [],   // count entry for each grid
-
+    globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
     // App entry point
     launch: function() {
       this._buildGrids();
@@ -76,7 +76,7 @@ Ext.define('CustomApp', {
     },
 
     
-    _buildBarChart: function() {
+    _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
         var chartCfg = {
             chart: {
@@ -88,7 +88,7 @@ Ext.define('CustomApp', {
                 text: 'Story Counts by Grid'
             },
             xAxis: {
-                categories: ['Africa', 'America', 'Asia', 'Europe', 'Oceania'],
+                categories: ['Chart1', 'Chart2', 'Chart3', 'Chart4', 'Chart5','Chart6'],
                 title: {
                     text: null
                 }
@@ -99,8 +99,11 @@ Ext.define('CustomApp', {
                 text: '# Artifacts',
                     align: 'high'
                 },
+                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
                 labels: {
+                    enabled: false,
                     overflow: 'justify'
+                    //format: /
                 }
             },
             tooltip: {
@@ -122,7 +125,8 @@ Ext.define('CustomApp', {
                 floating: true,
                 borderWidth: 1,
                 backgroundColor: '#FFFFFF',
-                shadow: true
+                shadow: true,
+                enabled: false
             },
             credits: {
             enabled: false
@@ -131,7 +135,6 @@ Ext.define('CustomApp', {
         var chartDt = {
             series: [{
                 name: 'Grid Counts',
-                //data: [100, 40, 20, 80]
                 data: this.globalGridCount
             }]
         };
@@ -144,15 +147,15 @@ Ext.define('CustomApp', {
         });
         console.log('finished bar');
 
-    },
+    }, //}}}
 
-    _buildPieChart: function() {
+    _buildPieChart: function() { //{{{
 
        
       this.down('#ribbon').add({
         xtype: 'rallychart',
         flex: 1,
-        chartConfig: { // {{{
+        chartConfig: { 
           chart: {
               plotBackgroundColor: null,
               plotBorderWidth: 1,//null,
@@ -179,8 +182,8 @@ Ext.define('CustomApp', {
               }
             }
           }
-        }, // }}}
-        chartData: { // {{{
+        }, 
+        chartData: { 
           series: [{
               type: 'pie',
               name: 'Team Block',
@@ -195,12 +198,12 @@ Ext.define('CustomApp', {
                   }
               ]
           }]
-        } // }}}
+        } 
       });
 
-    },
+    }, //}}}
 
-    _buildBubbleChart: function() {
+    _buildBubbleChart: function() { //{{{
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
@@ -231,9 +234,9 @@ Ext.define('CustomApp', {
         }
       });
 
-    },
+    }, //}}}
 
-    _buildColumnChart: function() {
+    _buildColumnChart: function() { //{{{
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
@@ -303,9 +306,9 @@ Ext.define('CustomApp', {
           }
           ]
         }
-      });
+      }); 
 
-    },
+    }, //}}}
 
     // Create all grids in the left/right columns
     _buildGrids: function() {
