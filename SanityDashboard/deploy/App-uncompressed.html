@@ -18,23 +18,23 @@
       {
         xtype: 'container',
         itemId: 'ribbon',
-        html: 'ribbon!',
         width: 1500,
         height: 250,
+        hidden: true,
         border: 1,
         layout: {
           type: 'hbox',
+          align: 'stretch',
           pack: 'center'
         },
         style: {
           borderColor: '#AAA',
           borderStyle: 'solid'
-        }
-      },
+        }      },
       {
         xtype: 'container',
         itemId: 'gridsContainer',
-        padding: 25,
+        //padding: 25,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -45,11 +45,11 @@
             itemId: 'gridsLeft',
             width: 750,
             border: 1,
-            padding: 25,
+            //padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid',
-              margin: '10px'
+              //margin: '10px'
             }
           },
           {
@@ -57,48 +57,49 @@
             itemId: 'gridsRight',
             width: 750,
             border: 1,
-            padding: 25,
+            //padding: 25,
             style: {
               borderColor: '#AAA',
               borderStyle: 'solid',
-              margin: '10px'
+              //margin: '10px'
             }
           }
         ]
       }
     ],
 
+    globalGridCount: [],   // count entry for each grid
+    globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
     // App entry point
     launch: function() {
-      this._buildCharts();
+      console.log(this.globalGridMap);
       this._buildGrids();
     },
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
-      this._buildPieChart();
-      this._buildBubbleChart();
-      this._buildColumnChart();
+      console.log('now building charts');
       this._buildBarChart();
+      this._buildBubbleChart();
+      this._buildPieChart();
+      this._buildColumnChart();
     },
 
     
-    _buildBarChart: function() {
+    _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
         var chartCfg = {
+            keys : Object.keys(this.globalGridMap),
             chart: {
                 type: 'bar',
                 width: 300,
                 height: 250
             },
             title: {
-                text: 'Historic World Population by Region'
-            },
-            subtitle: {
-                text: 'Source: Wikipedia.org'
+                text: 'Story Counts by Grid'
             },
             xAxis: {
-                categories: ['Africa', 'America', 'Asia', 'Europe', 'Oceania'],
+                categories: ['Chart1', 'Chart2', 'Chart3', 'Chart4', 'Chart5','Chart6'],
                 title: {
                     text: null
                 }
@@ -106,20 +107,34 @@
             yAxis: {
                 min: 0,
                 title: {
-                text: 'Population (millions)',
+                text: '# Artifacts',
                     align: 'high'
                 },
+                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
                 labels: {
-                    overflow: 'justify'
+                    enabled: false,
+                    overflow: 'justify',
+                    //format: this.globalGridMap.keys()
+                    /* formatter: function() { 
+                        console.log('Generating yaxis labels');
+                        console.log(this);
+                        console.log(this.keys);
+                        for (key in Object.keys(this.globalGridMap)) {
+                            if (this.globalGridMap[key]==this.value)
+                                return key;
+                            return 0;
+                        }
+                     } */
                 }
             },
             tooltip: {
-                valueSuffix: ' millions'
+                valueSuffix: ' Stories'
             },
             plotOptions: {
                 bar: {
                     dataLabels: {
                         enabled: true
+                        //format: this.globalGridMap.keys()
                     }   
                 }
             },
@@ -132,34 +147,39 @@
                 floating: true,
                 borderWidth: 1,
                 backgroundColor: '#FFFFFF',
-                shadow: true
+                shadow: true,
+                enabled: false
             },
             credits: {
             enabled: false
             }
         };
-        console.log('Chart Config', chartCfg);
         var chartDt = {
             series: [{
-                name: 'Mister Foobar',
-                data: [100, 40, 20, 80]
+                name: 'Grid Counts',
+                data: this.globalGridCount
+                //dataLabels: this.globalGridMap.keys()
             }]
         };
-        console.log('Chart Data', chartDt);
+
         this.down('#ribbon').add({
             xtype: 'rallychart',
             chartConfig: chartCfg,
-            chartData: chartDt
+            chartData: chartDt,
+            flex: 1,
+            scope: this
         });
+        console.log('finished bar');
 
-    },
+    }, //}}}
 
-    _buildPieChart: function() {
+    _buildPieChart: function() { //{{{
 
        
       this.down('#ribbon').add({
         xtype: 'rallychart',
-        chartConfig: { // {{{
+        flex: 1,
+        chartConfig: { 
           chart: {
               plotBackgroundColor: null,
               plotBorderWidth: 1,//null,
@@ -186,34 +206,32 @@
               }
             }
           }
-        }, // }}}
-        chartData: { // {{{
+        }, 
+        chartData: { 
           series: [{
               type: 'pie',
-              name: 'Browser share',
+              name: 'Team Block',
               data: [
-                  ['Firefox',   45.0],
-                  ['IE',       26.8],
+                  ['Alpha',   45.0],
+                  ['Beta',       26.8],
                   {
-                      name: 'Chrome',
+                      name: 'Gamma',
                       y: 12.8,
                       sliced: true,
                       selected: true
-                  },
-                  ['Safari',    8.5],
-                  ['Opera',     6.2],
-                  ['Others',   0.7]
+                  }
               ]
           }]
-        } // }}}
+        } 
       });
 
-    },
+    }, //}}}
 
-    _buildBubbleChart: function() {
+    _buildBubbleChart: function() { //{{{
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
+        flex: 1,
         chartConfig: {
           chart: {
               width: 300,
@@ -223,26 +241,30 @@
           },
 
           title: {
-              text: 'Foo Bubbles'
+              text: 'Team Analysis'
           },
         },
         chartData: {
           series: [{
+              name: 'Team Alpha',
               data: [[97, 36, 79], [94, 74, 60], [68, 76, 58], [64, 87, 56], [68, 27, 73], [74, 99, 42], [7, 93, 87], [51, 69, 40], [38, 23, 33], [57, 86, 31]]
           }, {
+              name: 'Team Beta',
               data: [[25, 10, 87], [2, 75, 59], [11, 54, 8], [86, 55, 93], [5, 3, 58], [90, 63, 44], [91, 33, 17], [97, 3, 56], [15, 67, 48], [54, 25, 81]]
           }, {
+              name: 'Team Gamma',
               data: [[47, 47, 21], [20, 12, 4], [6, 76, 91], [38, 30, 60], [57, 98, 64], [61, 17, 80], [83, 60, 13], [67, 78, 75], [64, 12, 10], [30, 77, 82]]
           }]
         }
       });
 
-    },
+    }, //}}}
 
-    _buildColumnChart: function() {
+    _buildColumnChart: function() { //{{{
 
       this.down('#ribbon').add({
         xtype: 'rallychart',
+        flex: 1,
         chartConfig: {
           chart: {
               type: 'column',
@@ -250,10 +272,10 @@
               height: 250
           },
           title: {
-              text: 'Monthly Average Rainfall'
+              text: 'Story Counts By Team'
           },
           subtitle: {
-              text: 'Source: WorldClimate.com'
+              text: ''
           },
           xAxis: {
               categories: [
@@ -274,7 +296,7 @@
           yAxis: {
               min: 0,
               title: {
-                  text: 'Rainfall (mm)'
+                  text: 'Story Count'
               }
           },
           tooltip: {
@@ -294,39 +316,45 @@
         },
         chartData: {
           series: [{
-              name: 'Tokyo',
+              name: 'Alpha',
               data: [49.9, 71.5, 106.4, 129.2, 144.0, 176.0, 135.6, 148.5, 216.4, 194.1, 95.6, 54.4]
 
           }, {
-              name: 'New York',
+              name: 'Beta',
               data: [83.6, 78.8, 98.5, 93.4, 106.0, 84.5, 105.0, 104.3, 91.2, 83.5, 106.6, 92.3]
 
-          }]
-        }
-      });
+          }, {
+              name: 'Gamma',
+              data: [13.6, 72.8, 48.5, 83.4, 106.0, 84.5, 305.0, 74.3, 91.2, 53.5, 106.6, 12.3]
 
-    },
+          }
+          ]
+        }
+      }); 
+
+    }, //}}}
 
     // Create all grids in the left/right columns
     _buildGrids: function() {
 
-      var grids = [
+      var grids = [ //{{{
         {
-          title: 'Blocked Stories',
+          title: 'C1: Blocked Stories',
           model: 'User Story',
-          columns: ['FormattedID', 'Name', 'Owner', 'Blocked'],
+          columns: ['FormattedID', 'Name', 'Project', 'Blocked'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
             return Ext.create('Rally.data.wsapi.Filter', {
                 property: 'blocked', operator: '=', value: 'true'
             });
-          }
+          },
+          chartnum: 'C1'
         },
         {
-          title: 'Unsized Stories with Features',
+          title: 'C2: Unsized Stories with Features',
           model: 'User Story',
-          columns: ['FormattedID', 'Name', 'Owner', 'Feature'],
+          columns: ['FormattedID', 'Name', 'Project', 'Feature','PlanEstimate'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -338,12 +366,13 @@
             });
 
             return featureFilter.and(noPlanEstimateFilter);
-          }
+          },
+          chartnum: 'C2'
         },
         {
-          title: 'Unsized Stories with Release',
+          title: 'C3: Unsized Stories with Release',
           model: 'User Story',
-          columns: ['FormattedID', 'Name', 'Owner', 'Release'],
+          columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -355,10 +384,11 @@
             });
 
             return releaseFilter.and(noPlanEstimateFilter);
-          }
+          },
+          chartnum: 'C3'
         },
         {
-          title: 'Features with no stories',
+          title: 'C4: Features with no stories',
           model: 'PortfolioItem/Feature',
           columns: ['FormattedID', 'Name', 'PlannedEndDate'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
@@ -372,12 +402,13 @@
             });
 
             return userstoryFilter.and(noPlanEstimateFilter);
-          }
+          },
+          chartnum: 'C4'
         },
         {
-          title: 'Features with no Iteration stories',
+          title: 'C5: Stories attached to Feature in Release without Iteration',
           model: 'UserStory',
-          columns: ['FormattedID', 'Name', 'Feature'],
+          columns: ['FormattedID', 'Name', 'Feature','Iteration'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -389,12 +420,13 @@
             });
 
             return featureFilter.and(noPlanEstimateFilter);
-          }
+          },
+          chartnum: 'C5'
         },
         {
-          title: 'Features with unaccepted stories in past sprints',
+          title: 'C6: Features with unaccepted stories in past sprints',
           model: 'UserStory',
-          columns: ['FormattedID', 'Name', 'Feature', 'ScheduleState'],
+          columns: ['FormattedID', 'Name','Project', 'ScheduleState'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -409,18 +441,56 @@
             });
 
             return featureFilter.and(unacceptedFilter).and(enddateFilter);
-          }
+          },
+          chartnum: 'C6'
         },
 
-      ];
+      ]; //}}}
 
+      var allPromises = [];
       _.each(grids, function(grid) {
-        this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize,grid.chartnum);
+
+        promise.then({
+          success: function(count, key, data) {
+            this.globalGridCount.push(count[0]);
+            this.globalGridMap[count[1]]=count[0];
+            console.log('Grid Map', this.globalGridMap);
+            console.log(count);
+          },
+          error: function(error) {
+            console.log('single: error', error);
+          },
+          scope: this
+        }).always(function() {
+          //console.log('single - always');
+        });
+
+        allPromises.push(promise);
       }, this);
+
+      Deft.promise.Promise.all(allPromises).then({
+        success: function() {
+          console.log('all counts finished!', this.globalGridCount);
+          console.log(this.globalGridMap);
+          console.log(Object.keys(this.globalGridMap));
+          this.down('#ribbon').show();
+          this._buildCharts();
+          console.log('Got Grid Map:',this.globalGridMap);
+        },
+        failure: function(error) {
+          console.log('all error!', error);
+        },
+        scope: this
+      });
+
     },
 
     // Utility function to generically build a grid and add to a container with given specs
-    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, pageSize) {
+    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, pageSize,cnum) {
+
+      var deferred = Ext.create('Deft.Deferred');
+
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
       // new grid with store data
@@ -435,7 +505,20 @@
           model: myModel,
           context: this.context.getDataContext(),
           autoLoad: {start: 0, limit: pageSize},
-          filters: myFilters()
+          filters: myFilters(),
+          listeners: {
+            load: function(store) {
+              console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
+              var tempcount=store.getTotalCount();
+              //var temp =_.map(this.globalGridMap, function(value, key) { if (key==cnum) { return store.getTotalCount(); } return value; );
+              /*for (var key in Object.keys(this.globalGridMap)) {
+                if (key==cnum)
+                    this.globalGridMap[key]=tempcount;
+              }*/
+              console.log("this is chart ",cnum);
+              deferred.resolve([store.getTotalCount(),String(cnum)]);  // TODO more meta data?
+            }
+          }
         },
         padding: 10,
         style: {
@@ -447,6 +530,8 @@
       });
       // show me the grid!
       gridContainer.add(grid);
+
+      return deferred.promise;
 
       /* EXAMPLE for loading a store and viewing a Grid  (pre-template version)
       var blockedStoriesStore = Ext.create('Rally.data.wsapi.Store', {
@@ -479,28 +564,6 @@
     }
 
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
