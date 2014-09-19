@@ -62,13 +62,8 @@
 */
 
 /********************* PRODUCTION *****************/
-rootProject = "All Scrums";
-console = { log: function(){} };		
+//console = { log: function(){} };		
 /********************* END PRODUCTION *****************/
-
-/******************* IF DEBUG *******************
-rootProject = "Sandbox/Experiments Only"; //for debug: 
-****************** END DEBUG ********************************/
 
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
@@ -108,7 +103,7 @@ Ext.define('CustomApp', {
 	_loadProject: function(project, cb){ 
 		var me = this;
 		me.Project.load(project.ObjectID, {
-			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', '_ref'],
+			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -154,6 +149,18 @@ Ext.define('CustomApp', {
 		});
 	},
 	
+	_loadRootProject: function(projectRecord, cb){
+		var me = this, n = projectRecord.get('Name');
+		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.get('Parent')) {
+			me.RootProjectRecord = projectRecord;
+			cb();
+		} else {
+			me._loadProject(projectRecord.get('Parent'), function(parentRecord){
+				me._loadRootProject(parentRecord, cb);
+			});
+		}
+	},
+	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
@@ -170,16 +177,18 @@ Ext.define('CustomApp', {
 		}
 	},
 	
-	_getCurrentOrFirstRelease: function(){
-		var me = this;
-		var d = new Date();
-		var rs = me.ReleaseStore.getRecords();
-		if(!rs.length) return;
-		for(var i=0; i<rs.length; ++i){
-			if(new Date(rs[i].get('ReleaseDate')) >= d && new Date(rs[i].get('ReleaseStartDate')) <= d) 
-				return rs[i];
-		}
-		return rs[0]; //pick a random one then 
+	_getCurrentOrClosestRelease: function(){
+		var me = this, d = new Date(),
+			rs = me.ReleaseStore.getRecords();
+		return _.find(rs, function(r){
+			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
+		}) || _.reduce(rs, function(best, r){
+			if(best===null) return r;
+			else {
+				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
+				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
+			}
+		}, null);
 	},
 	
 	_loadValidProjects: function(cb){
@@ -231,7 +240,7 @@ Ext.define('CustomApp', {
 			},
 			filters:[{
 					property:'Name',
-					value: rootProject
+					value: me.RootProjectRecord.get('Name')
 				}
 			],
 			listeners:{
@@ -397,6 +406,46 @@ Ext.define('CustomApp', {
 		me.DependenciesParsedData = {Predecessors:predDepsList};
 	},
 	
+	/************************************************** MSGBOX config ****************************************************/
+	
+	_alert: function(title, str){
+		var me = this;
+		Ext.MessageBox.alert(title, str).setY(me._msgBoxY);
+		setTimeout(function(){ 
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 10);
+	},
+	
+	_confirm: function(title, str, fn){
+		var me = this;
+		Ext.MessageBox.confirm(title, str, fn).setY(me._msgBoxY);
+		setTimeout(function(){
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 10);
+	},
+	
+	_applyMessageBoxConfig: function(){
+		function getOffsetTop(el){ return (el.parentNode ? el.offsetTop + getOffsetTop(el.parentNode) : 0); }
+		
+		var me = this, w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
+		
+		function setMsgBoxY(){
+			var ph = p.getWindowHeight(), 
+				ps = p.getScrollY(), 
+				ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			me._msgBoxY = iyOffset<0 ? 0 : iyOffset;
+		}
+		setMsgBoxY();
+		p.onresize = setMsgBoxY;
+		p.onscroll = setMsgBoxY;
+	},
+	
 	/*************************************************** DEFINE MODELS ******************************************************/
 	_defineModels: function(){
 	
@@ -445,15 +494,16 @@ Ext.define('CustomApp', {
 	},
 	
 	/******************************************************* STATE VARIABLES / Reloading ***********************************/
-	_isEditing: false,
+	_isEditingRisks: 0,
+	_isEditingDeps: 0,
 
 	_reloadRisksStores: function(){
 		var me = this;						
-		if(me.RisksFeatureStore && !me._isEditing) {
+		if(me.RisksFeatureStore && !me._isEditingRisks) {
 			me.RisksFeatureStore.load({ 
 				callback: function(records, operation){
 					me._parseRisksData();
-					if(me.CustomRisksStore && !me._isEditing)					
+					if(me.CustomRisksStore && !me._isEditingRisks)					
 						me.CustomRisksStore.load();
 				}
 			});
@@ -462,13 +512,13 @@ Ext.define('CustomApp', {
 	
 	_reloadDependenciesStores: function(){
 		var me = this;
-		if(me.DependenciesUserStoryStore && me._isEditing) {
+		if(me.DependenciesUserStoryStore && !me._isEditingDeps) {
 			me.DependenciesUserStoryStore.load({ 
 				callback: function(records, operation){
 					me._buildDependenciesData(); //reparse the data
-					if(me.CustomPredDepStore && me._isEditing)
+					if(me.CustomPredDepStore && !me._isEditingDeps)
 						me.CustomPredDepStore.load();
-					if(me.CustomSuccDepStore && me._isEditing)
+					if(me.CustomSuccDepStore && !me._isEditingDeps)
 						me.CustomSuccDepStore.load();
 				}
 			});
@@ -476,11 +526,13 @@ Ext.define('CustomApp', {
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-    _reloadEverything:function(){
+  
+	_reloadEverything:function(){
 		var me = this;
 		me.removeAll();
 
-		me._isEditing = false;
+		me._isEditingDeps = 0;
+		me._isEditingRisks = 0;
 		
 		//load the release picker
 		me._loadReleasePicker();
@@ -505,31 +557,35 @@ Ext.define('CustomApp', {
 			return;
 		}
 		me._defineModels();
+		me._applyMessageBoxConfig();
+		
 		setInterval(function(){ me._reloadRisksStores();}, 10000); 
 		setInterval(function(){ me._reloadDependenciesStores();}, 10000); 
 		me._loadModels(function(){
-			me._loadValidProjects(function(){
-				var scopeProject = me.getContext().getProject();
-				me._loadProject(scopeProject, function(scopeProjectRecord){
-					me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
-						if(trainRecord){
-							me.TrainRecord = trainRecord; 
-							console.log('train loaded:', trainRecord);
-							me._loadReleases(function(){
-								var currentRelease = me._getCurrentOrFirstRelease();
-								if(currentRelease){
-									me.ReleaseRecord = currentRelease;
-									console.log('release loaded', currentRelease);
-									me._reloadEverything();
-								} else {
-									me.removeAll();
-									me._showError('This team has no releases');
-								}
-							});
-						} else{
-							me.removeAll();
-							me._showError('Please scope to a valid team for release planning');
-						}
+			var scopeProject = me.getContext().getProject();
+			me._loadProject(scopeProject, function(scopeProjectRecord){
+				me._loadRootProject(scopeProjectRecord, function(){
+					me._loadValidProjects(function(){
+						me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
+							if(trainRecord){
+								me.TrainRecord = trainRecord; 
+								console.log('train loaded:', trainRecord);
+								me._loadReleases(function(){
+									var currentRelease = me._getCurrentOrClosestRelease();
+									if(currentRelease){
+										me.ReleaseRecord = currentRelease;
+										console.log('release loaded', currentRelease);
+										me._reloadEverything();
+									} else {
+										me.removeAll();
+										me._showError('This team has no releases');
+									}
+								});
+							} else{
+								me.removeAll();
+								me._showError('Please scope to a valid team for release planning');
+							}
+						});
 					});
 				});
 			});
@@ -755,9 +811,7 @@ Ext.define('CustomApp', {
 				width:195,
 				resizable:false,
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }		
 			},{
 				text:'Impact', 
 				dataIndex:'Impact',
@@ -766,9 +820,7 @@ Ext.define('CustomApp', {
 				width:200,
 				resizable:false,
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }
 			},{
 				text:'Status',	
 				dataIndex:'Status',
@@ -796,9 +848,7 @@ Ext.define('CustomApp', {
 				},
 				resizable:false,
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }
 			},{
 				text:'Contact', 
 				dataIndex:'Contact',
@@ -807,9 +857,7 @@ Ext.define('CustomApp', {
 				editor: 'textfield',
 				sortable:true,
 				resizable:false,
-				renderer:function(val, meta){
-					return val || '-';
-				}			
+				renderer:function(val){ return val || '-'; }
 			},{
 				text:'Needed By',	
 				dataIndex:'Checkpoint',
@@ -832,9 +880,7 @@ Ext.define('CustomApp', {
 					}
 				},
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }
 			},{
 				text:'',
 				width:80,
@@ -852,6 +898,7 @@ Ext.define('CustomApp', {
 							var realRiskData = removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
 							for(var key in realRiskData)
 								riskRecord.set(key, realRiskData[key]);
+							me._isEditingRisks--;
 						}
 					};
 				}
@@ -872,19 +919,19 @@ Ext.define('CustomApp', {
 						width:70,
 						handler: function(){
 							if(!riskRecord.get('Checkpoint')){
-								alert('You must set the Checkpoint for this risk');
+								me._alert('ERROR', 'You must set the Checkpoint for this risk');
 								return;
 							} else if(!riskRecord.get('Description')){
-								alert('You must set the Description for this risk');
+								me._alert('ERROR', 'You must set the Description for this risk');
 								return;
 							} else if(!riskRecord.get('Impact')){
-								alert('You must set the Impact for this risk');
+								me._alert('ERROR', 'You must set the Impact for this risk');
 								return;
 							} else if(!riskRecord.get('Status')){
-								alert('You must set the Status for this risk');
+								me._alert('ERROR', 'You must set the Status for this risk');
 								return;
 							} else if(!riskRecord.get('Contact')){
-								alert('You must set the Contact for this risk');
+								me._alert('ERROR', 'You must set the Contact for this risk');
 								return;
 							}	
 							me.RisksGrid.setLoading(true);
@@ -896,6 +943,7 @@ Ext.define('CustomApp', {
 									
 									var lastAction = function(){ //last thing to do!
 										riskRecord.set('Edited', false);
+										me._isEditingRisks--;
 										me.RisksGrid.setLoading(false);
 									};
 										
@@ -923,7 +971,7 @@ Ext.define('CustomApp', {
 
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
-            title: 'Risks',
+      title: 'Risks',
 			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:400,
 			x:0,
@@ -941,20 +989,25 @@ Ext.define('CustomApp', {
 				getRowClass: function(){ return 'intel-row-35px';}
 			},
 			listeners: {
-				beforeedit: function(){
-					me._isEditing = true;
+				beforeedit: function(editor, e){
+					var risksRecord = e.record;
+					if(!risksRecord.get('Edited')) me._isEditingRisks++; //if first edit on record
 				},
-				canceledit: function(){
-					me._isEditing = false;
+				canceledit: function(editor, e){
+					var risksRecord = e.record;
+					if(!risksRecord.get('Edited')) me._isEditingRisks--; //if first edit on record failed
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
 						risksRecord = e.record,
 						field = e.field,
 						value = e.value,
-						originalValue = e.originalValue;					
-					me._isEditing = false;					
-					if(value === originalValue) return;
+						originalValue = e.originalValue;				
+					
+					if(value === originalValue) { 
+						if(!risksRecord.get('Edited')) me._isEditingRisks--;//if first edit on record failed
+						return; 
+					}			
 					risksRecord.set('Edited', true);
 				}
 			},
@@ -992,16 +1045,15 @@ Ext.define('CustomApp', {
 			};
 
 			//update or append to the cache, this predDepData
-			if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
-				for(i=0;i<cachePreds.length; ++i){
-					dpdp = cachePreds[i];
-					if(dpdp.DependencyID === predDepData.DependencyID){
-						cachePreds[i] = predDepData;
-						parseDataAdded = true; break;
-					}
+			for(i=0;i<cachePreds.length; ++i){
+				dpdp = cachePreds[i];
+				if(dpdp.DependencyID === predDepData.DependencyID){
+					cachePreds[i] = predDepData;
+					parseDataAdded = true; break;
 				}
-				if(!parseDataAdded) cachePreds.push(predDepData);	
 			}
+			if(!parseDataAdded) cachePreds.push(predDepData);	
+
 			var str = JSON.stringify(dependencies, null, '\t');
 			if(str.length >= 32768){
 				alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
@@ -1224,7 +1276,6 @@ Ext.define('CustomApp', {
 						items: [
 							{
 								xtype: 'rallygrid',	
-								bodyCls: 'blend-in-grid',
 								width:_.reduce(teamColumnCfgs, function(sum, i){ return sum + i.width; }, 0),
 								rowLines:false,
 								flex:1,
@@ -1232,9 +1283,12 @@ Ext.define('CustomApp', {
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
-										if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-no-team-dep-selected';
+										if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-team-dep-row';
 										else return 'intel-row-35px';
 									}
+								},
+								listeners: {
+									selectionchange: function(){ this.getSelectionModel().deselectAll(); }
 								},
 								hideHeaders:true,
 								showRowActionsColumn:false,
@@ -1294,7 +1348,7 @@ Ext.define('CustomApp', {
 
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
-            title: "Dependencies",
+      title: "Dependencies",
 			width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:800,
 			x:0, y:500,
@@ -1314,11 +1368,13 @@ Ext.define('CustomApp', {
 				}
 			},
 			listeners: {
-				beforeedit: function(){
-					me._isEditing = true;
+				beforeedit: function(editor, e){
+					var predDepRecord = e.record;
+					if(!predDepRecord.get('Edited')) me._isEditingDeps++; //if first edit on record
 				},
-				canceledit: function(){
-					me._isEditing = false;
+				canceledit: function(editor, e){
+					var predDepRecord = e.record;
+					if(!predDepRecord.get('Edited')) me._isEditingDeps--; //if first edit on record failed
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -1326,9 +1382,11 @@ Ext.define('CustomApp', {
 						field = e.field,
 						value = e.value,
 						originalValue = e.originalValue;	
-					console.log('predDep edit:', predDepRecord, field, value, originalValue);
-					if(value === originalValue) return;
 					
+					if(value === originalValue) { 
+						if(!predDepRecord.get('Edited')) me._isEditingDeps--;//if first edit on record failed
+						return; 
+					} 
 					predDepRecord.set('Edited', true);
 					
 					me.PredDepGrid.setLoading(true);
@@ -1341,7 +1399,8 @@ Ext.define('CustomApp', {
 							
 							/***************************** UPDATE THE PRED USER STORIES *********************/
 							var lastAction = function(){ //last thing to do!												
-								predDepRecord.set('Edited', false);		
+								predDepRecord.set('Edited', false);	
+								me._isEditingDeps--;
 								me.PredDepGrid.setLoading(false);
 							};
 							

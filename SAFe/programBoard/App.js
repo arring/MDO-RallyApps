@@ -62,13 +62,8 @@
 */
 
 /********************* PRODUCTION *****************/
-rootProject = "All Scrums";
 //console = { log: function(){} };		
 /********************* END PRODUCTION *****************/
-
-/******************* IF DEBUG *******************/
-//rootProject = "Sandbox/Experiments Only"; //for debug: 
-/****************** END DEBUG ********************************/
 
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
@@ -123,7 +118,7 @@ Ext.define('CustomApp', {
 	_loadReleases: function(cb){ 
 		var me = this;
 		
-		// so we have 2 different filters: for a team in a train, a team not in a train (DCD, HVE)
+		// so we have 2 different filters: for a team in a train, a team not in a train (DCD, HVE), 
 		var filterString = Ext.create('Rally.data.wsapi.Filter', {
 			property:'Project.ObjectID',
 			value: me.ProjectRecord.get('ObjectID')
@@ -200,6 +195,18 @@ Ext.define('CustomApp', {
 		store.load();
 	},
 	
+	_loadRootProject: function(projectRecord, cb){
+		var me = this, n = projectRecord.get('Name');
+		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.get('Parent')) {
+			me.RootProjectRecord = projectRecord;
+			cb();
+		} else {
+			me._loadProject(projectRecord.get('Parent'), function(parentRecord){
+				me._loadRootProject(parentRecord, cb);
+			});
+		}
+	},
+	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
@@ -216,12 +223,18 @@ Ext.define('CustomApp', {
 		}
 	},
 	
-	_getCurrentOrFirstRelease: function(){
+	_getCurrentOrClosestRelease: function(){
 		var me = this, d = new Date(),
 			rs = me.ReleaseStore.getRecords();
 		return _.find(rs, function(r){
 			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
-		}) || rs.pop(); //pick a random one then 
+		}) || _.reduce(rs, function(best, r){
+			if(best===null) return r;
+			else {
+				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
+				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
+			}
+		}, null);
 	},
 	
 	_loadValidProjects: function(cb){
@@ -274,7 +287,7 @@ Ext.define('CustomApp', {
 			},
 			filters:[{
 					property:'Name',
-					value: rootProject
+					value: me.RootProjectRecord.get('Name')
 				}
 			],
 			listeners:{
@@ -800,10 +813,10 @@ Ext.define('CustomApp', {
 	
 	/******************************************************* STATE VARIABLES / Reloading ***********************************/
 
-	_isEditingTeamCommits: false,
+	_isEditingTeamCommits: false, 
 	_isEditingVelocity: false,
-	_isEditingRisks: false,
-	_isEditingDeps: false,
+	_isEditingRisks: 0, //act as counting variables for how many records are being edited
+	_isEditingDeps: 0,
 	
 	_reloadVelocityStores: function(){
 		var me = this;
@@ -863,16 +876,56 @@ Ext.define('CustomApp', {
 		}
 	},
 	
+	/************************************************** MSGBOX config ****************************************************/
+	
+	_alert: function(title, str){
+		var me = this;
+		Ext.MessageBox.alert(title, str).setY(me._msgBoxY);
+		setTimeout(function(){ 
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 10);
+	},
+	
+	_confirm: function(title, str, fn){
+		var me = this;
+		Ext.MessageBox.confirm(title, str, fn).setY(me._msgBoxY);
+		setTimeout(function(){
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 10);
+	},
+	
+	_applyMessageBoxConfig: function(){
+		function getOffsetTop(el){ return (el.parentNode ? el.offsetTop + getOffsetTop(el.parentNode) : 0); }
+		
+		var me = this, w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
+		
+		function setMsgBoxY(){
+			var ph = p.getWindowHeight(), 
+				ps = p.getScrollY(), 
+				ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			me._msgBoxY = iyOffset<0 ? 0 : iyOffset;
+		}
+		setMsgBoxY();
+		p.onresize = setMsgBoxY;
+		p.onscroll = setMsgBoxY;
+	},
+	
 	/******************************************************* LAUNCH ********************************************************/
-   
+  
 	_reloadEverything:function(){
 		var me = this;
 		me.removeAll();
 		
 		me._isEditingTeamCommits = false;
 		me._isEditingVelocity = false;
-		me._isEditingRisks = false;
-		me._isEditingDeps = false;
+		me._isEditingRisks = 0;
+		me._isEditingDeps = 0;
 		
 		//load the release picker
 		me._loadReleasePicker();
@@ -906,6 +959,7 @@ Ext.define('CustomApp', {
 		var me = this;
 		me._showError('Loading Data...');
 		me._defineModels();
+		me._applyMessageBoxConfig();
 		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 			me.removeAll();
 			me._showError('You do not have permissions to edit this project');
@@ -916,33 +970,35 @@ Ext.define('CustomApp', {
 		setInterval(function(){ me._reloadRisksStores();}, 12000); 
 		setInterval(function(){ me._reloadDependenciesStores();}, 12000); 
 		me._loadModels(function(){
-			me._loadValidProjects(function(){
-				var scopeProject = me.getContext().getProject();
-				me._loadProject(scopeProject, function(scopeProjectRecord){ 
-					me.ProjectRecord = _.find(me.ValidProjects, function(validProject){ //must have people in it
-						return validProject.data.ObjectID === scopeProjectRecord.data.ObjectID;
-					});
-					if(me.ProjectRecord){
-						me._projectInWhichTrain(me.ProjectRecord, function(trainRecord){
-							me.TrainRecord = trainRecord; 
-							console.log('train loaded:', trainRecord);
-							me._loadReleases(function(){
-								var currentRelease = me._getCurrentOrFirstRelease();
-								if(currentRelease){
-									me.ReleaseRecord = currentRelease;
-									console.log('release loaded', currentRelease);
-									me._reloadEverything();
-								} else {
-									me.removeAll();
-									me._showError('This team has no releases');
-								}
-							});
+			var scopeProject = me.getContext().getProject();
+			me._loadProject(scopeProject, function(scopeProjectRecord){
+				me._loadRootProject(scopeProjectRecord, function(){
+					me._loadValidProjects(function(){
+						me.ProjectRecord = _.find(me.ValidProjects, function(validProject){ //must have people in it
+							return validProject.data.ObjectID === scopeProjectRecord.data.ObjectID;
 						});
-						
-					} else{
-						me.removeAll();
-						me._showError('Please scope to a valid team for release planning');
-					}
+						if(me.ProjectRecord){
+							me._projectInWhichTrain(me.ProjectRecord, function(trainRecord){
+								me.TrainRecord = trainRecord; 
+								console.log('train loaded:', trainRecord);
+								me._loadReleases(function(){
+									var currentRelease = me._getCurrentOrClosestRelease();
+									if(currentRelease){
+										me.ReleaseRecord = currentRelease;
+										console.log('release loaded', currentRelease);
+										me._reloadEverything();
+									} else {
+										me.removeAll();
+										me._showError('This team has no releases');
+									}
+								});
+							});
+							
+						} else{
+							me.removeAll();
+							me._showError('Please scope to a valid team for release planning');
+						}
+					});
 				});
 			});
 		});
@@ -1034,7 +1090,7 @@ Ext.define('CustomApp', {
 			tcs[projectID].Objective = tc.Objective;		
 			var str = JSON.stringify(tcs, null, '\t');
 			if(str.length >= 32768){
-				alert('ERROR: TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
 			}
 			featureRecord.set('c_TeamCommits', str);
@@ -1449,7 +1505,7 @@ Ext.define('CustomApp', {
 				}
 				var str = JSON.stringify(risks, null, '\t');
 				if(str.length >= 32768){
-					alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					me._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 					if(cb) cb();
 				}
 				featureRecord.set('c_Risks', str);
@@ -1486,7 +1542,7 @@ Ext.define('CustomApp', {
 			if(!parseDataAdded) me.RisksParsedData.push(riskData);
 			var str = JSON.stringify(risks, null, '\t');
 			if(str.length >= 32768){
-				alert('ERROR: Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				me._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
 			}
 			featureRecord.set('c_Risks', str);
@@ -1501,7 +1557,7 @@ Ext.define('CustomApp', {
 		function getDirtyType(localRiskRecord, realRiskData){
 			var riskData = localRiskRecord.data;
 			if(!realRiskData)	return riskData.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
-			else				return riskData.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
+			else return riskData.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
 		}
 		
 		/*************************************************************************************************************/
@@ -1575,7 +1631,8 @@ Ext.define('CustomApp', {
 					displayField: 'FormattedID'
 				},			
 				resizable:false,
-				sortable:true
+				sortable:true,
+				renderer:function(val){ return val || '-'; }		
 			},{
 				text:'Feature', 
 				dataIndex:'FeatureName',
@@ -1606,7 +1663,8 @@ Ext.define('CustomApp', {
 					displayField: 'Name'
 				},
 				resizable:false,
-				sortable:true		
+				sortable:true	,
+				renderer:function(val){ return val || '-'; }			
 			},{
 				text:'Risk Description', 
 				dataIndex:'Description',
@@ -1615,9 +1673,7 @@ Ext.define('CustomApp', {
 				editor: 'textfield',
 				resizable:false,
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }		
 			},{
 				text:'Impact', 
 				dataIndex:'Impact',
@@ -1626,9 +1682,7 @@ Ext.define('CustomApp', {
 				resizable:false,
 				sortable:true,
 				editor: 'textfield',
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }		
 			},{
 				text:'Status(ROAM)',
 				dataIndex:'Status',
@@ -1668,9 +1722,7 @@ Ext.define('CustomApp', {
 				editor: 'textfield',
 				sortable:true,
 				resizable:false,
-				renderer:function(val, meta){
-					return val || '-';
-				}			
+				renderer:function(val){ return val || '-'; }			
 			},{
 				text:'Checkpoint',	
 				dataIndex:'Checkpoint',
@@ -1693,9 +1745,7 @@ Ext.define('CustomApp', {
 					}
 				},
 				sortable:true,
-				renderer:function(val, meta){
-					return val || '-';
-				}		
+				renderer:function(val){ return val || '-'; }		
 			},{
 				text:'',
 				width:80,
@@ -1712,7 +1762,8 @@ Ext.define('CustomApp', {
 						handler: function(){
 							var realRiskData = removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
 							for(var key in realRiskData)
-								riskRecord.set(key, realRiskData[key]);
+								riskRecord.set(key, realRiskData[key]);	
+							me._isEditingRisks--; //it is no longer in an edited state
 						}
 					};
 				}
@@ -1724,7 +1775,7 @@ Ext.define('CustomApp', {
 				renderer: function(value, meta, riskRecord){
 					var realRiskData = removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
 					var dirtyType = getDirtyType(riskRecord, realRiskData);
-					if(dirtyType === 'New') dirtyType = 'Save';
+					if(dirtyType === 'New') dirtyType = 'Save'; //setEditing only if save or resave is true
 					else if(dirtyType === 'Edited') dirtyType = 'Resave';
 					else return;
 					return {
@@ -1732,24 +1783,25 @@ Ext.define('CustomApp', {
 						text:dirtyType,
 						width:70,
 						handler: function(){
-							if(!riskRecord.get('Checkpoint')){
-								alert('You must set the Checkpoint date for this risk');
+							if(!riskRecord.get('FormattedID') || !riskRecord.get('FeatureName')){
+								me._alert('ERROR', 'You must set the Feature affected by this risk');
+								return;
+							} else if(!riskRecord.get('Checkpoint')){
+								me._alert('ERROR', 'You must set the Checkpoint date for this risk');
 								return;
 							} else if(!riskRecord.get('Description')){
-								alert('You must set the Description date for this risk');
+								me._alert('ERROR', 'You must set the Description date for this risk');
 								return;
 							} else if(!riskRecord.get('Impact')){
-								alert('You must set the Impact date for this risk');
+								me._alert('ERROR', 'You must set the Impact date for this risk');
 								return;
 							} else if(!riskRecord.get('Status')){
-								alert('You must set the Status date for this risk');
+								me._alert('ERROR', 'You must set the Status date for this risk');
 								return;
 							} else if(!riskRecord.get('Contact')){
-								alert('You must set the Contact date for this risk');
+								me._alert('ERROR', 'You must set the Contact date for this risk');
 								return;
 							}	
-							if(me._isEditingRisks) return;
-							me._isEditingRisks = true;
 							me.RisksGrid.setLoading(true);
 							me.RisksFeatureStore.load({
 								callback: function(records, operation){
@@ -1759,7 +1811,7 @@ Ext.define('CustomApp', {
 									
 									var lastAction = function(){
 										riskRecord.set('Edited', false);	
-										me._isEditingRisks = false;
+										me._isEditingRisks--;
 										me.RisksGrid.setLoading(false);			
 									};
 										
@@ -1793,9 +1845,8 @@ Ext.define('CustomApp', {
 						text:'Delete',
 						width:70,
 						handler: function(){
-							if(me._isEditingRisks) return;
-							me._isEditingRisks = true;
-							if(confirm('Confirm Risk Deletion')){
+							me._confirm('Confirm', 'Delete Risk?', function(msg){
+								if(msg.toLowerCase() !== 'yes') return;
 								me.RisksGrid.setLoading(true);
 								me.RisksFeatureStore.load({
 									callback: function(records, operation){
@@ -1804,8 +1855,8 @@ Ext.define('CustomApp', {
 										var realRiskData = removeRiskFromList(riskRecordData.RiskID, me.RisksParsedData.slice(0));
 										
 										var lastAction = function(){
+											if(riskRecord.get('Edited')) me._isEditingRisks--; //only decrement editing if it was in edited state
 											me.CustomRisksStore.remove(riskRecord);
-											me._isEditingRisks = false;
 											me.RisksGrid.setLoading(false);
 										};
 										
@@ -1824,7 +1875,7 @@ Ext.define('CustomApp', {
 										else nextAction();									
 									}
 								});
-							}
+							});
 						}
 					};
 				}
@@ -1840,13 +1891,12 @@ Ext.define('CustomApp', {
 			style:'margin-bottom:10px',
 			listeners:{
 				click: function(){
-					var randomFeature = me.RisksFeatureStore.first();
-					if(!randomFeature) alert('No Features for this Release!');
+					if(!me.RisksFeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
 					else if(me.CustomRisksStore) {
 						var model = Ext.create('IntelRisk', {
 							RiskID: (new Date() * 1) + '' + (Math.random() * 10000000),
-							FormattedID: randomFeature.get('FormattedID'),
-							FeatureName: randomFeature.get('Name'),
+							FormattedID: '',
+							FeatureName: '',
 							Description: '',
 							Impact: '',
 							Status: '',
@@ -1856,6 +1906,7 @@ Ext.define('CustomApp', {
 						});
 						me.CustomRisksStore.insert(0, [model]);
 						me.RisksGrid.getSelectionModel().select(model);
+						me._isEditingRisks++;
 					}
 				}
 			}
@@ -1881,11 +1932,13 @@ Ext.define('CustomApp', {
 				getRowClass: function(){ return 'intel-row-35px';}
 			},
 			listeners: {
-				beforeedit: function(){
-					me._isEditingRisks = true;
+				beforeedit: function(editor, e){
+					var risksRecord = e.record;
+					if(!risksRecord.get('Edited')) me._isEditingRisks++; //if first edit on record
 				},
-				canceledit: function(){
-					me._isEditingRisks = false;
+				canceledit: function(editor, e){
+					var risksRecord = e.record;
+					if(!risksRecord.get('Edited')) me._isEditingRisks--; //if first edit on record failed
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -1894,7 +1947,10 @@ Ext.define('CustomApp', {
 						value = e.value,
 						originalValue = e.originalValue;					
 								
-					if(value === originalValue) { me._isEditingRisks = false; return; }
+					if(value === originalValue) { 
+						if(!risksRecord.get('Edited')) me._isEditingRisks--;//if first edit on record failed
+						return; 
+					} 
 					var previousEdit = risksRecord.get('Edited');
 					risksRecord.set('Edited', true);
 					
@@ -1903,16 +1959,17 @@ Ext.define('CustomApp', {
 						featureRecord = me.RisksFeatureStore.findRecord('Name', value, 0, false, true, true);
 						if(!featureRecord){
 							risksRecord.set('FeatureName', originalValue);
-							risksRecord.set('Edited', previousEdit);//not edited
+							risksRecord.set('Edited', previousEdit);
+							if(!previousEdit) me._isEditingRisks--; //if first edit on record failed
 						} else risksRecord.set('FormattedID', featureRecord.get('FormattedID'));
 					} else if(field === 'FormattedID'){
 						featureRecord = me.RisksFeatureStore.findRecord('FormattedID', value, 0, false, true, true);
 						if(!featureRecord) {
 							risksRecord.set('FormattedID', originalValue);
-							risksRecord.set('Edited', previousEdit); //not edited
+							risksRecord.set('Edited', previousEdit); 
+							if(!previousEdit) me._isEditingRisks--; //if first edit on record failed
 						} else risksRecord.set('FeatureName', featureRecord.get('Name'));
 					}
-					me._isEditingRisks = false;
 				}
 			},
 			showRowActionsColumn:false,
@@ -2027,7 +2084,7 @@ Ext.define('CustomApp', {
 			syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Predecessors', function(){ 
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
-					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
 					if(cb) cb();
 				}
 				userStoryRecord.set('c_Dependencies', str);
@@ -2074,7 +2131,7 @@ Ext.define('CustomApp', {
 			syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Successors', function(){ 
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
-					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
 					if(cb) cb();
 				}
 				userStoryRecord.set('c_Dependencies', str);
@@ -2124,7 +2181,7 @@ Ext.define('CustomApp', {
 			syncCollection(userStoryRecord, predUSlist, [], 'Predecessors', function(){
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
-					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
 					if(cb) cb();
 				}
 				userStoryRecord.set('c_Dependencies', str);
@@ -2189,7 +2246,7 @@ Ext.define('CustomApp', {
 			syncCollection(userStoryRecord, succUSlist, [], 'Successors', function(){
 				var str = JSON.stringify(dependencies, null, '\t');
 				if(str.length >= 32768){
-					alert('ERROR: Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+					me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
 					if(cb) cb();
 				}
 				userStoryRecord.set('c_Dependencies', str);
@@ -2307,7 +2364,8 @@ Ext.define('CustomApp', {
 					},
 					displayField: 'FormattedID'
 				},
-				sortable:true
+				sortable:true,
+				renderer: function(val){ return val || '-'; }		
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
@@ -2344,7 +2402,8 @@ Ext.define('CustomApp', {
 					},
 					displayField: 'Name'
 				},
-				sortable:true		
+				sortable:true	,
+				renderer: function(val){ return val || '-'; }			
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
@@ -2353,9 +2412,7 @@ Ext.define('CustomApp', {
 				tdCls: 'intel-editor-cell',
 				editor: 'textfield',
 				sortable:true,
-				renderer: function(val){
-					return val || '-';
-				}				
+				renderer: function(val){ return val || '-'; }				
 			},{
 				dataIndex:'Checkpoint',
 				width:80,
@@ -2377,10 +2434,8 @@ Ext.define('CustomApp', {
 						}
 					}
 				},
-				renderer: function(val){
-					return val || '-';
-				},
-				sortable:true
+				sortable:true,
+				renderer: function(val){ return val || '-'; }
 			},{
 				text:'Teams Depended On',
 				html:	'<div class="pred-dep-header" style="width:80px !important;"></div>' +
@@ -2408,7 +2463,7 @@ Ext.define('CustomApp', {
 							},
 							listeners: {
 								load: function(depTeamStore, depTeamRecords){
-									predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+									var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 									var predecessors = predDepRecord.get('Predecessors').slice(0);				
 									Outer:
 									for(var i = 0;i<depTeamRecords.length;++i){
@@ -2450,7 +2505,7 @@ Ext.define('CustomApp', {
 								if(val && projectRecord) return projectRecord.get('Name');
 								else {
 									meta.tdCls += 'intel-editor-cell';
-									return 'Select Team';
+									return '-';
 								}
 							},
 							editor: {
@@ -2553,10 +2608,11 @@ Ext.define('CustomApp', {
 								margin:'0 4 0 0',
 								handler: function(){
 									if(me.PredDepTeamStores[depID]) {
-										predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+										var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 										var newItem = newTeamDep();
 										me.PredDepTeamStores[depID].add(Ext.create('IntelDepTeam', newItem));
 										predDepRecord.data.Predecessors.push(newItem);
+										if(!predDepRecord.get('Edited')) me._isEditingDeps++; //first edit to this dep
 										predDepRecord.set('Edited', true);	
 									}
 								}
@@ -2574,32 +2630,36 @@ Ext.define('CustomApp', {
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
-										if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-no-team-dep-selected';
+										if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-team-dep-row';
 										else return 'intel-row-35px';
 									}
 								},
 								listeners: {
 									beforeedit: function(editor, e){
 										if(!!e.value) return false; //don't edit if has value
-										me._isEditing = true;
+										var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+										if(!predDepRecord.get('Edited')) me._isEditingDeps++; //first edit to this dep
 									},
 									canceledit: function(){
-										me._isEditing = false;
+										var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+										if(!predDepRecord.get('Edited')) me._isEditingDeps--; //first edit to this dep failed
 									},
 									edit: function(editor, e){	
 										var depTeamRecord = e.record,
 											field = e.field,
 											value = e.value,
 											originalValue = e.originalValue,
-											i;
-										me._isEditing = false;
+											i, predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 										
-										predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+										if(value === originalValue) {
+											if(!predDepRecord.get('Edited')) me._isEditingDeps--; //first edit to this dep failed
+											return;
+										}
 										
-										console.log('teamDepEdit', field, value, originalValue);
 										var previousEdit = predDepRecord.get('Edited');
 										predDepRecord.set('Edited', true);
 										var predecessors = predDepRecord.get('Predecessors');
+										
 										if(field === 'PID'){
 											var projectRecord = _.find(me.ValidProjects, function(projectRecord){
 												return projectRecord.get('Name') == value;
@@ -2607,20 +2667,23 @@ Ext.define('CustomApp', {
 											if(!projectRecord) {
 												depTeamRecord.set('PID', originalValue);
 												predDepRecord.set('Edited', previousEdit);
+												if(!previousEdit) me._isEditingDeps--; //first edit to this dep failed
 												return;
 											} else {
 												for(i = 0;i<predecessors.length;++i){
 													if(predecessors[i].PID === ''+projectRecord.get('ObjectID')){
-														alert(value + ' already included in this dependency');
+														me._alert('ERROR', value + ' already included in this dependency');
 														depTeamRecord.set('PID', originalValue);
 														predDepRecord.set('Edited', previousEdit);
+														if(!previousEdit) me._isEditingDeps--; //first edit to this dep failed
 														return;
 													}
 												}
 												if(projectRecord.get('ObjectID') === me.ProjectRecord.get('ObjectID')){
-													alert('You cannot depend on yourself');
+													me._alert('ERROR', 'You cannot depend on yourself');
 													depTeamRecord.set('PID', originalValue);
 													predDepRecord.set('Edited', previousEdit);
+													if(!previousEdit) me._isEditingDeps--; //first edit to this dep failed
 													return;
 												}
 												depTeamRecord.set('PID', projectRecord.get('ObjectID'));
@@ -2633,7 +2696,8 @@ Ext.define('CustomApp', {
 												break; 
 											}
 										}
-									}
+									},
+									selectionchange: function(){ this.getSelectionModel().deselectAll(); }
 								},
 								hideHeaders:true,
 								showRowActionsColumn:false,
@@ -2679,6 +2743,7 @@ Ext.define('CustomApp', {
 								else predDepRecord.set(key, realDep[key]);
 							}
 							me.PredDepTeamStores[depID].load();
+							me._isEditingDeps--; //it is no longer in an edited state
 						}
 					};
 				}
@@ -2699,18 +2764,17 @@ Ext.define('CustomApp', {
 						text:dirtyType,
 						handler: function(){
 							//validate fields first
+							if(predDepRecord.get('FormattedID') === '' || predDepRecord.get('UserStoryName') === ''){
+								me._alert('ERROR', 'UserStory not selected'); return; }
 							if(predDepRecord.get('Description') === ''){
-								alert('Cannot Save: Description is empty'); return; }
+								me._alert('ERROR', 'Description is empty'); return; }
 							if(predDepRecord.get('Checkpoint') === ''){
-								alert('Cannot Save: Checkpoint is empty'); return; }
+								me._alert('ERROR', 'Checkpoint is empty'); return; }
 							var predecessors = predDepRecord.get('Predecessors');
 							if(predecessors.length === 0){
-								alert('Cannot Save: Must specify a team you depend on'); return; }
-							for(var i = 0;i<predecessors.length;++i)
-								if(predecessors[i].PID === ''){
-									alert('Cannot Save: All Team Names must be valid'); return; }
-							if(me._isEditingDeps) return;
-							me._isEditingDeps = true;
+								me._alert('ERROR', 'Must specify a team you depend on'); return; }
+							if(_.find(predecessors, function(p){ return p.PID === ''; })){
+								me._alert('ERROR', 'All Team Names must be valid'); return; }
 							me.PredDepGrid.setLoading(true);
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
@@ -2767,7 +2831,7 @@ Ext.define('CustomApp', {
 													
 													var lastAction = function(){ //last thing to do!											
 														predDepRecord.set('Edited', false);	
-														me._isEditingDeps = false;
+														me._isEditingDeps--; //it is no longer in an edited state
 														me.PredDepGrid.setLoading(false);		
 													};
 													
@@ -2801,8 +2865,8 @@ Ext.define('CustomApp', {
 														me._loadRandomUserStory(project.get('_ref'), function(us){
 															if(!us){
 																me.PredDepGrid.setLoading(false);
-																me._isEditingDeps = false;
-																alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
+																//DONT me._isEditingDeps-- here!
+																me._alert('ERROR', 'Project ' + project.get('Name') + ' has no user stories, cannot continue');
 																return;
 															}
 															updatedTeamDepsCallbacks.push(function(){ // got deleted from user story
@@ -2871,8 +2935,8 @@ Ext.define('CustomApp', {
 										me._loadRandomUserStory(project.get('_ref'), function(us){
 											if(!us){
 												me.PredDepGrid.setLoading(false);
-												me._isEditing = false;
-												alert('Project ' + project.get('Name') + ' has no user stories, cannot continue');
+												//DONT me._isEditingDeps-- here!
+												me._alert('ERROR', 'Project ' + project.get('Name') + ' has no user stories, cannot continue');
 												return;
 											}
 											addedTeamDepsCallbacks.push(function(){
@@ -2916,10 +2980,9 @@ Ext.define('CustomApp', {
 						xtype:'button',
 						text:'Delete',
 						handler: function(){
-							if(me._isEditingDeps) return;
-							if(confirm('Confirm Dependency Deletion')){
+							me._confirm('Confirm', 'Delete Dependency?', function(msg){
+								if(msg.toLowerCase() !== 'yes') return;
 								me.PredDepGrid.setLoading(true);
-								me._isEditingDeps = true;
 								me.DependenciesUserStoryStore.load({
 									callback: function(userStoryRecords, operation){
 										me._buildDependenciesData();
@@ -2944,10 +3007,10 @@ Ext.define('CustomApp', {
 											});
 										});
 													
-										var lastAction = function(){	//last thing to do!												
+										var lastAction = function(){	//last thing to do!	
+											if(predDepRecord.get('Edited')) me._isEditingDeps--; //only decrement editing if it was in edited state											
 											me.CustomPredDepStore.remove(predDepRecord);
 											me.PredDepGrid.setLoading(false);
-											me._isEditingDeps = false;
 										};
 										
 										var nextAction = function(){
@@ -2966,7 +3029,7 @@ Ext.define('CustomApp', {
 										else nextAction();	
 									}
 								});
-							}
+							});
 						}
 					};
 				}
@@ -2981,13 +3044,12 @@ Ext.define('CustomApp', {
 			y:720,
 			listeners:{
 				click: function(){
-					var randomUserStory = me.DependenciesReleaseUserStories[0];
-					if(!randomUserStory) alert('No User Stories for this Release!');
+					if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
 					else if(me.CustomPredDepStore) {
 						var model = Ext.create('IntelPredDep', {
 							DependencyID: (new Date() * 1) + '' + (Math.random() * 10000000),
-							FormattedID: randomUserStory.get('FormattedID'),
-							UserStoryName: randomUserStory.get('Name'),
+							FormattedID: '',
+							UserStoryName: '',
 							Description: '',
 							Checkpoint: '',
 							Predecessors:[newTeamDep()],
@@ -2995,6 +3057,7 @@ Ext.define('CustomApp', {
 						});
 						me.CustomPredDepStore.insert(0, [model]);	
 						me.PredDepGrid.getSelectionModel().select(model);
+						me._isEditingDeps++;
 					}
 				}
 			}
@@ -3002,7 +3065,7 @@ Ext.define('CustomApp', {
 		
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
-            title: "Dependencies We Have on Other Teams",
+      title: "Dependencies We Have on Other Teams",
 			width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
 			x:0, y:750,
@@ -3022,35 +3085,42 @@ Ext.define('CustomApp', {
 				}
 			},
 			listeners: {
-				beforeedit: function(){
-					me._isEditingDeps = true;
+				beforeedit: function(editor, e){
+					var predDepRecord = e.record;
+					if(!predDepRecord.get('Edited')) me._isEditingDeps++; //if first edit on record
 				},
-				canceledit: function(){
-					me._isEditingDeps = false;
+				canceledit: function(editor, e){
+					var predDepRecord = e.record;
+					if(!predDepRecord.get('Edited')) me._isEditingDeps--; //if first edit on record failed
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
 						predDepRecord = e.record,
 						field = e.field,
 						value = e.value,
-						originalValue = e.originalValue;					
-					me._isEditingDeps = false;
-					console.log('predDep edit:', predDepRecord, field, value, originalValue);
-					if(value === originalValue) return;
+						originalValue = e.originalValue;	
+						
+					if(value === originalValue) { 
+						if(!predDepRecord.get('Edited')) me._isEditingDeps--;//if first edit on record failed
+						return; 
+					} 
 					var previousEdit = predDepRecord.get('Edited');
 					predDepRecord.set('Edited', true);
+					
 					var userStoryRecord;
 					if(field === 'UserStoryName'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('Name') === value; });
 						if(!userStoryRecord){
 							predDepRecord.set('UserStoryName', originalValue);
-							predDepRecord.set('Edited', previousEdit); //not edited
+							predDepRecord.set('Edited', previousEdit); 
+							if(!previousEdit) me._isEditingDeps--; //if first edit on record failed
 						} else predDepRecord.set('FormattedID', userStoryRecord.get('FormattedID'));	
 					} else if(field === 'FormattedID'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
 						if(!userStoryRecord) {
 							predDepRecord.set('FormattedID', originalValue);
-							predDepRecord.set('Edited', previousEdit); //not edited
+							predDepRecord.set('Edited', previousEdit); 
+							if(!previousEdit) me._isEditingDeps--; //if first edit on record failed
 						} else predDepRecord.set('UserStoryName', userStoryRecord.get('Name'));	
 					}
 				}
@@ -3288,7 +3358,7 @@ Ext.define('CustomApp', {
 							var realDep = removeDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
 							for(var key in realDep)
 								succDepRecord.set(key, realDep[key]);
-							succDepRecord.set('Edited', false);
+							me._isEditingDeps--; //not editing row anymore
 						}
 					};
 				}
@@ -3306,8 +3376,6 @@ Ext.define('CustomApp', {
 						text:'Save',
 						handler:function(){
 							//no field validation needed
-							if(me._isEditingDeps) return;
-							me._isEditingDeps = true;
 							me.SuccDepGrid.setLoading(true);
 							me.DependenciesUserStoryStore.load({
 								callback: function(userStoryRecords, operation){
@@ -3322,8 +3390,8 @@ Ext.define('CustomApp', {
 									});
 									if(!project){
 										me.SuccDepGrid.setLoading(false);
-										me._isEditingDeps = false;
-										alert('could not find project ' + succDepData.SuccProjectID);
+										//DONT me._isEditingDeps--; here!
+										me._alert('ERROR', 'could not find project ' + succDepData.SuccProjectID);
 										return;
 									}													
 									if(succDepData.FormattedID) { //move it to the user story it was assigned to in a few steps
@@ -3334,7 +3402,7 @@ Ext.define('CustomApp', {
 									var lastAction = function(){ //This is the last thing to do!
 										succDepRecord.set('Edited', false);
 										me.SuccDepGrid.setLoading(false);
-										me._isEditingDeps = false;
+										me._isEditingDeps--;
 									};
 									
 									var nextAction = function(){ //2nd to last thing to do
@@ -3344,12 +3412,12 @@ Ext.define('CustomApp', {
 									};
 									
 									var alertAndDelete = function(msg){
-										alert(msg);
+										me._alert('ERROR', msg);
 										console.log('removing succDep from user story', realDepData._realFormattedID, succDepData._realFormattedID);
 										var userStoryRecord = me.DependenciesUserStoryStore.findRecord('FormattedID', realDepData._realFormattedID, 0, false, true, true);
 										if(userStoryRecord) removeSuccDep(userStoryRecord, realDepData, function(){
 											me.SuccDepGrid.setLoading(false);
-											me._isEditingDeps = false;
+											if(succDepRecord.get('Edited')) me._isEditingDeps--;
 											me.CustomSuccDepStore.remove(succDepRecord);
 										});
 									};
@@ -3422,16 +3490,18 @@ Ext.define('CustomApp', {
 			viewConfig:{
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(predDepRecord){ return 'intel-row-35px'; }
+				getRowClass: function(){ return 'intel-row-35px'; }
 			},
 			listeners: {
 				beforeedit: function(editor, e){
-					if(e.record.get('Supported') == 'No' && e.field != 'Supported') return false; //don't user story stuff if not supported
-					me._isEditingDeps = true;
-					return true;
+					var succDepRecord = e.record;
+					if(succDepRecord.get('Supported') == 'No' && e.field != 'Supported') 
+						return false; //don't user story stuff if not supported
+					if(!succDepRecord.get('Edited')) me._isEditingDeps++; //if first edit on record
 				},
-				canceledit: function(){
-					me._isEditingDeps = false;
+				canceledit: function(editor, e){
+					var succDepRecord = e.record;
+					if(!succDepRecord.get('Edited')) me._isEditingDeps--; //if first edit on record failed
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -3440,17 +3510,20 @@ Ext.define('CustomApp', {
 						value = e.value,
 						originalValue = e.originalValue;
 						
-					me._isEditingDeps = false;
-					console.log('succDep edit:', succDepRecord, field, value, originalValue);
-					if(value === originalValue) return;
+					if(value === originalValue) { 
+						if(!succDepRecord.get('Edited')) me._isEditingDeps--;//if first edit on record failed
+						return; 
+					} 
 					var previousEdit = succDepRecord.get('Edited');
 					succDepRecord.set('Edited', true);
+					
 					var userStoryRecord;
 					if(field === 'UserStoryName'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('Name') === value; });
 						if(!userStoryRecord){
 							succDepRecord.set('UserStoryName', originalValue);
-							succDepRecord.set('Edited', previousEdit); //not edited
+							succDepRecord.set('Edited', previousEdit); 
+							if(!previousEdit) me._isEditingDeps--; //if first edit on record failed
 						} else {
 							succDepRecord.set('FormattedID', userStoryRecord.get('FormattedID'));	
 							succDepRecord.set('Assigned', true);
@@ -3459,7 +3532,8 @@ Ext.define('CustomApp', {
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
 						if(!userStoryRecord) {
 							succDepRecord.set('FormattedID', originalValue);
-							succDepRecord.set('Edited', previousEdit); //not edited
+							succDepRecord.set('Edited', previousEdit); 
+							if(!previousEdit) me._isEditingDeps--; //if first edit on record failed
 						} else {
 							succDepRecord.set('UserStoryName', userStoryRecord.get('Name'));	
 							succDepRecord.set('Assigned', true);
@@ -3467,7 +3541,6 @@ Ext.define('CustomApp', {
 					}
 					else if(field === 'Supported'){ //cant be non-supported with a user story!
 						if(value == 'No'){
-							succDepRecord.set('Edited', true);
 							succDepRecord.set('Assigned', false);
 							succDepRecord.set('FormattedID', '');
 							succDepRecord.set('UserStoryName', '');

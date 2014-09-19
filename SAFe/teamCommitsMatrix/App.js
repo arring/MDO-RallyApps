@@ -2,13 +2,10 @@
 console = { log: function(){} };		
 /********************* END PRODUCTION *****************/
 
-/******************* IF DEBUG *******************
-****************** END DEBUG ********************************/
-
 Ext.define('CustomApp', {
   extend: 'Rally.app.App',
 	layout:'absolute',
-	height:2000,
+	autoScroll:false,
 		
 	/****************************************************** SHOW ERROR/TEXT MESSAGE ********************************************************/
 	_showError: function(text){
@@ -89,7 +86,7 @@ Ext.define('CustomApp', {
 				load: {
 					fn: function(releaseStore, releaseRecords){
 						console.log('releases loaded:', releaseRecords);
-						me.MatrixReleaseStore = releaseStore;
+						me.ReleaseStore = releaseStore;
 						cb();
 					},
 					single:true
@@ -271,12 +268,23 @@ Ext.define('CustomApp', {
 		});
 	},
 	
+	/*************************************************** Reload Stores ******************************************************/
+	_isReloadRefresh: false,
+	
 	_reloadMatrixStores: function(){
 		var me = this;
 		me._loadMatrixFeatures(function(){
 			me.featureTCAECache = {};
-			if(me.CustomMatrixStore)
-				me.CustomMatrixStore.load();
+			if(me.CustomMatrixStore){
+				var scroll = me.MatrixGrid.view.getEl().getScrollTop();
+				me._isReloadRefresh = true;
+				me.CustomMatrixStore.load({
+					callback: function(){
+						me.MatrixGrid.view.getEl().setScrollTop(scroll);
+						setTimeout(function(){ me._isReloadRefresh = false; }, 10);
+					}
+				});
+			}
 		});
 	},
 	
@@ -297,16 +305,84 @@ Ext.define('CustomApp', {
 		}
 	},
 	
-	_getCurrentOrFirstRelease: function(){
+	_getCurrentOrClosestRelease: function(){
+		var me = this, d = new Date(),
+			rs = me.ReleaseStore.getRecords();
+		return _.find(rs, function(r){
+			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
+		}) || _.reduce(rs, function(best, r){
+			if(best===null) return r;
+			else {
+				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
+				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
+			}
+		}, null);
+	},
+	
+	/************************************************** Event Handler/ window size/scroll config *********************************************/
+	
+	_alert: function(title, str){
 		var me = this;
-		var d = new Date();
-		var rs = me.MatrixReleaseStore.getRecords();
-		if(!rs.length) return;
-		for(var i=0; i<rs.length; ++i){
-			if(new Date(rs[i].data.ReleaseDate) >= d && new Date(rs[i].data.ReleaseStartDate) <= d) 
-				return rs[i];
+		Ext.MessageBox.alert(title, str).setY(me._msgBoxY);
+		setTimeout(function(){ 
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 10);
+	},
+	
+	_getIframe: function(){
+		var w = window, p = w.parent, pd = w.parent.document, l = w.location;
+		return pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
+	},
+	
+	_applyMessageBoxConfig: function(){
+		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
+			ph = p.getWindowHeight(), 
+			ps = p.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+			iyOffset = Math.floor(ph/2 - ofy + ps - 50);		
+		me._msgBoxY = iyOffset<0 ? 0 : iyOffset;
+	},
+	
+	_changeGridHeight: function(){
+		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
+			ph = p.getWindowHeight(), 
+			ps = p.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+			height = Math.max(ph - ofy - 150, 200); //height of the app yo		
+		me._gridHeight = height;
+		if(me.MatrixGrid) me.MatrixGrid.setHeight(height);
+	},
+	
+	_getDistanceFromBottomOfScreen: function(innerY){
+		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
+			ph = p.getWindowHeight(), 
+			ps = p.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+			actualY = ofy + innerY;
+		return ph - actualY;
+	},
+	
+	_changeGridWidth: function(){
+		var me = this, mg = me.MatrixGrid;
+		if(mg) mg.setWidth(Math.min(
+			_.reduce(mg.config.columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
+			me.getWidth()-40
+		));
+	},
+	
+	_applyEventListeners: function(){
+		var me=this, p = window.parent;
+		
+		function screenChanged(){
+			me._applyMessageBoxConfig();
+			me._changeGridHeight();
+			me._changeGridWidth();
 		}
-		return rs[0]; //pick a random one then 
+		screenChanged();
+		p.onresize = screenChanged;
+		p.onscroll = screenChanged;
 	},
 	
 	/******************************************************* LAUNCH/UPDATE APP********************************************************/
@@ -321,14 +397,15 @@ Ext.define('CustomApp', {
 	
 	launch: function(){
 		var me = this;
-		me._defineModels();
+		me._showError('Loading Data...');
 		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 			me.removeAll();
 			me._showError('You do not have permissions to edit this project');
 			return;
 		}
-		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
-		me._showError('Loading Data...');
+		me._defineModels();
+		me._applyEventListeners();
+		//setInterval(function(){ me._reloadMatrixStores();}, 10000); 
 		me._loadModels(function(){
 			var scopeProject = me.getContext().getProject();
 			me._loadProject(scopeProject, function(scopeProjectRecord){
@@ -337,7 +414,7 @@ Ext.define('CustomApp', {
 						me.TrainRecord = trainRecord; 
 						console.log('train loaded:', trainRecord);
 						me._loadReleases(function(){
-							var currentRelease = me._getCurrentOrFirstRelease();
+							var currentRelease = me._getCurrentOrClosestRelease();
 							if(currentRelease){
 								me.ReleaseRecord = currentRelease;
 								console.log('release loaded', currentRelease);
@@ -413,7 +490,7 @@ Ext.define('CustomApp', {
 			tcs[projectID].Expected = value;		
 			var str = JSON.stringify(tcs, null, '\t');
 			if(str.length >= 32768){
-				alert('ERROR: TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
 			}
 			featureRecord.set('c_TeamCommits', str);
@@ -449,6 +526,8 @@ Ext.define('CustomApp', {
 				editor:false,
 				sortable:true,
 				resizable:false,
+				draggable:false,
+				menuDisabled:true,
 				locked:true,
 				renderer: function(oid, meta, f1){
 					var rank = 1;
@@ -467,6 +546,8 @@ Ext.define('CustomApp', {
 				width:50,
 				editor:false,
 				resizable:false,
+				draggable:false,
+				menuDisabled:true,
 				sortable:true,
 				locked:true,
 				renderer:function(FID){
@@ -484,14 +565,18 @@ Ext.define('CustomApp', {
 				width:250,
 				editor:false,
 				resizable:false,
+				draggable:false,
+				menuDisabled:true,
 				locked:true,
 				sortable:true
 			},{
 				text:'Product', 
 				dataIndex:'ProductName',
-				width:100,
+				width:80,
 				editor:false,
 				resizable:false,
+				draggable:false,
+				menuDisabled:true,
 				locked:true,
 				sortable:true
 			}
@@ -503,6 +588,8 @@ Ext.define('CustomApp', {
 				dataIndex:'ObjectID',
 				width:50,
 				editor:'textfield',
+				draggable:false,
+				menuDisabled:true,
 				align:'center',
 				tdCls: 'intel-editor-cell',
 				sortable:false,
@@ -529,7 +616,7 @@ Ext.define('CustomApp', {
 			x:0, y:0,
 			store: Ext.create('Ext.data.Store', {
 				fields: ['Name'],
-				data: _.map(me.MatrixReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
+				data: _.map(me.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
 			}),
 			displayField: 'Name',
 			fieldLabel: 'Release:',
@@ -538,7 +625,7 @@ Ext.define('CustomApp', {
 			listeners: {
 				select: function(combo, records){
 					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-					me.ReleaseRecord = me.MatrixReleaseStore.findRecord('Name', records[0].get('Name'));	
+					me.ReleaseRecord = me.ReleaseStore.findRecord('Name', records[0].get('Name'));	
 					me._clearToolTip();
 					me.setLoading(true);					
 					setTimeout(function(){
@@ -613,19 +700,19 @@ Ext.define('CustomApp', {
 			xtype:'container',
 			layout:'table',
 			columns:5,
-			width:800, x:400, y:0,
+			width:600, x:300, y:0,
 			border:true,
 			frame:false,
 			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected'], function(name){
 				var color;
 				if(name === 'Undecided') color='white';
-				if(name === 'N/A') color='grey';
-				if(name === 'Committed') color='green';
-				if(name === 'Not Committed') color='red';
-				if(name === 'Expected') color='yellow';
+				if(name === 'N/A') color='rgba(224, 224, 224, 0.50)'; //grey
+				if(name === 'Committed') color='rgba(0, 255, 0, 0.50)';//grenn
+				if(name === 'Not Committed') color='rgba(255, 0, 0, 0.50)';//red
+				if(name === 'Expected') color='rgba(251, 255, 0, 0.50)'; //yellow
 				return {
 					xtype: 'container',
-					width:160,
+					width:120,
 					border:false,
 					frame:false,
 					html:'<div class="intel-legend-item">' + name + 
@@ -635,18 +722,25 @@ Ext.define('CustomApp', {
 		});
 		
 		me.MatrixGrid = me.add({
-			xtype: 'rallygrid',
+			xtype: 'grid',
 			x:0, y:100,
-			width: Math.min(_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-20),
+			width: Math.min(_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-40),
+			height:me._gridHeight,
 			scroll:'both',
 			resizable:false,
-			columnCfgs: columnCfgs,
+			columns: columnCfgs,
 			plugins: [
 				Ext.create('Ext.grid.plugin.CellEditing', {
 					triggerEvent:'cellclick'
 				})
 			],
+			viewConfig: {
+				preserveScrollOnRefresh: true
+			},
 			listeners: {
+				sortchange: function(){
+					me._clearToolTip();
+				},
 				beforeedit: function(editor, e){
 					var ProjectName = e.column.text,
 						matrixRecord = e.record;
@@ -658,14 +752,17 @@ Ext.define('CustomApp', {
 					}
 					return false;
 				}, 
-				viewready: function (grid) {
-					var view = grid.view;			
+				afterrender: function (grid) {
+					var view = grid.view.normalView;	//lockedView and normalView		
+					
+					view.getEl().on('scroll', function(){ if(!me._isReloadRefresh) me._clearToolTip(); });
+					
 					// record the current cellIndex for tooltip stuff
 					grid.mon(view, {
 						uievent: function (type, view, cell, row, col, e) {
 							if(mode === 'Details' && type === 'mousedown') {
 								var matrixRecord = me.CustomMatrixStore.getAt(row);
-								var ProjectName = me.MatrixGrid.getColumnManager().columns[col].text;
+								var ProjectName = view.getGridColumns()[col].text;
 								var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 								var tcae = getTeamCommit(featureRecord, ProjectName);
 								var pos = cell.getBoundingClientRect();
@@ -680,21 +777,24 @@ Ext.define('CustomApp', {
 									}
 								}
 								
-								if(col <= 3) return;
+								//if(col <= 3) return; //this applied to non-locked grid
 								var panelWidth = 400;
-								var theHTML = '<p><b>Team: </b>' + ProjectName + 
-											'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
+								var theHTML = 
+											//'<p><b>Team: </b>' + ProjectName + 
+											//'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
 											'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
 											'<p><b>PlanEstimate: </b>' + 
 											_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
 												return sum + (sr.get('PlanEstimate') || 0); }, 0) +
-											'<p><b>UserStories: </b><ol>';
+											'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
 								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
 									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
 										'd/detail/userstory/' + sr.get('ObjectID') + '" target="_blank">' + sr.get('FormattedID') + '</a>: ' + 
 										sr.get('Name').substring(0, 40) + (sr.get('Name').length>40 ? '...' : '') + '</li>';
 								});
-								theHTML += '</ol>';
+								theHTML += '</ol></div>';
+								
+								var dbs = me._getDistanceFromBottomOfScreen(pos.top);
 								
 								me.tooltip = {
 									row:row,
@@ -702,6 +802,8 @@ Ext.define('CustomApp', {
 									panel: Ext.widget('container', {
 										floating:true,
 										width: panelWidth,
+										autoScroll:false,
+										id:'MatrixTooltipPanel',
 										cls: 'intel-tooltip',
 										focusOnToFront:false,
 										shadow:false,
@@ -709,20 +811,31 @@ Ext.define('CustomApp', {
 										html:theHTML,
 										listeners:{
 											afterrender: function(panel){
-												panel.setPosition(pos.left-panelWidth, pos.top);
+												var upsideDown = (dbs < panel.getHeight() + 40);
+												panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
 											}
 										}
 									}),
 									triangle: Ext.widget('container', {
 										floating:true,
 										width:0, height:0,
-										cls: 'intel-tooltip-triangle',
 										focusOnToFront:false,
 										shadow:false,
 										renderTo:Ext.getBody(),
 										listeners:{
 											afterrender: function(panel){
-												panel.setPosition(pos.left -10, pos.top);
+												setTimeout(function(){
+													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 40);
+													if(upsideDown) {
+														panel.removeCls('intel-tooltip-triangle');
+														panel.addCls('intel-tooltip-triangle-up');
+														panel.setPosition(pos.left -10, pos.bottom -10);
+													} else {
+														panel.removeCls('intel-tooltip-triangle-up');
+														panel.addCls('intel-tooltip-triangle');
+														panel.setPosition(pos.left -10, pos.top);
+													}
+												}, 10);
 											}
 										}
 									})	
@@ -738,18 +851,5 @@ Ext.define('CustomApp', {
 			context: me.getContext(),
 			store: me.CustomMatrixStore
 		});	
-	},
-	
-	listeners: { //app listeners yo
-		afterrender: function() {
-			var me = this;
-			me.getEl().on('scroll', function(){
-				me._clearToolTip();
-			});
-		},
-		resize: function(){
-			var me = this, mg = me.MatrixGrid;
-			if(mg)  mg.setWidth(Math.min(_.reduce(mg.config.columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-20));
-		}
 	}
 });
