@@ -3,7 +3,7 @@ Ext.define('CustomApp', {
     componentCls: 'app',
     width: 800,
     layout:{
-      type: 'vbox',
+      type: 'vbox'
     },
     items:[
       {
@@ -25,7 +25,6 @@ Ext.define('CustomApp', {
       {
         xtype: 'container',
         itemId: 'gridsContainer',
-        //padding: 25,
         layout: {
           type: 'hbox',
           align: 'top'
@@ -36,11 +35,9 @@ Ext.define('CustomApp', {
             itemId: 'gridsLeft',
             width: 750,
             border: 1,
-            //padding: 25,
             style: {
               borderColor: '#AAA',
-              borderStyle: 'solid',
-              //margin: '10px'
+              borderStyle: 'solid'
             }
           },
           {
@@ -48,11 +45,9 @@ Ext.define('CustomApp', {
             itemId: 'gridsRight',
             width: 750,
             border: 1,
-            //padding: 25,
             style: {
               borderColor: '#AAA',
-              borderStyle: 'solid',
-              //margin: '10px'
+              borderStyle: 'solid'
             }
           }
         ]
@@ -61,6 +56,8 @@ Ext.define('CustomApp', {
 
     globalGridCount: [],   // count entry for each grid
     globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
+    globalStoryCount: [],
+    globalTeamCount: [],
     // App entry point
     launch: function() {
       console.log(this.globalGridMap);
@@ -79,8 +76,9 @@ Ext.define('CustomApp', {
     
     _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
+        console.log(this);
+        console.log(this.globalGridMap);
         var chartCfg = {
-            keys : Object.keys(this.globalGridMap),
             chart: {
                 type: 'bar',
                 width: 300,
@@ -89,22 +87,33 @@ Ext.define('CustomApp', {
             title: {
                 text: 'Story Counts by Grid'
             },
+            yAxis: {},
             xAxis: {
-                categories: ['Chart1', 'Chart2', 'Chart3', 'Chart4', 'Chart5','Chart6'],
-                title: {
-                    text: null
-                }
-            },
-            yAxis: {
-                min: 0,
-                title: {
-                text: '# Artifacts',
-                    align: 'high'
+                categories: function () {
+                    temp = _.map(this.globalStoryCount, function(x) {return x.name;});
+                    console.log('CATEGORIES');
+                    console.log(temp);
+                    return temp;
                 },
-                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
                 labels: {
-                    enabled: false,
-                    overflow: 'justify',
+                    enabled: true,
+                    step: 1,
+                    formatter: function() {
+                        return 'Grid '+ this.value;
+                    }
+                },
+                tickInterval: 1 
+            },
+            //yAxis: {
+                //min: 0,
+                //title: {
+                    //text: 'Story Count',
+                    //align: 'high'
+                //},
+                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
+                //labels: {
+                    //enabled: false,
+                    //overflow: 'justify',
                     //format: this.globalGridMap.keys()
                     /* formatter: function() { 
                         console.log('Generating yaxis labels');
@@ -116,19 +125,20 @@ Ext.define('CustomApp', {
                             return 0;
                         }
                      } */
-                }
-            },
-            tooltip: {
+                //}
+            //},
+            /*tooltip: {
                 valueSuffix: ' Stories'
-            },
-            plotOptions: {
+            },*/
+            /*plotOptions: {
                 bar: {
                     dataLabels: {
-                        enabled: true
-                        //format: this.globalGridMap.keys()
+                        enabled: true,
+                        //formatter: this.point
+                        format: this.series
                     }   
                 }
-            },
+            }, */
             legend: {
                 layout: 'vertical',
                 align: 'right',
@@ -142,14 +152,18 @@ Ext.define('CustomApp', {
                 enabled: false
             },
             credits: {
-            enabled: false
+                enabled: false
             }
         };
+        //formatteddata = []
+        //this.formatdata();
         var chartDt = {
             series: [{
                 name: 'Grid Counts',
-                data: this.globalGridCount
-                //dataLabels: this.globalGridMap.keys()
+                //data: _.map(this.globalGridMap, function(value, key) {return value;})
+                //dataLabels: _.map(this.globalGridMap, function(value, key) {return key;})
+                //data: this.globalGridMap
+                data: this.globalStoryCount
             }]
         };
 
@@ -164,6 +178,7 @@ Ext.define('CustomApp', {
 
     }, //}}}
 
+
     _buildPieChart: function() { //{{{
 
        
@@ -176,7 +191,7 @@ Ext.define('CustomApp', {
               plotBorderWidth: 1,//null,
               plotShadow: false,
               width: 300,
-              height: 250,
+              height: 250
           },
           title: {
               text: ''
@@ -202,16 +217,17 @@ Ext.define('CustomApp', {
           series: [{
               type: 'pie',
               name: 'Team Block',
-              data: [
-                  ['Alpha',   45.0],
-                  ['Beta',       26.8],
-                  {
-                      name: 'Gamma',
-                      y: 12.8,
-                      sliced: true,
-                      selected: true
-                  }
-              ]
+              data: this.globalStoryCount
+              //data: [
+             //     ['Alpha',   45.0],
+               //   ['Beta',       26.8],
+                 // {
+                   //   name: 'Gamma',
+                     // y: 12.8,
+                     // sliced: true,
+                     // selected: true
+                  //}
+              //]
           }]
         } 
       });
@@ -233,7 +249,7 @@ Ext.define('CustomApp', {
 
           title: {
               text: 'Team Analysis'
-          },
+          }
         },
         chartData: {
           series: [{
@@ -303,7 +319,7 @@ Ext.define('CustomApp', {
                   pointPadding: 0.2,
                   borderWidth: 0
               }
-          },
+          }
         },
         chartData: {
           series: [{
@@ -434,7 +450,7 @@ Ext.define('CustomApp', {
             return featureFilter.and(unacceptedFilter).and(enddateFilter);
           },
           chartnum: 'C6'
-        },
+        }
 
       ]; //}}}
 
@@ -446,6 +462,7 @@ Ext.define('CustomApp', {
           success: function(count, key, data) {
             this.globalGridCount.push(count[0]);
             this.globalGridMap[count[1]]=count[0];
+            this.globalStoryCount.push(count[2]);
             console.log('Grid Map', this.globalGridMap);
             console.log(count);
           },
@@ -464,6 +481,7 @@ Ext.define('CustomApp', {
         success: function() {
           console.log('all counts finished!', this.globalGridCount);
           console.log(this.globalGridMap);
+          console.log(this.globalStoryCount);
           console.log(Object.keys(this.globalGridMap));
           this.down('#ribbon').show();
           this._buildCharts();
@@ -484,6 +502,7 @@ Ext.define('CustomApp', {
 
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
+      
       // new grid with store data
       var grid = Ext.create('Rally.ui.grid.Grid', {
         xtype: 'rallygrid',
@@ -501,13 +520,15 @@ Ext.define('CustomApp', {
             load: function(store) {
               console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
               var tempcount=store.getTotalCount();
-              //var temp =_.map(this.globalGridMap, function(value, key) { if (key==cnum) { return store.getTotalCount(); } return value; );
-              /*for (var key in Object.keys(this.globalGridMap)) {
-                if (key==cnum)
-                    this.globalGridMap[key]=tempcount;
-              }*/
+              console.log(store);
+              var elem = {
+                    name : cnum,
+                    x: cnum.charAt(1),
+                    y: tempcount
+                  };
+              console.log(elem);
               console.log("this is chart ",cnum);
-              deferred.resolve([store.getTotalCount(),String(cnum)]);  // TODO more meta data?
+              deferred.resolve([store.getTotalCount(),String(cnum), elem]);  // TODO more meta data?
             }
           }
         },
