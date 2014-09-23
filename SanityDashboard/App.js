@@ -1,10 +1,11 @@
 Ext.define('CustomApp', {
-    extend: 'Rally.app.App',
+    extend: 'Rally.app.TimeboxScopedApp',
     componentCls: 'app',
     width: 800,
     layout:{
       type: 'vbox'
     },
+    scopeType: 'release',
     items:[
       {
         xtype: 'container',
@@ -59,10 +60,15 @@ Ext.define('CustomApp', {
     globalStoryCount: [],
     globalTeamCount: [],
     // App entry point
-    launch: function() {
+    launch: function(scope) {
       console.log(this.globalGridMap);
       this._buildGrids();
     },
+    
+    /*onScopeChange: function(scope) {
+      //launch(scope)
+      this._buildGrids(scope);
+    },*/
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
@@ -71,6 +77,7 @@ Ext.define('CustomApp', {
       this._buildBubbleChart();
       this._buildPieChart();
       this._buildColumnChart();
+      this._chartsReady = true;
     },
 
     
@@ -102,43 +109,8 @@ Ext.define('CustomApp', {
                         return 'Grid '+ this.value;
                     }
                 },
-                tickInterval: 1 
+                tickInterval: 0.5 
             },
-            //yAxis: {
-                //min: 0,
-                //title: {
-                    //text: 'Story Count',
-                    //align: 'high'
-                //},
-                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
-                //labels: {
-                    //enabled: false,
-                    //overflow: 'justify',
-                    //format: this.globalGridMap.keys()
-                    /* formatter: function() { 
-                        console.log('Generating yaxis labels');
-                        console.log(this);
-                        console.log(this.keys);
-                        for (key in Object.keys(this.globalGridMap)) {
-                            if (this.globalGridMap[key]==this.value)
-                                return key;
-                            return 0;
-                        }
-                     } */
-                //}
-            //},
-            /*tooltip: {
-                valueSuffix: ' Stories'
-            },*/
-            /*plotOptions: {
-                bar: {
-                    dataLabels: {
-                        enabled: true,
-                        //formatter: this.point
-                        format: this.series
-                    }   
-                }
-            }, */
             legend: {
                 layout: 'vertical',
                 align: 'right',
@@ -155,8 +127,6 @@ Ext.define('CustomApp', {
                 enabled: false
             }
         };
-        //formatteddata = []
-        //this.formatdata();
         var chartDt = {
             series: [{
                 name: 'Grid Counts',
@@ -483,6 +453,7 @@ Ext.define('CustomApp', {
           console.log(this.globalGridMap);
           console.log(this.globalStoryCount);
           console.log(Object.keys(this.globalGridMap));
+          this._gridsLoaded = true;
           this.down('#ribbon').show();
           this._buildCharts();
           console.log('Got Grid Map:',this.globalGridMap);
@@ -508,8 +479,10 @@ Ext.define('CustomApp', {
         xtype: 'rallygrid',
         title: myTitle,
         columnCfgs: myColumns,
+        showPagingToolbar: true,
         pagingToolbarCfg: {
-          pageSizes: [3,5,10,15]
+          pageSizes: [3,5,10,15],
+          autoRender: true
         },
         storeConfig: {
           model: myModel,
@@ -542,37 +515,19 @@ Ext.define('CustomApp', {
       });
       // show me the grid!
       gridContainer.add(grid);
+      if (!this._gridsLoaded) {
+        return deferred.promise;
+      }
+      return true;
 
-      return deferred.promise;
+    },
 
-      /* EXAMPLE for loading a store and viewing a Grid  (pre-template version)
-      var blockedStoriesStore = Ext.create('Rally.data.wsapi.Store', {
-        model: 'UserStory',
-        context: this.context.getDataContext(),
-        autoLoad: {start: 0, limit: 5},
-        filters: [
-          {
-            property: 'blocked',
-            operator: '=',
-            value: 'true'
-          }
-        ],
-        listeners: {
-          load: function(myStore, data) {
-            console.log('got', data);
-            var blockedStoriesGrid = Ext.create('Rally.ui.grid.Grid', {
-              title: 'Blocked Stories',
-              columnCfgs: ['FormattedID', 'Name', 'Owner'],
-              store: myStore
-            });
-            var ls = this.down('#leftGrids');
-            ls.add(blockedStoriesGrid);
+    fireReady : function() {
+        if(Rally.BrowserTest && this._gridsLoaded && this._chartsReady && !this.readyFired) {
+            this.readyFired = true;
+            Rally.BrowserTest.publishComponentReady(this);
 
-          },
-          scope: this
         }
-      });
-      */
     }
 
 });
