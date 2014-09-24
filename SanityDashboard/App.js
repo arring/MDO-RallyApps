@@ -58,7 +58,7 @@ Ext.define('CustomApp', {
     globalGridCount: [],   // count entry for each grid
     globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
     globalStoryCount: [],
-    globalTeamCount: [],
+    globalTeamCount: {},
     // App entry point
     launch: function(scope) {
       console.log(this.globalGridMap);
@@ -109,7 +109,7 @@ Ext.define('CustomApp', {
                         return 'Grid '+ this.value;
                     }
                 },
-                tickInterval: 0.5 
+                tickInterval: 1 
             },
             legend: {
                 layout: 'vertical',
@@ -405,7 +405,7 @@ Ext.define('CustomApp', {
           model: 'UserStory',
           columns: ['FormattedID', 'Name','Project', 'ScheduleState'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
-          pageSize: 3,
+          //pageSize: 3,
           filters: function() {
             var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
                 property: 'Feature', operator: '!=', value: 'null'
@@ -426,7 +426,7 @@ Ext.define('CustomApp', {
 
       var allPromises = [];
       _.each(grids, function(grid) {
-        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize,grid.chartnum);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, /*grid.pageSize,*/grid.chartnum);
 
         promise.then({
           success: function(count, key, data) {
@@ -467,7 +467,7 @@ Ext.define('CustomApp', {
     },
 
     // Utility function to generically build a grid and add to a container with given specs
-    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, pageSize,cnum) {
+    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, /*pageSize,*/cnum) {
 
       var deferred = Ext.create('Deft.Deferred');
 
@@ -482,25 +482,26 @@ Ext.define('CustomApp', {
         showPagingToolbar: true,
         pagingToolbarCfg: {
           pageSizes: [3,5,10,15],
-          autoRender: true
+          autoRender: true,
+          resizable: true
         },
         storeConfig: {
           model: myModel,
           context: this.context.getDataContext(),
-          autoLoad: {start: 0, limit: pageSize},
+          autoLoad:{start: 0, limit: 3},
           filters: myFilters(),
           listeners: {
             load: function(store) {
-              console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
+              //console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
               var tempcount=store.getTotalCount();
-              console.log(store);
+              //console.log(store);
               var elem = {
                     name : cnum,
                     x: cnum.charAt(1),
                     y: tempcount
                   };
-              console.log(elem);
-              console.log("this is chart ",cnum);
+              //console.log(elem);
+              //console.log("this is chart ",cnum);
               deferred.resolve([store.getTotalCount(),String(cnum), elem]);  // TODO more meta data?
             }
           }
