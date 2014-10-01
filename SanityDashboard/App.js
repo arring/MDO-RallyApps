@@ -1,3 +1,4 @@
+var newscope = true;
 Ext.define('CustomApp', {
     extend: 'Rally.app.TimeboxScopedApp',
     componentCls: 'app',
@@ -7,81 +8,124 @@ Ext.define('CustomApp', {
     },
     scopeType: 'release',
     launch: function() {
-    this.add(
-                {
-                   xtype: 'container',
-                    itemId: 'releaseInfo',
-                    tpl: [
-                        '<div class="releaseInfo"><p><b>About this release: </b><br />',
-                        '<p class="release-notes">{notes}</p>',
-                        'Additional information is available <a href="{detailUrl}" target="_top">here.</a></p></div>'
-                    ]
+        this.add( //{{{
+            {
+                xtype: 'button',
+                itemId: 'goButton',
+                text: 'Go',
+                border: 1,
+                margin: '10 4 4 10',
+                listeners: {
+                    click: function() {
+                            window.newscope = true;
+                        },
+                    mouseover: function() {
+                            console.log(window.newscope);
+                            if(!this.mousedover) {
+                                this.mousedover=true;
+                                alert('Click Go to load the data');
+                            }
+                        }
+                    },
+            },
+            {
+               xtype: 'container',
+               itemId: 'releaseInfo',
+               tpl: [
+                    '<div class="releaseInfo"><p><b>About this release: </b><br />',
+                    '<p class="release-notes">{notes}</p>',
+                    'Additional information is available <a href="{detailUrl}" target="_top">here.</a></p></div>'
+                ]
+            },
+           {  
+                xtype: 'container',
+                itemId: 'ribbon',
+                width: 1500,
+                height: 250,
+                hidden: true,
+                border: 1,
+                layout: {
+                  type: 'hbox',
+                  align: 'stretch',
+                  pack: 'center'
                 },
-      {
-        xtype: 'container',
-        itemId: 'ribbon',
-        width: 1500,
-        height: 250,
-        hidden: true,
-        border: 1,
-        layout: {
-          type: 'hbox',
-          align: 'stretch',
-          pack: 'center'
-        },
-        style: {
-          borderColor: '#AAA',
-          borderStyle: 'solid'
-        }      },
-      {
-        xtype: 'container',
-        itemId: 'gridsContainer',
-        layout: {
-          type: 'hbox',
-          align: 'top'
-        },
-        items: [
-          {
-            xtype: 'container',
-            itemId: 'gridsLeft',
-            width: 750,
-            border: 1,
-            style: {
-              borderColor: '#AAA',
-              borderStyle: 'solid'
-            }
-          },
-          {
-            xtype: 'container',
-            itemId: 'gridsRight',
-            width: 750,
-            border: 1,
-            style: {
-              borderColor: '#AAA',
-              borderStyle: 'solid'
-            }
-          }
-        ]
-      }
-    );
+                style: {
+                    borderColor: '#AAA',
+                    borderStyle: 'solid'
+                }
+            },
+            {
+                xtype: 'container',
+                itemId: 'gridsContainer',
+                layout: {
+                    type: 'hbox',
+                    align: 'top'
+                },
+                items: [
+                  {
+                    xtype: 'container',
+                    itemId: 'gridsLeft',
+                    width: 750,
+                    border: 1,
+                    style: {
+                      borderColor: '#AAA',
+                      borderStyle: 'solid'
+                    }
+                  },
+                  {
+                    xtype: 'container',
+                    itemId: 'gridsRight',
+                    width: 750,
+                    border: 1,
+                    style: {
+                      borderColor: '#AAA',
+                      borderStyle: 'solid'
+                    }
+                  }
+                ]
+      } 
+    ); //}}}
      this.callParent(arguments);
     },
-
-    globalGridCount: [],   // count entry for each grid
+    /*globalGridCount: [],   // count entry for each grid
     globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
     globalStoryCount: [],
-    globalTeamCount: {},
+    globalTeamCount: {},*/
     
     onScopeChange: function(scope) {
       //launch(scope)
       //console.log('Ribbon element: ',this.down('#ribbon'));
-      this.down('#ribbon').removeAll();
-      this.down('#ribbon').hide();
-      this._gridsLoaded = false;
-      this._loadReleaseDetails(scope);
-      this._buildGrids(scope);
-
+      //if(window.newscope) {
+         this.down('#ribbon').removeAll();
+         this.globalGridCount=[];   // count entry for each grid
+         this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''};
+         this.globalStoryCount=[];
+         this.globalTeamCount={};
+         this.down('#ribbon').hide();
+         this._gridsLoaded = false;
+         this.down('#gridsLeft').removeAll();
+         this.down('#gridsRight').removeAll();
+         this._loadReleaseDetails(scope);
+         this._buildGrids(scope);
+         //this._buildCharts();
+         window.newscope=true;
+       //} else {
+       //  this._refreshGrids(scope);
+       //}
     },
+
+        _refreshGrids: function() {
+            var filter = [this.getContext().getTimeboxScope().getQueryFilter()];
+            var gridContainerLeft = this.down('#gridsLeft');
+            var gridContainerRight = this.down('#gridsRight');
+            gridContainerLeft.down('#C1').filter(filter, true, true);
+            gridContainerLeft.down('#C3').filter(filter, true, true);
+            gridContainerLeft.down('#C5').filter(filter, true, true);
+            gridContainerRight.down('#C2').filter(filter, true, true);
+            gridContainerRight.down('#C4').filter(filter, true, true);
+            gridContainerRight.down('#C6').filter(filter, true, true);
+        },
+
         _loadReleaseDetails: function(scope) {
             var release = scope.getRecord();
             if (release) {
@@ -104,17 +148,23 @@ Ext.define('CustomApp', {
     _buildCharts: function() {
       console.log('now building charts');
       this._buildBarChart();
-      this._buildBubbleChart();
-      this._buildPieChart();
-      this._buildColumnChart();
+      //this._buildBubbleChart();
+      //this._buildPieChart();
+      //this._buildColumnChart();
       this._chartsReady = true;
     },
 
     
     _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
-        console.log(this);
         console.log(this.globalGridMap);
+        console.log(this.globalGridCount);
+        if(_.every(this.globalGridCount, function(elem) { return elem==0;})) {
+            this.down('#ribbon').add({
+                xtype: 'component',
+                html: 'Congrats! The Train is healthy for this release'
+            });
+        } else {
         var chartCfg = {
             chart: {
                 type: 'bar',
@@ -174,6 +224,7 @@ Ext.define('CustomApp', {
             flex: 1,
             scope: this
         });
+        }
         console.log('finished bar');
 
     }, //}}}
@@ -478,7 +529,7 @@ Ext.define('CustomApp', {
       //var promise = new Deft.promise.Promise();
       _.each(grids, function(grid) {
         console.log(grid.chartnum);
-        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, /*grid.pageSize,*/grid.chartnum);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, /*grid.pageSize,*/grid.chartnum,scope);
         //console.log('This is the promise: ',promise);
         promise.then({
           success: function(count, key) {
@@ -510,6 +561,7 @@ Ext.define('CustomApp', {
           this.down('#ribbon').show();
           this._buildCharts();
           console.log('Got Grid Map:',this.globalGridMap);
+          window.newscope=false;
         },
         failure: function(error) {
           console.log('all error!', error);
@@ -520,38 +572,16 @@ Ext.define('CustomApp', {
     },
 
     // Utility function to generically build a grid and add to a container with given specs
-    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, /*pageSize,*/cnum) {
+    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide,cnum,scope) {
 
       var deferred = Ext.create('Deft.Deferred');
-      /*var store = Ext.create('Ext.data.Store', {
-          model: myModel,
-          storeId: cnum,
-          //context: this.context.getDataContext(),
-          //this.getContext().getTimeboxScope().getQueryFilter(), 
-          autoLoad:{start: 0, limit: 3},
-          pageSize: 3,
-          filters: [this.getContext().getTimeboxScope(),myFilters()],
-          listeners: {
-            load: function(store) {
-              var tempcount=store.getTotalCount();
-              console.log('Loaded store', store);
-              var elem = {
-                    name : cnum,
-                    x: cnum.charAt(1),
-                    y: tempcount
-                  };
-              //console.log(elem);
-              //console.log("this is chart ",cnum);
-              deferred.resolve([store.getTotalCount(),String(cnum)]);  // TODO more meta data?
-            }
-          }
-        }); */
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
       
       // new grid with store data
       var grid = Ext.create('Rally.ui.grid.Grid', {
         xtype: 'rallygrid',
+        itemId: cnum,
         title: myTitle,
         columnCfgs: myColumns,
         showPagingToolbar: true,
@@ -567,8 +597,16 @@ Ext.define('CustomApp', {
           //context: this.context.getDataContext(),
           //this.getContext().getTimeboxScope().getQueryFilter(), 
           autoLoad:{start: 0, limit: 3},
+          //filters: [this.getContext().getTimeboxScope().getQueryFilter()],
           pageSize: 3,
-          filters: [this.getContext().getTimeboxScope(),myFilters()],
+          pagingToolbarCfg: {
+            pageSizes: [3,5,10,15],
+            //pageSize:5,
+            autoRender: true,
+            resizable: true,
+            //store: storeConfig
+            },
+          filters: [this.getContext().getTimeboxScope().getQueryFilter(),myFilters()],
           listeners: {
             load: function(store) {
               var tempcount=store.getTotalCount();
@@ -580,7 +618,12 @@ Ext.define('CustomApp', {
                   };
               //console.log(elem);
               //console.log("this is chart ",cnum);
-              deferred.resolve([store.getTotalCount(),String(cnum)]);  // TODO more meta data?
+                    if(window.newscope) {
+                        deferred.resolve([store.getTotalCount(),String(cnum),elem]);
+                        // TODO more meta data?
+                    } else {
+                        console.log('Deferred done already');
+                    }
             }
           }
         },
