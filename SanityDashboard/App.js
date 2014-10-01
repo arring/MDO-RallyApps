@@ -9,7 +9,7 @@ Ext.define('CustomApp', {
     scopeType: 'release',
     launch: function() {
         this.add( //{{{
-            {
+            /*{
                 xtype: 'button',
                 itemId: 'goButton',
                 text: 'Go',
@@ -27,7 +27,7 @@ Ext.define('CustomApp', {
                             }
                         }
                     },
-            },
+            },*/
             {
                xtype: 'container',
                itemId: 'releaseInfo',
@@ -87,6 +87,7 @@ Ext.define('CustomApp', {
     ); //}}}
      this.callParent(arguments);
     },
+    
     /*globalGridCount: [],   // count entry for each grid
     globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
     globalStoryCount: [],
@@ -107,6 +108,7 @@ Ext.define('CustomApp', {
          this.down('#gridsRight').removeAll();
          this._loadReleaseDetails(scope);
          this._buildGrids(scope);
+         this.readyFired = false;
          //this._buildCharts();
          window.newscope=true;
        //} else {
@@ -159,12 +161,23 @@ Ext.define('CustomApp', {
         console.log('starting to build bar chart');
         console.log(this.globalGridMap);
         console.log(this.globalGridCount);
-        if(_.every(this.globalGridCount, function(elem) { return elem==0;})) {
+        if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
             this.down('#ribbon').add({
                 xtype: 'component',
-                html: 'Congrats! The Train is healthy for this release'
+                html: '<b>Congrats! The Train is healthy for this release</b>'
             });
         } else {
+        function compare(a,b) {
+            if(a.x < b.x)
+                return -1;
+            if (a.x > b.x)
+                return 1;
+            return 0;
+        };
+        var tempobj = this.globalStoryCount.sort(compare);
+        console.log('Sorted obj', tempobj);
+        var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
+        console.log('categories', tempcat);
         var chartCfg = {
             chart: {
                 type: 'bar',
@@ -176,24 +189,25 @@ Ext.define('CustomApp', {
             },
             yAxis: {},
             xAxis: {
-                categories: function () {
+                categories: tempcat,
+                /*function () {
                     temp = _.map(this.globalStoryCount, function(x) {return x.name;});
                     console.log('CATEGORIES');
                     console.log(temp);
                     return temp;
-                },
-                labels: {
+                },*/
+                /*labels: {
                     enabled: true,
                     step: 1,
                     formatter: function() {
                         return 'Grid '+ this.value;
                     }
-                },
+                },*/
                 tickInterval: 1 
             },
             legend: {
                 layout: 'vertical',
-                align: 'right',
+                align: 'center',
                 verticalAlign: 'top',
                 x: -40,
                 y: 100,
@@ -213,7 +227,7 @@ Ext.define('CustomApp', {
                 //data: _.map(this.globalGridMap, function(value, key) {return value;})
                 //dataLabels: _.map(this.globalGridMap, function(value, key) {return key;})
                 //data: this.globalGridMap
-                data: this.globalStoryCount
+                data: tempobj
             }]
         };
 
@@ -222,6 +236,9 @@ Ext.define('CustomApp', {
             chartConfig: chartCfg,
             chartData: chartDt,
             flex: 1,
+            layout: {
+                pack: 'center'
+            },
             scope: this
         });
         }
