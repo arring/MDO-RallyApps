@@ -173,7 +173,7 @@ Ext.define('CustomApp', {
         if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
             this.down('#ribbon').add({
                 xtype: 'component',
-                html: '<b>Congrats! The Train is healthy for this release</b>'
+                html: '<b><font color="red" size=18>Congrats! The Train is healthy for this release</font></b>'
             });
         } else {
         function compare(a,b) {
@@ -205,13 +205,13 @@ Ext.define('CustomApp', {
                     console.log(temp);
                     return temp;
                 },*/
-                /*labels: {
+               labels: {
                     enabled: true,
                     step: 1,
                     formatter: function() {
-                        return 'Grid '+ this.value;
+                        return 'Grid C'+ this.value;
                     }
-                },*/
+                },
                 tickInterval: 1 
             },
             legend: {
@@ -429,7 +429,7 @@ Ext.define('CustomApp', {
           listeners: {
               scope: this
           },
-          columns: ['FormattedID', 'Name', 'Project', 'Blocked'],
+          columns: ['FormattedID', 'Name', 'Project', 'Blocked', 'BlockedReason'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
