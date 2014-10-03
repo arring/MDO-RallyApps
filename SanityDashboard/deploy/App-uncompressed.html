@@ -97,18 +97,10 @@ Ext.define('CustomApp', {
      this.callParent(arguments);
     },
     
-    /*globalGridCount: [],   // count entry for each grid
-    globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
-    globalStoryCount: [],
-    globalTeamCount: {},*/
-    
     onScopeChange: function(scope) {
-      //launch(scope)
-      //console.log('Ribbon element: ',this.down('#ribbon'));
-      //if(window.newscope) {
          this.down('#ribbon').removeAll();
          this.globalGridCount=[];   // count entry for each grid
-         this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''};
+         this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':'', 'C7': ''};
          this.globalStoryCount=[];
          this.globalTeamCount={};
          this.down('#ribbon').hide();
@@ -118,11 +110,8 @@ Ext.define('CustomApp', {
          this._loadReleaseDetails(scope);
          this._buildGrids(scope);
          this.readyFired = false;
-         //this._buildCharts();
+         this._chartsReady=false;
          window.newscope=true;
-       //} else {
-       //  this._refreshGrids(scope);
-       //}
     },
 
         _refreshGrids: function() {
@@ -132,6 +121,7 @@ Ext.define('CustomApp', {
             gridContainerLeft.down('#C1').filter(filter, true, true);
             gridContainerLeft.down('#C3').filter(filter, true, true);
             gridContainerLeft.down('#C5').filter(filter, true, true);
+            gridContainerLeft.down('#C7').filter(filter, true, true);
             gridContainerRight.down('#C2').filter(filter, true, true);
             gridContainerRight.down('#C4').filter(filter, true, true);
             gridContainerRight.down('#C6').filter(filter, true, true);
@@ -255,8 +245,7 @@ Ext.define('CustomApp', {
 
     }, //}}}
 
-
-
+//This is placeholder for future implementations of these charts
     _buildPieChart: function() { //{{{
 
        
@@ -546,32 +535,61 @@ Ext.define('CustomApp', {
             return featureFilter.and(unacceptedFilter).and(enddateFilter);
           },
           chartnum: 'C6'
-        }
+        },
+        {
+          title: 'C7: Improperly Sized Stories',
+          model: 'User Story',
+          listeners: {
+              scope: this
+          },
+          columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
+          side: 'Left',    // TODO: ensure camelcase format to match itemId names
+          pageSize: 3,
+          filters: function() {
+            var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: 'null'
+            });
+            var planSizeOne = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '1'
+            });
+            var planSizeTwo = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '2'
+            });
+            var planSizeFour = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '4'
+            });
+            var planSizeEight = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '8'
+            });
+            var planSizeSixteen = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '16'
+            });
+
+            return noPlanEstimateFilter.and(planSizeOne).and(planSizeTwo).and(planSizeFour).and(planSizeEight).and(planSizeSixteen);
+          },
+          chartnum: 'C7'
+        },
 
       ]; //}}}
 
 
       var allPromises = [];
-      //var promise = new Deft.promise.Promise();
       _.each(grids, function(grid) {
-        console.log(grid.chartnum);
-        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, /*grid.pageSize,*/grid.chartnum,scope);
-        //console.log('This is the promise: ',promise);
+        //console.log(grid.chartnum);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.chartnum,scope);
         promise.then({
           success: function(count, key) {
-            //console.log('Attempting deffered');
             this.globalGridCount.push(count[0]);
             this.globalGridMap[count[1]]=count[0];
             this.globalStoryCount.push(count[2]);
-            console.log('Grid Map', this.globalGridMap);
-            console.log(count);
+            //console.log('Grid Map', this.globalGridMap);
+            //console.log(count);
           },
           error: function(error) {
             console.log('single: error', error);
           },
           scope: this
         }).always(function() {
-          //console.log('single - always');
         });
 
         allPromises.push(promise);
@@ -613,37 +631,30 @@ Ext.define('CustomApp', {
         showPagingToolbar: true,
         pagingToolbarCfg: {
           pageSizes: [3,5,10,15],
-          //pageSize:5,
           autoRender: true,
           resizable: true,
-          //store: storeConfig
         },
         storeConfig: {
           model: myModel,
-          //context: this.context.getDataContext(),
-          //this.getContext().getTimeboxScope().getQueryFilter(), 
           autoLoad:{start: 0, limit: 3},
-          //filters: [this.getContext().getTimeboxScope().getQueryFilter()],
           pageSize: 3,
           pagingToolbarCfg: {
             pageSizes: [3,5,10,15],
-            //pageSize:5,
             autoRender: true,
             resizable: true,
-            //store: storeConfig
             },
           filters: [this.getContext().getTimeboxScope().getQueryFilter(),myFilters()],
           listeners: {
             load: function(store) {
-              var tempcount=store.getTotalCount();
-              console.log('Loaded store', store);
-              var elem = {
-                    name : cnum,
-                    x: cnum.charAt(1),
-                    y: tempcount
-                  };
-              //console.log(elem);
-              //console.log("this is chart ",cnum);
+                    var tempcount=store.getTotalCount();
+                    console.log('Loaded store', store);
+                    //console.log(this);
+                    store.each(function(record) {console.log(record);});
+                    var elem = {
+                        name : cnum,
+                        x: cnum.charAt(1),
+                        y: tempcount
+                    };
                     if(window.newscope) {
                         deferred.resolve([store.getTotalCount(),String(cnum),elem]);
                         // TODO more meta data?
@@ -651,7 +662,11 @@ Ext.define('CustomApp', {
                         console.log('Deferred done already');
                     }
             }
-          }
+          },
+          //each: function(record) {
+          //    console.log(record);
+          //    }
+         //scope: this
         },
         padding: 10,
         style: {
