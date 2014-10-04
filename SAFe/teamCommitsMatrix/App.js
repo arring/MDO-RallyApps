@@ -102,7 +102,8 @@ Ext.define('CustomApp', {
 			model: 'PortfolioItem/Feature',
 			autoLoad:true,
 			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 'UserStories', 'c_TeamCommits', 'DragAndDropRank'],
+			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 
+				'UserStories', 'c_TeamCommits', 'DragAndDropRank', 'PlannedEndDate'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -263,7 +264,8 @@ Ext.define('CustomApp', {
 				{name: 'FormattedID', type:'string'},
 				{name: 'ObjectID', type:'string'},
 				{name: 'FeatureName',  type: 'string'},
-				{name: 'ProductName', type:'string'}
+				{name: 'ProductName', type:'string'},
+				{name: 'PlannedEndDate', type:'string'}
 			]
 		});
 	},
@@ -278,7 +280,7 @@ Ext.define('CustomApp', {
 			if(me.CustomMatrixStore){
 				var scroll = me.MatrixGrid.view.getEl().getScrollTop();
 				me._isReloadRefresh = true;
-				me.CustomMatrixStore.load({
+				me.CustomMatrixStore.load({ //we use load here because the logic is handled in the renderers
 					callback: function(){
 						me.MatrixGrid.view.getEl().setScrollTop(scroll);
 						setTimeout(function(){ me._isReloadRefresh = false; }, 10);
@@ -317,6 +319,19 @@ Ext.define('CustomApp', {
 				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
 			}
 		}, null);
+	},
+	
+	_getWorkweek: function(date){ //calculates intel workweek, returns integer
+		var me = this, oneDay = 1000 * 60 * 60 * 24,
+			yearStart = new Date(date.getFullYear(), 0, 1),
+			dayIndex = yearStart.getDay(),
+			ww01Start = yearStart - dayIndex*oneDay,
+			timeDiff = date - ww01Start,
+			dayDiff = timeDiff / oneDay,
+			ww = Math.floor(dayDiff/7) + 1,
+			leap = (date.getFullYear() % 4 === 0),
+			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+		return weekCount < ww ? 1 : ww;
 	},
 	
 	/************************************************** Event Handler/ window size/scroll config *********************************************/
@@ -403,9 +418,11 @@ Ext.define('CustomApp', {
 			me._showError('You do not have permissions to edit this project');
 			return;
 		}
+		Ext.tip.QuickTipManager.init();
+		Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1000 });
 		me._defineModels();
 		me._applyEventListeners();
-		//setInterval(function(){ me._reloadMatrixStores();}, 10000); 
+		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
 		me._loadModels(function(){
 			var scopeProject = me.getContext().getProject();
 			me._loadProject(scopeProject, function(scopeProjectRecord){
@@ -463,7 +480,7 @@ Ext.define('CustomApp', {
 				if(me.featureTCAECache[featureID]) 
 					parsed_tcs = me.featureTCAECache[featureID];
 				else {
-					parsed_tcs = JSON.parse(tcs) || {};
+					parsed_tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = parsed_tcs;
 				}
 				this_tc = parsed_tcs[projectID] || {}; 
@@ -473,14 +490,14 @@ Ext.define('CustomApp', {
 		}
 		
 		function setExpected(featureRecord, ProjectName, value){
-			var tcs = featureRecord.data.c_TeamCommits;
+			var tcs = featureRecord.get('c_TeamCommits');
 			var featureID = featureRecord.data.ObjectID;
 			var projectID = me.MatrixProjectMap[ProjectName];
 			try{ 
 				if(me.featureTCAECache[featureID]) 
 					tcs = me.featureTCAECache[featureID];
 				else {
-					tcs = JSON.parse(tcs) || {};
+					tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = tcs;
 				}
 			} 
@@ -488,7 +505,7 @@ Ext.define('CustomApp', {
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
 			tcs[projectID].Expected = value;		
-			var str = JSON.stringify(tcs, null, '\t');
+			var str = btoa(JSON.stringify(tcs, null, '\t'));
 			if(str.length >= 32768){
 				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
@@ -498,12 +515,14 @@ Ext.define('CustomApp', {
 		}
 
 		var customMatrixRecords = _.map(me.MatrixFeatureStore.getRecords(), function(featureRecord){
+			var ed = featureRecord.get('PlannedEndDate');
 			return {
 				Rank: featureRecord.get('DragAndDropRank'),
 				FormattedID: featureRecord.get('FormattedID'),
 				ObjectID: featureRecord.get('ObjectID'),
 				FeatureName: featureRecord.get('Name'),
-				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')]
+				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')],
+				PlannedEndDate: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-')
 			};
 		});		
 
@@ -568,11 +587,25 @@ Ext.define('CustomApp', {
 				draggable:false,
 				menuDisabled:true,
 				locked:true,
-				sortable:true
+				sortable:true,
+				renderer: function(value, metaData) {
+					metaData.tdAttr = 'data-qtip="' + value + '"';
+					return value;
+				}
 			},{
 				text:'Product', 
 				dataIndex:'ProductName',
-				width:80,
+				width:60,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true
+			},{
+				text:'Planned End',
+				dataIndex:'PlannedEndDate',
+				width:60,
 				editor:false,
 				resizable:false,
 				draggable:false,
@@ -594,6 +627,8 @@ Ext.define('CustomApp', {
 				tdCls: 'intel-editor-cell',
 				sortable:false,
 				resizable:false,
+				tooltip:ProjectName,
+				tooltipType:'title',
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [];
@@ -845,10 +880,7 @@ Ext.define('CustomApp', {
 					});
 				}
 			},
-			showRowActionsColumn:false,
-			showPagingToolbar:false,
 			enableEditing:false,
-			context: me.getContext(),
 			store: me.CustomMatrixStore
 		});	
 	}

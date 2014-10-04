@@ -7,7 +7,10 @@
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                Ext.define('CustomApp', {
+                console = { log: function(){} };	////DEBUG!!!	
+preferenceName = 'intel-ART-CFD';
+
+Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
 	
@@ -227,6 +230,36 @@
 			});
 		});
 	},
+		
+	/************************************************** Preferences FUNCTIONS ***************************************************/
+	
+	_loadPreferences: function(cb){ //parse all settings too
+		var me = this,uid = me.getContext().getUser().ObjectID;
+		Rally.data.PreferenceManager.load({
+			appID: me.getAppId(),
+      filterByName:preferenceName+ uid,
+			success: function(prefs) {
+				var projs = prefs[preferenceName + uid];
+				try{ projs = JSON.parse(projs); }
+				catch(e){ projs = {}; }
+				me.ProjPrefs = projs;
+				console.log('loaded prefs', projs);
+        cb();
+			}
+		});
+	},
+
+	_savePreferences: function(prefs, cb){ // stringify and save only the updated settings
+		var me = this, s = {}, uid = me.getContext().getUser().ObjectID;
+    s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    console.log('saving prefs', prefs);
+		Rally.data.PreferenceManager.update({
+			appID: me.getAppId(),
+			settings: s,
+			success: cb,
+			scope:me
+		});
+	},
 	
 	/*************************************************** RANDOM HELPERS ******************************************************/	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
@@ -245,18 +278,22 @@
 		}
 	},
 	
-	_getCurrentOrFirstRelease: function(){
-		var me = this;
-		var d = new Date();
-		var rs = me.ReleaseStore.getRecords();
-		if(!rs.length) return;
-		for(var i=0; i<rs.length; ++i){
-			if(new Date(rs[i].data.ReleaseDate) >= d && new Date(rs[i].data.ReleaseStartDate) <= d) 
-				return rs[i];
-		}
-		return rs[0]; //pick a random one then 
+	_getScopedRelease: function(){
+		var me = this, d = new Date(), r,
+			rs = me.ReleaseStore.getRecords(),
+			prefOID = me.ProjPrefs[me.TrainRecord.get('ObjectID')];
+		return (prefOID && _.find(rs, function(r){ return r.get('ObjectID') == prefOID; })) ||
+			_.find(rs, function(r){
+				return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
+			}) ||
+			_.reduce(rs, function(best, r){
+				if(best===null) return r;
+				else {
+					var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
+					return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+				}
+			}, null);
 	},
-	
 	/******************************************************* DEFINE THE CFD CALCULATOR ********************************************************/
 	_defineClasses: function(){
 		Ext.define("lameCalculator", {
@@ -351,57 +388,66 @@
 			dayDiff = timeDiff / oneDay,
 			ww = Math.floor(dayDiff/7) + 1,
 			leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay(),
-			weekCount = ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52; //weeks in this year
+			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
 		return weekCount < ww ? (ww - weekCount) : ww;
 	},	
 	
 	/******************************************************* LAUNCH ********************************************************/
-    launch: function(){
+	
+	_reloadEverything:function(){
+		var me = this;
+		me.setLoading(true);
+		me._loadReleasesWithName(function(){
+			me._loadSnapshotStore(function(){
+				me.removeAll();
+				me.setLoading(false);
+				me._renderStuff(); 
+			});
+		});
+	},
+	
+	launch: function(){
 		var me = this;
 		me._defineClasses();
 		me._showError('Loading Data...');
 		if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
 			Rally.sdk.dependencies.Analytics.load(function(){	
-				me._loadModels(function(){
-					var scopeProject = me.getContext().getProject();
-					me._loadProject(scopeProject, function(scopeProjectRecord){
-						me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
-							if(trainRecord){
-								me.TrainRecord = trainRecord; 
-								console.log('train loaded:', trainRecord);					
-								me._loadReleases(function(){
-									var currentRelease = me._getCurrentOrFirstRelease();
-									if(currentRelease){
-										me.ReleaseRecord = currentRelease;
-										console.log('release loaded', currentRelease);
-										me._loadReleasesWithName(function(){
-											me._loadSnapshotStore(function(){
-												me._renderStuff(); 
-											});
-										});
-									} else {
-										me.removeAll();
-										me._showError('This ART has no valid releases');
-									}
-								});
-							} else {
-								me.removeAll();
-								me._showError('Project "' + scopeProject.Name + '" not a train or sub-project of train');
-							}
+				me._loadPreferences(function(){
+					me._loadModels(function(){
+						var scopeProject = me.getContext().getProject();
+						me._loadProject(scopeProject, function(scopeProjectRecord){
+							me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
+								if(trainRecord){
+									me.TrainRecord = trainRecord; 
+									console.log('train loaded:', trainRecord);					
+									me._loadReleases(function(){
+										var currentRelease = me._getScopedRelease();
+										if(currentRelease){
+											me.ReleaseRecord = currentRelease;
+											console.log('release loaded', currentRelease);
+											me._reloadEverything();
+										} else {
+											me.removeAll();
+											me._showError('This ART has no valid releases');
+										}
+									});
+								} else {
+									me.removeAll();
+									me._showError('Project "' + scopeProject.Name + '" not a train or sub-project of train');
+								}
+							});
 						});
 					});
 				});
 			});
 		}
-    },
+	},
 	
 	
 	/******************************************************* RENDERING CHARTS ********************************************************/
 
-    _renderStuff: function(){
+  _renderStuff: function(){
 		var me = this;
-		me.removeAll();
 		
 		if(me.AllSnapshots.length === 0){
 			me._showError(me.TrainRecord.get('Name') + ' has no data for release: ' + me.ReleaseRecord.get('Name'));
@@ -423,15 +469,9 @@
 			listeners: {
 				select: function(combo, records){
 					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-					me.ReleaseRecord = me.ReleaseStore.findRecord('Name', records[0].get('Name'));						
-					setTimeout(function(){
-						me._loadReleasesWithName(function(){
-							me._loadSnapshotStore(function(){
-								me.removeAll();
-								me._renderStuff(); 
-							});
-						});
-					}, 0);
+					me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].get('Name'));			
+					me.ProjPrefs[me.TrainRecord.get('ObjectID')] = me.ReleaseRecord.get('ObjectID');
+					me._savePreferences(me.ProjPrefs, function(){ me._reloadEverything(); });					
 				}, 
 				focus: function(combo){ combo.expand(); }
 			}
@@ -496,7 +536,7 @@
 		for(var projectName in me.TeamStores){
 			me.panel.add({
 				xtype:'rallychart',
-				columnWidth:0.33,
+				columnWidth:0.32,
 				loadMask:false,
 				height:400,
 				padding:"50px 0 0 0",
@@ -531,7 +571,8 @@
 		if(isTrianData) window.Datemap = []; //for the tooltip to have extra info to display on the chart
 
 		//get ideal trendline
-		var total = _.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); }, 0) || 0,
+		var total = (new Date(data.categories[0]) > now ? 0 : 
+				_.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); }, 0) || 0),
 			idealTrend = {type:'spline', dashStyle:'Solid', name:'Ideal', data:new Array(data.categories.length)},
 			ratio = (total/(data.categories.length-1)) || 0; //for NaN
 		idealTrend.data = _.map(idealTrend.data, function(e, i){ return Math.round(100*(0 + i*ratio))/100; });
@@ -555,17 +596,17 @@
 		for(i=1;i<projectedTrend.data.length;++i)
 			if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
 				begin = i-1; break; }
-		for(i=begin+1;i<projectedTrend.data.length;++i)
-			if(projectedTrend.data[i]===0){
-				end = i-1; break; }
+		for(i=end;i>=begin;--i) //start at the END, not at begin+1 (remember ISSG_binsplit bug)
+			if(projectedTrend.data[i]!==0){
+				end = i; break; }
 		ratio = end===begin ? 0 : (projectedTrend.data[end] - 0)/(end-begin);
 		projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 			if(j>=begin) return Math.round(100*(0 + (j-begin)*ratio))/100;
 			else return p; 
 		});
 
-		//apply label to correct point if needed
-		for(i=0;i<projectedTrend.data.length;++i)
+		//apply label to correct point if needed IGNORE FIRST POINT!
+		for(i=1;i<projectedTrend.data.length;++i)
 			if(projectedTrend.data[i] >= total){
 				projectedTrend.data[i] = {
 					dataLabels: {

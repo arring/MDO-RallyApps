@@ -1,1068 +1,4 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Random App Name70221</title>
-
-    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
-
-    <script type="text/javascript">
-        Rally.onReady(function () {
-                /*!
- * CTemplate
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/ctemplate
- */
-Ext.define('Skirtle.CTemplate', {
-    extend: 'Ext.XTemplate',
-
-    statics: {
-        AUTO_ID: 0
-    },
-
-    // May need to be increased if components are included deeper in the data object
-    copyDepth: 10,
-
-    // Placeholder element template. Should be changed in tandem with getPlaceholderEl()
-    cTpl: '<p id="ctemplate-{0}-{1}"></p>',
-
-    // Flag
-    isCTemplate: true,
-
-    constructor: function() {
-        var me = this;
-
-        me.callParent(arguments);
-
-        me.id = ++me.statics().AUTO_ID;
-
-        me.reset();
-    },
-
-    /* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
-     * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
-     * components.
-     */
-    copyValues: function(values, depth) {
-        var me = this,
-            id,
-            copy = {},
-            copyDepth = depth || me.copyDepth;
-
-        if (copyDepth === 1) {
-            return values;
-        }
-
-        if (Ext.isArray(values)) {
-            return Ext.Array.map(values, function(value) {
-                return me.copyValues(value, copyDepth - 1);
-            });
-        }
-
-        if (!Ext.isObject(values)) {
-            return values;
-        }
-
-        // This is the key sleight-of-hand that makes the whole thing work
-        if (values.isComponent) {
-            id = values.getId();
-            me.ids.push(id);
-            return Ext.String.format(me.cTpl, id, me.id);
-        }
-
-        Ext.Object.each(values, function(key, value) {
-            // $comp is a special value for a renderTpl that references the current component
-            copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
-        });
-
-        return copy;
-    },
-
-    // Override
-    doInsert: function() {
-        var ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    /* We have to resort to polling for component injection as we don't have full control over when the generated HTML
-     * will be added to the DOM
-     */
-    doPolling: function(interval) {
-        var me = this;
-
-        me.pollInterval = interval;
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-        }
-
-        me.pollId = Ext.defer(me.injectComponents, interval, me);
-    },
-
-    getPlaceholderEl: function(id) {
-        return Ext.get('ctemplate-' + id + '-' + this.id);
-    },
-
-    /* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
-     * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
-     * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
-     * call this method directly as soon as the generated HTML is inserted into the DOM.
-     */
-    injectComponents: function() {
-        var me = this,
-            ids = me.ids,
-            index = ids.length - 1,
-            id,
-            cmp,
-            placeholderEl;
-
-        // Iterate backwards because we remove some elements in the loop
-        for ( ; index >= 0 ; --index) {
-            id = ids[index];
-            cmp = Ext.getCmp(id);
-            placeholderEl = me.getPlaceholderEl(id);
-
-            if (me.renderComponent(cmp, placeholderEl) || !cmp) {
-                // Either we've successfully done the switch or the component has been destroyed
-                Ext.Array.splice(ids, index, 1);
-
-                if (placeholderEl) {
-                    placeholderEl.remove();
-                }
-            }
-        }
-
-        if (ids.length) {
-            // Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
-            me.doPolling(me.pollInterval * 1.5);
-        }
-    },
-
-    // Override
-    overwrite: function(el) {
-        var dom,
-            firstChild,
-            ret;
-
-        /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-         * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
-         * but we can guard against the case where all updates come through this template.
-         */
-        if (Ext.isIE) {
-            dom = Ext.getDom(el);
-            while (dom.firstChild) {
-                dom.removeChild(dom.firstChild);
-            }
-        }
-
-        ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    renderComponent: function(cmp, placeholderEl) {
-        if (cmp && placeholderEl) {
-            var parent = placeholderEl.parent();
-
-            if (cmp.rendered) {
-                // Move a component that has been rendered previously
-                cmp.getEl().replace(placeholderEl);
-            }
-            else {
-                cmp.render(parent, placeholderEl);
-            }
-
-            if (Ext.isIE6) {
-                // Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
-                parent.repaint();
-            }
-
-            return true;
-        }
-
-        return false;
-    },
-
-    reset: function() {
-        var me = this;
-
-        // The ids of injected components that haven't yet been rendered
-        me.ids = [];
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-            me.pollId = null;
-        }
-    }
-}, function(ctemplate) {
-    var apply = function() {
-        var me = this,
-            args = Ext.Array.slice(arguments);
-
-        args[0] = me.copyValues(args[0]);
-
-        // As we're returning an HTML string/array we can't actually complete the injection here
-        me.doPolling(10);
-
-        return me.callParent(args);
-    };
-
-    // The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
-    if (ctemplate.prototype.applyOut) {
-        // 4.1+
-        ctemplate.override({
-            applyOut: apply
-        });
-    }
-    else {
-        // 4.0
-        ctemplate.override({
-            applyTemplate: apply
-        });
-
-        ctemplate.createAlias('apply', 'applyTemplate');
-    }
-});
-
-/*!
- * Component Column
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/component-column
- */
-Ext.define('Skirtle.grid.column.Component', {
-    alias: 'widget.componentcolumn',
-    extend: 'Ext.grid.column.Column',
-    requires: ['Skirtle.CTemplate'],
-
-    // Whether or not to automatically resize the components when the column resizes
-    autoWidthComponents: true,
-
-    // Whether or not to destroy components when they are removed from the DOM
-    componentGC: true,
-
-    // Override the superclass - this must always be true or odd things happen, especially in IE
-    hasCustomRenderer: true,
-
-    // The estimated size of the cell frame. This is updated once there is a cell where it can be measured
-    lastFrameWidth: 12,
-
-    /* Defer durations for updating the component width when a column resizes. Required when a component has an animated
-     * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
-     *
-     * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
-     */
-    widthUpdateDelay: [10, 400],
-
-    constructor: function(cfg) {
-        var me = this;
-
-        me.callParent(arguments);
-
-        // Array of component ids for both component queries and GC
-        me.compIds = [];
-
-        // We need a dataIndex, even if it doesn't correspond to a real field
-        me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
-
-        me.tpl = me.createTemplate(me.tpl);
-        me.renderer = me.createRenderer(me.renderer);
-
-        me.registerColumnListeners();
-    },
-
-    addRefOwner: function(child) {
-        var me = this,
-            fn = me.refOwnerFn || (me.refOwnerFn = function() {
-                return me;
-            });
-
-        if (me.extVersion < 40200) {
-            // Component queries for ancestors use getBubbleTarget in 4.1 ...
-            child.getBubbleTarget = fn;
-        }
-        else {
-            // ... and getRefOwner in 4.2+
-            child.getRefOwner = fn;
-        }
-    },
-
-    applyTemplate: function(data, value) {
-        if (Ext.isDefined(value)) {
-            data[this.dataIndex] = value;
-        }
-
-        return this.tpl.apply(data);
-    },
-
-    /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-     * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
-     * from the DOM just before the grid view is refreshed.
-     */
-    beforeViewRefresh: function() {
-        if (Ext.isIE) {
-            var ids = this.compIds,
-                index = 0,
-                len = ids.length,
-                item,
-                el,
-                parentEl;
-
-            for ( ; index < len ; index++) {
-                if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
-                    parentEl.removeChild(el);
-                }
-            }
-        }
-    },
-
-    calculateFrameWidth: function(component) {
-        var el = component.getEl(),
-            parentDiv = el && el.parent(),
-            // By default the TD has no padding but it is quite common to add some via a tdCls
-            parentTd = parentDiv && parentDiv.parent();
-
-        if (parentTd) {
-            // Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-            return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
-        }
-    },
-
-    createRenderer: function(renderer) {
-        var me = this;
-
-        return function(value, p, record) {
-            var data = Ext.apply({}, record.data, record.getAssociatedData());
-
-            if (renderer) {
-                // Scope must be this, not me
-                value = renderer.apply(this, arguments);
-            }
-
-            // Process the value even with no renderer defined as the record may contain a component config
-            value = me.processValue(value);
-
-            return me.applyTemplate(data, value);
-        };
-    },
-
-    createTemplate: function(tpl) {
-        return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
-    },
-
-    destroyChild: function(child) {
-        child.destroy();
-    },
-
-    getRefItems: function(deep) {
-        var items = this.callParent([deep]),
-            ids = this.compIds,
-            index = 0,
-            len = ids.length,
-            item;
-
-        for ( ; index < len ; index++) {
-			item = Ext.getCmp(ids[index]);
-            if (item) {
-                items.push(item);
-
-                if (deep && item.getRefItems) {
-                    items.push.apply(items, item.getRefItems(true));
-                }
-            }
-        }
-
-        return items;
-    },
-
-    onChildAfterRender: function(child) {
-        this.resizeChild(child);
-    },
-
-    onChildBoxReady: function(child) {
-        // Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
-        this.resizeChild(child, false);
-    },
-
-    onChildDestroy: function(child) {
-        Ext.Array.remove(this.compIds, child.getId());
-    },
-
-    onChildResize: function() {
-        this.redoScrollbars();
-    },
-
-    onColumnResize: function(column) {
-        column.resizeAll();
-    },
-
-    onColumnShow: function(column) {
-        column.resizeAll();
-    },
-
-    // This is called in IE 6/7 as the components can still be seen even when a column is hidden
-    onColumnVisibilityChange: function(column) {
-        var items = column.getRefItems(),
-            index = 0,
-            length = items.length,
-            visible = !column.isHidden();
-
-        // In practice this probably won't help but it shouldn't hurt either
-        if(Ext.suspendLayouts) Ext.suspendLayouts();
-
-        for ( ; index < length ; ++index) {
-            items[index].setVisible(visible);
-        }
-
-       if(Ext.resumeLayouts) Ext.resumeLayouts(true);
-    },
-
-    onDestroy: function() {
-        Ext.destroy(this.getRefItems());
-
-        this.callParent();
-    },
-
-    // Override
-    onRender: function() {
-        this.registerViewListeners();
-        this.callParent(arguments);
-    },
-
-    // View has changed, may be a full refresh or just a single row
-    onViewChange: function() {
-        var me = this,
-            tpl = me.tpl;
-
-        // Batch the resizing of child components until after they've all been injected
-        me.suspendResizing();
-
-        if (tpl.isCTemplate) {
-            // No need to wait for the polling, the sooner we inject the less painful it is
-            tpl.injectComponents();
-
-            // If the template picked up other components in the data we can just ignore them, they're not for us
-            tpl.reset();
-        }
-
-        // A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
-        me.redoScrollbars();
-
-        me.resumeResizing();
-        
-        me.performGC();
-    },
-
-    // Component GC, try to stop components leaking
-    performGC: function() {
-        var compIds = this.compIds,
-            index = compIds.length - 1,
-            comp,
-            el;
-
-        for ( ; index >= 0 ; --index) {
-            // Could just assume that the component id is the el id but that seems risky
-            comp = Ext.getCmp(compIds[index]);
-            el = comp && comp.getEl();
-
-            if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
-                // The component is no longer in the DOM
-                if (comp && !comp.isDestroyed) {
-                    comp.destroy();
-                }
-            }
-        }
-    },
-
-    processValue: function(value) {
-        var me = this,
-            compIds = me.compIds,
-            id, initialWidth, dom, parent;
-
-        if (Ext.isObject(value) && !value.isComponent && value.xtype) {
-            // Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
-            value = Ext.widget(value.xtype, value);
-        }
-
-        if (value && value.isComponent) {
-            id = value.getId();
-
-            // When the view is refreshed the renderer could return a component that's already in the list
-            if (!Ext.Array.contains(compIds, id)) {
-                compIds.push(id);
-            }
-
-            me.addRefOwner(value);
-            me.registerListeners(value);
-
-            if (value.rendered) {
-                /* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
-                 * The problem occurs when a record value is changed and the components in that same row are being
-                 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
-                 * one row. Unfortunately this nukes the existing components so we need to remove them first.
-                 */
-                if (Ext.isIE) {
-                    // TODO: Should this be promoted to CTemplate?
-                    dom = value.el.dom;
-                    parent = dom.parentNode;
-
-                    if (parent) {
-                        if (me.extVersion === 40101) {
-                            // Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
-                            Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
-                        }
-
-                        // TODO: Removing the element like this could fall foul of Element GC
-                        parent.removeChild(dom);
-                    }
-                }
-            }
-            else if (me.autoWidthComponents) {
-                /* Set the width to a 'best guess' before the component is rendered to ensure that the component's
-                 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
-                 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
-                 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
-                 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
-                 */
-                initialWidth = me.getWidth() - me.lastFrameWidth;
-
-                // Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
-                initialWidth = initialWidth > 4 ? initialWidth : 4;
-
-                value.setWidth(initialWidth);
-            }
-
-            // Part of the same IE 6/7 hack as onColumnVisibilityChange
-            if ((Ext.isIE6 || Ext.isIE7) && me.isHidden()) {
-                value.hide();
-            }
-        }
-
-        return value;
-    },
-
-    redoScrollbars: function() {
-        var me = this,
-            grid = me.up('tablepanel');
-
-        if (grid) {
-            // The presence of a resizeQueue signifies that we are currently suspended
-            if (me.resizeQueue) {
-                me.redoScrollbarsRequired = true;
-                return;
-            }
-
-            // After components are injected the need for a grid scrollbar may need redetermining
-            if (me.extVersion < 40100) {
-                // 4.0
-                grid.invalidateScroller();
-                grid.determineScrollbars();
-            }
-            else {
-                // 4.1+
-                grid.doLayout();
-            }
-        }
-    },
-
-    registerColumnListeners: function() {
-        var me = this;
-
-        if (me.autoWidthComponents) {
-            // Need to resize children when the column resizes
-            me.on('resize', me.onColumnResize);
-
-            // Need to resize children when the column is shown as they can't be resized correctly while it is hidden
-            me.on('show', me.onColumnShow);
-        }
-
-        if (Ext.isIE6 || Ext.isIE7) {
-            me.on({
-                hide: me.onColumnVisibilityChange,
-                show: me.onColumnVisibilityChange
-            });
-        }
-    },
-
-    registerListeners: function(component) {
-        var me = this;
-
-        // Remove the component from the child list when it is destroyed
-        component.on('destroy', me.onChildDestroy, me);
-
-        if (me.autoWidthComponents) {
-            // Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
-            component.on('afterrender', me.onChildAfterRender, me, {single: true});
-
-            // With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
-            if (me.extVersion >= 40100) {
-                component.on('boxready', me.onChildBoxReady, me, {single: true});
-            }
-        }
-
-        // Need to redo scrollbars when a child resizes
-        component.on('resize', me.onChildResize, me);
-    },
-
-    registerViewListeners: function() {
-        var me = this,
-            view = me.up('tablepanel').getView();
-
-        me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
-        me.mon(view, 'refresh', me.onViewChange, me);
-        me.mon(view, 'itemupdate', me.onViewChange, me);
-        me.mon(view, 'itemadd', me.onViewChange, me);
-        me.mon(view, 'itemremove', me.onViewChange, me);
-    },
-
-    resizeAll: function() {
-        var me = this;
-
-        me.suspendResizing();
-        me.resizeQueue = me.getRefItems();
-        me.resumeResizing();
-    },
-
-    resizeChild: function(component, defer) {
-        var me = this,
-            frameWidth,
-            newWidth,
-            oldWidth,
-            resizeQueue;
-
-        if (me.resizingSuspended) {
-            resizeQueue = me.resizeQueue;
-
-            if (!Ext.Array.contains(resizeQueue, component)) {
-                resizeQueue.push(component);
-            }
-
-            return;
-        }
-
-        frameWidth = me.calculateFrameWidth(component);
-
-        // TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
-        if (Ext.isNumber(frameWidth)) {
-            newWidth = me.getWidth() - frameWidth;
-            oldWidth = component.getWidth();
-
-            // Returns true if a resize actually happened
-            if (me.setChildWidth(component, newWidth, oldWidth)) {
-                // Avoid an infinite resizing loop, deferring will only happen once
-                if (defer !== false) {
-                    // Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
-                    Ext.each(me.widthUpdateDelay, function(delay) {
-                        Ext.defer(me.resizeChild, delay, me, [component, false]);
-                    });
-                }
-            }
-        }
-    },
-
-    resumeResizing: function() {
-        var me = this,
-            index = 0,
-            resizeQueue = me.resizeQueue,
-            len = resizeQueue.length;
-
-        if (!--me.resizingSuspended) {
-            for ( ; index < len ; ++index) {
-                me.resizeChild(resizeQueue[index]);
-            }
-
-            me.resizeQueue = null;
-
-            if (me.redoScrollbarsRequired) {
-                me.redoScrollbars();
-            }
-        }
-    },
-
-    setChildWidth: function(component, newWidth, oldWidth) {
-        if (oldWidth === newWidth) {
-            return false;
-        }
-
-        component.setWidth(newWidth);
-
-        return true;
-    },
-
-    suspendResizing: function() {
-        var me = this;
-
-        me.resizingSuspended = (me.resizingSuspended || 0) + 1;
-
-        if (!me.resizeQueue) {
-            me.resizeQueue = [];
-        }
-    }
-}, function(cls) {
-    var proto = cls.prototype,
-        version = Ext.getVersion();
-
-    // ExtJS version detection
-    proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch();
-
-    // 4.1.1 initially reported its version as 4.1.0
-    if (Ext.Element.prototype.syncContent && version.toString() === '4.1.0') {
-        proto.extVersion = 40101;
-    }
-});
-                Ext.define('intel.grid.column.Component.', {
-	alias: 'widget.fastgridcolumn',
-	extend: 'Skirtle.grid.column.Component',
-
-	// Whether or not to automatically resize the components when the column resizes
-	autoWidthComponents: false,
-
-	// Whether or not to destroy components when they are removed from the DOM
-	componentGC: true,
-
-	// Override the superclass - this must always be true or odd things happen, especially in IE
-	hasCustomRenderer: true,
-
-	// The estimated size of the cell frame. This is updated once there is a cell where it can be measured
-	lastFrameWidth: 12,
-
-	/* Defer durations for updating the component width when a column resizes. Required when a component has an animated
-	 * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
-	 *
-	 * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
-	 */
-	//widthUpdateDelay: [10, 400],
-
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	onViewChange: function() {
-		var me = this, tpl = me.tpl;
-		// Batch the resizing of child components until after they've all been injected
-		me.suspendResizing();
-		if (tpl.isCTemplate) {
-				// No need to wait for the polling, the sooner we inject the less painful it is
-				tpl.injectComponents();
-				// If the template picked up other components in the data we can just ignore them, they're not for us
-				tpl.reset();
-		}
-		// A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
-		//me.redoScrollbars();
-		me.resumeResizing();
-		me.performGC();
-	},
-	
-	resumeResizing: function() {
-		var me = this,
-			index = 0,
-			resizeQueue = me.resizeQueue,
-			len = resizeQueue.length;
-		if (!--me.resizingSuspended) {
-			for ( ; index < len ; ++index) {
-					me.resizeChild(resizeQueue[index]);
-			}
-			me.resizeQueue = null;
-			//if (me.redoScrollbarsRequired) {
-			//    me.redoScrollbars();
-			//}
-		}
-	},
-	onChildResize: function() {
-		//this.redoScrollbars();
-  }
-});
-                Ext.define('Intel.data.proxy.SessionStorage', {
-	extend: 'Ext.data.proxy.SessionStorage',
-	alias: 'proxy.fastsessionproxy',
-
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	update: function(operation, callback, scope) {
-		var records = operation.records,
-			length = records.length,
-			ids = this.getIds(),
-			record, id, i;
-			
-		operation.setStarted();
-		for (i = 0; i < length; i++) {
-			record = records[i];
-			this.setRecord(record);
-		
-			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
-
-			//we need to update the set of ids here because it's possible that a non-phantom record was added
-			//to this proxy - in which case the record's id would never have been added via the normal 'create' call
-			id = record.getId();
-			if (id !== undefined && Ext.Array.indexOf(ids, id) == -1) ids.push(id);
-		}
-		this.setIds(ids);
-
-		operation.setCompleted();
-		operation.setSuccessful();
-		if (typeof callback == 'function') callback.call(scope || this, operation);
-	}
-});
-                Ext.define('Intel.data.FastStore', {  //doesn't redundantly call fireEvent... me.sync() calls that downstream 
-	extend: 'Ext.data.Store',
-	alias: 'store.faststore',
-
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	afterEdit: function(record, modifiedFieldNames) {
-		var me = this, i, shouldSync;
-		if (me.autoSync && !me.autoSyncSuspended) {
-			for (i = modifiedFieldNames.length; i--;) {
-				if (record.fields.get(modifiedFieldNames[i]).persist) {
-					me.sync();  //all rendering changes made here
-					break;
-				}
-			}
-		}
-		me.onUpdate(record, Ext.data.Model.EDIT, modifiedFieldNames);
-		//me.fireEvent('update', me, record, Ext.data.Model.EDIT, modifiedFieldNames); //redundant with me.sync()
-	}
-});
-                Ext.define('Intel.form.field.ComboBox', {
-	extend:'Ext.form.field.ComboBox',
-	alias: ['widget.intelcombo', 'widget.intelcombobox'],
-	
-	constructor: function() {
-		this.callParent(arguments);
-	},	
-	enableKeyEvents:true,
-	queryMode:'local',
-	ignoreNoChange:true,
-	listeners: {
-		keyup: function(a,b){
-			if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
-			var combo = this;
-			combo.store.filters.getRange().forEach(function(filter){
-				combo.store.removeFilter(filter);
-			});
-			combo.store.filterBy(function(item){
-				return item.get(combo.displayField).indexOf(combo.getRawValue()) === 0;
-			});
-		},
-		focus: function(combo) {
-			combo.store.filters.getRange().forEach(function(filter){
-				combo.store.removeFilter(filter);
-			});
-			combo.setValue('');
-			combo.expand();
-		}
-	}
-});
-                Ext.define('Intel.grid.plugin.CellEditing', {
-	alias: 'plugin.fastcellediting',
-	extend: 'Ext.grid.plugin.CellEditing',
-	
-	constructor: function() {
-		this.callParent(arguments);
-	},
-	triggerEvent:'cellclick',
-	onEditComplete : function(ed, value, startValue) {
-		var me = this,
-			activeColumn = me.getActiveColumn(),
-			context = me.context,
-			record;
-		if (activeColumn) {
-			record = context.record;
-
-			me.setActiveEditor(null);
-			me.setActiveColumn(null);
-			me.setActiveRecord(null);
-
-			context.value = value;
-			if (!me.validateEdit()) {
-					me.editing = false;
-					return;
-			}
-			record.beginEdit(); //only call store.AfterEdit at the very End 
-			if (!record.isEqual(value, startValue)) 
-					record.set(activeColumn.dataIndex, value); //dont call store.AfterEdit
-
-			context.view.focusRow(context.rowIdx, 100);
-			me.fireEvent('edit', me, context); //dont call store.AfterEdit if record.set() is called in here
-			me.editing = false;
-			record.endEdit(); //now call store.AfterEdit!
-		}
-	}
-});
-                Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant believe Extjs cant do this
-	extend: 'Ext.view.Table',
-	alias: 'widget.scrolltableview',
-	
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	refresh: function() {
-		var me = this,
-			targetEl,
-			targetParent,
-			oldDisplay,
-			nextSibling,
-			dom,
-			records,
-			el = me.getEl(),
-			scroll = el && el.getScrollTop();
-			
-		if (!me.rendered || me.isDestroyed) return;
-
-		if (!me.hasListeners.beforerefresh || me.fireEvent('beforerefresh', me) !== false) {
-			targetEl = me.getTargetEl();
-			records = me.getViewRange();
-			dom = targetEl.dom;
-			if (!me.preserveScrollOnRefresh) {
-				targetParent = dom.parentNode;
-				oldDisplay = dom.style.display;
-				dom.style.display = 'none';
-				nextSibling = dom.nextSibling;
-				targetParent.removeChild(dom);
-			}
-			if (me.refreshCounter) me.clearViewEl();
-			else {
-				me.fixedNodes = targetEl.dom.childNodes.length;
-				me.refreshCounter = 1;
-			}
-			me.tpl.append(targetEl, me.collectData(records, me.all.startIndex));
-
-			if (records.length < 1) {
-				if (!this.store.loading && (!me.deferEmptyText || me.hasFirstRefresh)) {
-					Ext.core.DomHelper.insertHtml('beforeEnd', targetEl.dom, me.emptyText);
-				}
-				me.all.clear();
-			} else {
-				me.collectNodes(targetEl.dom);
-				me.updateIndexes(0);
-			}
-			if (me.hasFirstRefresh) {
-				if (me.refreshSelmodelOnRefresh !== false) {
-					me.selModel.refresh();
-				} else {
-					me.selModel.pruneIf();
-				}
-			}
-			me.hasFirstRefresh = true;
-
-			if (!me.preserveScrollOnRefresh) {
-				targetParent.insertBefore(dom, nextSibling);
-				dom.style.display = oldDisplay;
-			}
-
-			this.refreshSize();
-			me.fireEvent('refresh', me);
-			if (!me.viewReady) {
-				me.viewReady = true;
-				me.fireEvent('viewready', me);
-			}
-		}
-		
-		if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);
-	},
-	
-	onRemove : function(ds, records, indexes) {
-		var me = this,
-			fireItemRemove = me.hasListeners.itemremove,
-			i,
-			record,
-			index,
-			el = me.getEl(),
-			scroll = el && el.getScrollTop();
-
-		if (me.all.getCount()) {
-			if (me.dataSource.getCount() === 0) {
-				if (fireItemRemove) {
-					for (i = indexes.length - 1; i >= 0; --i) {
-						me.fireEvent('itemremove', records[i], indexes[i]);
-					}
-				}
-				me.refresh();
-			} else {
-				for (i = indexes.length - 1; i >= 0; --i) {
-					record = records[i];
-					index = indexes[i];
-					me.doRemove(record, index);
-					if (fireItemRemove) {
-						me.fireEvent('itemremove', record, index);
-					}
-				}
-				me.updateIndexes(indexes[0]);
-			}
-			this.refreshSize();
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);
-		}
-	},
-	
-	onUpdate : function(ds, record){
-		var me = this,
-			index,
-			node,
-			el = me.getEl(),
-			scroll = el && el.getScrollTop();
-
-		if (me.viewReady) {
-			index = me.dataSource.indexOf(record);
-			if (index > -1) {
-				node = me.bufferRender([record], index)[0];
-				if (me.getNode(record)) {
-					me.all.replaceElement(index, node, true);
-					me.updateIndexes(index, index);
-					me.selModel.onUpdate(record);
-					if (me.hasListeners.itemupdate) {
-						me.fireEvent('itemupdate', record, index, node);
-					}
-					return node;
-				}
-			}
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);
-		}
-	},
-	
-	onAdd : function(store, records, index) {
-		var me = this,
-			nodes,
-			el = me.getEl(),
-			scroll = el && el.getScrollTop();
-
-		if (me.rendered) {
-			if (me.all.getCount() === 0) {
-				me.refresh();
-				nodes = me.all.slice();
-			} else {
-				nodes = me.doAdd(records, index);
-				if (me.refreshSelmodelOnRefresh !== false) {
-					me.selModel.refresh();
-				}
-				me.updateIndexes(index);
-				me.refreshSize();
-			}
-
-			if (me.hasListeners.itemadd) {
-				me.fireEvent('itemadd', records, index, nodes);
-			}
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);
-		}
-	}
-});
-                /** this app requires the following custom fields for your workspace:
+/** this app requires the following custom fields for your workspace:
 	c_TeamCommits on PortfolioItem/Feature, (type: 32 kB)
 	c_Risks on PortfolioItem/Feature, (type: 32 kB)
 	c_Dependencies on HierarchicalRequirement, (type: 32 kB)
@@ -1131,151 +67,122 @@ preferenceName = 'intel-program-board';
 
 /********************* END PRODUCTION *****************/
 Ext.define('CustomApp', {
-	extend: 'Rally.app.App',
-	componentCls: 'app',
+    extend: 'Rally.app.App',
+    componentCls: 'app',
 	
-	layout: {
-		type:'vbox',
-		align:'stretch',
-		pack:'start'
-	},
-	items:[{
-		xtype:'container',
-		layout: {
-			type:'hbox',
-			align:'stretch',
-			pack:'start'
-		},
-		height:45,
-		itemId:'navbox',
-		items:[{
-			xtype:'container',
-			flex:3,
-			itemId:'navbox_left',
-			layout: {
-				type:'hbox'
-			}
-		},{
-			xtype:'container',
-			flex:2,
-			itemId:'navbox_right',
-			layout: {
-				type:'hbox',
-				pack:'end'
-			}
-		}]
-	},{
-		xtype:'container',
-		layout: {
-			type:'hbox',
-			align:'stretch',
-			pack:'start'
-		},
-		height:320,
-		itemId:'tc_vel_box'
-	}],
-	minWidth:910, //1065+20 for scrollbar
+	layout: 'absolute',
+	height:1620,
+	width:1085, //1065+20 for scrollbar
 		
 	/****************************************************** SHOW ERROR MESSAGE ********************************************************/
-	_showMessage: function(text){
-		if(this.ShowMessageText) this.remove(this.ShowMessageText);
-		this.ShowMessageText = this.add({xtype:'text', text:text});
+	_showError: function(text){
+		if(this.errMessage) this.remove(this.errMessage);
+		this.errMessage = this.add({xtype:'text', text:text});
 	},
 	/****************************************************** DATA STORE METHODS ********************************************************/
-	
+
 	//___________________________________GENERAL LOADING STUFF___________________________________	
 	_loadModels: function(cb){
-		var promises = [],
-			models = {
-				Project: 'Project',
-				UserStory: 'HierarchicalRequirement',
-				Feature:'PortfolioItem/Feature',
-				Milestone:'PortfolioItem/Milestone'
-			};
-		_.each(models, function(modelType, modelName){
-			var defered = Q.defer();
-			Rally.data.WsapiModelFactory.getModel({ //load project
-				type:modelType, 
-				scope:this,
-				success: function(loadedModel){ 
-					this[modelName] = loadedModel;
-					defered.resolve();
-				}
-			});
-			promises.push(defered.promise);
-		}, this);
-		Q.all(promises).then(cb);
+		var me = this, finished=0, todo=4;
+		function done(){ if(++finished===todo) cb(); }
+		
+		Rally.data.WsapiModelFactory.getModel({ //load project
+			type:'Project', scope:me,
+			success: function(model){ 
+				me.Project = model;  done();
+			}
+		});
+		Rally.data.WsapiModelFactory.getModel({ //load user Story
+			type:'HierarchicalRequirement', scope:me,
+			success: function(model){ 
+				me.UserStory = model; done(); 
+			}
+		});
+		Rally.data.WsapiModelFactory.getModel({ //load feature
+			type:'PortfolioItem/Feature', scope:me,
+			success: function(model){ 
+				me.Feature = model; done(); 
+			}
+		});
+		Rally.data.ModelFactory.getModel({ //load milestone
+			type:'PortfolioItem/Milestone',
+			success: function(model){ 
+				me.Milestone = model; done();
+			}
+		});
 	},
 	
 	_loadProject: function(project, cb){ 
-		this.Project.load(project.ObjectID, {
+		var me = this;
+		me.Project.load(project.ObjectID, {
 			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 			context: {
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
-			callback: cb,
-			scope:this
+			callback: cb
 		});
 	},
 	
 	_loadFeature: function(oid, cb){ 
 		if(!oid){ cb(); return; }
-		this.Feature.load(oid, {
+		var me = this;
+		me.Feature.load(oid, {
 			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
 			context: {
-				workspace: this.getContext().getWorkspace()._ref,
-				project: this.ProjectRecord.get('_ref')
+				workspace: me.getContext().getWorkspace()._ref,
+				project: me.ProjectRecord.get('_ref')
 			},
-			callback: cb,
-			scope:this
+			callback: cb
 		});
 	},
 	
 	_loadUserStory: function(oid, cb){ 
 		if(!oid){ cb(); return; }
-		this.UserStory.load(oid, {
+		var me = this;
+		me.UserStory.load(oid, {
 			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 			context: {
-				workspace: this.getContext().getWorkspace()._ref,
-				project: this.ProjectRecord.get('_ref')
+				workspace: me.getContext().getWorkspace()._ref,
+				project: me.ProjectRecord.get('_ref')
 			},
-			callback: cb,
-			scope:this
+			callback: cb
 		});
 	},
 	
 	_loadMilestone: function(milestone, cb){ 
-		this.Milestone.load(milestone.ObjectID, {
+		var me = this;
+		me.Milestone.load(milestone.ObjectID, {
 			fetch: ['ObjectID', 'Parent', 'Name'],
 			context: {
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
-			callback: cb,
-			scope:this
+			callback: function(record, operation){
+				if(operation.wasSuccessful()) cb(record);
+				else me._showError('failed to retreive milestone: ' + milestone.ObjectID);
+			}
 		});
 	},
 	
-	/** to make this work with the NEW naming convention, simply delete the first filter (everything within if(this.TrainRecord){   ....) 
-			also, you'd have to get rid of the Name !contains ' ' thing too
-	**/
-	_getReleaseFilterString: function(){
-		// so we have 2 different filters: for a team in a train, a team not in a train (DCD, HVE),
+	_loadReleases: function(cb){ 
+		var me = this;
+		
+		// so we have 2 different filters: for a team in a train, a team not in a train (DCD, HVE), 
 		var filterString = Ext.create('Rally.data.wsapi.Filter', {
 			property:'Project.ObjectID',
-			value: this.ProjectRecord.get('ObjectID')
+			value: me.ProjectRecord.get('ObjectID')
 		});
 		var filterString2, f2;
-		/*if(this.TrainRecord){
-			var teamName = this.ProjectRecord.get('Name');
-			var trainName = this.TrainRecord.get('Name').split(' ART ')[0];
+		if(me.TrainRecord){
+			var teamName = me.ProjectRecord.get('Name');
+			var trainName = me.TrainRecord.get('Name').split(' ART ')[0];
 			var trainNames = teamName.split(trainName)[1].replace(/ \(.*\)/, '').split('-');//accounts for alpha-bravo-charlie stuff
 			if(!trainNames[0]) trainNames[0] = trainName;
 			else {
 				trainNames.push(trainName); //this should never get called
-				console.log('scrum ' + this.ProjectRecord.get('Name') + ' does not follow naming convention');
+				console.log('scrum ' + me.ProjectRecord.get('Name') + ' does not follow naming convention');
 			}
 			trainNames.forEach(function(trainName){
 				f2 = Ext.create('Rally.data.wsapi.Filter', { 
@@ -1287,34 +194,41 @@ Ext.define('CustomApp', {
 				else filterString2 = f2;
 			});
 			filterString = filterString.and(filterString2);
-		} else { */
+		} else {
 			filterString2 = Ext.create('Rally.data.wsapi.Filter', { //for non train scrums e.g: Q115
 				property:'ReleaseDate',
 				operator:'>=',
 				value: new Date().toISOString()
-			})/*.and(Ext.create('Rally.data.wsapi.Filter', { 
+			}).and(Ext.create('Rally.data.wsapi.Filter', { 
 				property:'Name',
 				operator:'!contains',
 				value: ' '
-			}))*/;
+			}));
 			filterString = filterString.and(filterString2);
-	/*	} */
-		return filterString.toString();
-	},
-	
-	_loadReleases: function(cb){  
-		var filterString = this._getReleaseFilterString();	
-		this.ReleaseStore = Ext.create('Rally.data.wsapi.Store',{
+		}
+		filterString = filterString.toString();
+		
+		var store = Ext.create('Rally.data.wsapi.Store',{
 			model: 'Release',
 			limit:Infinity,
 			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
-			filters:[{ property:'Dummy', value:'value' }]
+			filters:[{ property:'Dummy', value:'value' }],
+			listeners: {
+				load: {
+					fn: function(releaseStore, releaseRecords){
+						console.log('releases loaded:', releaseRecords);
+						me.ReleaseStore = releaseStore;
+						cb();
+					},
+					single:true
+				}
+			}
 		});
-		this.ReleaseStore._hydrateModelAndLoad = function(options){
+		store._hydrateModelAndLoad = function(options){
 			var deferred = new Deft.Deferred();
 			this.hydrateModel().then({
 					success: function(model) {
@@ -1329,28 +243,23 @@ Ext.define('CustomApp', {
 					scope: this
 			});
 		};
-		this.ReleaseStore.load({
-			scope:this,
-			callback:function(releaseRecords, releaseStore){
-				console.log('releases loaded:', releaseRecords);
-				cb(); cb=null;
-			}
-		});
+		store.load();
 	},
 	
 	_loadRootProject: function(projectRecord, cb){
-		var n = projectRecord.get('Name');
+		var me = this, n = projectRecord.get('Name');
 		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.get('Parent')) {
-			this.RootProjectRecord = projectRecord;
+			me.RootProjectRecord = projectRecord;
 			cb();
 		} else {
-			this._loadProject(projectRecord.get('Parent'), (function(parentRecord){
-				this._loadRootProject(parentRecord, cb);
-			}).bind(this));
+			me._loadProject(projectRecord.get('Parent'), function(parentRecord){
+				me._loadRootProject(parentRecord, cb);
+			});
 		}
 	},
 	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
+		var me = this;
 		if(!projectRecord) cb();
 		var split = projectRecord.get('Name').split(' ART ');
 		if(split.length>1) cb(projectRecord);
@@ -1358,59 +267,17 @@ Ext.define('CustomApp', {
 			var parent = projectRecord.get('Parent');
 			if(!parent) cb();
 			else {
-				this._loadProject(parent, (function(parentRecord){
-					this._projectInWhichTrain(parentRecord, cb);
-				}).bind(this));
+				me._loadProject(parent, function(parentRecord){
+					me._projectInWhichTrain(parentRecord, cb);
+				});
 			}
 		}
 	},
 	
-	_allValidProjectsLoaded: function(scrums, cb){ 
-		this.ValidProjects = _.indexBy(scrums, function(scrum) { return scrum.data.ObjectID; });
-		this.ProjectNames = _.map(scrums, function(s){ return {Name: s.get('Name')}; });
-		console.log('valid scrums loaded:', scrums);
-		cb(); 
-	},
-	
-	_loadAllTrains: function(cb){
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Project',
-			autoLoad:true,
-			remoteSort:false,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{
-					property:'Name',
-					operator: 'contains',
-					value: ' ART '
-				},{
-					property: 'Name',
-					operator: '!contains',
-					value: 'Test'
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(projectStore, projectRecords){
-						this.AllTrainRecordsStore = projectStore;
-						this.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART ')[0]};  });
-						console.log('AllTrainRecords loaded', projectRecords);
-						cb();
-					},
-					single:true,
-					scope:this
-				}
-			}
-		});
-	},
-	
 	_loadValidProjects: function(cb){
+		var me = this;
 		var scrums = [];
-		var loadChildren = (function(project, _cb){
+		function loadChildren(project, _cb){
 			if(project.data.TeamMembers.Count > 0) //valid scrums have people
 				scrums.push(project);
 			Ext.create('Rally.data.wsapi.Store',{
@@ -1420,7 +287,7 @@ Ext.define('CustomApp', {
 				limit:Infinity,
 				fetch: ['Name', 'ObjectID', 'Parent', 'TeamMembers'],
 				context:{
-					workspace: this.getContext().getWorkspace()._ref,
+					workspace: me.getContext().getWorkspace()._ref,
 					project: null
 				},
 				filters:[{
@@ -1431,20 +298,18 @@ Ext.define('CustomApp', {
 				listeners: {
 					load: {
 						fn: function(projectStore, projectRecords){
-							var promises = [];
-							projectRecords.forEach(function(c){ 
-								var defered = Q.defer();
-								loadChildren(c, defered.resolve);
-								promises.push(defered.promise);
-							});
-							Q.all(promises).then(_cb);
+							if(projectRecords.length === 0) _cb();
+							else {
+								var finished = 0;
+								var done = function(){ if(++finished === projectRecords.length) _cb(); };
+								projectRecords.forEach(function(c){ loadChildren(c, function(){ done(); }); });
+							}
 						},
-						single:true,
-						scope:this
+						single:true
 					}
 				}
 			});
-		}).bind(this);
+		}
 
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'Project',
@@ -1454,27 +319,32 @@ Ext.define('CustomApp', {
 			limit:1,
 			fetch: ['Name', 'ObjectID', 'TeamMembers'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
 			filters:[{
 					property:'Name',
-					value: this.RootProjectRecord.get('Name')
+					value: me.RootProjectRecord.get('Name')
 				}
 			],
 			listeners:{
 				load:{
 					fn: function(ps, recs){
-						loadChildren(recs[0], this._allValidProjectsLoaded.bind(this, scrums, cb));
+						loadChildren(recs[0], function(){ 
+							me.ValidProjects = _.indexBy(scrums, function(scrum) { return scrum.data.ObjectID; });
+							me.ProjectNames = _.map(scrums, function(s){ return {Name: s.get('Name')}; });
+							console.log('valid scrums loaded:', scrums);
+							cb(); 
+						});
 					},
-					single:true,
-					scope:this
+					single:true
 				}
 			}
 		});
 	},
 				
 	_loadRandomUserStory: function(ProjectRef, cb){ //get the most recent one!!
+		var me = this;
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
 			autoLoad:true,
@@ -1482,7 +352,7 @@ Ext.define('CustomApp', {
 			pageSize:1,
 			fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: ProjectRef
 			},
 			sorters: [
@@ -1503,6 +373,7 @@ Ext.define('CustomApp', {
 	},
 	
 	_loadUserStoryByFID: function(FormattedID, ProjectRef, cb){
+		var me = this;
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
 			autoLoad:true,
@@ -1510,7 +381,7 @@ Ext.define('CustomApp', {
 			pageSize:1,
 			fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: ProjectRef
 			},
 			filters: [
@@ -1530,97 +401,66 @@ Ext.define('CustomApp', {
 		});
 	},
 	
-	_milestoneLoaded: function(frData, defered, milestoneRecord){
-		var p = milestoneRecord.data.Parent;
-		this.FeatureProductHash[frData.ObjectID] = ((p && p.Name ) ? p.Name : '');
-		defered.resolve();
-	},
-						
-	_getFeatureFilterString: function(){
-		var coreFilter = Ext.create('Rally.data.wsapi.Filter', {
-			property:'Release.Name',
-			value: this.ReleaseRecord.get('Name')
-		});
-		if(!this.TrainRecord) { //TODO: how are DCD and HVE teams doing Features ???? is it tied to DCD and HVE. they dont have portfolioItem projects
-			// return Ext.create('Rally.data.wsapi.Filter', {
-				// property:'Project.Name',
-				// value: this.ProjectRecord.get('Name')
-			// }).and(coreFilter).toString();
-			throw 'You should have a train here'; //even non-train teams
-		}
-		else {
-			var prodString = this.TrainRecord.get('Name').match(/\((.*)\)/)[1];
-			return _.reduce(prodString.split('/'), function(filter, product){
-				var newFilter = Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: product.trim().split(' ')[0] + ' Portfolio' //ugly split(' ') because of stupid Bravo 'DNV (PG' 
-				});
-				return filter ? filter.or(newFilter) : newFilter;
-			}, null).and(coreFilter).toString();
-		}
-	},
-	
 	_loadFeatures: function(cb){ 
-		var filterString = this._getFeatureFilterString();
-		this.FeatureStore = Ext.create('Rally.data.wsapi.Store',{
+		var me = this;
+		Ext.create('Rally.data.wsapi.Store',{
 			model: 'PortfolioItem/Feature',
+			autoLoad:true,
 			limit:Infinity,
 			remoteSort:false,
 			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
-			filters:[{ property:'Dummy', value:'value' }]
-		});
-		this.FeatureStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
+			filters:[
+				{
+					property:'Release.Name',
+					value: me.ReleaseRecord.get('Name')
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(featureStore, featureRecords){
+						console.log('features loaded:', featureRecords);
+						me.FeatureStore = featureStore;
+						me.FeatureProductHash = {};
+						var finished = -1;
+						var done = function(){ if(++finished == featureRecords.length) { cb(); } };
+						done();
+						featureRecords.forEach(function(fr){
+							var frData = fr.data;
+							if(frData.Parent){
+								me._loadMilestone(frData.Parent, function(milestoneRecord){
+									var p = milestoneRecord.data.Parent;
+									me.FeatureProductHash[frData.ObjectID] = ((p && p.Name ) ? p.Name : '');
+									done();
+								});
+							}
+							else {
+								me.FeatureProductHash[frData.ObjectID] = '';
+								done();
+							}
 						});
 					},
-					scope: this
-			});
-		};
-		this.FeatureStore.load({
-			scope:this,
-			callback: function(featureRecords){
-				console.log('features loaded:', featureRecords);
-				var promises = [];
-				this.FeatureProductHash = {};
-				featureRecords.forEach(function(fr){
-					var defered = Q.defer();
-					var frData = fr.data;
-					if(frData.Parent) this._loadMilestone(frData.Parent, this._milestoneLoaded.bind(this, frData, defered));
-					else {
-						this.FeatureProductHash[frData.ObjectID] = '';
-						defered.resolve();
-					}
-					promises.push(defered.promise);
-				}, this);
-				Q.all(promises).then(cb);
+					single:true
+				}
 			}
 		});
 	},
 	
 	_loadIterations: function(cb){
-		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
-			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
-		this.IterationStore = Ext.create("Rally.data.WsapiDataStore", {
+		var me = this,
+			startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.get('ReleaseStartDate')),
+			endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.get('ReleaseDate'));
+		Ext.create("Rally.data.WsapiDataStore", {
 			model: "Iteration",
 			autoLoad: true,
-			remoteSort: false,
 			limit:Infinity,
       fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: this.getContext().getProject()._ref
+				workspace: me.getContext().getWorkspace()._ref,
+				project: me.getContext().getProject()._ref
 			},
       filters: [
 				{
@@ -1633,34 +473,36 @@ Ext.define('CustomApp', {
 					value: endDate  
 				}
 			],
+			remoteSort: false,
 			listeners: {
 				load: function(store) {
 					console.log('Iterations loaded:', store.getRecords());
+					me.IterationStore = store;
           cb();
         },
-				scope:this,
 				single:true
 			}
     });
 	},
 	
 	_loadUserStories: function(cb){	
-		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
-			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
+		var me = this,
+			startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.get('ReleaseStartDate')),
+			endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.get('ReleaseDate'));
 		
 		/*************************************** core Filter ********************************************/
 		var coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
 			property:'Release.Name',
-			value: this.ReleaseRecord.get('Name')
+			value: me.ReleaseRecord.get('Name')
 		}).and(Ext.create('Rally.data.wsapi.Filter', {
 			property:'Project.Name',
-			value: this.ProjectRecord.get('Name')
+			value: me.ProjectRecord.get('Name')
 		}));
 		
 		/*************************************** Dependencies Filter ********************************************/		
 		var depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
 			property:'Project.Name',
-			value: this.ProjectRecord.get('Name')
+			value: me.ProjectRecord.get('Name')
 		}).and(Ext.create('Rally.data.wsapi.Filter', {
 			property:'c_Dependencies',
 			operator:'!=',
@@ -1684,14 +526,14 @@ Ext.define('CustomApp', {
 		/*************************************** Store Stuff********************************************/
 		var filterString = coreFilter.or(depFilter).toString();
 		
-		this.UserStoryStore = Ext.create('Rally.data.wsapi.Store',{
+		var store = Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
 			limit:Infinity,
 			remoteSort:false,
 			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 			context:{
-				workspace: this.getContext().getWorkspace()._ref,
+				workspace: me.getContext().getWorkspace()._ref,
 				project: null
 			},
 			filters:[{ property:'Dummy', value:'value' }], //need this or filterString wont get injected
@@ -1699,13 +541,14 @@ Ext.define('CustomApp', {
 				load: {
 					fn: function(userStoryStore, userStoryRecords){
 						console.log('user stories loaded:', userStoryRecords);
+						me.UserStoryStore = userStoryStore;
 						cb();
 					},
 					single:true
 				}
 			}
 		});
-		this.UserStoryStore._hydrateModelAndLoad = function(options){
+		store._hydrateModelAndLoad = function(options){
       var deferred = new Deft.Deferred();
       this.hydrateModel().then({
         success: function(model) {
@@ -1720,22 +563,23 @@ Ext.define('CustomApp', {
 				scope: this
 			});
 		};
-		this.UserStoryStore.load();
+		store.load();
 	},
 	
 	/**___________________________________TEAM COMMITS STUFF___________________________________**/
 			
 	_getTeamCommit: function(featureRecord){	
-		var tcs = featureRecord.get('c_TeamCommits'),
-			projectID = this.ProjectRecord.get('ObjectID');
+		var me=this, tcs = featureRecord.get('c_TeamCommits'),
+			projectID = me.ProjectRecord.get('ObjectID');
 		try{ tcs = JSON.parse(atob(tcs))[projectID] || {}; } 
 		catch(e){ tcs = {}; }
 		return tcs;
 	},
 		
 	_setTeamCommit: function(featureRecord, tc, cb){
-		var tcs = featureRecord.get('c_TeamCommits'),
-			projectID = this.ProjectRecord.get('ObjectID');
+		var me = this,
+			tcs = featureRecord.get('c_TeamCommits'),
+			projectID = me.ProjectRecord.get('ObjectID');
 		try{ tcs = JSON.parse(atob(tcs)) || {}; }
 		catch(e){ tcs = {}; }
 		if(!tcs[projectID]) tcs[projectID] = {};
@@ -1743,7 +587,7 @@ Ext.define('CustomApp', {
 		tcs[projectID].Objective = tc.Objective;
 		var str = btoa(JSON.stringify(tcs, null, '\t'));
 		if(str.length >= 32768){
-			this._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+			me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 			if(cb) cb();
 		}
 		featureRecord.set('c_TeamCommits', str);
@@ -1752,22 +596,24 @@ Ext.define('CustomApp', {
 				
 	_TeamCommitsCountHash: {},
 	_getStoryCount: function(FID){	
-		if(this._TeamCommitsCountHash[FID]) return this._TeamCommitsCountHash[FID];
-		var count = _.reduce(this.UserStoryStore.getRecords(), function(total, us){ 
+		var me = this;
+		if(me._TeamCommitsCountHash[FID]) return me._TeamCommitsCountHash[FID];
+		var count = _.reduce(me.UserStoryStore.getRecords(), function(total, us){ 
 			return (us.get('Feature') && us.get('Feature').ObjectID == FID)*1 + total;
 		}, 0);
-		this._TeamCommitsCountHash[FID] = count;
+		me._TeamCommitsCountHash[FID] = count;
 		return count;
 	},
 		
 	_TeamCommitsEstimateHash: {},
 	_getStoriesEstimate: function(FID){	
-		if(this._TeamCommitsEstimateHash[FID]) 
-			return this._TeamCommitsEstimateHash[FID];
-		var estimate = _.reduce(this.UserStoryStore.getRecords(), function(total, us){ 
+		var me = this;
+		if(me._TeamCommitsEstimateHash[FID]) 
+			return me._TeamCommitsEstimateHash[FID];
+		var estimate = _.reduce(me.UserStoryStore.getRecords(), function(total, us){ 
 			return (us.get('Feature') && us.get('Feature').ObjectID == FID ? us.get('PlanEstimate') : 0)*1 + total;
 		}, 0);
-		this._TeamCommitsEstimateHash[FID] = estimate;
+		me._TeamCommitsEstimateHash[FID] = estimate;
 		return estimate;
 	},
 		
@@ -1783,9 +629,9 @@ Ext.define('CustomApp', {
 	},
 	
 	_parseRisksFromFeature: function(featureRecord){
-		var array = [],
-			projectID = this.ProjectRecord.get('ObjectID'), 
-			risks = this._getRisks(featureRecord),
+		var me = this, array = [],
+			projectID = me.ProjectRecord.get('ObjectID'), 
+			risks = me._getRisks(featureRecord),
 			ObjectID = featureRecord.get('ObjectID'),
 			FormattedID = featureRecord.get('FormattedID'),
 			FeatureName = featureRecord.get('Name');
@@ -1810,11 +656,11 @@ Ext.define('CustomApp', {
 	},
 	
 	_parseRisksData: function(){ 
-		var array = [];
-		_.each(this.FeatureStore.getRecords(), function(featureRecord){ 
-			array = array.concat(this._parseRisksFromFeature(featureRecord));
-		}, this);	
-		this.RisksParsedData = array;
+		var me = this, array = [];
+		_.each(me.FeatureStore.getRecords(), function(featureRecord){ 
+			array = array.concat(me._parseRisksFromFeature(featureRecord));
+		});	
+		me.RisksParsedData = array;
 	},
 		
 	_removeRiskFromList: function(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
@@ -1826,17 +672,17 @@ Ext.define('CustomApp', {
 	},
 	
 	_removeRisk: function(featureRecord, riskData, cb){ 
-		var risks = this._getRisks(featureRecord),
-			projectID = this.ProjectRecord.get('ObjectID');
+		var me = this, risks = me._getRisks(featureRecord),
+			projectID = me.ProjectRecord.get('ObjectID');
 			
 		if(risks[projectID]){
 			delete risks[projectID][riskData.RiskID];
-			this.RisksParsedData = _.reject(this.RisksParsedData, function(rpd){ //remove it from cached risks
+			me.RisksParsedData = _.reject(me.RisksParsedData, function(rpd){ //remove it from cached risks
 				return rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID;
 			});
 			var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
 			if(str.length >= 32768){
-				this._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				me._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
 			}
 			featureRecord.set('c_Risks', str);
@@ -1851,8 +697,8 @@ Ext.define('CustomApp', {
 	},
 	
 	_addRisk: function(featureRecord, riskData, cb){
-		var risks = this._getRisks(featureRecord),
-			projectID = this.ProjectRecord.get('ObjectID');
+		var me = this, risks = me._getRisks(featureRecord),
+			projectID = me.ProjectRecord.get('ObjectID');
 		
 		riskData = Ext.clone(riskData);
 		riskData.Edited = false;
@@ -1867,17 +713,17 @@ Ext.define('CustomApp', {
 		};
 		risks[projectID][riskData.RiskID] = copy;
 		var parseDataAdded = false;
-		for(var i=0;i<this.RisksParsedData.length; ++i){
-			var rpd = this.RisksParsedData[i];
+		for(var i=0;i<me.RisksParsedData.length; ++i){
+			var rpd = me.RisksParsedData[i];
 			if(rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID){
-				this.RisksParsedData[i] = riskData;
+				me.RisksParsedData[i] = riskData;
 				parseDataAdded = true; break;
 			}
 		}
-		if(!parseDataAdded) this.RisksParsedData.push(riskData);
+		if(!parseDataAdded) me.RisksParsedData.push(riskData);
 		var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
 		if(str.length >= 32768){
-			this._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+			me._alert('ERROR', 'Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 			if(cb) cb();
 		}
 		featureRecord.set('c_Risks', str);
@@ -1892,10 +738,12 @@ Ext.define('CustomApp', {
 	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/
 	
 	_isInRelease: function(usr){
-		return usr.get('Release') && usr.get('Release').Name === this.ReleaseRecord.get('Name');
+		var me = this;
+		return usr.get('Release') && usr.get('Release').Name === me.ReleaseRecord.get('Name');
 	},
 	
 	_getDependencies: function(userStoryRecord){
+		var me = this;
 		var dependencies, dependencyString = userStoryRecord.get('c_Dependencies');
 		if(dependencyString === '') dependencies = { Preds:{}, Succs:[] };
 		else {
@@ -1906,14 +754,14 @@ Ext.define('CustomApp', {
 	},
 	
 	_parseDependenciesFromUserStory: function(userStoryRecord){
-		var deps = this._getDependencies(userStoryRecord), 
+		var me = this, deps = me._getDependencies(userStoryRecord), 
 			preds = deps.Preds, succs = deps.Succs,
 			predDepsList = [], succDepsList = [],
-			startDate =	new Date(this.ReleaseRecord.get('ReleaseStartDate')),
-			endDate =	new Date(this.ReleaseRecord.get('ReleaseDate')),
+			startDate =	new Date(me.ReleaseRecord.get('ReleaseStartDate')),
+			endDate =	new Date(me.ReleaseRecord.get('ReleaseDate')),
 			ObjectID = userStoryRecord.get('ObjectID');
 			
-		if(this._isInRelease(userStoryRecord)){
+		if(me._isInRelease(userStoryRecord)){
 			for(var predDepID in preds){
 				var predDep = preds[predDepID];
 				predDepsList.push({
@@ -1961,16 +809,17 @@ Ext.define('CustomApp', {
 	},
 	
 	_buildDependenciesData: function(){	
-		this.DependenciesReleaseUserStories = _.filter(this.UserStoryStore.getRecords(), function(usr){
-			return this._isInRelease(usr);
-		}, this);	
+		var me = this;
+		me.DependenciesReleaseUserStories = _.filter(me.UserStoryStore.getRecords(), function(usr){
+			return me._isInRelease(usr);
+		});	
 		var predDepsList = [], succDepsList = [];
-		_.each(this.UserStoryStore.getRecords(), function(userStoryRecord){ //load risks into custom Data Store
-			var usrData = this._parseDependenciesFromUserStory(userStoryRecord);
+		_.each(me.UserStoryStore.getRecords(), function(userStoryRecord){ //load risks into custom Data Store
+			var usrData = me._parseDependenciesFromUserStory(userStoryRecord);
 			predDepsList = predDepsList.concat(usrData.Predecessors);
 			succDepsList = succDepsList.concat(usrData.Successors);
-		}, this);
-		this.DependenciesParsedData = {Predecessors:predDepsList, Successors:succDepsList};
+		});
+		me.DependenciesParsedData = {Predecessors:predDepsList, Successors:succDepsList};
 	},
 		
 	_newTeamDep: function(){
@@ -2025,24 +874,9 @@ Ext.define('CustomApp', {
 		});	
 	},
 	
-	_collectionSynced: function(userStoryRecord, msg, depData, dependencies, cb){
-		var str = btoa(JSON.stringify(dependencies, null, '\t'));
-		if(str.length >= 32768){
-			this._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
-			if(cb) cb();
-		}
-		userStoryRecord.set('c_Dependencies', str);
-		userStoryRecord.save({
-			callback:function(){
-				console.log(msg, userStoryRecord, depData, dependencies);
-				if(cb) cb();
-			}
-		});
-	},
-	
 	_removePredDep: function(userStoryRecord, predDepData, cb){
-		var dependencies = this._getDependencies(userStoryRecord),
-			cachePreds = this.DependenciesParsedData.Predecessors,
+		var me=this, dependencies = me._getDependencies(userStoryRecord),
+			cachePreds = me.DependenciesParsedData.Predecessors,
 			addUSlist = [], removeUSlist = [], depID = predDepData.DependencyID, i;
 
 		removeUSlist = dependencies.Preds[depID].Preds || [];
@@ -2050,7 +884,7 @@ Ext.define('CustomApp', {
 		delete dependencies.Preds[depID]; //delete from user story preds	
 		
 		//update or append to the cache, this predDepData
-		if(userStoryRecord.get('Project').ObjectID === this.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 			for(i=0;i<cachePreds.length; ++i){
 				if(cachePreds[i].DependencyID===depID){ 
 					cachePreds.splice(i, 1); 
@@ -2070,13 +904,26 @@ Ext.define('CustomApp', {
 			});
 		});
 		
-		this._syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Predecessors', 
-			this._collectionSynced.bind(this, userStoryRecord, 'removed predDep', predDepData, dependencies, cb)); 
+		me._syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Predecessors', function(){ 
+			var str = btoa(JSON.stringify(dependencies, null, '\t'));
+			if(str.length >= 32768){
+				me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			userStoryRecord.set('c_Dependencies', str);
+			userStoryRecord.save({
+				callback:function(){
+					console.log('removed pred from userStory:', userStoryRecord, predDepData, dependencies);
+					if(cb) cb();
+				}
+			});
+		});
+		
 	},
 	
 	_removeSuccDep: function(userStoryRecord, succDepData, cb){
-		var dependencies = this._getDependencies(userStoryRecord),
-			cacheSuccs = this.DependenciesParsedData.Successors, dpds,
+		var me=this, dependencies = me._getDependencies(userStoryRecord),
+			cacheSuccs = me.DependenciesParsedData.Successors, dpds,
 			addUSlist = [], removeUSlist = [], succDep, i;
 			
 		for(i=0; i<dependencies.Succs.length; ++i) //find the correct succDep. and remove it from the dependencies object
@@ -2085,7 +932,7 @@ Ext.define('CustomApp', {
 		removeUSlist = succDep ? [{USID:succDep.SUSID, PID:succDep.SPID}] : [];
 		
 		//update or append to the cache, this predDepData
-		if(userStoryRecord.get('Project').ObjectID === this.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 			for(i=0;i<cacheSuccs.length; ++i){ //remove suddDep from cache
 				dpds = cacheSuccs[i];
 				//need formattedID because can be multiple same succ DepIDs
@@ -2103,13 +950,26 @@ Ext.define('CustomApp', {
 				addUSlist.push({USID: succ.SUSID, PID: succ.SPID});
 			}
 		});
-		this._syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Successors', 
-			this._collectionSynced.bind(this, userStoryRecord, 'removed succdep', succDepData, dependencies, cb)); 
+		
+		me._syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Successors', function(){ 
+			var str = btoa(JSON.stringify(dependencies, null, '\t'));
+			if(str.length >= 32768){
+				me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			userStoryRecord.set('c_Dependencies', str);
+			userStoryRecord.save({
+				callback: function(){
+					console.log('removed succ from userStory:', userStoryRecord, succDepData, dependencies);
+					if(cb) cb();
+				}
+			});
+		});
 	},
 
 	_addPredDep: function(userStoryRecord, predDepData, cb){ 
-		var dependencies = this._getDependencies(userStoryRecord),
-			cachePreds = this.DependenciesParsedData.Predecessors, dpdp,
+		var me=this, dependencies = me._getDependencies(userStoryRecord),
+			cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
 			predUSlist = [], parseDataAdded = false, depID, i;
 		
 		predDepData = Ext.clone(predDepData);
@@ -2123,7 +983,7 @@ Ext.define('CustomApp', {
 		};
 
 		//update or append to the cache, this predDepData
-		if(userStoryRecord.get('Project').ObjectID === this.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 			for(i=0;i<cachePreds.length; ++i){
 				dpdp = cachePreds[i];
 				if(dpdp.DependencyID === predDepData.DependencyID){
@@ -2142,14 +1002,26 @@ Ext.define('CustomApp', {
 			}
 		}			
 		for(depID in dependencies.Preds){ _.each(dependencies.Preds[depID].Preds, appendPred); }
-			
-		this._syncCollection(userStoryRecord, predUSlist, [], 'Predecessors', 
-			this._collectionSynced.bind(this, userStoryRecord, 'added predDep', predDepData, dependencies, cb)); 
+		
+		me._syncCollection(userStoryRecord, predUSlist, [], 'Predecessors', function(){
+			var str = btoa(JSON.stringify(dependencies, null, '\t'));
+			if(str.length >= 32768){
+				me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			userStoryRecord.set('c_Dependencies', str);
+			userStoryRecord.save({
+				callback:function(){
+					console.log('added predecessor to userStory:', userStoryRecord, predDepData, dependencies);
+					if(cb) cb();
+				}
+			});
+		});
 	},
 	
 	_addSuccDep: function(userStoryRecord, succDepData, cb){ 
-		var dependencies = this._getDependencies(userStoryRecord),
-			cacheSuccs = this.DependenciesParsedData.Successors, dpds,
+		var me=this, dependencies = me._getDependencies(userStoryRecord),
+			cacheSuccs = me.DependenciesParsedData.Successors, dpds,
 			replaced = false, succUSlist=[], 
 			parseDataAdded = false, i, newSucc;
 		
@@ -2178,7 +1050,7 @@ Ext.define('CustomApp', {
 		if(!replaced) dependencies.Succs.push(newSucc);
 
 		//update or append to the cache, this succDepData
-		if(userStoryRecord.get('Project').ObjectID === this.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
 			for(i=0;i<cacheSuccs.length; ++i){ //update or append to the cache, this succDepData
 				dpds = cacheSuccs[i];
 				//could be multiple succs with same DepID
@@ -2198,8 +1070,20 @@ Ext.define('CustomApp', {
 			}
 		});
 		
-		this._syncCollection(userStoryRecord, succUSlist, [], 'Successors', 
-			this._collectionSynced.bind(this, userStoryRecord, 'added succdep', succDepData, dependencies, cb)); 
+		me._syncCollection(userStoryRecord, succUSlist, [], 'Successors', function(){
+			var str = btoa(JSON.stringify(dependencies, null, '\t'));
+			if(str.length >= 32768){
+				me._alert('ERROR', 'Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				if(cb) cb();
+			}
+			userStoryRecord.set('c_Dependencies', str);
+			userStoryRecord.save({
+				callback:function(){
+					console.log('added succ to userStory:', userStoryRecord, succDepData, dependencies);
+					if(cb) cb();
+				}
+			});
+		});
 	},
 	
 	/*************************************************** DEFINE MODELS ******************************************************/
@@ -2294,7 +1178,8 @@ Ext.define('CustomApp', {
 	/************************************************** MSGBOX config ****************************************************/
 	
 	_alert: function(title, str){
-		Ext.MessageBox.alert(title, str).setY(this._msgBoxY);
+		var me = this;
+		Ext.MessageBox.alert(title, str).setY(me._msgBoxY);
 		setTimeout(function(){ 
 			var x = Ext.MessageBox.down('button');
 			while(x.isHidden()) x = x.nextSibling();
@@ -2303,7 +1188,8 @@ Ext.define('CustomApp', {
 	},
 	
 	_confirm: function(title, str, fn){
-		Ext.MessageBox.confirm(title, str, fn).setY(this._msgBoxY);
+		var me = this;
+		Ext.MessageBox.confirm(title, str, fn).setY(me._msgBoxY);
 		setTimeout(function(){
 			var x = Ext.MessageBox.down('button');
 			while(x.isHidden()) x = x.nextSibling();
@@ -2312,20 +1198,27 @@ Ext.define('CustomApp', {
 	},
 	
 	_applyMessageBoxConfig: function(){
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+		function getOffsetTop(el){ return (el.parentNode ? el.offsetTop + getOffsetTop(el.parentNode) : 0); }
+		
+		var me = this, w = window, p = w.parent, pd = w.parent.document, l = w.location,
 			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
 		
-		var ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
-			iyOffset = Math.floor(ph/2 - ofy + ps - 50);
-		this._msgBoxY = iyOffset<0 ? 0 : iyOffset;
+		function setMsgBoxY(){
+			var ph = p.getWindowHeight(), 
+				ps = p.getScrollY(), 
+				ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			me._msgBoxY = iyOffset<0 ? 0 : iyOffset;
+		}
+		setMsgBoxY();
+		p.onresize = setMsgBoxY;
+		p.onscroll = setMsgBoxY;
 	},
 	
 	/************************************************** DATE FUNCTIONS ***************************************************/
 		
 	_getWorkweek: function(date){ //calculates intel workweek, returns integer
-		var oneDay = 1000 * 60 * 60 * 24,
+		var me = this, oneDay = 1000 * 60 * 60 * 24,
 			yearStart = new Date(date.getFullYear(), 0, 1),
 			dayIndex = yearStart.getDay(),
 			ww01Start = yearStart - dayIndex*oneDay,
@@ -2344,12 +1237,12 @@ Ext.define('CustomApp', {
 	},
 	
 	_getWorkweeks: function(){ //gets list of workweeks in the release
-		var i,
-			start = this.ReleaseRecord.get('ReleaseStartDate'),
-			end = this.ReleaseRecord.get('ReleaseDate'),
-			sd_week = this._getWorkweek(start),
-			ed_week = this._getWorkweek(end),
-			week_count = this._getWeekCount(start);
+		var me = this, i,
+			start = me.ReleaseRecord.get('ReleaseStartDate'),
+			end = me.ReleaseRecord.get('ReleaseDate'),
+			sd_week = me._getWorkweek(start),
+			ed_week = me._getWorkweek(end),
+			week_count = me._getWeekCount(start);
 
 		var weeks = [];
 		if(ed_week < sd_week){
@@ -2363,31 +1256,30 @@ Ext.define('CustomApp', {
 	/************************************************** Preferences FUNCTIONS ***************************************************/
 	
 	_loadPreferences: function(cb){ //parse all settings too
-		var uid = this.getContext().getUser().ObjectID;
+		var me = this,uid = me.getContext().getUser().ObjectID;
 		Rally.data.PreferenceManager.load({
-			appID: this.getAppId(),
+			appID: me.getAppId(),
       filterByName:preferenceName+ uid,
 			success: function(prefs) {
 				var appPrefs = prefs[preferenceName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
-				catch(e){ appPrefs = { projs:{}, refresh:30};}
-				this.AppPrefs = appPrefs;
+				catch(e){ appPrefs = { projs:{}, refresh:10};}
+				me.AppPrefs = appPrefs;
 				console.log('loaded prefs', appPrefs);
         cb();
-			},
-			scope:this
+			}
 		});
 	},
 
 	_savePreferences: function(prefs, cb){ // stringify and save only the updated settings
-		var s = {}, uid = this.getContext().getUser().ObjectID;
+		var me = this, s = {}, uid = me.getContext().getUser().ObjectID;
     s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
-			appID: this.getAppId(),
+			appID: me.getAppId(),
 			settings: s,
 			success: cb,
-			scope:this
+			scope:me
 		});
 	},
 	
@@ -2402,17 +1294,16 @@ Ext.define('CustomApp', {
 			.replace(/>/g, '&gt;');
 	},
 	
-	_getDirtyType: function(localRecord, realData){ //if risk or dep record is new/edited/deleted/unchanged
+	_getDirtyType: function(localRecord, realData){
 		var localData = localRecord.data;
 		if(!realData)	return localData.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
 		else return localData.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
 	},
 		
 	_getScopedRelease: function(){
-		var d = new Date(), r,
-			rs = this.ReleaseStore.getRecords(),
-			pid = this.ProjectRecord.get('ObjectID'),
-			prefOID = this.AppPrefs.projs[pid] && this.AppPrefs.projs[pid].Release;
+		var me = this, d = new Date(), r,
+			rs = me.ReleaseStore.getRecords(),
+			prefOID = me.AppPrefs.projs[me.ProjectRecord.get('ObjectID')];
 		return (prefOID && _.find(rs, function(r){ return r.get('ObjectID') == prefOID; })) ||
 			_.find(rs, function(r){
 				return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
@@ -2426,25 +1317,6 @@ Ext.define('CustomApp', {
 			}, null);
 	},
 	
-	_applyIframeResize: function(){
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
-			ip1 = iframe.parentNode,
-			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode,
-			height = 0, next = this.down();
-		while(next){
-			height += next.getHeight();
-			next = next.next();
-		}
-		ip1.style.height = height + 'px';
-		ip2.style.height = height + 'px';
-	},
-	
-	_windowResize: function(){
-		this._applyMessageBoxConfig();
-		this._applyIframeResize();
-	},
-	
   /************************************************ LOADING AND RELOADING ***********************************/
 
 	_isEditingTeamCommits: false, 
@@ -2456,265 +1328,169 @@ Ext.define('CustomApp', {
 		return false;
 	},
 	
-	_updateAllGrids: function(){ //synchronous function
-		var isEditingRisks = this._isEditing(this.CustomRisksStore),
-			isEditingDeps = this._isEditing(this.CustomPredDepStore) || this._isEditing(this.CustomSuccDepStore);
-		if(!this._isEditingVelocity && this.IterationStore && this.UserStoryStore)
-			if(this.CustomVelocityStore) this.CustomVelocityStore.intelUpdate();
-		if(!this._isEditingTeamCommits && this.FeatureStore && this.UserStoryStore)
-			if(this.CustomTeamCommitsStore) this.CustomTeamCommitsStore.intelUpdate();
-		if(!isEditingRisks && this.FeatureStore){
-			this._parseRisksData();
-			if(this.CustomRisksStore) this.CustomRisksStore.intelUpdate();
-		}
-		if(!isEditingDeps && this.UserStoryStore && this.FeatureStore){
-			this._buildDependenciesData(); //reparse the data
-			if(this.CustomPredDepStore) this.CustomPredDepStore.intelUpdate();
-			if(this.CustomSuccDepStore) this.CustomSuccDepStore.intelUpdate();
-		}
-	},
-	
 	_reloadStores: function(cb){
-		var isEditingRisks = this._isEditing(this.CustomRisksStore),
-			isEditingDeps = this._isEditing(this.CustomPredDepStore) || this._isEditing(this.CustomSuccDepStore),
-			promises = [];
-		if(!this._isEditingVelocity){
-			var def1 = Q.defer();
-			if(this.IterationStore) this.IterationStore.load({ callback: def1.resolve});
-			else this._loadIterations(def1.resolve);
-			promises.push(def1.promise);
-		}
-		if(!this._isEditingTeamCommits && !isEditingRisks){
-			var def2 = Q.defer();
-			if(this.FeatureStore) this.FeatureStore.load({ callback: def2.resolve});
-			else this._loadFeatures(def2.resolve);
-			promises.push(def2.promise);
-		}
-		if(!this._isEditingVelocity && !this._isEditingTeamCommits && !isEditingDeps){
-			var def3 = Q.defer();
-			if(this.UserStoryStore) this.UserStoryStore.load({ callback: def3.resolve});
-			else this._loadUserStories(def3.resolve);
-			promises.push(def3.promise);
-		}
-		Q.all(promises).then((function(){
-			this._updateAllGrids(); 
-			if(cb) cb();
-		}).bind(this));
-	},
-	
-	_storesReloaded: function(){	
-		this._loadTeamCommitsGrid();
-		this._loadVelocityGrid(); 
-		this._loadRisksGrid();
-		this._loadDependenciesGrids();
-		setTimeout(this._windowResize.bind(this), 0);
+		var me = this, scroll,
+			finished = 0, 
+			todo=3,
+			isEditingRisks = me._isEditing(me.CustomRisksStore),
+			isEditingDeps = me._isEditing(me.CustomPredDepStore) || me._isEditing(me.CustomSuccDepStore),
+			reloadStore = function(store, grid){
+				if(store){
+					if(grid) scroll = grid.view.getEl().getScrollTop();
+					store.update();
+					if(grid) grid.view.getEl().setScrollTop(scroll);
+
+				}
+			},
+			done = function(){ 
+				if(++finished==todo) {	
+					if(!me._isEditingVelocity && me.IterationStore && me.UserStoryStore)
+						reloadStore(me.CustomVelocityStore, null);
+					if(!me._isEditingTeamCommits && me.FeatureStore && me.UserStoryStore)
+						reloadStore(me.CustomTeamCommitsStore, null);
+					if(!isEditingRisks && me.FeatureStore){
+						me._parseRisksData();
+						reloadStore(me.CustomRisksStore, me.RisksGrid);
+					}
+					if(!isEditingDeps && me.UserStoryStore && me.FeatureStore){
+						me._buildDependenciesData(); //reparse the data
+						reloadStore(me.CustomPredDepStore, me.PredDepGrid);
+						reloadStore(me.CustomSuccDepStore, me.SuccDepGrid);
+					}
+					if(cb) cb();
+				}
+			};	
+		if(!me._isEditingVelocity){
+			if(me.IterationStore) me.IterationStore.load({ callback: done});
+			else me._loadIterations(done);
+		} else done();
+		if(!me._isEditingTeamCommits && !isEditingRisks){
+			if(me.FeatureStore) me.FeatureStore.load({ callback: done });
+			else me._loadFeatures(done);
+		} else done();
+		if(!me._isEditingVelocity && !me._isEditingTeamCommits && !isEditingDeps){
+			if(me.UserStoryStore) me.UserStoryStore.load({ callback: done });
+			else me._loadUserStories(done);
+		} else done();
 	},
 	
 	_reloadEverything:function(){
-		this._isEditingTeamCommits = false;
-		this._isEditingVelocity = false;
+		var me = this;
+		me.removeAll();
 		
-		delete this.ShowMessageText;
+		me._isEditingTeamCommits = false;
+		me._isEditingVelocity = false;
 		
-		delete this.UserStoryStore;
-		delete this.FeatureStore;
-		delete this.IterationStore;
+		delete me.UserStoryStore;
+		delete me.FeatureStore;
+		delete me.IterationStore;
 		
-		delete this.PredDepGrid;
-		delete this.SuccDepGrid;
-		delete this.RisksGrid;
-		delete this.VelocityGrid;
-		delete this.TeamCommitsGrid;
+		delete me.PredDepGrid;
+		delete me.SuccDepGrid;
+		delete me.RisksGrid;
+		delete me.VelocityGrid;
+		delete me.TeamCommitsGrid;
 		
-		delete this.CustomPredDepStore;
-		delete this.CustomSuccDepStore;
-		delete this.CustomTeamCommitsStore;
-		delete this.CustomVelocityStore;
+		delete me.CustomPredDepStore;
+		delete me.CustomSuccDepStore;
+		delete me.CustomTeamCommitsStore;
+		delete me.CustomVelocityStore;
 		
-		this.setLoading(true);
+		me._loadReleasePicker();
+		me._loadRefreshToggleButton();
+		me._loadManualRefreshButton();
 		
-		var toRemove = this.down('#tc_vel_box').next(), tmp;
-		while(toRemove){ //delete risks and deps
-			tmp = toRemove.next();
-			toRemove.up().remove(toRemove);
-			toRemove = tmp;
-		}
-		this.down('#tc_vel_box').removeAll(); //delete vel & team commits
-
-		if(!this.ReleasePicker){ //draw these once, never removve them
-			this._loadReleasePicker();
-			this._loadTrainPicker();
-			this._loadRefreshIntervalCombo();
-			this._loadManualRefreshButton();
-		}		
-		this._reloadStores((function(){ 
-			this._storesReloaded();
-			this.setLoading(false);
-		}).bind(this));
-	},
-	
-	/******************************************************* REFRESHING WSAPI DATA ***********************************************/
-	
-	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
-		this._reloadStores(this._windowResize.bind(this));
-	},
-	
-	_setRefreshInterval: function(){
-		if(this.RefreshInterval) { 
-			clearInterval(this.RefreshInterval); 
-			delete this.RefreshInterval; 
-		}
-		if(this.AppPrefs.refresh!=='Off')
-			this.RefreshInterval = setInterval(this._refreshDataFunc.bind(this), this.AppPrefs.refresh * 1000);
+		me._reloadStores(function(){						
+			me._loadTeamCommitsGrid();
+			me._loadVelocityGrid(); 
+			me._loadRisksGrid();
+			me._loadDependenciesGrids();
+		});
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-	_releasesLoaded: function(){ //finally we can render!!!
-		var currentRelease = this._getScopedRelease();
-		if(currentRelease){
-			this.ReleaseRecord = currentRelease;
-			console.log('release loaded', currentRelease);
-			this._setRefreshInterval(); 
-			this._reloadEverything();
-		} else {
-			this.removeAll();
-			this._alert('This team has no releases');
-		}
-	},
-	
-	_trainRecordLoaded: function(trainRecord){ //now we set the TrainRecord based on trainRecord and this.AppPrefs
-		if(trainRecord)	this.TrainRecord = trainRecord;
-		else {
-			this.ProjectNotInTrain = true;
-			var pid = this.ProjectRecord.get('ObjectID');
-			if(this.AppPrefs.projs[pid] && this.AppPrefs.projs[pid].Train) {
-				this.TrainRecord = this.AllTrainRecordsStore.findExactRecord('ObjectID', this.AppPrefs.projs[pid].Train);
-				if(!this.TrainRecord) this.TrainRecord = this.AllTrainRecordsStore.first();
-			}
-			else this.TrainRecord = this.AllTrainRecordsStore.first();
-		}
-		console.log('train loaded:', trainRecord);
-		this._loadReleases(this._releasesLoaded.bind(this));
-	},
-	
-	_allTrainRecordsLoaded: function(){
-		this._projectInWhichTrain(this.ProjectRecord, this._trainRecordLoaded.bind(this));
-	},
-	
-	_preferencesLoaded: function(){
-		this._loadAllTrains(this._allTrainRecordsLoaded.bind(this));
-	},
-	
-	_validProjectsLoaded: function(){
-		this.ProjectRecord = this.ValidProjects[this.ProjectRecord.get('ObjectID')];
-		if(this.ProjectRecord) this._loadPreferences(this._preferencesLoaded.bind(this));
-		else{
-			this.removeAll();
-			this._alert('Please scope to a valid team for release planning');
-		}
-	},
-	
-	_rootProjectLoaded: function(){
-		this._loadValidProjects(this._validProjectsLoaded.bind(this));
-	},
-	
-	_currentProjectLoaded: function(scopeProjectRecord){
-		this.ProjectRecord = scopeProjectRecord;
-		this._loadRootProject(scopeProjectRecord, this._rootProjectLoaded.bind(this));
-	},
-	
-	_modelsLoaded: function(){
-		var scopeProject = this.getContext().getProject();
-		this._loadProject(scopeProject, this._currentProjectLoaded.bind(this));
-	},
 	
 	launch: function(){
-		this._showMessage('Loading Data...');
-		window.parent.onresize = this._windowResize.bind(this); //reset msgbox and app height on resize
-		window.parent.onscroll = this._applyMessageBoxConfig.bind(this);	//reset msgbox on scroll
-		if(!this.getContext().getPermissions().isProjectEditor(this.getContext().getProject())) { //permission check
-			this.removeAll();
-			this._alert('You do not have permissions to edit this project');
-		} else {	
-			//Ext.tip.QuickTipManager.init(); //TOOLTIP IS UGLY
-			//Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1200 });
-			this._defineModels();
-			this._loadModels(this._modelsLoaded.bind(this));
+		var me = this;
+		me._showError('Loading Data...');
+		me._defineModels();
+		me._applyMessageBoxConfig();
+		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+			me.removeAll();
+			me._showError('You do not have permissions to edit this project');
+			return;
 		}
+		//Ext.tip.QuickTipManager.init();
+		//Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1200 });
+		me._loadModels(function(){
+			var scopeProject = me.getContext().getProject();
+			me._loadProject(scopeProject, function(scopeProjectRecord){
+				me._loadRootProject(scopeProjectRecord, function(){
+					me._loadValidProjects(function(){
+						me.ProjectRecord = me.ValidProjects[scopeProjectRecord.get('ObjectID')];
+						if(me.ProjectRecord){
+							me._projectInWhichTrain(me.ProjectRecord, function(trainRecord){
+								me.TrainRecord = trainRecord; 
+								console.log('train loaded:', trainRecord);
+								me._loadPreferences(function(){
+									if(me.AppPrefs.refresh!=='Off')
+										me.RefreshInterval = setInterval(function(){ me._reloadStores(); }, me.AppPrefs.refresh * 1000);
+									me._loadReleases(function(){
+										var currentRelease = me._getScopedRelease();
+										if(currentRelease){
+											me.ReleaseRecord = currentRelease;
+											console.log('release loaded', currentRelease);
+											me._reloadEverything();
+										} else {
+											me.removeAll();
+											me._showError('This team has no releases');
+										}
+									});
+								});
+							});
+							
+						} else{
+							me.removeAll();
+							me._showError('Please scope to a valid team for release planning');
+						}
+					});
+				});
+			});
+		});
 	},
 
-	/******************************************************* RENDER TOP BAR ITEMS********************************************************/	
-	
-	_releasePickerSelected: function(combo, records){
-		if(this.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-		this.ReleaseRecord = this.ReleaseStore.findExactRecord('Name', records[0].get('Name'));			
-		var pid = this.ProjectRecord.get('ObjectID');		
-		if(!this.AppPrefs.projs[pid]) this.AppPrefs.projs[pid] = {};
-		this.AppPrefs.projs[pid].Release = this.ReleaseRecord.get('ObjectID');
-		this._savePreferences(this.AppPrefs, this._reloadEverything.bind(this));
-	},
-				
+	/******************************************************* RENDER ********************************************************/	
+	//1065px wide
+
 	_loadReleasePicker: function(){
-		this.ReleasePicker = this.down('#navbox_left').add({
+		var me = this;
+		me.ReleasePicker = me.add({
 			xtype:'combobox',
-			width:240,
-			padding:'0 10px 0 0',
-			labelWidth:50,
+			x:0, y:0,
 			store: Ext.create('Ext.data.Store', {
 				fields: ['Name'],
-				data: _.map(this.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
+				data: _.map(me.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
 			}),
 			displayField: 'Name',
 			fieldLabel: 'Release:',
 			editable:false,
-			value:this.ReleaseRecord.get('Name'),
+			value:me.ReleaseRecord.get('Name'),
 			listeners: {
-				select: this._releasePickerSelected.bind(this)
+				select: function(combo, records){
+					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
+					me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].get('Name'));			
+					me.AppPrefs.projs[me.ProjectRecord.get('ObjectID')] = me.ReleaseRecord.get('ObjectID');
+					me._savePreferences(me.AppPrefs, function(){me._reloadEverything(); }, 0);
+				}	
 			}
 		});
 	},
 	
-	_trainPickerSelected: function(combo, records){
-		if(this.TrainRecord.get('Name').indexOf(records[0].get('Name')) === 0) return;
-		this.TrainRecord = this.AllTrainRecordsStore.findRecord('Name', records[0].get('Name'));			
-		var pid = this.ProjectRecord.get('ObjectID');
-		if(!this.AppPrefs.projs[pid]) this.AppPrefs.projs[pid] = {};
-		this.AppPrefs.projs[pid].Train = this.TrainRecord.get('ObjectID');
-		this._savePreferences(this.AppPrefs, this._reloadEverything.bind(this));
-	},
-	
-	_loadTrainPicker: function(){
-		if(this.ProjectNotInTrain){
-			this.down('#navbox_left').add({
-				xtype:'combobox',
-				width:240,
-				labelWidth:40,
-				store: Ext.create('Ext.data.Store', {
-					fields: ['Name'],
-					data: this.TrainNames
-				}),
-				displayField: 'Name',
-				fieldLabel: 'Train:',
-				editable:false,
-				value:this.TrainRecord.get('Name').split(' ART ')[0],
-				listeners: {
-					select: this._trainPickerSelected.bind(this)
-				}
-			});
-		}
-	},
-	
-	_refreshComboSelected: function(combo, records){
-		var rate = records[0].get('Rate');
-		if(this.AppPrefs.refresh === rate) return;
-		this.AppPrefs.refresh = rate;
-		this._setRefreshInterval();
-		this._savePreferences(this.AppPrefs);
-	},
-				
-	_loadRefreshIntervalCombo: function(){
-		this.down('#navbox_right').add({
+	_loadRefreshToggleButton: function(){
+		var me = this;
+		me.ToggleRefreshButton = me.add({
 			xtype:'combobox',
+			x:705, y:0,
 			store: Ext.create('Ext.data.Store', {
 				fields: ['Rate'],
 				data: [
@@ -2729,27 +1505,35 @@ Ext.define('CustomApp', {
 			displayField: 'Rate',
 			fieldLabel: 'Refresh Rate (seconds):',
 			editable:false,
-			value:this.AppPrefs.refresh,
+			value:me.AppPrefs.refresh,
 			listeners: {
-				select: this._refreshComboSelected.bind(this)
+				select: function(combo, records){
+					var rate = records[0].get('Rate');
+					if(me.AppPrefs.refresh === rate) return;
+					me.AppPrefs.refresh = rate;
+					if(me.RefreshInterval){ clearInterval(me.RefreshInterval);}
+					if(rate === 'Off') delete me.RefreshInterval;
+					else setInterval(function(){ me._reloadStores(); }, me.AppPrefs.refresh * 1000);
+					me._savePreferences(me.AppPrefs);
+				}	
 			}
 		});
 	},
 	
 	_loadManualRefreshButton: function(){
-		this.down('#navbox_right').add({
+		var me = this;
+		me.AddManualRefreshButton = me.add({
 			xtype:'button',
 			text:'Refresh Data',
-			style:'margin: 5px 0 0 5px',
+			style:'margin-top: 5px',
+			x:965, y:0,
 			width:100,
 			listeners:{
-				click: this._refreshDataFunc.bind(this)
+				click: function(){ me._reloadStores(); }
 			}
 		});
 	},
 	
-	/******************************************************* RENDER GRIDS ********************************************************/	
-
 	_loadTeamCommitsGrid: function(){
 		var me = this;	
 		
@@ -2769,19 +1553,18 @@ Ext.define('CustomApp', {
 			};
 		});		
 		
-		me.CustomTeamCommitsStore = Ext.create('Intel.data.FastStore', {
+		me.CustomTeamCommitsStore = Ext.create('Ext.data.Store', {
 			data: customTeamCommitsRecords,
 			model:'IntelTeamCommits',
 			autoSync:true,
 			limit:Infinity,
 			proxy: {
-				type:'fastsessionproxy',
+				type:'sessionstorage',
 				id:'TeamCommitsProxy' + Math.random()
 			},
-			intelUpdate: function(){
+			update: function(){
 				var tcStore = me.CustomTeamCommitsStore, 
 					tcRecords = tcStore.getRange();
-				tcStore.suspendEvents(true);
 				console.log('syncing teamCommits with features', tcRecords, me.FeatureStore.getRecords());
 				tcRecords.forEach(function(tcRecord){
 					var featureRecord = me.FeatureStore.findRecord('ObjectID', tcRecord.get('ObjectID'));
@@ -2793,10 +1576,9 @@ Ext.define('CustomApp', {
 							tcRecord.set('Objective', newVal.Objective || '');
 					}
 				});
-				tcStore.resumeEvents();
 			}
 		});
-		me.CustomTeamCommitsStore.intelUpdate();
+		me.CustomTeamCommitsStore.update();
 		
 		var columnCfgs = [
 			{
@@ -2817,7 +1599,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Feature', 
 				dataIndex:'Name',
-				flex:1,
+				width:160,
 				editor:false,
 				resizable:false
 			},{
@@ -2843,7 +1625,7 @@ Ext.define('CustomApp', {
 						}
 					});
 				},
-				width:70,
+				width:50,
 				renderer:function(oid){
 					return me._getStoryCount(oid);
 				}
@@ -2864,7 +1646,7 @@ Ext.define('CustomApp', {
 						}
 					});
 				},
-				width:70,
+				width:60,
 				renderer:function(oid){
 					return me._getStoriesEstimate(oid);
 				}
@@ -2874,7 +1656,7 @@ Ext.define('CustomApp', {
 				sortable:true, 
 				editor:false,
 				resizable:false,
-				width:70
+				width:60
 			},{
 				dataIndex:'Commitment',
 				text:'Status',	
@@ -2904,7 +1686,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
-				flex:1,
+				width:120,
 				editor: {
 					xtype: 'textarea',
 					grow:true,
@@ -2918,18 +1700,20 @@ Ext.define('CustomApp', {
 			}
 		];
 		
-		me.TeamCommitsGrid = me.down('#tc_vel_box').add({
+		me.TeamCommitsGrid = me.add({
 			xtype: 'rallygrid',
       title: "Team Commits",
-			//width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20), //770
+			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20), //770
 			height:300,
-			flex:2,
-			padding:'0 20px 0 0',
+			x:0, y:40,
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
-			plugins: [ 'fastcellediting' ],
+			plugins: [
+				Ext.create('Ext.grid.plugin.CellEditing', {
+					triggerEvent:'cellclick'
+				})
+			],
 			viewConfig:{
-				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(tcRecord, index, rowParams, store){
@@ -2999,19 +1783,18 @@ Ext.define('CustomApp', {
 			};
 		}), 'Name');
 
-		me.CustomVelocityStore = Ext.create('Intel.data.FastStore', {
+		me.CustomVelocityStore = Ext.create('Ext.data.Store', {
 			data: iterationGroupTotals,
 			model:'IntelVelocity',
 			autoSync:true,
 			limit:Infinity,
 			proxy: {
-				type:'fastsessionproxy',
+				type:'sessionstorage',
 				id:'VelocityProxy' + Math.random()
 			},
-			intelUpdate: function(){
+			update: function(){
 				var velStore = me.CustomVelocityStore, 
-					velRecords = velStore.getRange();
-				velStore.suspendEvents(true);
+					velRecords = velStore.getRange();	
 				console.log('syncing velocity with current iterations', velRecords, me.IterationStore.getRecords());
 				velRecords.forEach(function(velRecord){
 					var iterationName = velRecord.get('Name');
@@ -3022,16 +1805,15 @@ Ext.define('CustomApp', {
 						console.log('velocity record update', velRecord);
 					}
 				});
-				velStore.resumeEvents();
 			}
 		});
-		me.CustomVelocityStore.intelUpdate();		
+		me.CustomVelocityStore.update();		
 		
 		var columnCfgs = [
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
-				flex: 2,
+				width:160,
 				editor:false,
 				resizable:false,
 				sortable:true,
@@ -3047,9 +1829,9 @@ Ext.define('CustomApp', {
 			},{
 				text: 'Target Capacity (Planned Velocity)',
 				dataIndex: 'PlannedVelocity',
-				flex:1,
+				width:85,
 				tdCls: 'intel-editor-cell',
-				//xtype:'numbercolumn',
+				xtype:'numbercolumn',
 				editor:'textfield',
 				resizable:false,
 				sortable:true,
@@ -3060,8 +1842,8 @@ Ext.define('CustomApp', {
 			},{
 				text: 'Actual Load (Plan Estimate)',
 				dataIndex: 'RealVelocity',
-				//xtype:'numbercolumn',
-				flex:1,
+				xtype:'numbercolumn',
+				width:80,
 				editor:false,
 				resizable:false,
 				sortable:true,
@@ -3072,13 +1854,13 @@ Ext.define('CustomApp', {
 				}
 			}
 		];
-		me.VelocityGrid = me.down('#tc_vel_box').add({
+		me.VelocityGrid = me.add({
 			xtype: 'rallygrid',
 			title: "Velocity",
 			scroll:'vertical',
-			//width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
+			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
-			flex:1,
+			x:720, y:40,
 			showPagingToolbar: false,
 			showRowActionsColumn:false,
 			viewConfig: {
@@ -3129,24 +1911,23 @@ Ext.define('CustomApp', {
 			workweeks = me._getWorkweeks(),
 			riskSorter = function(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }; //new come first
 		
-		me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
+		me.CustomRisksStore = Ext.create('Ext.data.Store', { 
 			data: Ext.clone(me.RisksParsedData),
 			autoSync:true,
 			model:'IntelRisk',
 			limit:Infinity,
 			proxy: {
-				type:'fastsessionproxy',
+				type:'sessionstorage',
 				id:'RiskProxy' + Math.random()
 			},
 			sorters: [riskSorter],
-			intelUpdate: function(){
+			update: function(){
 				var riskStore = me.CustomRisksStore, 
 					riskRecords = riskStore.getRange(),
 					realRisksDatas = me.RisksParsedData.slice(0), //'real' risks list
 					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing risks with current features', riskRecords, realRisksDatas);
-				riskStore.suspendEvents(true);
 				for(var i = 0;i<riskRecords.length;++i){
 					var riskRecord =  riskRecords[i];
 					var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), realRisksDatas);
@@ -3160,10 +1941,8 @@ Ext.define('CustomApp', {
 							if(!_.isEqual(riskRecord.get(key), realRiskData[key])){ remoteChanged = true; break; }
 						}
 						if(remoteChanged){
-							riskRecord.beginEdit();
 							for(key in realRiskData)
 								riskRecord.set(key, realRiskData[key]);
-							riskRecord.endEdit();
 						}
 					}
 				}
@@ -3171,10 +1950,9 @@ Ext.define('CustomApp', {
 					console.log('adding real risk', realRiskData);
 					riskStore.add(Ext.create('IntelRisk', Ext.clone(realRiskData)));
 				});
-				riskStore.resumeEvents();
 			}
 		});
-		me.CustomRisksStore.intelUpdate();
+		me.CustomRisksStore.update();
 		
 		var columnCfgs = [
 			{
@@ -3183,15 +1961,39 @@ Ext.define('CustomApp', {
 				tdCls: 'intel-editor-cell',	
 				width:80,
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['FormattedID'],
 						data: _.map(me.FeatureStore.getRecords(), function(fr){
 							return {'FormattedID': fr.get('FormattedID')};
-						}),
-						sorters: { property: 'FormattedID' }
+						})
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					value:'',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) === 0;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'FormattedID'
 				},			
 				resizable:false,
@@ -3201,16 +2003,39 @@ Ext.define('CustomApp', {
 				text:'Feature', 
 				dataIndex:'FeatureName',
 				tdCls: 'intel-editor-cell',	
-				flex:1,
+				width:185,
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Name'],
 						data: _.map(me.FeatureStore.getRecords(), function(fr){
 							return {'Name': fr.get('Name') };
-						}),
-						sorters: { property: 'Name' }
+						})
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) === 0;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'Name'
 				},
 				resizable:false,
@@ -3220,7 +2045,7 @@ Ext.define('CustomApp', {
 				text:'Risk Description', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
-				flex:1,
+				width:170,
 				editor: {
 					xtype: 'textarea',
 					grow:true,
@@ -3235,7 +2060,7 @@ Ext.define('CustomApp', {
 				text:'Impact', 
 				dataIndex:'Impact',
 				tdCls: 'intel-editor-cell',	
-				flex:1,
+				width:170,
 				resizable:false,
 				sortable:true,
 				editor: {
@@ -3281,7 +2106,7 @@ Ext.define('CustomApp', {
 				text:'Contact', 
 				dataIndex:'Contact',
 				tdCls: 'intel-editor-cell',	
-				flex:1,
+				width:170,
 				editor: {
 					xtype: 'textarea',
 					grow:true,
@@ -3318,7 +2143,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
@@ -3335,10 +2160,11 @@ Ext.define('CustomApp', {
 								element: 'el',
 								fn: function(){
 									var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
-									riskRecord.beginEdit();
+									var scroll = me.RisksGrid.view.getEl().getScrollTop();
 									for(var key in realRiskData)
 										riskRecord.set(key, realRiskData[key]);	
-									riskRecord.endEdit();
+									riskRecord.set('Edited', false);
+									me.RisksGrid.view.getEl().setScrollTop(scroll);	
 								}
 							}
 						}
@@ -3346,7 +2172,7 @@ Ext.define('CustomApp', {
 				}
 			},{
 				text:'',
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				width:30,
 				resizable:false,
@@ -3400,10 +2226,10 @@ Ext.define('CustomApp', {
 										me._loadFeature(riskRecord.get('ObjectID'), function(oldFeatureRecord){							
 											newFeatureRecord = newFeatureRecord || oldFeatureRecord; //if new is same as old			
 											var lastAction = function(){
-												riskRecord.beginEdit();
+												var scroll = me.RisksGrid.view.getEl().getScrollTop();
 												riskRecord.set('Edited', false);
 												riskRecord.set('ObjectID', newFeatureRecord.get('ObjectID'));
-												riskRecord.endEdit();
+												me.RisksGrid.view.getEl().setScrollTop(scroll);
 												me.RisksGrid.setLoading(false);
 											},
 											nextAction = function(){
@@ -3427,7 +2253,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
@@ -3445,7 +2271,9 @@ Ext.define('CustomApp', {
 										me.RisksGrid.setLoading(true);
 										me._loadFeature(riskRecord.get('ObjectID'), function(featureRecord){
 											var lastAction = function(){
+												var scroll = me.RisksGrid.view.getEl().getScrollTop();
 												me.CustomRisksStore.remove(riskRecord);
+												me.RisksGrid.view.getEl().setScrollTop(scroll);
 												me.RisksGrid.setLoading(false);
 											};	
 											if(!featureRecord){ lastAction(); return; } 
@@ -3466,55 +2294,59 @@ Ext.define('CustomApp', {
 		];
 
 		me.AddRiskButton = me.add({
-			xtype:'container',
-			items:[{
-				xtype:'button',
-				text:'+ Add Risk',
-				width:80,
-				style:'margin:10px 0 10px 0',
-				listeners:{
-					click: function(){
-						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
-						else if(me.CustomRisksStore) {
-							var model = Ext.create('IntelRisk', {
-								RiskID: (new Date() * 1) + '' + (Math.random() * 10000000),
-								ObjectID: '',
-								FormattedID: '',
-								FeatureName: '',
-								Description: '',
-								Impact: '',
-								Status: '',
-								Contact: '',
-								Checkpoint: '',
-								Edited:true
-							});
-							me.CustomRisksStore.insert(0, [model]);
-							me.RisksGrid.view.getEl().setScrollTop(0);
-							me.RisksGrid.getSelectionModel().select(model);
-						}
+			xtype:'button',
+			text:'+ Add Risk',
+			x:0,
+			y:370,
+			width:80,
+			style:'margin-bottom:10px',
+			listeners:{
+				click: function(){
+					if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
+					else if(me.CustomRisksStore) {
+						var model = Ext.create('IntelRisk', {
+							RiskID: (new Date() * 1) + '' + (Math.random() * 10000000),
+							ObjectID: '',
+							FormattedID: '',
+							FeatureName: '',
+							Description: '',
+							Impact: '',
+							Status: '',
+							Contact: '',
+							Checkpoint: '',
+							Edited:true
+						});
+						me.CustomRisksStore.insert(0, [model]);
+						me.RisksGrid.getSelectionModel().select(model);
 					}
 				}
-			}]
+			}
 		});
 		
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
       title: 'Risks',
-			minHeight:150,
-			maxHeight:700,
+			width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
+			height:260,
+			x:0,
+			y:400,
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
-			plugins: [ 'fastcellediting' ],
+			plugins: [
+				Ext.create('Ext.grid.plugin.CellEditing', {
+					triggerEvent:'cellclick'
+				})
+			],
 			viewConfig:{
-				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px';}
 			},
 			listeners: {
-				edit: function(editor, e){			
-					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
-						to improve performance.**/
+				beforeedit: function(editor, e){
+					me._riskScroll = me.RisksGrid.view.getEl().getScrollTop();
+				},
+				edit: function(editor, e){					
 					var grid = e.grid,
 						risksRecord = e.record,
 						field = e.field,
@@ -3543,6 +2375,7 @@ Ext.define('CustomApp', {
 							risksRecord.set('Edited', previousEdit); 
 						} else risksRecord.set('FeatureName', featureRecord.get('Name'));
 					} 
+					me.RisksGrid.view.getEl().setScrollTop(me._riskScroll);
 				}
 			},
 			showRowActionsColumn:false,
@@ -3563,70 +2396,65 @@ Ext.define('CustomApp', {
 		
 		function depSorter(o1, o2){ return o1.data.DependencyID > o2.data.DependencyID ? -1 : 1; } //new come first
 		function depTeamSorter(o1, o2){ return o1.data.TID > o2.data.TID ? -1 : 1; } //new come first
-
-		me.CustomPredDepStore = Ext.create('Intel.data.FastStore', { 
+		
+		me.CustomPredDepStore = Ext.create('Ext.data.Store', { 
 			data: Ext.clone(me.DependenciesParsedData.Predecessors),
 			autoSync:true,
 			model:'IntelPredDep',
-			limit:Infinity,
 			proxy: {
-				type:'fastsessionproxy',
+				type:'sessionstorage',
 				id:'PredDepProxy' + Math.random()
 			},
 			sorters:[depSorter],
-			intelUpdate: function(){ 
+			limit:Infinity,
+			update: function(){ 
 				var predDepStore = me.CustomPredDepStore, 
 					predDepRecs = predDepStore.getRange(),
 					realPredDepsData = me.DependenciesParsedData.Predecessors.slice(), //shallow copy of it	
 					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing predDeps with current userStories', predDepRecs, realPredDepsData);
-				predDepStore.suspendEvents(true);
 				for(var i = 0;i<predDepRecs.length;++i){
 					var depRec =  predDepRecs[i], //predecessor dependency record to be updated
 						depID = depRec.get('DependencyID'),
 						realDep = me._removeDepFromList(depID, realPredDepsData),	
-						dirtyType = me._getDirtyType(depRec, realDep),
-						teamStore = me.PredDepTeamStores[depID],
-						teamCont = me.PredDepContainers[depID];				
-					if(dirtyType === 'New' || dirtyType === 'Edited'){}//we don't want to remove any pending changes			
-					else if(dirtyType == 'Deleted'){ // the depRec was deleted by someone else, and we arent editing it
+						dirtyType = me._getDirtyType(depRec, realDep);
+					if(dirtyType === 'New' || dirtyType === 'Edited'){ 
+						//we don't want to remove any pending changes			
+					} else if(dirtyType == 'Deleted'){ 
+						// the depRec was deleted by someone else, and we arent editing it
 						predDepStore.remove(depRec);
-						if(teamStore) delete me.PredDepTeamStores[depID];
-						if(teamCont) delete me.PredDepContainers[depID];
+						if(me.PredDepTeamStores) delete me.PredDepTeamStores[depID];
+						if(me.PredDepContainers) delete me.PredDepContainers[depID];
 					} else {
 						for(key in realDep){
 							if(!_.isEqual(depRec.get(key), realDep[key])){ remoteChanged = true; break; }
 						}
 						if(remoteChanged){
-							depRec.beginEdit();
 							for(key in realDep){
 								if(key === 'Predecessors') depRec.set(key, Ext.clone(realDep[key]) || [me._newTeamDep()]); 
 								else depRec.set(key, realDep[key]);
 							}
-							depRec.endEdit();
 						}
 					}				
 					var preds = depRec.get('Predecessors');
 					//DO NOT SET EDITED==true, because it is already true! only new or edited will ever have preds.length==0
 					if(!preds.length) depRec.set('Predecessors', [me._newTeamDep()]); 
 					
-					if(remoteChanged && teamStore)
-						setTimeout(teamStore.intelUpdate.bind(teamStore), 0);
+					if(remoteChanged && me.PredDepTeamStores && me.PredDepTeamStores[depID])
+						me.PredDepTeamStores[depID].update();
 				}
-				
 				realPredDepsData.forEach(function(realDep){ 
 					//add all the new risks that other people have added since the last load
 					console.log('adding predDep', realDep);
 					predDepStore.add(Ext.create('IntelPredDep', Ext.clone(realDep)));					
-					var depID = realDep.DependencyID,
-						teamStore = me.PredDepTeamStores[depID];
-					if(teamStore) setTimeout(teamStore.intelUpdate.bind(teamStore), 0);
+					var depID = realDep.DependencyID;
+					if(me.PredDepTeamStores && me.PredDepTeamStores[depID])
+						me.PredDepTeamStores[depID].update();
 				});
-				predDepStore.resumeEvents();
 			}
 		});
-		me.CustomPredDepStore.intelUpdate();
+		me.CustomPredDepStore.update();
 		
 		var predDepColumnCfgs = [
 			{
@@ -3636,15 +2464,41 @@ Ext.define('CustomApp', {
 				width:80,
 				resizable:false,
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['FormattedID'],
 						data: _.map(me.DependenciesReleaseUserStories, function(usr){
 							return {'FormattedID': usr.get('FormattedID')};
 						}),
-						sorters: { property: 'FormattedID' }
+						sorters: {
+							property: 'FormattedID'
+						}
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) > -1;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'FormattedID'
 				},
 				sortable:true,
@@ -3652,18 +2506,44 @@ Ext.define('CustomApp', {
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
-				flex:1,
+				width:155,
 				resizable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Name'],
 						data: _.map(me.DependenciesReleaseUserStories, function(usr){
 							return {'Name': usr.get('Name') };
 						}),
-						sorters: { property: 'Name' }
+						sorters: {
+							property: 'Name'
+						}
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) > -1;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'Name'
 				},
 				sortable:true	,
@@ -3671,7 +2551,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
-				flex:1,
+				width:160,
 				resizable:false,
 				tdCls: 'intel-editor-cell',
 				editor: {
@@ -3717,27 +2597,26 @@ Ext.define('CustomApp', {
 				width:480,
 				resizable:false,
 				sortable:false,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				renderer: function (depID){
 					var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
 					var predecessors = predDepRecord.get('Predecessors');
 					if(!me.PredDepTeamStores[depID]){
-						me.PredDepTeamStores[depID] = Ext.create('Intel.data.FastStore', { 
+						me.PredDepTeamStores[depID] = Ext.create('Ext.data.Store', { 
 							model:'IntelDepTeam',
 							data: predecessors,
 							autoSync:true,
 							limit:Infinity,
 							proxy: {
-								type:'fastsessionproxy',
+								type:'sessionstorage',
 								id:'TeamDep-' + depID + '-proxy' + Math.random()
 							},
 							sorters:[depTeamSorter],
-							intelUpdate: function(){
+							update: function(){
 								var depTeamStore = me.PredDepTeamStores[depID],
 									depTeamRecords = depTeamStore.getRange(),
 									predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
-									predecessors = predDepRecord.get('Predecessors').slice(0);
-								depTeamStore.suspendEvents(true);
+									predecessors = predDepRecord.get('Predecessors').slice(0);	
 								Outer:
 								for(var i = 0;i<depTeamRecords.length;++i){
 									var depTeamRecord = depTeamRecords[i];
@@ -3745,10 +2624,8 @@ Ext.define('CustomApp', {
 									for(var j=0; j<predecessors.length;++j){
 										if(predecessors[j].TID === depTeamRecord.get('TID')){
 											realTeamDep = predecessors.splice(j, 1)[0];
-											depTeamRecord.beginEdit();
 											for(var key in realTeamDep)
 												depTeamRecord.set(key, realTeamDep[key]);
-											depTeamRecord.endEdit();
 											continue Outer;
 										}
 									}
@@ -3758,7 +2635,6 @@ Ext.define('CustomApp', {
 									depTeamStore.add(Ext.create('IntelDepTeam', realTeamDep));
 								});	
 								if(depTeamStore.getRange().length===0) depTeamStore.add(me._newTeamDep());
-								depTeamStore.resumeEvents();
 							}
 						});	
 					}
@@ -3785,12 +2661,37 @@ Ext.define('CustomApp', {
 								}
 							},
 							editor: {
-								xtype:'intelcombobox', 
+								xtype:'combobox', 
 								store: Ext.create('Ext.data.Store', {
 									fields: ['Name'],
 									data: me.ProjectNames,
 									sorters: { property: 'Name' }
 								}),
+								enableKeyEvents:true,
+								ignoreNoChange:true,
+								queryMode:'local',
+								listeners: {
+									keyup: function(a,b){
+										if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+										var me = this;
+										me.store.filters.getRange().forEach(function(filter){
+											me.store.removeFilter(filter);
+										});
+										me.store.filterBy(function(item){
+											return item.get('Name').indexOf(me.getRawValue()) > -1;
+										});
+									},
+									focus: function(combo) {
+										var me = this;
+										me.store.filters.getRange().forEach(function(filter){
+											me.store.removeFilter(filter);
+										});
+										me.store.filterBy(function(item){
+											return item.get('Name').indexOf(me.getRawValue()) === 0;
+										});
+										combo.expand();
+									}
+								},
 								displayField: 'Name'
 							}
 						},{
@@ -3824,7 +2725,7 @@ Ext.define('CustomApp', {
 						},{
 							resizable:false,
 							width:30,
-							xtype:'fastgridcolumn',
+							xtype:'componentcolumn',
 							tdCls: 'iconCell',
 							renderer: function(val, meta, depTeamRecord){
 								//meta.tdAttr = 'data-qtip="' + 'Delete Team' + '"';
@@ -3836,23 +2737,22 @@ Ext.define('CustomApp', {
 										click: {
 											element: 'el',
 											fn: function(){
-												var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
-													predecessors = predDepRecord.get('Predecessors'),
-													teamStore = me.PredDepTeamStores[depID];										
-												teamStore.suspendEvents(true);
+												predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
+												var predecessors = predDepRecord.get('Predecessors'),
+													scroll = me.PredDepGrid.view.getEl().getScrollTop();
 												for(var i=0; i<predecessors.length; ++i)
 													if(predecessors[i].TID === depTeamRecord.get('TID')){
 														predecessors.splice(i, 1); break; }
-												teamStore.remove(depTeamRecord);
+												me.PredDepTeamStores[depID].remove(depTeamRecord);
 												
 												if(!predecessors.length){
 													var newItem = me._newTeamDep();
-													teamStore.add(Ext.create('IntelDepTeam', newItem));
+													me.PredDepTeamStores[depID].add(Ext.create('IntelDepTeam', newItem));
 													predecessors.push(newItem);
 												}
 												predDepRecord.set('Edited', true);
-												me.PredDepGrid.view.refreshNode(me.CustomPredDepStore.indexOf(predDepRecord));//fix row not resizing
-												teamStore.resumeEvents();
+												me.PredDepGrid.view.refreshNode(me.CustomPredDepStore.indexOf(predDepRecord));
+												me.PredDepGrid.view.getEl().setScrollTop(scroll);	
 											}
 										}
 									}
@@ -3895,7 +2795,11 @@ Ext.define('CustomApp', {
 								rowLines:false,
 								flex:1,
 								columnCfgs: teamColumnCfgs,
-								plugins: [ 'fastcellediting' ],
+								plugins: [
+									Ext.create('Ext.grid.plugin.CellEditing', {
+										triggerEvent:'cellclick'
+									})
+								],
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
@@ -3906,34 +2810,42 @@ Ext.define('CustomApp', {
 								listeners: {
 									beforeedit: function(editor, e){
 										if(!!e.value) return false; //don't edit if has value
+										me._predDepScroll = me.PredDepGrid.view.getEl().getScrollTop();
 									},
-									edit: function(editor, e){									
-										/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
-											to improve performance.**/		
+									edit: function(editor, e){	
 										var depTeamRecord = e.record,
 											field = e.field,
 											value = e.value,
 											originalValue = e.originalValue,
-											predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
-											predecessors = predDepRecord.get('Predecessors'),
-											i;			
-										if(value === originalValue) return;										
+											i, predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);										
+										if(value === originalValue) return;
+										
+										var previousEdit = predDepRecord.get('Edited');
+										predDepRecord.set('Edited', true);
+										var predecessors = predDepRecord.get('Predecessors');
+										
 										if(field === 'PID'){
 											var projectRecord = _.find(me.ValidProjects, function(vp){ return vp.data.Name === value; });
 											if(!projectRecord) {
 												depTeamRecord.set('PID', originalValue);
+												predDepRecord.set('Edited', previousEdit);
+												me.PredDepGrid.view.getEl().setScrollTop(me._predDepScroll); //reset grid scroll
 												return;
 											} else {
 												for(i = 0;i<predecessors.length;++i){
-													if(predecessors[i].PID == projectRecord.get('ObjectID')){
+													if(predecessors[i].PID === ''+projectRecord.get('ObjectID')){
 														me._alert('ERROR', value + ' already included in this dependency');
 														depTeamRecord.set('PID', originalValue);
+														predDepRecord.set('Edited', previousEdit);
+														me.PredDepGrid.view.getEl().setScrollTop(me._predDepScroll); //reset grid scroll
 														return;
 													}
 												}
 												if(projectRecord.get('ObjectID') === me.ProjectRecord.get('ObjectID')){
 													me._alert('ERROR', 'You cannot depend on yourself');
 													depTeamRecord.set('PID', originalValue);
+													predDepRecord.set('Edited', previousEdit);
+													me.PredDepGrid.view.getEl().setScrollTop(me._predDepScroll); //reset grid scroll
 													return;
 												}
 												depTeamRecord.set('PID', projectRecord.get('ObjectID'));
@@ -3946,7 +2858,7 @@ Ext.define('CustomApp', {
 												break; 
 											}
 										}
-										predDepRecord.set('Edited', true);
+										me.PredDepGrid.view.getEl().setScrollTop(me._predDepScroll);
 									},
 									selectionchange: function(){ this.getSelectionModel().deselectAll(); }
 								},
@@ -3978,7 +2890,7 @@ Ext.define('CustomApp', {
 				text:'',
 				dataIndex:'Edited',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, predDepRecord){	
@@ -3995,14 +2907,14 @@ Ext.define('CustomApp', {
 								element: 'el',
 								fn: function(){
 									var depID = predDepRecord.get('DependencyID');
-									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));
-									predDepRecord.beginEdit();
+									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));	
+									var scroll = me.PredDepGrid.view.getEl().getScrollTop();
 									for(var key in realDep){
 										if(key === 'Predecessors') predDepRecord.set(key, Ext.clone(realDep[key]) || [me._newTeamDep()]);
 										else predDepRecord.set(key, realDep[key]);
-									}	
-									predDepRecord.endEdit();
-									me.PredDepTeamStores[depID].intelUpdate();
+									}
+									me.PredDepGrid.view.getEl().setScrollTop(scroll);	
+									me.PredDepTeamStores[depID].update();
 								}
 							}
 						}
@@ -4012,7 +2924,7 @@ Ext.define('CustomApp', {
 				text:'',
 				dataIndex:'Edited',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, predDepRecord){				
@@ -4106,14 +3018,14 @@ Ext.define('CustomApp', {
 															});
 															addedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the added teams now 
 															updatedTeamDepsCallbacks.forEach(function(cb){ cb(); }); //execute the updated teams now 
-										
-															predDepRecord.beginEdit();
-															predDepRecord.set('ObjectID', newUSRecord.get('ObjectID'));
-															predDepRecord.set('Predecessors', localPredTeams); //update these after 1) and 2) changed them
+
+															predDepData.ObjectID = newUSRecord.get('ObjectID');
+															predDepData.Predecessors = localPredTeams; //update these after 1) and 2) changed them
 															
 															var lastAction = function(){
+																var scroll = me.PredDepGrid.view.getEl().getScrollTop();
 																predDepRecord.set('Edited', false);
-																predDepRecord.endEdit();
+																me.PredDepGrid.view.getEl().setScrollTop(scroll);
 																me.PredDepGrid.setLoading(false);
 															},
 															nextAction = function(){
@@ -4238,7 +3150,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, predDepRecord){		
@@ -4257,7 +3169,9 @@ Ext.define('CustomApp', {
 										me.PredDepGrid.setLoading(true);
 										me._loadUserStory(predDepRecord.get('ObjectID'), function(usRecord){							
 											var lastAction = function(){	//last thing to do!	
+												var scroll = me.PredDepGrid.view.getEl().getScrollTop();
 												me.CustomPredDepStore.remove(predDepRecord);
+												me.PredDepGrid.view.getEl().setScrollTop(scroll);	
 												me.PredDepGrid.setLoading(false);
 											};	
 											if(!usRecord) lastAction();
@@ -4293,45 +3207,46 @@ Ext.define('CustomApp', {
 		];
 
 		me.AddPredDepButton = me.add({
-			xtype:'container',
-			items:[{
-				xtype:'button',
-				text:'+ Add Dependency',
-				style:'margin:10px 0 10px 0',
-				listeners:{
-					click: function(){
-						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
-						else if(me.CustomPredDepStore) {
-							var model = Ext.create('IntelPredDep', {
-								DependencyID: (new Date() * 1) + '' + (Math.random() * 10000000),
-								ObjectID:'',
-								FormattedID: '',
-								UserStoryName: '',
-								Description: '',
-								Checkpoint: '',
-								Predecessors:[me._newTeamDep()],
-								Edited:true
-							});
-							me.CustomPredDepStore.insert(0, [model]);	
-							me.PredDepGrid.view.getEl().setScrollTop(0);
-							me.PredDepGrid.getSelectionModel().select(model);
-						}
+			xtype:'button',
+			text:'+ Add Dependency',
+			style:'margin-bottom:10px',
+			x:0,
+			y:720,
+			listeners:{
+				click: function(){
+					if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
+					else if(me.CustomPredDepStore) {
+						var model = Ext.create('IntelPredDep', {
+							DependencyID: (new Date() * 1) + '' + (Math.random() * 10000000),
+							ObjectID:'',
+							FormattedID: '',
+							UserStoryName: '',
+							Description: '',
+							Checkpoint: '',
+							Predecessors:[me._newTeamDep()],
+							Edited:true
+						});
+						me.CustomPredDepStore.insert(0, [model]);	
+						me.PredDepGrid.getSelectionModel().select(model);
 					}
 				}
-			}]
+			}
 		});
 		
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
       title: "Dependencies We Have on Other Teams",
-			//width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
-			minHeight:150,
-			maxHeight:500,
+			width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
+			height:300,
+			x:0, y:750,
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
-			plugins: [ 'fastcellediting' ],
+			plugins: [
+				Ext.create('Ext.grid.plugin.CellEditing', {
+					triggerEvent:'cellclick'
+				})
+			],
 			viewConfig:{
-				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(predDepRecord){ 
@@ -4340,37 +3255,41 @@ Ext.define('CustomApp', {
 				}
 			},
 			listeners: {
-				edit: function(editor, e){		
-					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
-						to improve performance.**/			
-					var predDepRecord = e.record,
+				beforeedit: function(editor, e){
+					me._predDepScroll = me.PredDepGrid.view.getEl().getScrollTop();
+				},
+				edit: function(editor, e){					
+					var grid = e.grid,
+						predDepRecord = e.record,
 						field = e.field,
 						value = e.value,
-						originalValue = e.originalValue;
+						originalValue = e.originalValue;							
 					
 					if(value === originalValue) return; 
 					if(field === 'Description') {
 						value = me._htmlEscape(value);			
-						predDepRecord.set(field, value);
+						predDepRecord.data[field] = value;
 					}
 
 					var previousEdit = predDepRecord.get('Edited'); 
-					predDepRecord.set('Edited', true);
+					predDepRecord.data.Edited = true;
 					
 					var userStoryRecord;
 					if(field === 'UserStoryName'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('Name') === value; });
 						if(!userStoryRecord){
-							predDepRecord.set('UserStoryName', originalValue);
-							predDepRecord.set('Edited', previousEdit);
-						} else predDepRecord.set('FormattedID', userStoryRecord.get('FormattedID'));
+							predDepRecord.data.UserStoryName = originalValue;
+							predDepRecord.data.Edited = previousEdit; 
+						} else predDepRecord.data.FormattedID = userStoryRecord.get('FormattedID');	
 					} else if(field === 'FormattedID'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
 						if(!userStoryRecord) {
-							predDepRecord.set('UserStoryName', originalValue);
-							predDepRecord.set('Edited', previousEdit);
-						} else predDepRecord.set('UserStoryName', userStoryRecord.get('Name'));
+							predDepRecord.data.FormattedID = originalValue;
+							predDepRecord.data.Edited = previousEdit; 
+						} else predDepRecord.data.UserStoryName = userStoryRecord.get('Name');	
 					}
+					predDepRecord.commit();
+					me.PredDepGrid.view.getEl().setScrollTop(me._predDepScroll);
 				}
 			},
 			showRowActionsColumn:false,
@@ -4380,24 +3299,23 @@ Ext.define('CustomApp', {
 		});	
 	
 		/****************************** SUCCESSORS    STUFF           ***********************************************/	
-		me.CustomSuccDepStore = Ext.create('Intel.data.FastStore', { 
+		me.CustomSuccDepStore = Ext.create('Ext.data.Store', { 
 			data: Ext.clone(me.DependenciesParsedData.Successors.slice(0)),
 			autoSync:true,
 			model:'IntelSuccDep',
 			proxy: {
-				type: 'fastsessionproxy',
+				type: 'sessionstorage',
 				id:'SuccDepProxy' + Math.random()
 			},
 			limit:Infinity,
 			sorters:[depSorter],
-			intelUpdate: function(){
+			update: function(){
 				var succDepStore = me.CustomSuccDepStore,
 					customSuccDepRecs = succDepStore.getRange(), 
 					realSuccDepsData = me.DependenciesParsedData.Successors.slice(0), //shallow copy of it
 					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing succDeps with current userStories', customSuccDepRecs, realSuccDepsData);
-				succDepStore.suspendEvents(true);
 				for(var i = 0;i<customSuccDepRecs.length;++i){
 					var depRec =  customSuccDepRecs[i]; //predecessor dependency record to be updated
 					
@@ -4414,10 +3332,8 @@ Ext.define('CustomApp', {
 							if(!_.isEqual(depRec.get(key), realDep[key])){ remoteChanged = true; break; }
 						}
 						if(remoteChanged){
-							depRec.beginEdit();
 							for(key in realDep)
 								depRec.set(key, realDep[key]);
-							depRec.endEdit();
 						}
 					}
 				}
@@ -4425,10 +3341,9 @@ Ext.define('CustomApp', {
 					console.log('adding succDep', realDep);
 					succDepStore.add(Ext.create('IntelSuccDep', Ext.clone(realDep)));
 				});
-				succDepStore.resumeEvents();
 			}
 		});
-		me.CustomSuccDepStore.intelUpdate();
+		me.CustomSuccDepStore.update();
 		
 		var succDepColumnCfgs = [
 			{
@@ -4450,13 +3365,13 @@ Ext.define('CustomApp', {
 			},{
 				text:'Req Team UserStory',
 				dataIndex:'SuccUserStoryName',
-				flex:1,
+				width:160,
 				resizable:false,
 				sortable:true		
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
-				flex:1,
+				width:160,
 				resizable:false,
 				editor: false,
 				sortable:true					
@@ -4504,15 +3419,41 @@ Ext.define('CustomApp', {
 				width:80,
 				resizable:false,
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					width:120,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['FormattedID'],
 						data: _.map(me.DependenciesReleaseUserStories, function(usr){
 							return {'FormattedID': usr.get('FormattedID')};
 						}),
-						sorters: { property: 'FormattedID' }
+						sorters: {
+							property: 'FormattedID'
+						}
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) > -1;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('FormattedID').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'FormattedID'
 				},
 				sortable:true,
@@ -4523,18 +3464,44 @@ Ext.define('CustomApp', {
 			},{
 				text:'Sup UserStory', 
 				dataIndex:'UserStoryName',
-				flex:1,
+				width:150,
 				resizable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
-					xtype:'intelcombobox',
+					xtype:'combobox',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Name'],
 						data: _.map(me.DependenciesReleaseUserStories, function(usr){
 							return {'Name': usr.get('Name') };
 						}),
-						sorters: { property: 'Name' }
+						sorters: {
+							property: 'Name'
+						}
 					}),
+					enableKeyEvents:true,
+					queryMode:'local',
+					listeners: {
+						keyup: function(a,b){
+							if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) > -1;
+							});
+						},
+						focus: function(combo) {
+							var me = this;
+							me.store.filters.getRange().forEach(function(filter){
+								me.store.removeFilter(filter);
+							});
+							me.store.filterBy(function(item){
+								return item.get('Name').indexOf(me.getRawValue()) === 0;
+							});
+							combo.expand();
+						}
+					},
 					displayField: 'Name'
 				},
 				sortable: true,
@@ -4546,7 +3513,7 @@ Ext.define('CustomApp', {
 				text:'',
 				dataIndex:'Edited',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){			
@@ -4560,10 +3527,12 @@ Ext.define('CustomApp', {
 							click: {
 								element: 'el',
 								fn: function(){
+									var scroll = me.SuccDepGrid.view.getEl().getScrollTop();
 									succDepRecord.set('Edited', true);
 									succDepRecord.set('Assigned', false);
 									succDepRecord.set('FormattedID', '');
 									succDepRecord.set('UserStoryName', '');
+									me.SuccDepGrid.view.getEl().setScrollTop(scroll);	
 								}
 							}
 						}
@@ -4573,7 +3542,7 @@ Ext.define('CustomApp', {
 				text:'',
 				dataIndex:'Edited',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){		
@@ -4591,10 +3560,10 @@ Ext.define('CustomApp', {
 								fn: function(){
 									var depID = succDepRecord.get('DependencyID');
 									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
-									succDepRecord.beginEdit(true);
+									var scroll = me.SuccDepGrid.view.getEl().getScrollTop();
 									for(var key in realDep)
 										succDepRecord.set(key, realDep[key]);
-									succDepRecord.endEdit();
+									me.SuccDepGrid.view.getEl().setScrollTop(scroll);	
 								}
 							}
 						}
@@ -4603,7 +3572,7 @@ Ext.define('CustomApp', {
 			},{
 				text:'',
 				width:30,
-				xtype:'fastgridcolumn',
+				xtype:'componentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){	
@@ -4643,7 +3612,9 @@ Ext.define('CustomApp', {
 											succDepData.ObjectID = newUSRecord.get('ObjectID');
 											
 											var lastAction = function(){ //This is the last thing to do!
+												var scroll = me.SuccDepGrid.view.getEl().getScrollTop();
 												succDepRecord.set('Edited', false);
+												me.SuccDepGrid.view.getEl().setScrollTop(scroll);	
 												me.SuccDepGrid.setLoading(false);
 											};
 											
@@ -4714,14 +3685,17 @@ Ext.define('CustomApp', {
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
       title: "Dependencies Other Teams Have on Us",
-			//width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
-			minHeight:150,
-			maxHeight:800,
+			width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
+			height:300,
+			x:0, y:1100,
 			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
-			plugins: [ 'fastcellediting' ],
+			plugins: [
+				Ext.create('Ext.grid.plugin.CellEditing', {
+					triggerEvent:'cellclick'
+				})
+			],
 			viewConfig:{
-				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px'; }
@@ -4731,6 +3705,7 @@ Ext.define('CustomApp', {
 					var succDepRecord = e.record;
 					if(succDepRecord.get('Supported') == 'No' && e.field != 'Supported') 
 						return false; //don't user story stuff if not supported
+					me._succDepScroll = me.SuccDepGrid.view.getEl().getScrollTop();
 				},
 				edit: function(editor, e){					
 					var grid = e.grid,
@@ -4769,6 +3744,7 @@ Ext.define('CustomApp', {
 							succDepRecord.set('UserStoryName', '');
 						}
 					}
+					me.SuccDepGrid.view.getEl().setScrollTop(me._succDepScroll);
 				}
 			},
 			showRowActionsColumn:false,
@@ -4779,155 +3755,3 @@ Ext.define('CustomApp', {
 		});	
 	}	
 });
-
-
-            Rally.launchApp('CustomApp', {
-                name:"Random App Name70221",
-	            parentRepos:""
-            });
-
-        });
-    </script>
-
-
-    <style type="text/css">
-        /********************* General app stuff *************/
-.x-grid-row.intel-row-35px > .x-grid-cell {
-  height: 35px !important;
-}
-.x-grid-row.intel-row-45px > .x-grid-cell {
-  height: 45px !important;
-}
-.x-grid-row.intel-row-80px > .x-grid-cell {
-  height: 80px !important;
-}
-.x-grid-row.intel-row-115px > .x-grid-cell {
-  height: 115px !important;
-}
-.x-grid-row.intel-row-150px > .x-grid-cell {
-  height: 150px !important;
-}
-.x-grid-row.intel-row-185px > .x-grid-cell {
-  height: 185px !important;
-}
-.x-grid-row.intel-row-220px > .x-grid-cell {
-  height: 220px !important;
-}
-.x-grid-row.intel-row-255px > .x-grid-cell {
-  height: 255px !important;
-}
-.x-grid-row.intel-row-290px > .x-grid-cell {
-  height: 290px !important;
-}
-.x-grid-row.intel-row-325px > .x-grid-cell {
-  height: 325px !important;
-}
-.x-grid-row.intel-row-360px > .x-grid-cell {
-  height: 360px !important;
-}
-.x-grid-row .intel-editor-cell {
-  cursor: pointer !important;
-}
-.x-grid-row .intel-editor-cell * {
-  cursor: pointer !important;
-}
-.pred-dep-header {
-  display: inline-block !important;
-  line-height: 100% !important;
-  font-weight: 500 !important;
-}
-.grey-row .x-grid-cell {
-  background-color: rgba(224, 224, 224, 0.15) !important;
-}
-.grey-row.x-grid-row-selected .x-grid-cell {
-  background-color: rgba(224, 224, 224, 0.25) !important;
-}
-.red-row .x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.15) !important;
-}
-.red-row.x-grid-row-selected .x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.25) !important;
-}
-.green-row .x-grid-cell {
-  background-color: rgba(0, 255, 0, 0.15) !important;
-}
-.green-row.x-grid-row-selected .x-grid-cell {
-  background-color: rgba(0, 255, 0, 0.25) !important;
-}
-.x-grid-row .red-cell.x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.15) !important;
-}
-.x-grid-row-selected .red-cell.x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.25) !important;
-}
-.x-grid-row .yellow-cell.x-grid-cell {
-  background-color: rgba(230, 230, 0, 0.15) !important;
-}
-.x-grid-row-selected .yellow-cell.x-grid-cell {
-  background-color: rgba(230, 230, 0, 0.25) !important;
-}
-/************ dependencies stuff ******************/
-.x-grid-body .x-grid-body {
-  background-color: rgba(0, 0, 0, 0) !important;
-}
-.rally-grid .x-grid-body {
-  border-top: 0 !important;
-}
-.x-grid-row.intel-team-dep-row .x-grid-cell,
-.x-grid-row-hover.intel-team-dep-row.x-grid-cell,
-.x-grid-row-selected.intel-team-dep-row .x-grid-cell {
-  background-color: rgba(0, 0, 0, 0) !important;
-}
-.x-grid-row .intel-not-supported-cell.x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.15) !important;
-}
-.x-grid-row-selected .intel-not-supported-cell.x-grid-cell {
-  background-color: rgba(255, 0, 0, 0.25) !important;
-}
-.x-grid-row .intel-supported-cell.x-grid-cell {
-  background-color: rgba(0, 255, 0, 0.15) !important;
-}
-.x-grid-row-selected .intel-supported-cell.x-grid-cell {
-  background-color: rgba(0, 255, 0, 0.25) !important;
-}
-/************ buttons stuff ******************/
-.undo-button {
-  background-image: url(http://png-4.findicons.com/files/icons/2315/default_icon/256/undo.png) !important;
-}
-.delete-button {
-  background-image: url(http://superadm.com/wp-content/uploads/2014/05/delete.png) !important;
-}
-.save-button {
-  background-image: url(http://www.iconpng.com/png/windows8_icons2/save.png) !important;
-}
-.minus-button {
-  background-image: url(http://www.pubzi.com/f/minus-sign.svg) !important;
-}
-.plus-button {
-  background-image: url(http://ilstream.com/images/plus-icon.gif) !important;
-}
-.iconCell,
-.iconCell * {
-  padding: 0px !important;
-  margin: 0px !important;
-}
-.undo-button,
-.delete-button,
-.save-button,
-.minus-button,
-.plus-button {
-  /*30px total height with margins */
-  left: 0px !important;
-  top: 0px !important;
-  height: 20px !important;
-  width: 20px !important;
-  background-size: 20px !important;
-  padding: 0px !important;
-  margin: 5px 3px 0px 3px !important;
-}
-
-    </style>
-</head>
-<body>
-</body>
-</html>
