@@ -1,86 +1,174 @@
+var newscope = true;
 Ext.define('CustomApp', {
-    extend: 'Rally.app.App',
+    extend: 'Rally.app.TimeboxScopedApp',
     componentCls: 'app',
     width: 800,
     layout:{
-      type: 'vbox',
+      type: 'vbox'
     },
-    items:[
-      {
-        xtype: 'container',
-        itemId: 'ribbon',
-        width: 1500,
-        height: 250,
-        hidden: true,
-        border: 1,
-        layout: {
-          type: 'hbox',
-          align: 'stretch',
-          pack: 'center'
-        },
-        style: {
-          borderColor: '#AAA',
-          borderStyle: 'solid'
-        }      },
-      {
-        xtype: 'container',
-        itemId: 'gridsContainer',
-        //padding: 25,
-        layout: {
-          type: 'hbox',
-          align: 'top'
-        },
-        items: [
-          {
-            xtype: 'container',
-            itemId: 'gridsLeft',
-            width: 750,
-            border: 1,
-            //padding: 25,
-            style: {
-              borderColor: '#AAA',
-              borderStyle: 'solid',
-              //margin: '10px'
-            }
-          },
-          {
-            xtype: 'container',
-            itemId: 'gridsRight',
-            width: 750,
-            border: 1,
-            //padding: 25,
-            style: {
-              borderColor: '#AAA',
-              borderStyle: 'solid',
-              //margin: '10px'
-            }
-          }
-        ]
-      }
-    ],
-
-    globalGridCount: [],   // count entry for each grid
-    globalGridMap: {'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':''},
-    // App entry point
+    scopeType: 'release',
     launch: function() {
-      console.log(this.globalGridMap);
-      this._buildGrids();
+        this.add( //{{{
+            /*{
+                xtype: 'button',
+                itemId: 'goButton',
+                text: 'Go',
+                border: 1,
+                margin: '10 4 4 10',
+                listeners: {
+                    click: function() {
+                            window.newscope = true;
+                        },
+                    mouseover: function() {
+                            console.log(window.newscope);
+                            if(!this.mousedover) {
+                                this.mousedover=true;
+                                alert('Click Go to load the data');
+                            }
+                        }
+                    },
+            },*/
+            {
+               xtype: 'container',
+               itemId: 'releaseInfo',
+               tpl: [
+                    '<div class="releaseInfo"><p><b>About this release: </b><br />',
+                    '<p class="release-notes">{notes}</p>',
+                    'Additional information is available <a href="{detailUrl}" target="_top">here.</a></p></div>'
+                ]
+            },
+           {  
+                xtype: 'container',
+                itemId: 'ribbon',
+                width: 1500,
+                height: 250,
+                hidden: true,
+                border: 1,
+                layout: {
+                  type: 'hbox',
+                  align: 'stretch',
+                  pack: 'center'
+                },
+                style: {
+                    borderColor: '#AAA',
+                    borderStyle: 'solid'
+                }
+            },
+            {
+                xtype: 'container',
+                itemId: 'gridsContainer',
+                layout: {
+                    type: 'hbox',
+                    align: 'top'
+                },
+                items: [
+                  {
+                    xtype: 'container',
+                    itemId: 'gridsLeft',
+                    width: 750,
+                    border: 1,
+                    style: {
+                      borderColor: '#AAA',
+                      borderStyle: 'solid'
+                    }
+                  },
+                  {
+                    xtype: 'container',
+                    itemId: 'gridsRight',
+                    width: 750,
+                    border: 1,
+                    style: {
+                      borderColor: '#AAA',
+                      borderStyle: 'solid'
+                    }
+                  }
+                ]
+      } 
+    ); //}}}
+     this.callParent(arguments);
     },
+    
+    onScopeChange: function(scope) {
+         this.down('#ribbon').removeAll();
+         this.globalGridCount=[];   // count entry for each grid
+         this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':'', 'C7': ''};
+         this.globalStoryCount=[];
+         this.globalTeamCount={};
+         this.down('#ribbon').hide();
+         this._gridsLoaded = false;
+         this.down('#gridsLeft').removeAll();
+         this.down('#gridsRight').removeAll();
+         this._loadReleaseDetails(scope);
+         this._buildGrids(scope);
+         this.readyFired = false;
+         this._chartsReady=false;
+         window.newscope=true;
+    },
+
+        _refreshGrids: function() {
+            var filter = [this.getContext().getTimeboxScope().getQueryFilter()];
+            var gridContainerLeft = this.down('#gridsLeft');
+            var gridContainerRight = this.down('#gridsRight');
+            gridContainerLeft.down('#C1').filter(filter, true, true);
+            gridContainerLeft.down('#C3').filter(filter, true, true);
+            gridContainerLeft.down('#C5').filter(filter, true, true);
+            gridContainerLeft.down('#C7').filter(filter, true, true);
+            gridContainerRight.down('#C2').filter(filter, true, true);
+            gridContainerRight.down('#C4').filter(filter, true, true);
+            gridContainerRight.down('#C6').filter(filter, true, true);
+        },
+
+        _loadReleaseDetails: function(scope) {
+            var release = scope.getRecord();
+            if (release) {
+                var releaseModel = release.self;
+
+                releaseModel.load(Rally.util.Ref.getOidFromRef(release), {
+                    fetch: ['Notes'],
+                    success: function(record) {
+                        this.down('#releaseInfo').update({
+                            detailUrl: Rally.nav.Manager.getDetailUrl(release),
+                            notes: record.get('Notes')
+                        });
+                    },
+                    scope: this
+                });
+            }
+        },
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
       console.log('now building charts');
       this._buildBarChart();
-      this._buildBubbleChart();
-      this._buildPieChart();
-      this._buildColumnChart();
+      //this._buildBubbleChart();
+      //this._buildPieChart();
+      //this._buildColumnChart();
+      this._chartsReady = true;
     },
 
     
     _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
+        console.log(this.globalGridMap);
+        console.log(this.globalGridCount);
+        if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
+            this.down('#ribbon').add({
+                xtype: 'component',
+                html: '<b><font color="red" size=18>Congrats! The Train is healthy for this release</font></b>'
+            });
+        } else {
+        function compare(a,b) {
+            if(a.x < b.x)
+                return -1;
+            if (a.x > b.x)
+                return 1;
+            return 0;
+        };
+        var tempobj = this.globalStoryCount.sort(compare);
+        console.log('Sorted obj', tempobj);
+        var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
+        console.log('categories', tempcat);
         var chartCfg = {
-            keys : Object.keys(this.globalGridMap),
             chart: {
                 type: 'bar',
                 width: 300,
@@ -89,49 +177,27 @@ Ext.define('CustomApp', {
             title: {
                 text: 'Story Counts by Grid'
             },
+            yAxis: {},
             xAxis: {
-                categories: ['Chart1', 'Chart2', 'Chart3', 'Chart4', 'Chart5','Chart6'],
-                title: {
-                    text: null
-                }
-            },
-            yAxis: {
-                min: 0,
-                title: {
-                text: '# Artifacts',
-                    align: 'high'
+                categories: tempcat,
+                /*function () {
+                    temp = _.map(this.globalStoryCount, function(x) {return x.name;});
+                    console.log('CATEGORIES');
+                    console.log(temp);
+                    return temp;
+                },*/
+               labels: {
+                    enabled: true,
+                    step: 1,
+                    formatter: function() {
+                        return 'Grid C'+ this.value;
+                    }
                 },
-                //categories: ['C1', 'C2', 'C3', 'C4', 'C5','C6'],
-                labels: {
-                    enabled: false,
-                    overflow: 'justify',
-                    //format: this.globalGridMap.keys()
-                    /* formatter: function() { 
-                        console.log('Generating yaxis labels');
-                        console.log(this);
-                        console.log(this.keys);
-                        for (key in Object.keys(this.globalGridMap)) {
-                            if (this.globalGridMap[key]==this.value)
-                                return key;
-                            return 0;
-                        }
-                     } */
-                }
-            },
-            tooltip: {
-                valueSuffix: ' Stories'
-            },
-            plotOptions: {
-                bar: {
-                    dataLabels: {
-                        enabled: true
-                        //format: this.globalGridMap.keys()
-                    }   
-                }
+                tickInterval: 1 
             },
             legend: {
                 layout: 'vertical',
-                align: 'right',
+                align: 'center',
                 verticalAlign: 'top',
                 x: -40,
                 y: 100,
@@ -142,14 +208,16 @@ Ext.define('CustomApp', {
                 enabled: false
             },
             credits: {
-            enabled: false
+                enabled: false
             }
         };
         var chartDt = {
             series: [{
                 name: 'Grid Counts',
-                data: this.globalGridCount
-                //dataLabels: this.globalGridMap.keys()
+                //data: _.map(this.globalGridMap, function(value, key) {return value;})
+                //dataLabels: _.map(this.globalGridMap, function(value, key) {return key;})
+                //data: this.globalGridMap
+                data: tempobj
             }]
         };
 
@@ -158,12 +226,17 @@ Ext.define('CustomApp', {
             chartConfig: chartCfg,
             chartData: chartDt,
             flex: 1,
+            layout: {
+                pack: 'center'
+            },
             scope: this
         });
+        }
         console.log('finished bar');
 
     }, //}}}
 
+//This is placeholder for future implementations of these charts
     _buildPieChart: function() { //{{{
 
        
@@ -176,7 +249,7 @@ Ext.define('CustomApp', {
               plotBorderWidth: 1,//null,
               plotShadow: false,
               width: 300,
-              height: 250,
+              height: 250
           },
           title: {
               text: ''
@@ -202,16 +275,17 @@ Ext.define('CustomApp', {
           series: [{
               type: 'pie',
               name: 'Team Block',
-              data: [
-                  ['Alpha',   45.0],
-                  ['Beta',       26.8],
-                  {
-                      name: 'Gamma',
-                      y: 12.8,
-                      sliced: true,
-                      selected: true
-                  }
-              ]
+              data: this.globalStoryCount
+              //data: [
+             //     ['Alpha',   45.0],
+               //   ['Beta',       26.8],
+                 // {
+                   //   name: 'Gamma',
+                     // y: 12.8,
+                     // sliced: true,
+                     // selected: true
+                  //}
+              //]
           }]
         } 
       });
@@ -233,7 +307,7 @@ Ext.define('CustomApp', {
 
           title: {
               text: 'Team Analysis'
-          },
+          }
         },
         chartData: {
           series: [{
@@ -303,7 +377,7 @@ Ext.define('CustomApp', {
                   pointPadding: 0.2,
                   borderWidth: 0
               }
-          },
+          }
         },
         chartData: {
           series: [{
@@ -326,13 +400,16 @@ Ext.define('CustomApp', {
     }, //}}}
 
     // Create all grids in the left/right columns
-    _buildGrids: function() {
-
+    _buildGrids: function(scope) {
+    
       var grids = [ //{{{
         {
           title: 'C1: Blocked Stories',
           model: 'User Story',
-          columns: ['FormattedID', 'Name', 'Project', 'Blocked'],
+          listeners: {
+              scope: this
+          },
+          columns: ['FormattedID', 'Name', 'Project', 'Blocked', 'BlockedReason'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -345,6 +422,9 @@ Ext.define('CustomApp', {
         {
           title: 'C2: Unsized Stories with Features',
           model: 'User Story',
+          listeners: {
+              scope: this
+          },
           columns: ['FormattedID', 'Name', 'Project', 'Feature','PlanEstimate'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
@@ -363,6 +443,9 @@ Ext.define('CustomApp', {
         {
           title: 'C3: Unsized Stories with Release',
           model: 'User Story',
+          listeners: {
+              scope: this
+          },
           columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
@@ -381,6 +464,9 @@ Ext.define('CustomApp', {
         {
           title: 'C4: Features with no stories',
           model: 'PortfolioItem/Feature',
+          listeners: {
+              scope: this
+          },
           columns: ['FormattedID', 'Name', 'PlannedEndDate'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
@@ -399,6 +485,9 @@ Ext.define('CustomApp', {
         {
           title: 'C5: Stories attached to Feature in Release without Iteration',
           model: 'UserStory',
+          listeners: {
+              scope: this
+          },
           columns: ['FormattedID', 'Name', 'Feature','Iteration'],
           side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
@@ -417,6 +506,9 @@ Ext.define('CustomApp', {
         {
           title: 'C6: Features with unaccepted stories in past sprints',
           model: 'UserStory',
+          listeners: {
+              scope: this
+          },
           columns: ['FormattedID', 'Name','Project', 'ScheduleState'],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
@@ -435,26 +527,60 @@ Ext.define('CustomApp', {
           },
           chartnum: 'C6'
         },
+        {
+          title: 'C7: Improperly Sized Stories',
+          model: 'User Story',
+          listeners: {
+              scope: this
+          },
+          columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
+          side: 'Left',    // TODO: ensure camelcase format to match itemId names
+          pageSize: 3,
+          filters: function() {
+            var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: 'null'
+            });
+            var planSizeOne = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '1'
+            });
+            var planSizeTwo = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '2'
+            });
+            var planSizeFour = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '4'
+            });
+            var planSizeEight = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '8'
+            });
+            var planSizeSixteen = Ext.create('Rally.data.wsapi.Filter', {
+                property: 'PlanEstimate', operator: '!=', value: '16'
+            });
+
+            return noPlanEstimateFilter.and(planSizeOne).and(planSizeTwo).and(planSizeFour).and(planSizeEight).and(planSizeSixteen);
+          },
+          chartnum: 'C7'
+        },
 
       ]; //}}}
 
+
       var allPromises = [];
       _.each(grids, function(grid) {
-        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.pageSize,grid.chartnum);
-
+        //console.log(grid.chartnum);
+        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.chartnum,scope);
         promise.then({
-          success: function(count, key, data) {
+          success: function(count, key) {
             this.globalGridCount.push(count[0]);
             this.globalGridMap[count[1]]=count[0];
-            console.log('Grid Map', this.globalGridMap);
-            console.log(count);
+            this.globalStoryCount.push(count[2]);
+            //console.log('Grid Map', this.globalGridMap);
+            //console.log(count);
           },
           error: function(error) {
             console.log('single: error', error);
           },
           scope: this
         }).always(function() {
-          //console.log('single - always');
         });
 
         allPromises.push(promise);
@@ -464,10 +590,13 @@ Ext.define('CustomApp', {
         success: function() {
           console.log('all counts finished!', this.globalGridCount);
           console.log(this.globalGridMap);
+          console.log(this.globalStoryCount);
           console.log(Object.keys(this.globalGridMap));
+          this._gridsLoaded = true;
           this.down('#ribbon').show();
           this._buildCharts();
           console.log('Got Grid Map:',this.globalGridMap);
+          window.newscope=false;
         },
         failure: function(error) {
           console.log('all error!', error);
@@ -478,38 +607,57 @@ Ext.define('CustomApp', {
     },
 
     // Utility function to generically build a grid and add to a container with given specs
-    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide, pageSize,cnum) {
+    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide,cnum,scope) {
 
       var deferred = Ext.create('Deft.Deferred');
-
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
+      
       // new grid with store data
       var grid = Ext.create('Rally.ui.grid.Grid', {
         xtype: 'rallygrid',
+        itemId: cnum,
         title: myTitle,
         columnCfgs: myColumns,
+        showPagingToolbar: true,
         pagingToolbarCfg: {
-          pageSizes: [3,5,10,15]
+          pageSizes: [3,5,10,15],
+          autoRender: true,
+          resizable: true,
         },
         storeConfig: {
           model: myModel,
-          context: this.context.getDataContext(),
-          autoLoad: {start: 0, limit: pageSize},
-          filters: myFilters(),
+          autoLoad:{start: 0, limit: 3},
+          pageSize: 3,
+          pagingToolbarCfg: {
+            pageSizes: [3,5,10,15],
+            autoRender: true,
+            resizable: true,
+            },
+          filters: [this.getContext().getTimeboxScope().getQueryFilter(),myFilters()],
           listeners: {
             load: function(store) {
-              console.log("loaded store!", 'store count', store.getCount(), 'total count', store.getTotalCount());
-              var tempcount=store.getTotalCount();
-              //var temp =_.map(this.globalGridMap, function(value, key) { if (key==cnum) { return store.getTotalCount(); } return value; );
-              /*for (var key in Object.keys(this.globalGridMap)) {
-                if (key==cnum)
-                    this.globalGridMap[key]=tempcount;
-              }*/
-              console.log("this is chart ",cnum);
-              deferred.resolve([store.getTotalCount(),String(cnum)]);  // TODO more meta data?
+                    var tempcount=store.getTotalCount();
+                    console.log('Loaded store', store);
+                    //console.log(this);
+                    store.each(function(record) {console.log(record);});
+                    var elem = {
+                        name : cnum,
+                        x: cnum.charAt(1),
+                        y: tempcount
+                    };
+                    if(window.newscope) {
+                        deferred.resolve([store.getTotalCount(),String(cnum),elem]);
+                        // TODO more meta data?
+                    } else {
+                        console.log('Deferred done already');
+                    }
             }
-          }
+          },
+          //each: function(record) {
+          //    console.log(record);
+          //    }
+         //scope: this
         },
         padding: 10,
         style: {
@@ -517,41 +665,25 @@ Ext.define('CustomApp', {
           borderStyle: 'dotted',
           borderWidth: '2px'
         },
-        syncRowHeight: false
+        syncRowHeight: false,
+        scope: this
       });
       // show me the grid!
       gridContainer.add(grid);
+      if (!this._gridsLoaded) {
+        return deferred.promise;
+      }
+      return true;
 
-      return deferred.promise;
+    },
 
-      /* EXAMPLE for loading a store and viewing a Grid  (pre-template version)
-      var blockedStoriesStore = Ext.create('Rally.data.wsapi.Store', {
-        model: 'UserStory',
-        context: this.context.getDataContext(),
-        autoLoad: {start: 0, limit: 5},
-        filters: [
-          {
-            property: 'blocked',
-            operator: '=',
-            value: 'true'
-          }
-        ],
-        listeners: {
-          load: function(myStore, data) {
-            console.log('got', data);
-            var blockedStoriesGrid = Ext.create('Rally.ui.grid.Grid', {
-              title: 'Blocked Stories',
-              columnCfgs: ['FormattedID', 'Name', 'Owner'],
-              store: myStore
-            });
-            var ls = this.down('#leftGrids');
-            ls.add(blockedStoriesGrid);
+    fireReady : function() {
+        if(Rally.BrowserTest && this._gridsLoaded && this._chartsReady && !this.readyFired) {
+            console.log('Reached fire ready');
+            this.readyFired = true;
+            Rally.BrowserTest.publishComponentReady(this);
 
-          },
-          scope: this
         }
-      });
-      */
     }
 
 });
