@@ -61,8 +61,11 @@ Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant belie
 				dom.style.display = oldDisplay;
 			}
 
+			Ext.suspendLayouts();
 			this.refreshSize();
 			me.fireEvent('refresh', me);
+			Ext.resumeLayouts(true);
+			
 			if (!me.viewReady) {
 				me.viewReady = true;
 				me.fireEvent('viewready', me);
@@ -146,13 +149,24 @@ Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant belie
 					me.selModel.refresh();
 				}
 				me.updateIndexes(index);
-				me.refreshSize();
+				//me.refreshSize(); //already being refreshed by store.sync()
 			}
 
 			if (me.hasListeners.itemadd) {
 				me.fireEvent('itemadd', records, index, nodes);
 			}
 			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);
+		}
+	},
+
+	scrollRowIntoView: function(row) {
+		if(row===0){
+			this.getEl().setScrollTop(0);
+			return;
+		}
+		row = this.getNode(row, true);
+		if (row) {
+			Ext.fly(row).scrollIntoView(this.el, false);
 		}
 	}
 });

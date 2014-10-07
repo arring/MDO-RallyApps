@@ -7,6 +7,49 @@ Ext.define('Intel.data.proxy.SessionStorage', {
 		me.callParent(arguments);
 	},
 	
+	create: function(operation, callback, scope) {
+		var me = this,
+			records = operation.records,
+			length = records.length,
+			ids = me.getIds(),
+			id, record, i;
+
+		operation.setStarted();
+		if(me.isHierarchical === undefined) {
+				
+				
+			me.isHierarchical = !!records[0].isNode;
+			if(me.isHierarchical) {
+				me.getStorageObject().setItem(me.getTreeKey(), true);
+			}
+		}
+		for (i = 0; i < length; i++) {
+			record = records[i];
+
+			if (record.phantom) {
+				record.phantom = false;
+				id = me.getNextId();
+			} else {
+				id = record.getId();
+			}
+			
+			record.beginEdit();
+			me.setRecord(record, id);
+			record.endEdit(true); //SILENT!!!
+			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
+			
+			ids.push(id);
+		}
+		me.setIds(ids);
+
+		operation.setCompleted();
+		operation.setSuccessful();
+
+		if (typeof callback == 'function') {
+			callback.call(scope || me, operation);
+		}
+	},
+	
 	update: function(operation, callback, scope) {
 		var records = operation.records,
 			length = records.length,
@@ -20,8 +63,6 @@ Ext.define('Intel.data.proxy.SessionStorage', {
 		
 			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
 
-			//we need to update the set of ids here because it's possible that a non-phantom record was added
-			//to this proxy - in which case the record's id would never have been added via the normal 'create' call
 			id = record.getId();
 			if (id !== undefined && Ext.Array.indexOf(ids, id) == -1) ids.push(id);
 		}

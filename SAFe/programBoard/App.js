@@ -112,11 +112,6 @@ Ext.define('CustomApp', {
 	}],
 	minWidth:910, //1065+20 for scrollbar
 		
-	/****************************************************** SHOW ERROR MESSAGE ********************************************************/
-	_showMessage: function(text){
-		if(this.ShowMessageText) this.remove(this.ShowMessageText);
-		this.ShowMessageText = this.add({xtype:'text', text:text});
-	},
 	/****************************************************** DATA STORE METHODS ********************************************************/
 	
 	//___________________________________GENERAL LOADING STUFF___________________________________	
@@ -347,7 +342,7 @@ Ext.define('CustomApp', {
 	_loadValidProjects: function(cb){
 		var scrums = [];
 		var loadChildren = (function(project, _cb){
-			if(project.data.TeamMembers.Count > 0) //valid scrums have people
+			if(project.get('TeamMembers').Count > 0) //valid scrums have people
 				scrums.push(project);
 			Ext.create('Rally.data.wsapi.Store',{
 				model: 'Project',
@@ -485,6 +480,9 @@ Ext.define('CustomApp', {
 			throw 'You should have a train here'; //even non-train teams
 		}
 		else {
+			if(this.TrainRecord.get('Name') == 'Test ART (P&E)'){
+				return '(Project.Name = "Test ART (P&E)")';
+			}
 			var prodString = this.TrainRecord.get('Name').match(/\((.*)\)/)[1];
 			return _.reduce(prodString.split('/'), function(filter, product){
 				var newFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -766,7 +764,7 @@ Ext.define('CustomApp', {
 			projectID = this.ProjectRecord.get('ObjectID');
 			
 		if(risks[projectID]){
-			delete risks[projectID][riskData.RiskID];
+			risks[projectID][riskData.RiskID] = undefined;
 			this.RisksParsedData = _.reject(this.RisksParsedData, function(rpd){ //remove it from cached risks
 				return rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID;
 			});
@@ -1366,10 +1364,10 @@ Ext.define('CustomApp', {
 		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
 			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
 			ip1 = iframe.parentNode,
-			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode,
+			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
 			height = 0, next = this.down();
 		while(next){
-			height += next.getHeight();
+			height += next.getHeight() + 20;
 			next = next.next();
 		}
 		ip1.style.height = height + 'px';
@@ -1410,7 +1408,7 @@ Ext.define('CustomApp', {
 		}
 	},
 	
-	_reloadStores: function(cb){
+	_reloadStores: function(cb){ //this function calls updateAllGrids
 		var isEditingRisks = this._isEditing(this.CustomRisksStore),
 			isEditingDeps = this._isEditing(this.CustomPredDepStore) || this._isEditing(this.CustomSuccDepStore),
 			promises = [];
@@ -1450,22 +1448,20 @@ Ext.define('CustomApp', {
 		this._isEditingTeamCommits = false;
 		this._isEditingVelocity = false;
 		
-		delete this.ShowMessageText;
+		this.UserStoryStore = undefined;
+		this.FeatureStore = undefined;
+		this.IterationStore = undefined;
 		
-		delete this.UserStoryStore;
-		delete this.FeatureStore;
-		delete this.IterationStore;
+		this.PredDepGrid = undefined;
+		this.SuccDepGrid = undefined;
+		this.RisksGrid = undefined;
+		this.VelocityGrid = undefined;
+		this.TeamCommitsGrid = undefined;
 		
-		delete this.PredDepGrid;
-		delete this.SuccDepGrid;
-		delete this.RisksGrid;
-		delete this.VelocityGrid;
-		delete this.TeamCommitsGrid;
-		
-		delete this.CustomPredDepStore;
-		delete this.CustomSuccDepStore;
-		delete this.CustomTeamCommitsStore;
-		delete this.CustomVelocityStore;
+		this.CustomPredDepStore = undefined;
+		this.CustomSuccDepStore = undefined;
+		this.CustomTeamCommitsStore = undefined;
+		this.CustomVelocityStore = undefined;
 		
 		this.setLoading(true);
 		
@@ -1491,14 +1487,37 @@ Ext.define('CustomApp', {
 	
 	/******************************************************* REFRESHING WSAPI DATA ***********************************************/
 	
+	_setLoadingMasks: function(){
+		var t = 'Refreshing Data',
+			isEditingRisks = this._isEditing(this.CustomRisksStore),
+			isEditingDeps = this._isEditing(this.CustomPredDepStore) || this._isEditing(this.CustomSuccDepStore);			
+		if(this.TeamCommitsGrid && !this._isEditingTeamCommits) this.TeamCommitsGrid.setLoading(t);
+		if(this.VelocityGrid && !this._isEditingVelocity) this.VelocityGrid.setLoading(t);
+		if(this.RisksGrid && !isEditingRisks) this.RisksGrid.setLoading(t);
+		if(this.PredDepGrid && !isEditingDeps) this.PredDepGrid.setLoading(t);
+		if(this.SuccDepGrid && !isEditingDeps) this.SuccDepGrid.setLoading(t);
+	},
+	
+	_removeLoadingMasks: function(){
+		if(this.TeamCommitsGrid) this.TeamCommitsGrid.setLoading(false);
+		if(this.VelocityGrid) this.VelocityGrid.setLoading(false);
+		if(this.RisksGrid) this.RisksGrid.setLoading(false);
+		if(this.PredDepGrid) this.PredDepGrid.setLoading(false);
+		if(this.SuccDepGrid) this.SuccDepGrid.setLoading(false);
+	},
+	
 	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
-		this._reloadStores(this._windowResize.bind(this));
+		this._setLoadingMasks();	
+		this._reloadStores((function(){
+			this._windowResize();
+			this._removeLoadingMasks();
+		}).bind(this));
 	},
 	
 	_setRefreshInterval: function(){
 		if(this.RefreshInterval) { 
 			clearInterval(this.RefreshInterval); 
-			delete this.RefreshInterval; 
+			this.RefreshInterval = undefined; 
 		}
 		if(this.AppPrefs.refresh!=='Off')
 			this.RefreshInterval = setInterval(this._refreshDataFunc.bind(this), this.AppPrefs.refresh * 1000);
@@ -1513,7 +1532,7 @@ Ext.define('CustomApp', {
 			this._setRefreshInterval(); 
 			this._reloadEverything();
 		} else {
-			this.removeAll();
+			this.setLoading(false);
 			this._alert('This team has no releases');
 		}
 	},
@@ -1565,11 +1584,11 @@ Ext.define('CustomApp', {
 	},
 	
 	launch: function(){
-		this._showMessage('Loading Data...');
+		this.setLoading(true);
 		window.parent.onresize = this._windowResize.bind(this); //reset msgbox and app height on resize
 		window.parent.onscroll = this._applyMessageBoxConfig.bind(this);	//reset msgbox on scroll
 		if(!this.getContext().getPermissions().isProjectEditor(this.getContext().getProject())) { //permission check
-			this.removeAll();
+			this.setLoading(false);
 			this._alert('You do not have permissions to edit this project');
 		} else {	
 			//Ext.tip.QuickTipManager.init(); //TOOLTIP IS UGLY
@@ -1583,6 +1602,7 @@ Ext.define('CustomApp', {
 	
 	_releasePickerSelected: function(combo, records){
 		if(this.ReleaseRecord.get('Name') === records[0].get('Name')) return;
+		this.setLoading(true);
 		this.ReleaseRecord = this.ReleaseStore.findExactRecord('Name', records[0].get('Name'));			
 		var pid = this.ProjectRecord.get('ObjectID');		
 		if(!this.AppPrefs.projs[pid]) this.AppPrefs.projs[pid] = {};
@@ -1612,6 +1632,7 @@ Ext.define('CustomApp', {
 	
 	_trainPickerSelected: function(combo, records){
 		if(this.TrainRecord.get('Name').indexOf(records[0].get('Name')) === 0) return;
+		this.setLoading(true);
 		this.TrainRecord = this.AllTrainRecordsStore.findRecord('Name', records[0].get('Name'));			
 		var pid = this.ProjectRecord.get('ObjectID');
 		if(!this.AppPrefs.projs[pid]) this.AppPrefs.projs[pid] = {};
@@ -1663,7 +1684,7 @@ Ext.define('CustomApp', {
 				]
 			}),
 			displayField: 'Rate',
-			fieldLabel: 'Refresh Rate (seconds):',
+			fieldLabel: 'Auto-Refresh Rate (seconds):',
 			editable:false,
 			value:this.AppPrefs.refresh,
 			listeners: {
@@ -2407,7 +2428,7 @@ Ext.define('CustomApp', {
 				xtype:'button',
 				text:'+ Add Risk',
 				width:80,
-				style:'margin:10px 0 10px 0',
+				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
@@ -2437,7 +2458,8 @@ Ext.define('CustomApp', {
 			xtype: 'rallygrid',
       title: 'Risks',
 			minHeight:150,
-			maxHeight:700,
+			maxHeight:450,
+			style:'margin-top:10px',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			plugins: [ 'fastcellediting' ],
@@ -2528,27 +2550,33 @@ Ext.define('CustomApp', {
 					if(dirtyType === 'New' || dirtyType === 'Edited'){}//we don't want to remove any pending changes			
 					else if(dirtyType == 'Deleted'){ // the depRec was deleted by someone else, and we arent editing it
 						predDepStore.remove(depRec);
-						if(teamStore) delete me.PredDepTeamStores[depID];
-						if(teamCont) delete me.PredDepContainers[depID];
+						if(teamStore) me.PredDepTeamStores[depID] = undefined;
+						if(teamCont) me.PredDepContainers[depID] = undefined;
 					} else {
-						for(key in realDep){
-							if(!_.isEqual(depRec.get(key), realDep[key])){ remoteChanged = true; break; }
+						if(!_.isEqual(depRec.get('Predecessors'), realDep.Predecessors)){ //faster to delete and readd if preds are different
+							if(teamCont) {
+								me.PredDepContainers[depID].destroy();
+								me.PredDepContainers[depID] = undefined;
+							}
+							predDepStore.remove(depRec);
+							predDepStore.add(Ext.create('IntelPredDep', Ext.clone(realDep)));
+							if(teamStore) teamStore.intelUpdate(); 
 						}
-						if(remoteChanged){
+						else {
 							depRec.beginEdit();
 							for(key in realDep){
-								if(key === 'Predecessors') depRec.set(key, Ext.clone(realDep[key]) || [me._newTeamDep()]); 
-								else depRec.set(key, realDep[key]);
+								if(key!=='Predecessors' && realDep[key]!=depRec.get(key))
+									depRec.set(key, realDep[key]);
 							}
 							depRec.endEdit();
 						}
 					}				
 					var preds = depRec.get('Predecessors');
 					//DO NOT SET EDITED==true, because it is already true! only new or edited will ever have preds.length==0
-					if(!preds.length) depRec.set('Predecessors', [me._newTeamDep()]); 
-					
-					if(remoteChanged && teamStore)
-						setTimeout(teamStore.intelUpdate.bind(teamStore), 0);
+					if(!preds.length) {
+						depRec.set('Predecessors', [me._newTeamDep()]); 
+						if(teamStore) teamStore.intelUpdate();
+					}
 				}
 				
 				realPredDepsData.forEach(function(realDep){ 
@@ -2557,7 +2585,7 @@ Ext.define('CustomApp', {
 					predDepStore.add(Ext.create('IntelPredDep', Ext.clone(realDep)));					
 					var depID = realDep.DependencyID,
 						teamStore = me.PredDepTeamStores[depID];
-					if(teamStore) setTimeout(teamStore.intelUpdate.bind(teamStore), 0);
+					if(teamStore) teamStore.intelUpdate(); 
 				});
 				predDepStore.resumeEvents();
 			}
@@ -2676,24 +2704,36 @@ Ext.define('CustomApp', {
 								depTeamStore.suspendEvents(true);
 								Outer:
 								for(var i = 0;i<depTeamRecords.length;++i){
-									var depTeamRecord = depTeamRecords[i];
-									var realTeamDep;
+									var depTeamRecord = depTeamRecords[i],
+										realTeamDep, key,
+										remoteChanged = false; //if someone else updated this while it was idle on our screen	
 									for(var j=0; j<predecessors.length;++j){
 										if(predecessors[j].TID === depTeamRecord.get('TID')){
 											realTeamDep = predecessors.splice(j, 1)[0];
-											depTeamRecord.beginEdit();
-											for(var key in realTeamDep)
-												depTeamRecord.set(key, realTeamDep[key]);
-											depTeamRecord.endEdit();
+											for(key in realTeamDep){
+												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ remoteChanged = true; break; }
+											}
+											if(remoteChanged){
+												depTeamRecord.beginEdit();
+												for(key in realTeamDep)
+													depTeamRecord.set(key, realTeamDep[key]);
+												depTeamRecord.endEdit();
+											}
 											continue Outer;
 										}
 									}
 									depTeamStore.remove(depTeamRecord);
 								}
+								
 								predecessors.forEach(function(realTeamDep){ 
 									depTeamStore.add(Ext.create('IntelDepTeam', realTeamDep));
 								});	
-								if(depTeamStore.getRange().length===0) depTeamStore.add(me._newTeamDep());
+								
+								if(depTeamStore.getRange().length===0) {
+									var newItem = me._newTeamDep();
+									depTeamStore.add(Ext.create('IntelDepTeam', newItem));
+									predDepRecord.data.Predecessors.push(newItem);
+								}
 								depTeamStore.resumeEvents();
 							}
 						});	
@@ -2787,8 +2827,8 @@ Ext.define('CustomApp', {
 													predecessors.push(newItem);
 												}
 												predDepRecord.set('Edited', true);
-												me.PredDepGrid.view.refreshNode(me.CustomPredDepStore.indexOf(predDepRecord));//fix row not resizing
 												teamStore.resumeEvents();
+												//me.PredDepGrid.view.refreshNode(me.CustomPredDepStore.indexOf(predDepRecord));//fix row not resizing
 											}
 										}
 									}
@@ -3233,7 +3273,7 @@ Ext.define('CustomApp', {
 			items:[{
 				xtype:'button',
 				text:'+ Add Dependency',
-				style:'margin:10px 0 10px 0',
+				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
@@ -3263,6 +3303,7 @@ Ext.define('CustomApp', {
 			//width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			minHeight:150,
 			maxHeight:500,
+			style:'margin-top:10px',
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
 			plugins: [ 'fastcellediting' ],
@@ -3303,7 +3344,7 @@ Ext.define('CustomApp', {
 					} else if(field === 'FormattedID'){
 						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
 						if(!userStoryRecord) {
-							predDepRecord.set('UserStoryName', originalValue);
+							predDepRecord.set('FormattedID', originalValue);
 							predDepRecord.set('Edited', previousEdit);
 						} else predDepRecord.set('UserStoryName', userStoryRecord.get('Name'));
 					}
@@ -3652,7 +3693,8 @@ Ext.define('CustomApp', {
       title: "Dependencies Other Teams Have on Us",
 			//width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			minHeight:150,
-			maxHeight:800,
+			style:'margin-top:40px',
+			maxHeight:500,
 			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
 			plugins: [ 'fastcellediting' ],
