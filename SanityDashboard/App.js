@@ -94,7 +94,7 @@ Ext.define('CustomApp', {
          this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':'', 'C7': ''};
          this.globalStoryCount=[];
          this.globalTeamCount={};
-         this.down('#ribbon').hide();
+         //this.down('#ribbon').hide();
          this._gridsLoaded = false;
          this.down('#gridsLeft').removeAll();
          this.down('#gridsRight').removeAll();
@@ -138,25 +138,72 @@ Ext.define('CustomApp', {
 
     // Create all charts in the header ribbon
     _buildCharts: function() {
-      console.log('now building charts');
-      this._buildBarChart();
-      //this._buildBubbleChart();
-      //this._buildPieChart();
-      //this._buildColumnChart();
-      this._chartsReady = true;
+      if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
+          this.down('#ribbon').add({
+              xtype: 'component',
+              html: '<b><font color="green" size=18>Congrats! The Train is healthy for this release</font></b>'
+          });
+      } else {
+        console.log('now building charts');
+        //this._buildBarChart();
+        this._buildRibbon();
+        //this._buildBubbleChart();
+        //this._buildPieChart();
+        //this._buildColumnChart();
+        this._chartsReady = true;
+      }
     },
 
-    
+   _buildRibbon: function() { //{{{
+         
+        var linkid = '<b>{title}:&emsp;<a href="#C{name}">{count}</a></b><br><p>';
+        function compare(a,b) {
+            if(a.x < b.x)
+                return -1;
+            if (a.x > b.x)
+                return 1;
+            return 0;
+        };
+        var tempobj = this.globalStoryCount.sort(compare);
+        var newhtml = "<br>";
+        var line;
+        console.log("building ribbon with" , tempobj);
+        for(var i=0; i < 7; i++) {
+            //var dummymodel = new Rally.data.Model(tempobj[i]);
+            console.log("got data ", tempobj[i]);
+            line = linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y);
+            console.log(line);
+            newhtml =  newhtml.concat(line);
+            //console.log(linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y));
+            //newhtml = newhtml.concat(linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y));
+            
+            }
+            this.down('#ribbon').add({
+                xtype: 'component',
+                //layout: {type: 'vbox'},
+                itemId: 'ribbondata',
+                html: newhtml
+                /*html : [
+                        linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y)
+                      ],
+                data: {
+                        Grid: tempobj[i].name,
+                        Count: linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].y)
+                        }*/
+            });        
+
+    }, //}}}
+
     _buildBarChart: function() { //{{{
         console.log('starting to build bar chart');
         console.log(this.globalGridMap);
         console.log(this.globalGridCount);
-        if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
+        /*if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
             this.down('#ribbon').add({
                 xtype: 'component',
-                html: '<b><font color="red" size=18>Congrats! The Train is healthy for this release</font></b>'
+                html: '<b><font color="green" size=18>Congrats! The Train is healthy for this release</font></b>'
             });
-        } else {
+        } else {*/
         function compare(a,b) {
             if(a.x < b.x)
                 return -1;
@@ -190,7 +237,7 @@ Ext.define('CustomApp', {
                     enabled: true,
                     step: 1,
                     formatter: function() {
-                        return 'Grid C'+ this.value;
+                        return tempobj[this.value-1].name;
                     }
                 },
                 tickInterval: 1 
@@ -231,7 +278,7 @@ Ext.define('CustomApp', {
             },
             scope: this
         });
-        }
+        //}
         console.log('finished bar');
 
     }, //}}}
@@ -404,7 +451,7 @@ Ext.define('CustomApp', {
     
       var grids = [ //{{{
         {
-          title: 'C1: Blocked Stories',
+          title: 'Blocked Stories',
           model: 'User Story',
           listeners: {
               scope: this
@@ -420,7 +467,7 @@ Ext.define('CustomApp', {
           chartnum: 'C1'
         },
         {
-          title: 'C2: Unsized Stories with Features',
+          title: 'Unsized Stories with Features',
           model: 'User Story',
           listeners: {
               scope: this
@@ -441,7 +488,7 @@ Ext.define('CustomApp', {
           chartnum: 'C2'
         },
         {
-          title: 'C3: Unsized Stories with Release',
+          title: 'Unsized Stories with Release',
           model: 'User Story',
           listeners: {
               scope: this
@@ -462,7 +509,7 @@ Ext.define('CustomApp', {
           chartnum: 'C3'
         },
         {
-          title: 'C4: Features with no stories',
+          title: 'Features with no stories',
           model: 'PortfolioItem/Feature',
           listeners: {
               scope: this
@@ -483,7 +530,7 @@ Ext.define('CustomApp', {
           chartnum: 'C4'
         },
         {
-          title: 'C5: Stories attached to Feature in Release without Iteration',
+          title: 'Stories attached to Feature in Release without Iteration',
           model: 'UserStory',
           listeners: {
               scope: this
@@ -504,7 +551,7 @@ Ext.define('CustomApp', {
           chartnum: 'C5'
         },
         {
-          title: 'C6: Features with unaccepted stories in past sprints',
+          title: 'Features with unaccepted stories in past sprints',
           model: 'UserStory',
           listeners: {
               scope: this
@@ -528,7 +575,7 @@ Ext.define('CustomApp', {
           chartnum: 'C6'
         },
         {
-          title: 'C7: Improperly Sized Stories',
+          title: 'Improperly Sized Stories',
           model: 'User Story',
           listeners: {
               scope: this
@@ -608,16 +655,16 @@ Ext.define('CustomApp', {
 
     // Utility function to generically build a grid and add to a container with given specs
     _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide,cnum,scope) {
-
+      var linkid = '<a id={name}>{title}</a>';
       var deferred = Ext.create('Deft.Deferred');
       // lookup left or right side
       var gridContainer = this.down('#grids' + gridSide);
-      
+      var shouldiaddgrid = true; 
       // new grid with store data
       var grid = Ext.create('Rally.ui.grid.Grid', {
         xtype: 'rallygrid',
         itemId: cnum,
-        title: myTitle,
+        title: linkid.replace('{name}',cnum).replace('{title}',myTitle),
         columnCfgs: myColumns,
         showPagingToolbar: true,
         pagingToolbarCfg: {
@@ -639,13 +686,18 @@ Ext.define('CustomApp', {
             load: function(store) {
                     var tempcount=store.getTotalCount();
                     console.log('Loaded store', store);
-                    //console.log(this);
+                    //console.log('should i add grid', shouldiaddgrid);
                     store.each(function(record) {console.log(record);});
                     var elem = {
-                        name : cnum,
+                        name : myTitle,
                         x: cnum.charAt(1),
                         y: tempcount
                     };
+                    if (tempcount!=0) {
+                        //shouldiaddgrid=false;
+                        gridContainer.add(grid);
+                    }
+                    console.log('should i add grid', shouldiaddgrid);
                     if(window.newscope) {
                         deferred.resolve([store.getTotalCount(),String(cnum),elem]);
                         // TODO more meta data?
@@ -669,7 +721,9 @@ Ext.define('CustomApp', {
         scope: this
       });
       // show me the grid!
-      gridContainer.add(grid);
+      console.log(shouldiaddgrid);
+      //if (shouldiaddgrid)
+      //  gridContainer.add(grid);
       if (!this._gridsLoaded) {
         return deferred.promise;
       }
@@ -678,10 +732,10 @@ Ext.define('CustomApp', {
     },
 
     fireReady : function() {
-        if(Rally.BrowserTest && this._gridsLoaded && this._chartsReady && !this.readyFired) {
+        if(/*Rally.BrowserTest && */this._gridsLoaded && this._chartsReady && !this.readyFired) {
             console.log('Reached fire ready');
             this.readyFired = true;
-            Rally.BrowserTest.publishComponentReady(this);
+            //Rally.BrowserTest.publishComponentReady(this);
 
         }
     }
