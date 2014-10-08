@@ -46,7 +46,7 @@ Ext.define('CustomApp', {
                 border: 1,
                 layout: {
                   type: 'hbox',
-                  align: 'stretch',
+                  //align: 'stretch',
                   pack: 'center'
                 },
                 style: {
@@ -70,7 +70,11 @@ Ext.define('CustomApp', {
                     style: {
                       borderColor: '#AAA',
                       borderStyle: 'solid'
-                    }
+                    },
+                    items: [{ 
+                        xtype: 'component',
+                        html: "<b>Story Health</b>"
+                    }]
                   },
                   {
                     xtype: 'container',
@@ -80,7 +84,11 @@ Ext.define('CustomApp', {
                     style: {
                       borderColor: '#AAA',
                       borderStyle: 'solid'
-                    }
+                    },
+                    items: [{ 
+                        xtype: 'component',
+                        html: "<b>Feature Health</b>"
+                    }]
                   }
                 ]
       } 
@@ -97,7 +105,17 @@ Ext.define('CustomApp', {
          //this.down('#ribbon').hide();
          this._gridsLoaded = false;
          this.down('#gridsLeft').removeAll();
+         this.down('#gridsLeft').add({
+             xtype: 'container',
+             html: '<b><font size=4>Story Health</font></b>',
+             //layout: { type: 'hbox', pack: 'center' }
+         });
          this.down('#gridsRight').removeAll();
+         this.down('#gridsRight').add({
+             xtype: 'container',
+             html: '<b><font size=4>Feature Health</font></b>',
+             //layout: { type: 'hbox', pack: 'center' }
+         });
          this._loadReleaseDetails(scope);
          this._buildGrids(scope);
          this.readyFired = false;
@@ -156,7 +174,7 @@ Ext.define('CustomApp', {
 
    _buildRibbon: function() { //{{{
          
-        var linkid = '<b>{title}:&emsp;<a href="#C{name}">{count}</a></b><br><p>';
+        var linkid = '<b><app class="jump {state}">{title}:&emsp;<a href="#C{name}">{count}</a></b></app><br><p>';
         function compare(a,b) {
             if(a.x < b.x)
                 return -1;
@@ -172,6 +190,11 @@ Ext.define('CustomApp', {
             //var dummymodel = new Rally.data.Model(tempobj[i]);
             console.log("got data ", tempobj[i]);
             line = linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y);
+            if (tempobj[i].y == 0)
+                line = line.replace("{state}", "healthy");
+            else
+                line = line.replace("{state}", "unhealthy");
+
             console.log(line);
             newhtml =  newhtml.concat(line);
             //console.log(linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y));
@@ -283,169 +306,6 @@ Ext.define('CustomApp', {
 
     }, //}}}
 
-//This is placeholder for future implementations of these charts
-    _buildPieChart: function() { //{{{
-
-       
-      this.down('#ribbon').add({
-        xtype: 'rallychart',
-        flex: 1,
-        chartConfig: { 
-          chart: {
-              plotBackgroundColor: null,
-              plotBorderWidth: 1,//null,
-              plotShadow: false,
-              width: 300,
-              height: 250
-          },
-          title: {
-              text: ''
-          },
-          tooltip: {
-              pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
-          },
-          plotOptions: {
-            pie: {
-              allowPointSelect: true,
-              cursor: 'pointer',
-              dataLabels: {
-                enabled: true,
-                format: '<b>{point.name}</b>: {point.percentage:.1f} %',
-                style: {
-                    color: 'black'
-                }
-              }
-            }
-          }
-        }, 
-        chartData: { 
-          series: [{
-              type: 'pie',
-              name: 'Team Block',
-              data: this.globalStoryCount
-              //data: [
-             //     ['Alpha',   45.0],
-               //   ['Beta',       26.8],
-                 // {
-                   //   name: 'Gamma',
-                     // y: 12.8,
-                     // sliced: true,
-                     // selected: true
-                  //}
-              //]
-          }]
-        } 
-      });
-
-    }, //}}}
-
-    _buildBubbleChart: function() { //{{{
-
-      this.down('#ribbon').add({
-        xtype: 'rallychart',
-        flex: 1,
-        chartConfig: {
-          chart: {
-              width: 300,
-              height: 250,
-              type: 'bubble',
-              zoomType: 'xy'
-          },
-
-          title: {
-              text: 'Team Analysis'
-          }
-        },
-        chartData: {
-          series: [{
-              name: 'Team Alpha',
-              data: [[97, 36, 79], [94, 74, 60], [68, 76, 58], [64, 87, 56], [68, 27, 73], [74, 99, 42], [7, 93, 87], [51, 69, 40], [38, 23, 33], [57, 86, 31]]
-          }, {
-              name: 'Team Beta',
-              data: [[25, 10, 87], [2, 75, 59], [11, 54, 8], [86, 55, 93], [5, 3, 58], [90, 63, 44], [91, 33, 17], [97, 3, 56], [15, 67, 48], [54, 25, 81]]
-          }, {
-              name: 'Team Gamma',
-              data: [[47, 47, 21], [20, 12, 4], [6, 76, 91], [38, 30, 60], [57, 98, 64], [61, 17, 80], [83, 60, 13], [67, 78, 75], [64, 12, 10], [30, 77, 82]]
-          }]
-        }
-      });
-
-    }, //}}}
-
-    _buildColumnChart: function() { //{{{
-
-      this.down('#ribbon').add({
-        xtype: 'rallychart',
-        flex: 1,
-        chartConfig: {
-          chart: {
-              type: 'column',
-              width: 300,
-              height: 250
-          },
-          title: {
-              text: 'Story Counts By Team'
-          },
-          subtitle: {
-              text: ''
-          },
-          xAxis: {
-              categories: [
-                  'Jan',
-                  'Feb',
-                  'Mar',
-                  'Apr',
-                  'May',
-                  'Jun',
-                  'Jul',
-                  'Aug',
-                  'Sep',
-                  'Oct',
-                  'Nov',
-                  'Dec'
-              ]
-          },
-          yAxis: {
-              min: 0,
-              title: {
-                  text: 'Story Count'
-              }
-          },
-          tooltip: {
-              headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
-              pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
-                  '<td style="padding:0"><b>{point.y:.1f} mm</b></td></tr>',
-              footerFormat: '</table>',
-              shared: true,
-              useHTML: true
-          },
-          plotOptions: {
-              column: {
-                  pointPadding: 0.2,
-                  borderWidth: 0
-              }
-          }
-        },
-        chartData: {
-          series: [{
-              name: 'Alpha',
-              data: [49.9, 71.5, 106.4, 129.2, 144.0, 176.0, 135.6, 148.5, 216.4, 194.1, 95.6, 54.4]
-
-          }, {
-              name: 'Beta',
-              data: [83.6, 78.8, 98.5, 93.4, 106.0, 84.5, 105.0, 104.3, 91.2, 83.5, 106.6, 92.3]
-
-          }, {
-              name: 'Gamma',
-              data: [13.6, 72.8, 48.5, 83.4, 106.0, 84.5, 305.0, 74.3, 91.2, 53.5, 106.6, 12.3]
-
-          }
-          ]
-        }
-      }); 
-
-    }, //}}}
-
     // Create all grids in the left/right columns
     _buildGrids: function(scope) {
     
@@ -473,7 +333,7 @@ Ext.define('CustomApp', {
               scope: this
           },
           columns: ['FormattedID', 'Name', 'Project', 'Feature','PlanEstimate'],
-          side: 'Right',    // TODO: ensure camelcase format to match itemId names
+          side: 'Left',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
             var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -519,7 +379,7 @@ Ext.define('CustomApp', {
           pageSize: 3,
           filters: function() {
             var userstoryFilter = Ext.create('Rally.data.wsapi.Filter', {
-                property: 'UserStories.ObjectID', operator: '=', value: 'null'
+                property: 'UserStories.ObjectID', operator: 'contains', value: 'null'
             });
             var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
                 property: 'PlannedEndDate', operator: '<', value: 'NextWeek'
@@ -556,7 +416,11 @@ Ext.define('CustomApp', {
           listeners: {
               scope: this
           },
-          columns: ['FormattedID', 'Name','Project', 'ScheduleState'],
+          columns: [    
+                    {text: 'Feature', dataIndex: 'Feature', flex: 3, renderer: function(value) {
+                        return value.FormattedID.link("https://rally1.rallydev.com/#/"+value.Project.ObjectID+"d/detail/portfolioitem/feature/"+value.ObjectID);}},
+          'FormattedID', 'Name','Project', 'ScheduleState',
+                ],
           side: 'Right',    // TODO: ensure camelcase format to match itemId names
           pageSize: 3,
           filters: function() {
@@ -620,8 +484,6 @@ Ext.define('CustomApp', {
             this.globalGridCount.push(count[0]);
             this.globalGridMap[count[1]]=count[0];
             this.globalStoryCount.push(count[2]);
-            //console.log('Grid Map', this.globalGridMap);
-            //console.log(count);
           },
           error: function(error) {
             console.log('single: error', error);
