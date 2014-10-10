@@ -4,8 +4,16 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
-      "App.js",
-      "lib/component-column.js"
+			"../lib/intel-models.js",
+      "../../lib/component-column.js",
+      "../../lib/fast-component-column.js",
+      "../../lib/fast-session-proxy.js",
+      "../../lib/fast-store.js",
+      "../../lib/intel-combobox.js",
+      "../../lib/fast-cell-editing.js",
+      "../../lib/scroll-steady-tableview.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "App.js"
    ],
    "css": [
       "app.css"
