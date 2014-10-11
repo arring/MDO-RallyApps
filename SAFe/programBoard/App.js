@@ -143,9 +143,11 @@ Ext.define('ProgramBoard', {
 		Q.all(promises).then(cb);
 	},
 	
-	_loadProject: function(project, cb){ 
-		var me = this;
-		me.Project.load(project.ObjectID, {
+	_loadProject: function(oid, cb){ 
+		var me = this; 
+		if(!oid){ cb(); return; }
+		if(!me.Project){ me._loadModels(function(){ me._loadProject(oid, cb); }); return; }
+		me.Project.load(oid, {
 			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
@@ -158,11 +160,13 @@ Ext.define('ProgramBoard', {
 	_loadFeature: function(oid, cb){ 
 		var me = this;
 		if(!oid){ cb(); return; }
+		if(!me.Feature){ me._loadModels(function(){ me._loadFeature(oid, cb); }); return; }
+		if(!oid){ cb(); return; }
 		me.Feature.load(oid, {
 			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.get('_ref')
+				project: me.ProjectRecord.data._ref
 			},
 			callback: cb
 		});
@@ -171,20 +175,23 @@ Ext.define('ProgramBoard', {
 	_loadUserStory: function(oid, cb){ 
 		var me = this;
 		if(!oid){ cb(); return; }
+		if(!me.UserStory){ me._loadModels(function(){ me._loadUserStory(oid, cb); }); return; }
 		me.UserStory.load(oid, {
 			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.get('_ref')
+				project: me.ProjectRecord.data._ref
 			},
 			callback: cb
 		});
 	},
 	
-	_loadMilestone: function(milestone, cb){ 
+	_loadMilestone: function(oid, cb){ 
 		var me = this;
-		me.Milestone.load(milestone.ObjectID, {
+		if(!oid){ cb(); return; }
+		if(!me.Milestone){ me._loadModels(function(){ me._loadMilestone(oid, cb); }); return; }
+		me.Milestone.load(oid, {
 			fetch: ['ObjectID', 'Parent', 'Name'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
@@ -196,11 +203,11 @@ Ext.define('ProgramBoard', {
 	
 	_loadRootProject: function(projectRecord, cb){
 		var me=this, n = projectRecord.get('Name');
-		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.get('Parent')) {
+		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.data.Parent) {
 			me.RootProjectRecord = projectRecord;
 			cb();
 		} else {
-			me._loadProject(projectRecord.get('Parent'), function(parentRecord){
+			me._loadProject(projectRecord.data.Parent.ObjectID, function(parentRecord){
 				me._loadRootProject(parentRecord, cb);
 			});
 		}
@@ -208,13 +215,13 @@ Ext.define('ProgramBoard', {
 	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) cb();
-		var me=this, split = projectRecord.get('Name').split(' ART ');
+		var me=this, split = projectRecord.get('Name').split(' ART');
 		if(split.length>1) cb(projectRecord);
 		else { 
 			var parent = projectRecord.get('Parent');
 			if(!parent) cb();
 			else {
-				me._loadProject(parent, function(parentRecord){
+				me._loadProject(parent.ObjectID, function(parentRecord){
 					me._projectInWhichTrain(parentRecord, cb);
 				});
 			}
@@ -236,7 +243,7 @@ Ext.define('ProgramBoard', {
 			filters:[{
 					property:'Name',
 					operator: 'contains',
-					value: ' ART '
+					value: ' ART'
 				},{
 					property: 'Name',
 					operator: '!contains',
@@ -247,7 +254,7 @@ Ext.define('ProgramBoard', {
 				load: {
 					fn: function(projectStore, projectRecords){
 						me.AllTrainRecordsStore = projectStore;
-						me.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART ')[0]};  });
+						me.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART')[0]};  });
 						console.log('AllTrainRecords loaded', projectRecords);
 						cb();
 					},
@@ -463,7 +470,7 @@ Ext.define('ProgramBoard', {
 				featureRecords.forEach(function(fr){
 					var deferred = Q.defer();
 					var frData = fr.data;
-					if(frData.Parent) this._loadMilestone(frData.Parent, this._milestoneLoaded.bind(this, frData, deferred));
+					if(frData.Parent) this._loadMilestone(frData.Parent.ObjectID, this._milestoneLoaded.bind(this, frData, deferred));
 					else {
 						this.FeatureProductHash[frData.ObjectID] = '';
 						deferred.resolve();
@@ -510,7 +517,7 @@ Ext.define('ProgramBoard', {
     });
 	},
 	
-	_loadUserStories: function(cb){	
+	_loadUserStoryFilterString: function(){
 		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
 			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
 		
@@ -548,7 +555,11 @@ Ext.define('ProgramBoard', {
 		// })).and(coreFilter);
 		
 		/*************************************** Store Stuff********************************************/
-		var filterString = coreFilter.or(depFilter).toString();
+		return coreFilter.or(depFilter).toString();
+	},
+	
+	_loadUserStories: function(cb){	
+		var filterString = this._loadUserStoryFilterString();
 		
 		this.UserStoryStore = Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
@@ -1507,6 +1518,7 @@ Ext.define('ProgramBoard', {
 		
 		me.CustomPredDepStore = undefined;
 		me.CustomSuccDepStore = undefined;
+		me.CustomRisksStore = undefined;
 		me.CustomTeamCommitsStore = undefined;
 		me.CustomVelocityStore = undefined;
 		
@@ -1628,7 +1640,7 @@ Ext.define('ProgramBoard', {
 		if(this.ProjectRecord) this._loadPreferences(this._preferencesLoaded.bind(this));
 		else{
 			this.removeAll();
-			this._alert('ERROR', 'Please scope to a valid team for release planning');
+			this._alert('ERROR', 'Please scope to a team that has members');
 		}
 	},
 	
@@ -1643,7 +1655,7 @@ Ext.define('ProgramBoard', {
 	
 	_modelsLoaded: function(){
 		var scopeProject = this.getContext().getProject();
-		this._loadProject(scopeProject, this._currentProjectLoaded.bind(this));
+		this._loadProject(scopeProject.ObjectID, this._currentProjectLoaded.bind(this));
 	},
 	
 	launch: function(){
@@ -1713,7 +1725,7 @@ Ext.define('ProgramBoard', {
 				displayField: 'Name',
 				fieldLabel: 'Train:',
 				editable:false,
-				value:this.TrainRecord.get('Name').split(' ART ')[0],
+				value:this.TrainRecord.get('Name').split(' ART')[0],
 				listeners: {
 					select: this._trainPickerSelected.bind(this)
 				}
@@ -2159,7 +2171,7 @@ Ext.define('ProgramBoard', {
 	_loadRisksGrid: function(){
 		var me = this, 
 			rd = me.ReleaseRecord.data,
-			workweeks = me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate),
+			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; }),
 			riskSorter = function(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }; //new come first
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
@@ -2508,11 +2520,11 @@ Ext.define('ProgramBoard', {
 
 		me.AddRiskButton = me.add({
 			xtype:'container',
+			padding:'20px 0 0 0',
 			items:[{
 				xtype:'button',
 				text:'+ Add Risk',
 				width:80,
-				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
@@ -2552,9 +2564,10 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px';},
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){			
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/
@@ -2599,7 +2612,7 @@ Ext.define('ProgramBoard', {
 	_loadDependenciesGrids: function(){
 		var me = this,
 			rd = me.ReleaseRecord.data,
-			workweeks = me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate);
+			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; });
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.UserStoryFIDStore = Ext.create('Ext.data.Store', {
@@ -3219,10 +3232,10 @@ Ext.define('ProgramBoard', {
 
 		me.AddPredDepButton = me.add({
 			xtype:'container',
+			padding:'20px 0 0 0',
 			items:[{
 				xtype:'button',
 				text:'+ Add Dependency',
-				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
@@ -3264,9 +3277,10 @@ Ext.define('ProgramBoard', {
 					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
 					return cls;
 				},
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){		
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/			
@@ -3599,9 +3613,10 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px'; },
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				beforeedit: function(editor, e){
 					var succDepRecord = e.record;
 					if(succDepRecord.get('Supported') == 'No' && e.field != 'Supported') 

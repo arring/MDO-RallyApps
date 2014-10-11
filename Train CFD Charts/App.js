@@ -287,7 +287,7 @@ Ext.define('TrainCfdCharts', {
 		var me=this;
 		me.ReleasePicker = me.add({
 			xtype:'combobox',
-			margin:'0 0 10 0',
+			padding:'0 0 10px 0',
 			store: Ext.create('Ext.data.Store', {
 				fields: ['Name'],
 				data: _.map(me.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })

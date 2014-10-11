@@ -8,77 +8,6 @@
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                /************************************************** MSGBOX FUNCTIONS ***************************************************/
-
-Ext.define('PrettyAlert', {
-	_alert: function(title, str){
-		Ext.MessageBox.alert(title, str).setY(this._msgBoxY);
-		setTimeout(function(){ 
-			var x = Ext.MessageBox.down('button');
-			while(x.isHidden()) x = x.nextSibling();
-			x.focus();
-		}, 10);
-	},
-	
-	_confirm: function(title, str, fn){
-		Ext.MessageBox.confirm(title, str, fn).setY(this._msgBoxY);
-		setTimeout(function(){
-			var x = Ext.MessageBox.down('button');
-			while(x.isHidden()) x = x.nextSibling();
-			x.focus();
-		}, 10);
-	},
-	
-	_applyMessageBoxConfig: function(){
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
-		
-		var ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
-			iyOffset = Math.floor(ph/2 - ofy + ps - 50);
-		this._msgBoxY = iyOffset<0 ? 0 : iyOffset;
-	}
-});
-                /************************************************** Workweek FUNCTIONS ***************************************************/
-	
-Ext.define('IntelWorkweek', {
-	_getWorkweek: function(date){ //calculates intel workweek, returns integer
-		var oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
-	},
-	
-	_getWeekCount: function(date){ //returns the number of intel workweeks in the year the date is in
-		var leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay();
-		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
-	},
-	
-	_getWorkweeks: function(){ //gets list of workweeks in the release. ONLY USE THIS IF YOU HAVE this.ReleaseRecord set!
-		var i,
-			start = this.ReleaseRecord.get('ReleaseStartDate'),
-			end = this.ReleaseRecord.get('ReleaseDate'),
-			sd_week = this._getWorkweek(start),
-			ed_week = this._getWorkweek(end),
-			week_count = this._getWeekCount(start);
-
-		var weeks = [];
-		if(ed_week < sd_week){
-			for(i=sd_week; i<=week_count; ++i) weeks.push({'Week': 'ww' + i});
-			for(i = 1; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-		}
-		else for(i = sd_week; i<=ed_week;++i) weeks.push({'Week': 'ww' + i});
-		return weeks;
-	}
-});
                 Ext.define('IntelVelocity', {
 	extend: 'Ext.data.Model',
 	fields: [
@@ -163,6 +92,264 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 		{name: 'Edited', type: 'boolean'}
 	]
 });	
+                /** this is used if you want to listen to events in the parent window (e.g. useful for rally apps that resize with browser screen
+		vertically or things that need to know browser scroll position) 
+	You also can artificially fire the events and have the listeners run
+*/
+Ext.define('WindowListener', {
+
+	__initWindowEventListener: function(eventName){
+		var me=this;
+		if(!me._windowListeners) me._windowListeners = {};
+		me._windowListeners[eventName] = [];
+		
+		window.parent['on' + eventName] = function(event){ 
+			var listeners = me._windowListeners[eventName];
+			for(var i=0, len=listeners.length; i<len; ++i)
+				listeners[i](event);
+		};
+	},
+	
+	_addWindowEventListener: function(eventName, fn){
+		var me=this;
+		if(!me._windowListeners || !me._windowListeners[eventName]) 
+			me.__initWindowEventListener(eventName);
+		me._windowListeners[eventName].push(fn);
+	},
+	
+	_fireParentWindowEvent: function(eventName){ //eg: resize or scroll
+		var me=this;
+		if(!me._windowListeners || !me._windowListeners[eventName]) return;
+		var listeners = me._windowListeners[eventName];
+		for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
+	}
+});
+                /** resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar **/
+
+Ext.define('IframeResize', {
+	requires: ['WindowListener'],
+	
+	/** resizes the iframe to be the height of all the items in it, with 20 px padding in between + 50 px; */
+	__applyIframeResize: function(){ 
+		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
+			ip1 = iframe.parentNode,
+			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
+			height = 0, next = this.down();
+		while(next){
+			height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
+			next = next.next();
+		}
+		height += 150;
+		ip1.style.height = height + 'px';
+		ip2.style.height = height + 'px';
+		iframe.style.height = height + 'px';
+	},
+	
+	_initIframeResize: function(){
+		var me=this;
+		if(me._addWindowEventListener){
+			me._addWindowEventListener('resize', function(){ me.__applyIframeResize(); });
+		}
+	}
+});
+                /**  
+	THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
+	gives a window-centered alert or confirm dialog box that isn't ugly. 
+*/
+Ext.define('PrettyAlert', { 
+	requires:['WindowListener'],
+	
+	_alert: function(title, str){
+		Ext.MessageBox.alert(title || '', str || '').setY(this.__msgBoxY);
+		setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 20);
+	},
+	
+	_confirm: function(title, str, fn){
+		Ext.MessageBox.confirm(title || '', str || '', fn || function(){}).setY(this.__msgBoxY);
+		setTimeout(function(){
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 20);
+	},
+	
+
+	__applyMessageBoxConfig: function(){ 
+		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
+		
+		var ph = p.getWindowHeight(), 
+			ps = p.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+			iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+		this.__msgBoxY = iyOffset<0 ? 0 : iyOffset;
+	},
+	
+	/** CALL THIS IN LAUNCH FUNCTION! **/
+	_initPrettyAlert: function(){
+		var me=this;
+		if(me._addWindowEventListener){
+			me._addWindowEventListener('resize', function(){ me.__applyMessageBoxConfig(); });
+			me._addWindowEventListener('scroll', function(){ me.__applyMessageBoxConfig(); });
+		}
+	}
+});
+                Ext.define('IntelWorkweek', {
+	
+	/** calculates intel workweek, returns integer */
+	_getWorkweek: function(date){ 
+		var oneDay = 1000 * 60 * 60 * 24,
+			yearStart = new Date(date.getFullYear(), 0, 1),
+			dayIndex = yearStart.getDay(),
+			ww01Start = yearStart - dayIndex*oneDay,
+			timeDiff = date - ww01Start,
+			dayDiff = timeDiff / oneDay,
+			ww = Math.floor(dayDiff/7) + 1,
+			leap = (date.getFullYear() % 4 === 0),
+			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+		return weekCount < ww ? 1 : ww;
+	},
+	
+	/** returns the number of intel workweeks in the year the date is in */
+	_getWeekCount: function(date){ 
+		var leap = (date.getFullYear() % 4 === 0),
+			day = new Date(date.getFullYear(), 0, 1).getDay();
+		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+	},
+	
+	/**  gets list of workweeks between startDate and endDate (startDate and endDate dont have to be Date objects)  */
+	_getWorkweeks: function(startDate, endDate){ 
+		var i,
+			sd_week = this._getWorkweek(startDate),
+			ed_week = this._getWorkweek(endDate),
+			week_count = this._getWeekCount(startDate);
+			
+		var weeks = [];
+		if(ed_week < sd_week){
+			for(i=sd_week; i<=week_count; ++i) weeks.push('ww' + i);
+			for(i = 1; i<=ed_week;++i) weeks.push('ww' + i);
+		}
+		else for(i = sd_week; i<=ed_week;++i) weeks.push('ww' + i);
+		return weeks;
+	}
+});
+                /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
+	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
+	most functions return promises that resolve to stores
+*/
+
+Ext.define('ReleaseQuery', {
+		
+	/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
+	_loadReleasesInTheFuture: function(projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[
+				{
+					property:'Project.ObjectID',
+					value: projectRecord.data.ObjectID
+				},{
+					property:'ReleaseDate',
+					operator:'>=',
+					value: new Date().toISOString()
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(releaseStore, releaseRecords){
+						console.log('releases loaded:', releaseRecords);
+						deferred.resolve(releaseStore);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	/** loads this release for each scrum under this train. returns promise with the release Store 
+		the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
+		in the results.
+	**/
+	_loadReleasesWithName: function(releaseName, trainName){ 
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[
+				{
+					property:'Name', //match the release
+					value: releaseName
+				},{
+					property:'Project.Name', //is a child of the train
+					operator:'contains',
+					value:trainName
+				},{
+					property:'Project.Children.Name', //has teamMembers 
+					operator:'=',
+					value:''
+				},{
+					property:'Project.Name', //but not the train release itsself
+					operator:'!contains',
+					value:' ART'
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						console.log('releasesWithName loaded:', records);
+						deferred.resolve(store);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	/** gets the most likely release to scope to base on the following order:
+		1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+						to use preferences for this one)
+		2) if we are in a release
+		3) the closest release planning date to the current date
+	*/
+	_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
+		var me=this,
+			d = new Date(),
+			rs = releaseRecords,
+			prefOID = appPrefs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+		return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+			_.find(rs, function(r){
+				return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+			}) ||
+			_.reduce(rs, function(best, r){
+				if(best===null) return r;
+				else {
+					var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+					return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+				}
+			}, null);
+	}
+});
                 /*!
  * CTemplate
  * Version 1.1
@@ -873,6 +1060,39 @@ Ext.define('Skirtle.grid.column.Component', {
         proto.extVersion = 40101;
     }
 });
+                /** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+	(although there is some arrow key scrolling bug) 
+*/
+Ext.define('Intel.form.field.ComboBox', {
+	extend:'Ext.form.field.ComboBox',
+	alias: ['widget.intelcombo', 'widget.intelcombobox'],
+	
+	constructor: function() {
+		this.callParent(arguments);
+	},	
+	enableKeyEvents:true,
+	queryMode:'local',
+	ignoreNoChange:true,
+	listeners: {
+		keyup: function(a,b){
+			if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+			var combo = this;
+			combo.store.filters.getRange().forEach(function(filter){
+				combo.store.removeFilter(filter);
+			});
+			combo.store.filterBy(function(item){
+				return item.get(combo.displayField).indexOf(combo.getRawValue()) === 0;
+			});
+		},
+		focus: function(combo) {
+			combo.store.filters.getRange().forEach(function(filter){
+				combo.store.removeFilter(filter);
+			});
+			combo.setValue('');
+			combo.expand();
+		}
+	}
+});
                 Ext.define('intel.grid.column.Component.', {
 	alias: 'widget.fastgridcolumn',
 	extend: 'Skirtle.grid.column.Component',
@@ -1031,36 +1251,6 @@ Ext.define('Intel.data.proxy.SessionStorage', {
 		}
 		me.onUpdate(record, Ext.data.Model.EDIT, modifiedFieldNames);
 		//me.fireEvent('update', me, record, Ext.data.Model.EDIT, modifiedFieldNames); //redundant with me.sync()
-	}
-});
-                Ext.define('Intel.form.field.ComboBox', {
-	extend:'Ext.form.field.ComboBox',
-	alias: ['widget.intelcombo', 'widget.intelcombobox'],
-	
-	constructor: function() {
-		this.callParent(arguments);
-	},	
-	enableKeyEvents:true,
-	queryMode:'local',
-	ignoreNoChange:true,
-	listeners: {
-		keyup: function(a,b){
-			if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
-			var combo = this;
-			combo.store.filters.getRange().forEach(function(filter){
-				combo.store.removeFilter(filter);
-			});
-			combo.store.filterBy(function(item){
-				return item.get(combo.displayField).indexOf(combo.getRawValue()) === 0;
-			});
-		},
-		focus: function(combo) {
-			combo.store.filters.getRange().forEach(function(filter){
-				combo.store.removeFilter(filter);
-			});
-			combo.setValue('');
-			combo.expand();
-		}
 	}
 });
                 /**
@@ -1339,14 +1529,19 @@ Ext.define('Intel.grid.plugin.CellEditing', {
 */
 
 /********************* PRODUCTION *****************/
-//console = { log: function(){} };		
+//console = { log: function(){} }; // DEBUG!!!!		
 preferenceName = 'intel-program-board';
 
 /********************* END PRODUCTION *****************/
 Ext.define('ProgramBoard', {
 	extend: 'Rally.app.App',
-	componentCls: 'app',
-	mixins:['PrettyAlert', 'IntelWorkweek'],
+	mixins:[
+		'WindowListener',
+		'PrettyAlert',
+		'IframeResize',
+		'IntelWorkweek',
+		'ReleaseQuery'
+	],
 	
 	layout: {
 		type:'vbox',
@@ -1415,9 +1610,11 @@ Ext.define('ProgramBoard', {
 		Q.all(promises).then(cb);
 	},
 	
-	_loadProject: function(project, cb){ 
-		var me = this;
-		me.Project.load(project.ObjectID, {
+	_loadProject: function(oid, cb){ 
+		var me = this; 
+		if(!oid){ cb(); return; }
+		if(!me.Project){ me._loadModels(function(){ me._loadProject(oid, cb); }); return; }
+		me.Project.load(oid, {
 			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
@@ -1430,11 +1627,13 @@ Ext.define('ProgramBoard', {
 	_loadFeature: function(oid, cb){ 
 		var me = this;
 		if(!oid){ cb(); return; }
+		if(!me.Feature){ me._loadModels(function(){ me._loadFeature(oid, cb); }); return; }
+		if(!oid){ cb(); return; }
 		me.Feature.load(oid, {
 			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.get('_ref')
+				project: me.ProjectRecord.data._ref
 			},
 			callback: cb
 		});
@@ -1443,20 +1642,23 @@ Ext.define('ProgramBoard', {
 	_loadUserStory: function(oid, cb){ 
 		var me = this;
 		if(!oid){ cb(); return; }
+		if(!me.UserStory){ me._loadModels(function(){ me._loadUserStory(oid, cb); }); return; }
 		me.UserStory.load(oid, {
 			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.get('_ref')
+				project: me.ProjectRecord.data._ref
 			},
 			callback: cb
 		});
 	},
 	
-	_loadMilestone: function(milestone, cb){ 
+	_loadMilestone: function(oid, cb){ 
 		var me = this;
-		me.Milestone.load(milestone.ObjectID, {
+		if(!oid){ cb(); return; }
+		if(!me.Milestone){ me._loadModels(function(){ me._loadMilestone(oid, cb); }); return; }
+		me.Milestone.load(oid, {
 			fetch: ['ObjectID', 'Parent', 'Name'],
 			context: {
 				workspace: me.getContext().getWorkspace()._ref,
@@ -1466,64 +1668,13 @@ Ext.define('ProgramBoard', {
 		});
 	},
 	
-	/** THIS ONLY RETRIEVES RELEASES IN THE FUTURE OR CURRENT
-	**/
-	_getReleaseFilterString: function(){
-		var me=this,
-			filterString = Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.ObjectID',
-				value: me.ProjectRecord.get('ObjectID')
-			}).and(Ext.create('Rally.data.wsapi.Filter', { 
-				property:'ReleaseDate',
-				operator:'>=',
-				value: new Date().toISOString()
-			}));
-		return filterString.toString();
-	},
-	
-	_loadReleases: function(cb){  
-		var me = this,
-			filterString = me._getReleaseFilterString();	
-		me.ReleaseStore = Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{ property:'Dummy', value:'value' }]
-		});
-		me.ReleaseStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
-						});
-					},
-					scope: this
-			});
-		};
-		me.ReleaseStore.load({
-			callback:function(releaseRecords, releaseStore){
-				console.log('releases loaded:', releaseRecords);
-				cb();
-			}
-		});
-	},
-	
 	_loadRootProject: function(projectRecord, cb){
 		var me=this, n = projectRecord.get('Name');
-		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.get('Parent')) {
+		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.data.Parent) {
 			me.RootProjectRecord = projectRecord;
 			cb();
 		} else {
-			me._loadProject(projectRecord.get('Parent'), function(parentRecord){
+			me._loadProject(projectRecord.data.Parent.ObjectID, function(parentRecord){
 				me._loadRootProject(parentRecord, cb);
 			});
 		}
@@ -1531,13 +1682,13 @@ Ext.define('ProgramBoard', {
 	
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) cb();
-		var me=this, split = projectRecord.get('Name').split(' ART ');
+		var me=this, split = projectRecord.get('Name').split(' ART');
 		if(split.length>1) cb(projectRecord);
 		else { 
 			var parent = projectRecord.get('Parent');
 			if(!parent) cb();
 			else {
-				me._loadProject(parent, function(parentRecord){
+				me._loadProject(parent.ObjectID, function(parentRecord){
 					me._projectInWhichTrain(parentRecord, cb);
 				});
 			}
@@ -1559,7 +1710,7 @@ Ext.define('ProgramBoard', {
 			filters:[{
 					property:'Name',
 					operator: 'contains',
-					value: ' ART '
+					value: ' ART'
 				},{
 					property: 'Name',
 					operator: '!contains',
@@ -1570,7 +1721,7 @@ Ext.define('ProgramBoard', {
 				load: {
 					fn: function(projectStore, projectRecords){
 						me.AllTrainRecordsStore = projectStore;
-						me.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART ')[0]};  });
+						me.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART')[0]};  });
 						console.log('AllTrainRecords loaded', projectRecords);
 						cb();
 					},
@@ -1741,14 +1892,11 @@ Ext.define('ProgramBoard', {
 			if(this.TrainRecord.get('Name') == 'Test ART (P&E)'){
 				return '((Project.Name = "Test ART (P&E)") AND (Release.Name = "' + this.ReleaseRecord.get('Name') + '"))';
 			}
-			var prodString = this.TrainRecord.get('Name').match(/\((.*)\)/)[1];
-			return _.reduce(prodString.split('/'), function(filter, product){
-				var newFilter = Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: product.trim().split(' ')[0] + ' Portfolio' //ugly split(' ') because of stupid Bravo 'DNV (PG' 
-				});
-				return filter ? filter.or(newFilter) : newFilter;
-			}, null).and(coreFilter).toString();
+			var trainName = this.TrainRecord.get('Name').split(' ART')[0];
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project.Parent.Name',
+				value: trainName + ' POWG Portfolios'
+			}).and(coreFilter).toString();
 		}
 	},
 	
@@ -1789,7 +1937,7 @@ Ext.define('ProgramBoard', {
 				featureRecords.forEach(function(fr){
 					var deferred = Q.defer();
 					var frData = fr.data;
-					if(frData.Parent) this._loadMilestone(frData.Parent, this._milestoneLoaded.bind(this, frData, deferred));
+					if(frData.Parent) this._loadMilestone(frData.Parent.ObjectID, this._milestoneLoaded.bind(this, frData, deferred));
 					else {
 						this.FeatureProductHash[frData.ObjectID] = '';
 						deferred.resolve();
@@ -1836,7 +1984,7 @@ Ext.define('ProgramBoard', {
     });
 	},
 	
-	_loadUserStories: function(cb){	
+	_loadUserStoryFilterString: function(){
 		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
 			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
 		
@@ -1874,7 +2022,11 @@ Ext.define('ProgramBoard', {
 		// })).and(coreFilter);
 		
 		/*************************************** Store Stuff********************************************/
-		var filterString = coreFilter.or(depFilter).toString();
+		return coreFilter.or(depFilter).toString();
+	},
+	
+	_loadUserStories: function(cb){	
+		var filterString = this._loadUserStoryFilterString();
 		
 		this.UserStoryStore = Ext.create('Rally.data.wsapi.Store',{
 			model: 'HierarchicalRequirement',
@@ -2749,48 +2901,8 @@ Ext.define('ProgramBoard', {
 		if(!realData)	return localData.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
 		else return localData.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
 	},
-		
-	_getScopedRelease: function(){
-		var d = new Date(), r,
-			rs = this.ReleaseStore.getRecords(),
-			pid = this.ProjectRecord.get('ObjectID'),
-			prefOID = this.AppPrefs.projs[pid] && this.AppPrefs.projs[pid].Release;
-		return (prefOID && _.find(rs, function(r){ return r.get('ObjectID') == prefOID; })) ||
-			_.find(rs, function(r){
-				return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
-			}) ||
-			_.reduce(rs, function(best, r){
-				if(best===null) return r;
-				else {
-					var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
-					return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
-				}
-			}, null);
-	},
-	
-	_applyIframeResize: function(){ //resizes the iframe to be the height of all the items in it
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
-			ip1 = iframe.parentNode,
-			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
-			height = 0, next = this.down();
-		while(next){
-			height += next.getHeight() + 20;
-			next = next.next();
-		}
-		height += 50;
-		ip1.style.height = height + 'px';
-		ip2.style.height = height + 'px';
-		iframe.style.height = height + 'px';
-	},
-	
-	_windowResize: function(){
-		this._applyMessageBoxConfig();
-		this._applyIframeResize();
-	},
-	
-  /************************************************ LOADING AND RELOADING ***********************************/
 
+  /************************************************ LOADING AND RELOADING ***********************************/
 	_isEditingTeamCommits: false, 
 	_isEditingVelocity: false,
 	
@@ -2873,6 +2985,7 @@ Ext.define('ProgramBoard', {
 		
 		me.CustomPredDepStore = undefined;
 		me.CustomSuccDepStore = undefined;
+		me.CustomRisksStore = undefined;
 		me.CustomTeamCommitsStore = undefined;
 		me.CustomVelocityStore = undefined;
 		
@@ -2934,7 +3047,7 @@ Ext.define('ProgramBoard', {
 			})
 			.then(function(){
 				me._removeLoadingMasks();
-				me._windowResize();
+				me._fireParentWindowEvent('resize');
 			})
 			.done();
 	},
@@ -2950,32 +3063,35 @@ Ext.define('ProgramBoard', {
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-	_releasesLoaded: function(){ //finally we can render!!!
-		var currentRelease = this._getScopedRelease();
+	_releasesLoaded: function(releaseStore){ //finally we can render!!!
+		var me=this;
+		me.ReleaseStore = releaseStore;
+		var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.ProjectRecord.data.ObjectID, me.AppPrefs);
 		if(currentRelease){
-			this.ReleaseRecord = currentRelease;
+			me.ReleaseRecord = currentRelease;
 			console.log('release loaded', currentRelease);
-			this._setRefreshInterval(); 
-			this._reloadEverything();
+			me._setRefreshInterval(); 
+			me._reloadEverything();
 		} else {
-			this.setLoading(false);
-			this._alert('This team has no releases');
+			me.setLoading(false);
+			me._alert('ERROR', 'This team has no releases');
 		}
 	},
 	
 	_trainRecordLoaded: function(trainRecord){ //now we set the TrainRecord based on trainRecord and this.AppPrefs
-		if(trainRecord)	this.TrainRecord = trainRecord;
+		var me=this;
+		if(trainRecord)	me.TrainRecord = trainRecord;
 		else {
-			this.ProjectNotInTrain = true;
-			var pid = this.ProjectRecord.get('ObjectID');
-			if(this.AppPrefs.projs[pid] && this.AppPrefs.projs[pid].Train) {
-				this.TrainRecord = this.AllTrainRecordsStore.findExactRecord('ObjectID', this.AppPrefs.projs[pid].Train);
-				if(!this.TrainRecord) this.TrainRecord = this.AllTrainRecordsStore.first();
+			me.ProjectNotInTrain = true;
+			var pid = me.ProjectRecord.get('ObjectID');
+			if(me.AppPrefs.projs[pid] && me.AppPrefs.projs[pid].Train) {
+				me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('ObjectID', me.AppPrefs.projs[pid].Train);
+				if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecordsStore.first();
 			}
-			else this.TrainRecord = this.AllTrainRecordsStore.first();
+			else me.TrainRecord = me.AllTrainRecordsStore.first();
 		}
 		console.log('train loaded:', trainRecord);
-		this._loadReleases(this._releasesLoaded.bind(this));
+		me._loadReleasesInTheFuture(me.ProjectRecord).then(me._releasesLoaded.bind(me));
 	},
 	
 	_allTrainRecordsLoaded: function(){
@@ -2991,7 +3107,7 @@ Ext.define('ProgramBoard', {
 		if(this.ProjectRecord) this._loadPreferences(this._preferencesLoaded.bind(this));
 		else{
 			this.removeAll();
-			this._alert('Please scope to a valid team for release planning');
+			this._alert('ERROR', 'Please scope to a team that has members');
 		}
 	},
 	
@@ -3006,18 +3122,19 @@ Ext.define('ProgramBoard', {
 	
 	_modelsLoaded: function(){
 		var scopeProject = this.getContext().getProject();
-		this._loadProject(scopeProject, this._currentProjectLoaded.bind(this));
+		this._loadProject(scopeProject.ObjectID, this._currentProjectLoaded.bind(this));
 	},
 	
 	launch: function(){
-		this.setLoading(true);
-		window.parent.onresize = this._windowResize.bind(this); //reset msgbox and app height on resize
-		window.parent.onscroll = this._applyMessageBoxConfig.bind(this);	//reset msgbox on scroll
-		if(!this.getContext().getPermissions().isProjectEditor(this.getContext().getProject())) { //permission check
-			this.setLoading(false);
-			this._alert('You do not have permissions to edit this project');
+		var me=this;
+		me.setLoading(true);
+		me._initPrettyAlert();
+		me._initIframeResize();	
+		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+			me.setLoading(false);
+			me._alert('ERROR', 'You do not have permissions to edit this project');
 		} 
-		else this._loadModels(this._modelsLoaded.bind(this));
+		else me._loadModels(me._modelsLoaded.bind(me));
 	},
 
 	/******************************************************* RENDER TOP BAR ITEMS********************************************************/	
@@ -3075,7 +3192,7 @@ Ext.define('ProgramBoard', {
 				displayField: 'Name',
 				fieldLabel: 'Train:',
 				editable:false,
-				value:this.TrainRecord.get('Name').split(' ART ')[0],
+				value:this.TrainRecord.get('Name').split(' ART')[0],
 				listeners: {
 					select: this._trainPickerSelected.bind(this)
 				}
@@ -3520,7 +3637,8 @@ Ext.define('ProgramBoard', {
 
 	_loadRisksGrid: function(){
 		var me = this, 
-			workweeks = me._getWorkweeks(),
+			rd = me.ReleaseRecord.data,
+			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; }),
 			riskSorter = function(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }; //new come first
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
@@ -3869,11 +3987,11 @@ Ext.define('ProgramBoard', {
 
 		me.AddRiskButton = me.add({
 			xtype:'container',
+			padding:'20px 0 0 0',
 			items:[{
 				xtype:'button',
 				text:'+ Add Risk',
 				width:80,
-				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
@@ -3913,9 +4031,10 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px';},
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){			
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/
@@ -3959,7 +4078,8 @@ Ext.define('ProgramBoard', {
 	
 	_loadDependenciesGrids: function(){
 		var me = this,
-			workweeks = me._getWorkweeks();
+			rd = me.ReleaseRecord.data,
+			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; });
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.UserStoryFIDStore = Ext.create('Ext.data.Store', {
@@ -4579,10 +4699,10 @@ Ext.define('ProgramBoard', {
 
 		me.AddPredDepButton = me.add({
 			xtype:'container',
+			padding:'20px 0 0 0',
 			items:[{
 				xtype:'button',
 				text:'+ Add Dependency',
-				style:'margin-top:20px',
 				listeners:{
 					click: function(){
 						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
@@ -4624,9 +4744,10 @@ Ext.define('ProgramBoard', {
 					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
 					return cls;
 				},
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){		
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/			
@@ -4959,9 +5080,10 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(){ return 'intel-row-35px'; },
-				listeners: { resize: function(){ me._windowResize(); }}
+				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
 			},
 			listeners: {
+				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				beforeedit: function(editor, e){
 					var succDepRecord = e.record;
 					if(succDepRecord.get('Supported') == 'No' && e.field != 'Supported') 

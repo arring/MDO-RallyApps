@@ -82,3 +82,38 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 		{name: 'Edited', type: 'boolean'}
 	]
 });	
+
+Ext.define('IntelRiskWithProject', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ProjectName', type:'string'},
+		{name: 'ProjectOID', type:'string'},
+		{name: 'RiskID', type:'string'},
+		{name: 'ObjectID', type:'number'},
+		{name: 'FormattedID',  type: 'string'},
+		{name: 'FeatureName', type:'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Impact', type: 'string'},			
+		{name: 'Status', type: 'string'},
+		{name: 'Contact', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Edited', type: 'boolean'}
+	]
+});
+
+Ext.define('IntelPredDepWithProject', { //predecessor dependencies
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ProjectName', type:'string'},
+		{name: 'ProjectOID', type:'string'},
+		{name: 'ObjectID', type: 'number'},
+		{name: 'DependencyID', type:'string'},
+		{name: 'FormattedID',  type: 'string'}, 
+		{name: 'UserStoryName',  type: 'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
+		{name: 'Edited', type: 'boolean'}
+	]
+});		

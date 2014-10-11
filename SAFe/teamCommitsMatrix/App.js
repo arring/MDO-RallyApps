@@ -1,9 +1,14 @@
 /********************* PRODUCTION *****************/
-console = { log: function(){} };		
+//console = { log: function(){} };
+	
 /********************* END PRODUCTION *****************/
 
-Ext.define('CustomApp', {
+Ext.define('CommitMatrix', {
   extend: 'Rally.app.App',
+	mixins:[
+		'ReleaseQuery',
+		'IntelWorkweek'
+	],
 	layout:'absolute',
 	autoScroll:false,
 		
@@ -57,40 +62,6 @@ Ext.define('CustomApp', {
 			callback: function(record, operation){
 				if(operation.wasSuccessful()) cb(record);
 				else me._showError('failed to retreive milestone: ' + milestone.ObjectID);
-			}
-		});
-	},
-	
-	_loadReleases: function(cb){ 
-		var me = this;
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			autoLoad:true,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: me.TrainRecord.data.ObjectID
-				},{
-					property:'Name',
-					operator:'contains',
-					value: me.TrainRecord.data.Name.split(' ART ')[0]
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						me.ReleaseStore = releaseStore;
-						cb();
-					},
-					single:true
-				}
 			}
 		});
 	},
@@ -294,7 +265,7 @@ Ext.define('CustomApp', {
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART ');
+		var split = projectRecord.data.Name.split(' ART');
 		if(split.length>1) cb(projectRecord);
 		else { 
 			var parent = projectRecord.data.Parent;
@@ -306,33 +277,7 @@ Ext.define('CustomApp', {
 			}
 		}
 	},
-	
-	_getCurrentOrClosestRelease: function(){
-		var me = this, d = new Date(),
-			rs = me.ReleaseStore.getRecords();
-		return _.find(rs, function(r){
-			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
-		}) || _.reduce(rs, function(best, r){
-			if(best===null) return r;
-			else {
-				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
-				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
-			}
-		}, null);
-	},
-	
-	_getWorkweek: function(date){ //calculates intel workweek, returns integer
-		var me = this, oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
-	},
+
 	
 	/************************************************** Event Handler/ window size/scroll config *********************************************/
 	
@@ -430,8 +375,9 @@ Ext.define('CustomApp', {
 					if(trainRecord){
 						me.TrainRecord = trainRecord; 
 						console.log('train loaded:', trainRecord);
-						me._loadReleases(function(){
-							var currentRelease = me._getCurrentOrClosestRelease();
+						me._loadReleasesInTheFuture(me.TrainRecord).then(function(releaseStore){
+							me.ReleaseStore = releaseStore;
+							var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.TrainRecord.data.ObjectID, me.AppPrefs);
 							if(currentRelease){
 								me.ReleaseRecord = currentRelease;
 								console.log('release loaded', currentRelease);
