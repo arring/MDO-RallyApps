@@ -1,9 +1,14 @@
 /********************* PRODUCTION *****************/
-console = { log: function(){} };		
+//console = { log: function(){} };
+	
 /********************* END PRODUCTION *****************/
 
-Ext.define('CustomApp', {
+Ext.define('CommitMatrix', {
   extend: 'Rally.app.App',
+	mixins:[
+		'ReleaseQuery',
+		'IntelWorkweek'
+	],
 	layout:'absolute',
 	autoScroll:false,
 		
@@ -61,40 +66,6 @@ Ext.define('CustomApp', {
 		});
 	},
 	
-	_loadReleases: function(cb){ 
-		var me = this;
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			autoLoad:true,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: me.TrainRecord.data.ObjectID
-				},{
-					property:'Name',
-					operator:'contains',
-					value: me.TrainRecord.data.Name.split(' ART ')[0]
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						me.ReleaseStore = releaseStore;
-						cb();
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
 	_loadMatrixFeatures: function(cb){ 
 		var me = this;
 		me.MatrixProductHash = {};
@@ -102,7 +73,8 @@ Ext.define('CustomApp', {
 			model: 'PortfolioItem/Feature',
 			autoLoad:true,
 			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 'UserStories', 'c_TeamCommits', 'DragAndDropRank'],
+			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 
+				'UserStories', 'c_TeamCommits', 'DragAndDropRank', 'PlannedEndDate'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -263,7 +235,8 @@ Ext.define('CustomApp', {
 				{name: 'FormattedID', type:'string'},
 				{name: 'ObjectID', type:'string'},
 				{name: 'FeatureName',  type: 'string'},
-				{name: 'ProductName', type:'string'}
+				{name: 'ProductName', type:'string'},
+				{name: 'PlannedEndDate', type:'string'}
 			]
 		});
 	},
@@ -278,7 +251,7 @@ Ext.define('CustomApp', {
 			if(me.CustomMatrixStore){
 				var scroll = me.MatrixGrid.view.getEl().getScrollTop();
 				me._isReloadRefresh = true;
-				me.CustomMatrixStore.load({
+				me.CustomMatrixStore.load({ //we use load here because the logic is handled in the renderers
 					callback: function(){
 						me.MatrixGrid.view.getEl().setScrollTop(scroll);
 						setTimeout(function(){ me._isReloadRefresh = false; }, 10);
@@ -292,7 +265,7 @@ Ext.define('CustomApp', {
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART ');
+		var split = projectRecord.data.Name.split(' ART');
 		if(split.length>1) cb(projectRecord);
 		else { 
 			var parent = projectRecord.data.Parent;
@@ -304,20 +277,7 @@ Ext.define('CustomApp', {
 			}
 		}
 	},
-	
-	_getCurrentOrClosestRelease: function(){
-		var me = this, d = new Date(),
-			rs = me.ReleaseStore.getRecords();
-		return _.find(rs, function(r){
-			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
-		}) || _.reduce(rs, function(best, r){
-			if(best===null) return r;
-			else {
-				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
-				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
-			}
-		}, null);
-	},
+
 	
 	/************************************************** Event Handler/ window size/scroll config *********************************************/
 	
@@ -403,9 +363,11 @@ Ext.define('CustomApp', {
 			me._showError('You do not have permissions to edit this project');
 			return;
 		}
+		Ext.tip.QuickTipManager.init();
+		Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1000 });
 		me._defineModels();
 		me._applyEventListeners();
-		//setInterval(function(){ me._reloadMatrixStores();}, 10000); 
+		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
 		me._loadModels(function(){
 			var scopeProject = me.getContext().getProject();
 			me._loadProject(scopeProject, function(scopeProjectRecord){
@@ -413,8 +375,9 @@ Ext.define('CustomApp', {
 					if(trainRecord){
 						me.TrainRecord = trainRecord; 
 						console.log('train loaded:', trainRecord);
-						me._loadReleases(function(){
-							var currentRelease = me._getCurrentOrClosestRelease();
+						me._loadReleasesInTheFuture(me.TrainRecord).then(function(releaseStore){
+							me.ReleaseStore = releaseStore;
+							var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.TrainRecord.data.ObjectID, me.AppPrefs);
 							if(currentRelease){
 								me.ReleaseRecord = currentRelease;
 								console.log('release loaded', currentRelease);
@@ -463,7 +426,7 @@ Ext.define('CustomApp', {
 				if(me.featureTCAECache[featureID]) 
 					parsed_tcs = me.featureTCAECache[featureID];
 				else {
-					parsed_tcs = JSON.parse(tcs) || {};
+					parsed_tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = parsed_tcs;
 				}
 				this_tc = parsed_tcs[projectID] || {}; 
@@ -473,14 +436,14 @@ Ext.define('CustomApp', {
 		}
 		
 		function setExpected(featureRecord, ProjectName, value){
-			var tcs = featureRecord.data.c_TeamCommits;
+			var tcs = featureRecord.get('c_TeamCommits');
 			var featureID = featureRecord.data.ObjectID;
 			var projectID = me.MatrixProjectMap[ProjectName];
 			try{ 
 				if(me.featureTCAECache[featureID]) 
 					tcs = me.featureTCAECache[featureID];
 				else {
-					tcs = JSON.parse(tcs) || {};
+					tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = tcs;
 				}
 			} 
@@ -488,7 +451,7 @@ Ext.define('CustomApp', {
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
 			tcs[projectID].Expected = value;		
-			var str = JSON.stringify(tcs, null, '\t');
+			var str = btoa(JSON.stringify(tcs, null, '\t'));
 			if(str.length >= 32768){
 				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
@@ -498,12 +461,14 @@ Ext.define('CustomApp', {
 		}
 
 		var customMatrixRecords = _.map(me.MatrixFeatureStore.getRecords(), function(featureRecord){
+			var ed = featureRecord.get('PlannedEndDate');
 			return {
 				Rank: featureRecord.get('DragAndDropRank'),
 				FormattedID: featureRecord.get('FormattedID'),
 				ObjectID: featureRecord.get('ObjectID'),
 				FeatureName: featureRecord.get('Name'),
-				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')]
+				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')],
+				PlannedEndDate: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-')
 			};
 		});		
 
@@ -568,11 +533,25 @@ Ext.define('CustomApp', {
 				draggable:false,
 				menuDisabled:true,
 				locked:true,
-				sortable:true
+				sortable:true,
+				renderer: function(value, metaData) {
+					metaData.tdAttr = 'data-qtip="' + value + '"';
+					return value;
+				}
 			},{
 				text:'Product', 
 				dataIndex:'ProductName',
-				width:80,
+				width:60,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true
+			},{
+				text:'Planned End',
+				dataIndex:'PlannedEndDate',
+				width:60,
 				editor:false,
 				resizable:false,
 				draggable:false,
@@ -594,6 +573,8 @@ Ext.define('CustomApp', {
 				tdCls: 'intel-editor-cell',
 				sortable:false,
 				resizable:false,
+				tooltip:ProjectName,
+				tooltipType:'title',
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [];
@@ -845,10 +826,7 @@ Ext.define('CustomApp', {
 					});
 				}
 			},
-			showRowActionsColumn:false,
-			showPagingToolbar:false,
 			enableEditing:false,
-			context: me.getContext(),
 			store: me.CustomMatrixStore
 		});	
 	}

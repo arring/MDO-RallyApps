@@ -1,9 +1,5 @@
-.app {
-     /* Add app styles here */
-}
-/* .x-grid-row-alt {
-	background-color:gray !important;
-} */
+.app { background-color: black !important; padding:30px; }
+.header-cls { background-color:white !important; }
 
 .intel-feature-not-committed .x-grid-cell {
 	background-color:rgba(255, 0, 0, 0.15) !important;

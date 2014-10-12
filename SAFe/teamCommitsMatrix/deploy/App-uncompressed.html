@@ -1,18 +1,716 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Random App Name70221</title>
+    <title>ART Commit Matrix</title>
 
     <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function () {
+                Ext.define('IntelVelocity', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'Name', type: 'string'},
+		{name: 'PlannedVelocity', type: 'string'},
+		{name: 'RealVelocity', type:'string'}
+	]
+});
+
+Ext.define('IntelTeamCommits', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'Name', type: 'string'},
+		{name: 'ObjectID', type: 'string'},
+		{name: 'FormattedID', type:'string'},
+		{name: 'Commitment', type: 'string'},
+		{name: 'Objective', type:'string'},
+		{name: 'Product', type:'string'},
+		{name: 'PlannedEnd', type:'string'}
+	]
+});
+
+Ext.define('IntelRisk', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'RiskID', type:'string'},
+		{name: 'ObjectID', type:'number'},
+		{name: 'FormattedID',  type: 'string'},
+		{name: 'FeatureName', type:'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Impact', type: 'string'},			
+		{name: 'Status', type: 'string'},
+		{name: 'Contact', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Edited', type: 'boolean'}
+	]
+});
+
+Ext.define('IntelDepTeam', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'TID',  type: 'string'},  //teamDep ID
+		{name: 'PID',  type: 'string'},  //pred team id
+		{name: 'Sup', type: 'string'}, 
+		{name: 'USID', type: 'string'}, //pred formatted id
+		{name: 'USName', type: 'string'},
+		{name: 'A', type: 'boolean'} //yes/no
+	]
+});
+
+Ext.define('IntelPredDep', { //predecessor dependencies
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ObjectID', type: 'number'},
+		{name: 'DependencyID', type:'string'},
+		{name: 'FormattedID',  type: 'string'}, 
+		{name: 'UserStoryName',  type: 'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
+		{name: 'Edited', type: 'boolean'}
+	]
+});		
+	
+Ext.define('IntelSuccDep', { //predecessor dependency
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ObjectID', type: 'number'},
+		{name: 'DependencyID', type:'string'}, //same id as the pred id that references it
+		{name: 'SuccUserStoryName', type: 'string' },
+		{name: 'SuccFormattedID',  type: 'string'}, 
+		{name: 'SuccProjectID', type: 'string'}, //of predecessor team
+		{name: 'UserStoryName', type: 'string'}, //can be null!!!!!!!!!!!!
+		{name: 'FormattedID',  type: 'string'},  //CAN BE NULL!!!!!!!!!!!!
+		{name: 'ReleaseStartDate',  type: 'string'}, 
+		{name: 'ReleaseDate',  type: 'string'}, 
+		{name: 'Description', type: 'string'}, 
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Supported', type: 'string'}, //Yes, No
+		{name: 'Assigned', type: 'boolean'}, //yes/no
+		{name: 'Edited', type: 'boolean'}
+	]
+});	
+
+Ext.define('IntelRiskWithProject', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ProjectName', type:'string'},
+		{name: 'ProjectOID', type:'string'},
+		{name: 'RiskID', type:'string'},
+		{name: 'ObjectID', type:'number'},
+		{name: 'FormattedID',  type: 'string'},
+		{name: 'FeatureName', type:'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Impact', type: 'string'},			
+		{name: 'Status', type: 'string'},
+		{name: 'Contact', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Edited', type: 'boolean'}
+	]
+});
+
+Ext.define('IntelPredDepWithProject', { //predecessor dependencies
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'ProjectName', type:'string'},
+		{name: 'ProjectOID', type:'string'},
+		{name: 'ObjectID', type: 'number'},
+		{name: 'DependencyID', type:'string'},
+		{name: 'FormattedID',  type: 'string'}, 
+		{name: 'UserStoryName',  type: 'string'},
+		{name: 'Description', type: 'string'},
+		{name: 'Checkpoint', type: 'string'},
+		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
+		{name: 'Edited', type: 'boolean'}
+	]
+});		
+                /** this is used if you want to listen to events in the parent window (e.g. useful for rally apps that resize with browser screen
+		vertically or things that need to know browser scroll position) 
+	You also can artificially fire the events and have the listeners run
+*/
+Ext.define('WindowListener', {
+
+	__initWindowEventListener: function(eventName){
+		var me=this;
+		if(!me._windowListeners) me._windowListeners = {};
+		me._windowListeners[eventName] = [];
+		
+		window.parent['on' + eventName] = function(event){ 
+			var listeners = me._windowListeners[eventName];
+			for(var i=0, len=listeners.length; i<len; ++i)
+				listeners[i](event);
+		};
+	},
+	
+	_addWindowEventListener: function(eventName, fn){
+		var me=this;
+		if(!me._windowListeners || !me._windowListeners[eventName]) 
+			me.__initWindowEventListener(eventName);
+		me._windowListeners[eventName].push(fn);
+	},
+	
+	_fireParentWindowEvent: function(eventName){ //eg: resize or scroll
+		var me=this;
+		if(!me._windowListeners || !me._windowListeners[eventName]) return;
+		var listeners = me._windowListeners[eventName];
+		for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
+	}
+});
+                /** resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar **/
+
+Ext.define('IframeResize', {
+	requires: ['WindowListener'],
+	
+	/** resizes the iframe to be the height of all the items in it, with 20 px padding in between + 50 px; */
+	__applyIframeResize: function(){ 
+		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
+			ip1 = iframe.parentNode,
+			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
+			height = 0, next = this.down();
+		while(next){
+			height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
+			next = next.next();
+		}
+		height += 150;
+		ip1.style.height = height + 'px';
+		ip2.style.height = height + 'px';
+		iframe.style.height = height + 'px';
+	},
+	
+	_initIframeResize: function(){
+		var me=this;
+		if(me._addWindowEventListener){
+			me._addWindowEventListener('resize', function(){ me.__applyIframeResize(); });
+		}
+	}
+});
+                /**  
+	THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
+	gives a window-centered alert or confirm dialog box that isn't ugly. 
+*/
+Ext.define('PrettyAlert', { 
+	requires:['WindowListener'],
+	
+	_alert: function(title, str){
+		Ext.MessageBox.alert(title || '', str || '').setY(this.__msgBoxY);
+		setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 20);
+	},
+	
+	_confirm: function(title, str, fn){
+		Ext.MessageBox.confirm(title || '', str || '', fn || function(){}).setY(this.__msgBoxY);
+		setTimeout(function(){
+			var x = Ext.MessageBox.down('button');
+			while(x.isHidden()) x = x.nextSibling();
+			x.focus();
+		}, 20);
+	},
+	
+
+	__applyMessageBoxConfig: function(){ 
+		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
+		
+		var ph = p.getWindowHeight(), 
+			ps = p.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+			iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+		this.__msgBoxY = iyOffset<0 ? 0 : iyOffset;
+	},
+	
+	/** CALL THIS IN LAUNCH FUNCTION! **/
+	_initPrettyAlert: function(){
+		var me=this;
+		if(me._addWindowEventListener){
+			me._addWindowEventListener('resize', function(){ me.__applyMessageBoxConfig(); });
+			me._addWindowEventListener('scroll', function(){ me.__applyMessageBoxConfig(); });
+		}
+	}
+});
+                Ext.define('IntelWorkweek', {
+	
+	/** calculates intel workweek, returns integer */
+	_getWorkweek: function(date){ 
+		var oneDay = 1000 * 60 * 60 * 24,
+			yearStart = new Date(date.getFullYear(), 0, 1),
+			dayIndex = yearStart.getDay(),
+			ww01Start = yearStart - dayIndex*oneDay,
+			timeDiff = date - ww01Start,
+			dayDiff = timeDiff / oneDay,
+			ww = Math.floor(dayDiff/7) + 1,
+			leap = (date.getFullYear() % 4 === 0),
+			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+		return weekCount < ww ? 1 : ww;
+	},
+	
+	/** returns the number of intel workweeks in the year the date is in */
+	_getWeekCount: function(date){ 
+		var leap = (date.getFullYear() % 4 === 0),
+			day = new Date(date.getFullYear(), 0, 1).getDay();
+		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+	},
+	
+	/**  gets list of workweeks between startDate and endDate (startDate and endDate dont have to be Date objects)  */
+	_getWorkweeks: function(startDate, endDate){ 
+		var i,
+			sd_week = this._getWorkweek(startDate),
+			ed_week = this._getWorkweek(endDate),
+			week_count = this._getWeekCount(startDate);
+			
+		var weeks = [];
+		if(ed_week < sd_week){
+			for(i=sd_week; i<=week_count; ++i) weeks.push('ww' + i);
+			for(i = 1; i<=ed_week;++i) weeks.push('ww' + i);
+		}
+		else for(i = sd_week; i<=ed_week;++i) weeks.push('ww' + i);
+		return weeks;
+	}
+});
+                /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
+	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
+	most functions return promises that resolve to stores
+*/
+
+Ext.define('ReleaseQuery', {
+		
+	/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
+	_loadReleasesInTheFuture: function(projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[
+				{
+					property:'Project.ObjectID',
+					value: projectRecord.data.ObjectID
+				},{
+					property:'ReleaseDate',
+					operator:'>=',
+					value: new Date().toISOString()
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(releaseStore, releaseRecords){
+						console.log('releases loaded:', releaseRecords);
+						deferred.resolve(releaseStore);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	/** loads this release for each scrum under this train. returns promise with the release Store 
+		the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
+		in the results.
+	**/
+	_loadReleasesWithName: function(releaseName, trainName){ 
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[
+				{
+					property:'Name', //match the release
+					value: releaseName
+				},{
+					property:'Project.Name', //is a child of the train
+					operator:'contains',
+					value:trainName
+				},{
+					property:'Project.Children.Name', //has teamMembers 
+					operator:'=',
+					value:''
+				},{
+					property:'Project.Name', //but not the train release itsself
+					operator:'!contains',
+					value:' ART'
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						console.log('releasesWithName loaded:', records);
+						deferred.resolve(store);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	/** gets the most likely release to scope to base on the following order:
+		1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+						to use preferences for this one)
+		2) if we are in a release
+		3) the closest release planning date to the current date
+	*/
+	_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
+		var me=this,
+			d = new Date(),
+			rs = releaseRecords,
+			prefOID = appPrefs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+		return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+			_.find(rs, function(r){
+				return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+			}) ||
+			_.reduce(rs, function(best, r){
+				if(best===null) return r;
+				else {
+					var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+					return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+				}
+			}, null);
+	}
+});
+                /**
+	the regular proxy calls record.commit() and later on, datarefresh event is called. since these both cause a rerender, 
+	we make the record edits SILENT, so only the datarefresh actually rerender the page
+*/
+
+Ext.define('Intel.data.proxy.SessionStorage', {
+	extend: 'Ext.data.proxy.SessionStorage',
+	alias: 'proxy.fastsessionproxy',
+
+	constructor: function(cfg) {
+		var me = this;
+		me.callParent(arguments);
+	},
+	
+	create: function(operation, callback, scope) {
+		var me = this,
+			records = operation.records,
+			length = records.length,
+			ids = me.getIds(),
+			id, record, i;
+
+		operation.setStarted();
+		if(me.isHierarchical === undefined) {
+				
+				
+			me.isHierarchical = !!records[0].isNode;
+			if(me.isHierarchical) {
+				me.getStorageObject().setItem(me.getTreeKey(), true);
+			}
+		}
+		for (i = 0; i < length; i++) {
+			record = records[i];
+
+			if (record.phantom) {
+				record.phantom = false;
+				id = me.getNextId();
+			} else {
+				id = record.getId();
+			}
+			
+			record.beginEdit();
+			me.setRecord(record, id);
+			record.endEdit(true); //SILENT!!!
+			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
+			
+			ids.push(id);
+		}
+		me.setIds(ids);
+
+		operation.setCompleted();
+		operation.setSuccessful();
+
+		if (typeof callback == 'function') {
+			callback.call(scope || me, operation);
+		}
+	},
+	
+	update: function(operation, callback, scope) {
+		var records = operation.records,
+			length = records.length,
+			ids = this.getIds(),
+			record, id, i;
+			
+		operation.setStarted();
+		for (i = 0; i < length; i++) {
+			record = records[i];
+			this.setRecord(record);
+		
+			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
+
+			id = record.getId();
+			if (id !== undefined && Ext.Array.indexOf(ids, id) == -1) ids.push(id);
+		}
+		this.setIds(ids);
+
+		operation.setCompleted();
+		operation.setSuccessful();
+		if (typeof callback == 'function') callback.call(scope || this, operation);
+	}
+});
+                Ext.define('Intel.data.FastStore', {  //doesn't redundantly call fireEvent... me.sync() calls that downstream 
+	extend: 'Ext.data.Store',
+	alias: 'store.faststore',
+
+	constructor: function(cfg) {
+		var me = this;
+		me.callParent(arguments);
+	},
+	
+	afterEdit: function(record, modifiedFieldNames) {
+		var me = this, i, shouldSync;
+		if (me.autoSync && !me.autoSyncSuspended) {
+			for (i = modifiedFieldNames.length; i--;) {
+				if (record.fields.get(modifiedFieldNames[i]).persist) {
+					me.sync();  //all rendering changes made here
+					break;
+				}
+			}
+		}
+		me.onUpdate(record, Ext.data.Model.EDIT, modifiedFieldNames);
+		//me.fireEvent('update', me, record, Ext.data.Model.EDIT, modifiedFieldNames); //redundant with me.sync()
+	}
+});
+                /**
+	Cell editing has redundant calls to store.afterEdit, which in turn renders the page multiple times per edit. 
+	fastcellediting solves this by wrapping all the calls in beginEdit and endEdit, so store.afterEdit is called only once
+*/
+Ext.define('Intel.grid.plugin.CellEditing', {
+	alias: 'plugin.fastcellediting',
+	extend: 'Ext.grid.plugin.CellEditing',
+	
+	constructor: function() {
+		this.callParent(arguments);
+	},
+	triggerEvent:'cellclick',
+	onEditComplete : function(ed, value, startValue) {
+		var me = this,
+			activeColumn = me.getActiveColumn(),
+			context = me.context,
+			record;
+		if (activeColumn) {
+			record = context.record;
+
+			me.setActiveEditor(null);
+			me.setActiveColumn(null);
+			me.setActiveRecord(null);
+
+			context.value = value;
+			if (!me.validateEdit()) {
+					me.editing = false;
+					return;
+			}
+			record.beginEdit(); //only call store.AfterEdit at the very End 
+			if (!record.isEqual(value, startValue)) 
+					record.set(activeColumn.dataIndex, value); //dont call store.AfterEdit
+
+			context.view.focusRow(context.rowIdx, 100);
+			me.fireEvent('edit', me, context); //dont call store.AfterEdit if record.set() is called in here
+			me.editing = false;
+			record.endEdit(); //now call store.AfterEdit!
+		}
+	}
+});
+                Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant believe Extjs cant do this
+	extend: 'Ext.view.Table',
+	alias: 'widget.scrolltableview',
+	
+	constructor: function(cfg) {
+		var me = this;
+		me.callParent(arguments);
+	},
+	
+	refresh: function() {
+		var me = this,
+			targetEl,
+			targetParent,
+			oldDisplay,
+			nextSibling,
+			dom,
+			records,
+			el = me.getEl(), //edit
+			scroll = el && el.getScrollTop();//edit
+			
+		if (!me.rendered || me.isDestroyed) return;
+
+		if (!me.hasListeners.beforerefresh || me.fireEvent('beforerefresh', me) !== false) {
+			targetEl = me.getTargetEl();
+			records = me.getViewRange();
+			dom = targetEl.dom;
+			if (!me.preserveScrollOnRefresh) {
+				targetParent = dom.parentNode;
+				oldDisplay = dom.style.display;
+				dom.style.display = 'none';
+				nextSibling = dom.nextSibling;
+				targetParent.removeChild(dom);
+			}
+			if (me.refreshCounter) me.clearViewEl();
+			else {
+				me.fixedNodes = targetEl.dom.childNodes.length;
+				me.refreshCounter = 1;
+			}
+			me.tpl.append(targetEl, me.collectData(records, me.all.startIndex));
+
+			if (records.length < 1) {
+				if (!this.store.loading && (!me.deferEmptyText || me.hasFirstRefresh)) {
+					Ext.core.DomHelper.insertHtml('beforeEnd', targetEl.dom, me.emptyText);
+				}
+				me.all.clear();
+			} else {
+				me.collectNodes(targetEl.dom);
+				me.updateIndexes(0);
+			}
+			if (me.hasFirstRefresh) {
+				if (me.refreshSelmodelOnRefresh !== false) {
+					me.selModel.refresh();
+				} else {
+					me.selModel.pruneIf();
+				}
+			}
+			me.hasFirstRefresh = true;
+
+			if (!me.preserveScrollOnRefresh) {
+				targetParent.insertBefore(dom, nextSibling);
+				dom.style.display = oldDisplay;
+			}
+
+			Ext.suspendLayouts();
+			this.refreshSize();
+			me.fireEvent('refresh', me);
+			Ext.resumeLayouts(true);
+			
+			if (!me.viewReady) {
+				me.viewReady = true;
+				me.fireEvent('viewready', me);
+			}
+		}
+		
+		if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+	},
+	
+	onRemove : function(ds, records, indexes) {
+		var me = this,
+			fireItemRemove = me.hasListeners.itemremove,
+			i,
+			record,
+			index,
+			el = me.getEl(),//edit
+			scroll = el && el.getScrollTop();//edit
+
+		if (me.all.getCount()) {
+			if (me.dataSource.getCount() === 0) {
+				if (fireItemRemove) {
+					for (i = indexes.length - 1; i >= 0; --i) {
+						me.fireEvent('itemremove', records[i], indexes[i]);
+					}
+				}
+				//me.refresh();
+			} else {
+				for (i = indexes.length - 1; i >= 0; --i) {
+					record = records[i];
+					index = indexes[i];
+					me.doRemove(record, index);
+					if (fireItemRemove) {
+						me.fireEvent('itemremove', record, index);
+					}
+				}
+				me.updateIndexes(indexes[0]);
+			}
+			this.refreshSize();
+			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+		}
+	},
+	
+	onUpdate : function(ds, record){
+		var me = this,
+			index,
+			node,
+			el = me.getEl(),//edit
+			scroll = el && el.getScrollTop();//edit
+
+		if (me.viewReady) {
+			index = me.dataSource.indexOf(record);
+			if (index > -1) {
+				node = me.bufferRender([record], index)[0];
+				if (me.getNode(record)) {
+					me.all.replaceElement(index, node, true);
+					me.updateIndexes(index, index);
+					me.selModel.onUpdate(record);
+					if (me.hasListeners.itemupdate) {
+						me.fireEvent('itemupdate', record, index, node);
+					}
+					return node;
+				}
+			}
+			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+		}
+	},
+	
+	onAdd : function(store, records, index) {
+		var me = this,
+			nodes,
+			el = me.getEl(),
+			scroll = el && el.getScrollTop();
+
+		if (me.rendered) {
+			if (me.all.getCount() === 0) {
+				me.refresh();
+				nodes = me.all.slice();
+			} else {
+				nodes = me.doAdd(records, index);
+				if (me.refreshSelmodelOnRefresh !== false) {
+					me.selModel.refresh();
+				}
+				me.updateIndexes(index);
+				//me.refreshSize(); //already being refreshed by store.sync()
+			}
+
+			if (me.hasListeners.itemadd) {
+				me.fireEvent('itemadd', records, index, nodes);
+			}
+			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+		}
+	},
+
+	scrollRowIntoView: function(row) {
+		if(row===0){										//this is just added because its a LOT faster and the main use case
+			this.getEl().setScrollTop(0);
+			return;
+		}
+		row = this.getNode(row, true);
+		if (row) {
+			Ext.fly(row).scrollIntoView(this.el, false);
+		}
+	}
+});
                 /********************* PRODUCTION *****************/
-console = { log: function(){} };		
+//console = { log: function(){} };
+	
 /********************* END PRODUCTION *****************/
 
-Ext.define('CustomApp', {
+Ext.define('CommitMatrix', {
   extend: 'Rally.app.App',
+	mixins:[
+		'ReleaseQuery',
+		'IntelWorkweek'
+	],
 	layout:'absolute',
 	autoScroll:false,
 		
@@ -70,40 +768,6 @@ Ext.define('CustomApp', {
 		});
 	},
 	
-	_loadReleases: function(cb){ 
-		var me = this;
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			autoLoad:true,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: me.TrainRecord.data.ObjectID
-				},{
-					property:'Name',
-					operator:'contains',
-					value: me.TrainRecord.data.Name.split(' ART ')[0]
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						me.ReleaseStore = releaseStore;
-						cb();
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
 	_loadMatrixFeatures: function(cb){ 
 		var me = this;
 		me.MatrixProductHash = {};
@@ -111,7 +775,8 @@ Ext.define('CustomApp', {
 			model: 'PortfolioItem/Feature',
 			autoLoad:true,
 			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 'UserStories', 'c_TeamCommits', 'DragAndDropRank'],
+			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 
+				'UserStories', 'c_TeamCommits', 'DragAndDropRank', 'PlannedEndDate'],
 			context:{
 				workspace: me.getContext().getWorkspace()._ref,
 				project: null
@@ -272,7 +937,8 @@ Ext.define('CustomApp', {
 				{name: 'FormattedID', type:'string'},
 				{name: 'ObjectID', type:'string'},
 				{name: 'FeatureName',  type: 'string'},
-				{name: 'ProductName', type:'string'}
+				{name: 'ProductName', type:'string'},
+				{name: 'PlannedEndDate', type:'string'}
 			]
 		});
 	},
@@ -287,7 +953,7 @@ Ext.define('CustomApp', {
 			if(me.CustomMatrixStore){
 				var scroll = me.MatrixGrid.view.getEl().getScrollTop();
 				me._isReloadRefresh = true;
-				me.CustomMatrixStore.load({
+				me.CustomMatrixStore.load({ //we use load here because the logic is handled in the renderers
 					callback: function(){
 						me.MatrixGrid.view.getEl().setScrollTop(scroll);
 						setTimeout(function(){ me._isReloadRefresh = false; }, 10);
@@ -301,7 +967,7 @@ Ext.define('CustomApp', {
 	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
 		var me = this;
 		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART ');
+		var split = projectRecord.data.Name.split(' ART');
 		if(split.length>1) cb(projectRecord);
 		else { 
 			var parent = projectRecord.data.Parent;
@@ -313,20 +979,7 @@ Ext.define('CustomApp', {
 			}
 		}
 	},
-	
-	_getCurrentOrClosestRelease: function(){
-		var me = this, d = new Date(),
-			rs = me.ReleaseStore.getRecords();
-		return _.find(rs, function(r){
-			return (new Date(r.get('ReleaseDate')) >= d) && (new Date(r.get('ReleaseStartDate')) <= d);
-		}) || _.reduce(rs, function(best, r){
-			if(best===null) return r;
-			else {
-				var d1 = new Date(best.get('ReleaseStartDate')), d2 = new Date(r.get('ReleaseStartDate')), now = new Date();
-				return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : d2;
-			}
-		}, null);
-	},
+
 	
 	/************************************************** Event Handler/ window size/scroll config *********************************************/
 	
@@ -412,9 +1065,11 @@ Ext.define('CustomApp', {
 			me._showError('You do not have permissions to edit this project');
 			return;
 		}
+		Ext.tip.QuickTipManager.init();
+		Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1000 });
 		me._defineModels();
 		me._applyEventListeners();
-		//setInterval(function(){ me._reloadMatrixStores();}, 10000); 
+		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
 		me._loadModels(function(){
 			var scopeProject = me.getContext().getProject();
 			me._loadProject(scopeProject, function(scopeProjectRecord){
@@ -422,8 +1077,9 @@ Ext.define('CustomApp', {
 					if(trainRecord){
 						me.TrainRecord = trainRecord; 
 						console.log('train loaded:', trainRecord);
-						me._loadReleases(function(){
-							var currentRelease = me._getCurrentOrClosestRelease();
+						me._loadReleasesInTheFuture(me.TrainRecord).then(function(releaseStore){
+							me.ReleaseStore = releaseStore;
+							var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.TrainRecord.data.ObjectID, me.AppPrefs);
 							if(currentRelease){
 								me.ReleaseRecord = currentRelease;
 								console.log('release loaded', currentRelease);
@@ -472,7 +1128,7 @@ Ext.define('CustomApp', {
 				if(me.featureTCAECache[featureID]) 
 					parsed_tcs = me.featureTCAECache[featureID];
 				else {
-					parsed_tcs = JSON.parse(tcs) || {};
+					parsed_tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = parsed_tcs;
 				}
 				this_tc = parsed_tcs[projectID] || {}; 
@@ -482,14 +1138,14 @@ Ext.define('CustomApp', {
 		}
 		
 		function setExpected(featureRecord, ProjectName, value){
-			var tcs = featureRecord.data.c_TeamCommits;
+			var tcs = featureRecord.get('c_TeamCommits');
 			var featureID = featureRecord.data.ObjectID;
 			var projectID = me.MatrixProjectMap[ProjectName];
 			try{ 
 				if(me.featureTCAECache[featureID]) 
 					tcs = me.featureTCAECache[featureID];
 				else {
-					tcs = JSON.parse(tcs) || {};
+					tcs = JSON.parse(atob(tcs)) || {};
 					me.featureTCAECache[featureID] = tcs;
 				}
 			} 
@@ -497,7 +1153,7 @@ Ext.define('CustomApp', {
 			if(!tcs[projectID]) 
 				tcs[projectID] = {};
 			tcs[projectID].Expected = value;		
-			var str = JSON.stringify(tcs, null, '\t');
+			var str = btoa(JSON.stringify(tcs, null, '\t'));
 			if(str.length >= 32768){
 				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
 				if(cb) cb();
@@ -507,12 +1163,14 @@ Ext.define('CustomApp', {
 		}
 
 		var customMatrixRecords = _.map(me.MatrixFeatureStore.getRecords(), function(featureRecord){
+			var ed = featureRecord.get('PlannedEndDate');
 			return {
 				Rank: featureRecord.get('DragAndDropRank'),
 				FormattedID: featureRecord.get('FormattedID'),
 				ObjectID: featureRecord.get('ObjectID'),
 				FeatureName: featureRecord.get('Name'),
-				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')]
+				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')],
+				PlannedEndDate: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-')
 			};
 		});		
 
@@ -577,11 +1235,25 @@ Ext.define('CustomApp', {
 				draggable:false,
 				menuDisabled:true,
 				locked:true,
-				sortable:true
+				sortable:true,
+				renderer: function(value, metaData) {
+					metaData.tdAttr = 'data-qtip="' + value + '"';
+					return value;
+				}
 			},{
 				text:'Product', 
 				dataIndex:'ProductName',
-				width:80,
+				width:60,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true
+			},{
+				text:'Planned End',
+				dataIndex:'PlannedEndDate',
+				width:60,
 				editor:false,
 				resizable:false,
 				draggable:false,
@@ -603,6 +1275,8 @@ Ext.define('CustomApp', {
 				tdCls: 'intel-editor-cell',
 				sortable:false,
 				resizable:false,
+				tooltip:ProjectName,
+				tooltipType:'title',
 				renderer: function(oid, metaData, matrixRecord, row, col){
 					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
 					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [];
@@ -854,17 +1528,14 @@ Ext.define('CustomApp', {
 					});
 				}
 			},
-			showRowActionsColumn:false,
-			showPagingToolbar:false,
 			enableEditing:false,
-			context: me.getContext(),
 			store: me.CustomMatrixStore
 		});	
 	}
 });
 
-            Rally.launchApp('CustomApp', {
-                name:"Random App Name70221",
+            Rally.launchApp('CommitMatrix', {
+                name:"ART Commit Matrix",
 	            parentRepos:""
             });
 

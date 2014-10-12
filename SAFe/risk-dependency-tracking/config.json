@@ -4,8 +4,21 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
-      "App.js",
-      "lib/component-column.js"
+			"../lib/intel-models.js",
+      "../../lib/mixins/window-listener.js",
+      "../../lib/mixins/iframe-resize.js",
+      "../../lib/mixins/pretty-alert.js",
+      "../../lib/mixins/intel-workweek.js",
+      "../../lib/mixins/release-query.js",
+      "../../lib/components/component-column.js",
+      "../../lib/components/intel-combobox.js",
+      "../../lib/overrides/fast-component-column.js",
+      "../../lib/overrides/fast-session-proxy.js",
+      "../../lib/overrides/fast-store.js",
+      "../../lib/overrides/fast-cell-editing.js",
+      "../../lib/overrides/scroll-steady-tableview.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "App.js"
    ],
    "css": [
       "app.css"
