@@ -109,13 +109,13 @@ onScopeChange: function(scope) {
                    this.down('#gridsLeft').removeAll();
                    this.down('#gridsLeft').add({
                         xtype: 'container',
-                        html: '<b><font size=4>Story Health</font></b>',
+                        html: '<b><font size=4>Story Health</font></b>'
                         //layout: { type: 'hbox', pack: 'center' }
                     });
                     this.down('#gridsRight').removeAll();
                     this.down('#gridsRight').add({
                         xtype: 'container',
-                        html: '<b><font size=4>Feature Health</font></b>',
+                        html: '<b><font size=4>Feature Health</font></b>'
                         //layout: { type: 'hbox', pack: 'center' }
                     });
                     this._loadReleaseDetails(scope);
@@ -227,7 +227,7 @@ _buildRibbon: function() { //{{{
                       if (a.x > b.x)
                           return 1;
                       return 0;
-                  };
+                  }
                   var tempobj = this.globalStoryCount.sort(compare);
                   var newhtml = "<br>";
                   var line;
@@ -236,7 +236,7 @@ _buildRibbon: function() { //{{{
                       //var dummymodel = new Rally.data.Model(tempobj[i]);
                       console.log("got data ", tempobj[i]);
                       line = linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y);
-                      if (tempobj[i].y == 0)
+                      if (tempobj[i].y === 0)
                           line = line.replace("{state}", "healthy");
                       else
                           line = line.replace("{state}", "unhealthy");
@@ -279,7 +279,7 @@ html: '<b><font color="green" size=18>Congrats! The Train is healthy for this re
                         if (a.x > b.x)
                             return 1;
                         return 0;
-                    };
+                    }
                     var tempobj = this.globalStoryCount.sort(compare);
                     console.log('Sorted obj', tempobj);
                     var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
@@ -369,7 +369,7 @@ html: '<b><font color="green" size=18>Congrats! The Train is healthy for this re
                           if (a.x > b.x)
                               return 1;
                           return 0;
-                      };
+                      }
                       var tempobj = this.globalStoryCount.sort(compare);
                       console.log('Sorted obj', tempobj);
                       var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
@@ -378,7 +378,7 @@ html: '<b><font color="green" size=18>Congrats! The Train is healthy for this re
 chart: {
 type: 'pie',
       width: 300,
-      height: 250,
+      height: 400,
       innerSize: '50%'
        },
 title: {
@@ -451,20 +451,20 @@ this.down('#ribbon').add({
     xtype: 'rallychart',
     flex: 1,
     layout: {
-        align: 'stretch',
-        pack: 'center'
+//        align: 'stretch',
+//        pack: 'center'
     },
     scope: this,
     chartConfig: { 
             chart: {
                 plotBackgroundColor: null,
                 plotBorderWidth: 0,//null,
-                plotShadow: false,
-                width: 800,
-                height: 250
+                plotShadow: false//,
+                //width: 800,
+                //height: 600
             },
             title: {
-                text: 'Grid Count'
+                text: null // 'Grid ** Count'
             },
             tooltip: {enabled: false},
             plotOptions: {
@@ -473,13 +473,13 @@ this.down('#ribbon').add({
                     cursor: 'pointer',
                     dataLabels: {
                         enabled: true,
-                        distance: 15,
+                        //distance: 25,
                         format: '<b>{point.name}</b>: {y}',
                         style: {color: 'black'}
                     },
                     startAngle: -90,
-                    endAngle: 90,
-                    center: ['50%','75%']
+                    endAngle: 90
+                    //center: ['50%','20%']
                 }
            }
         }, 
@@ -487,6 +487,7 @@ this.down('#ribbon').add({
             series: [{
                 type: 'pie',
                 name: 'Grid Count',
+                innerSize: '40%',
                 data: tempobj//this.globalGridCount
         }]
            } 
@@ -607,7 +608,7 @@ scope: this
 columns: [    
          {text: 'Feature', dataIndex: 'Feature', flex: 3, renderer: function(value) {
                                                                                         return value.FormattedID.link("https://rally1.rallydev.com/#/"+value.Project.ObjectID+"d/detail/portfolioitem/feature/"+value.ObjectID);}},
-         'FormattedID', 'Name','Project', 'ScheduleState',
+         'FormattedID', 'Name','Project', 'ScheduleState'
          ],
          side: 'Right',    // TODO: ensure camelcase format to match itemId names
          pageSize: 3,
@@ -658,7 +659,7 @@ property: 'PlanEstimate', operator: '!=', value: '16'
 return noPlanEstimateFilter.and(planSizeOne).and(planSizeTwo).and(planSizeFour).and(planSizeEight).and(planSizeSixteen);
 },
 chartnum: 'C7'
-},
+}
 
     ]; //}}}
 
@@ -720,7 +721,7 @@ showPagingToolbar: true,
 pagingToolbarCfg: {
 pageSizes: [15, 25, 100],
 autoRender: true,
-resizable: true,
+resizable: true
 },
 storeConfig: {
 model: myModel,
@@ -729,7 +730,7 @@ pageSize: 15,
 pagingToolbarCfg: {
 pageSizes: [15,25,100],
 autoRender: true,
-resizable: true,
+resizable: true
 },
 filters: [this.getContext().getTimeboxScope().getQueryFilter(),myFilters()],
     listeners: {
@@ -743,7 +744,7 @@ name : myTitle,
        x: cnum.charAt(1),
        y: tempcount
           };
-          if (tempcount!=0) {
+          if (tempcount !== 0) {
               this.shouldiaddgrid=true;
               gridContainer.add(grid);
           }
@@ -764,7 +765,7 @@ scope: this
 style: {
 borderColor: '#AAA',
              borderStyle: 'dotted',
-             borderWidth: '2px',
+             borderWidth: '2px'
              //header: '#BCED91'
        },
 padding: 10,
@@ -780,7 +781,7 @@ if (!this._gridsLoaded) {
 }
 return true;
 
-},
+}
 
 
 });
