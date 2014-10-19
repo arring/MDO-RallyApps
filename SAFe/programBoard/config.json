@@ -5,13 +5,19 @@
    "sdk": "2.0rc3",
    "javascript": [
       "../lib/intel-models.js",
+      "../lib/intel-rally-app.js",
+      "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",
       "../../lib/mixins/iframe-resize.js",
       "../../lib/mixins/pretty-alert.js",
       "../../lib/mixins/intel-workweek.js",
       "../../lib/mixins/release-query.js",
+      "../../lib/mixins/async-queue.js",
       "../../lib/components/component-column.js",
       "../../lib/components/intel-combobox.js",
+      "../../lib/components/intel-fixed-combobox.js",
+      "../../lib/components/intel-release-picker.js",
+      "../../lib/components/intel-textarea.js",
       "../../lib/overrides/fast-component-column.js",
       "../../lib/overrides/fast-session-proxy.js",
       "../../lib/overrides/fast-store.js",
@@ -21,6 +27,8 @@
       "App.js"
    ],
    "css": [
+      "../lib/css/grid-icons.css",
+      "../lib/css/team-dep-grid.css",
       "app.css"
    ]
 }

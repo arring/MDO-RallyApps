@@ -1,0 +1,22 @@
+/************ buttons stuff ******************/
+.undo-button { background-image:url(http://png-4.findicons.com/files/icons/2315/default_icon/256/undo.png) !important; }
+.delete-button { background-image:url(http://superadm.com/wp-content/uploads/2014/05/delete.png) !important; }
+.save-button { background-image:url(http://www.iconpng.com/png/windows8_icons2/save.png) !important; }
+.minus-button { background-image:url(http://www.pubzi.com/f/minus-sign.svg) !important; }
+.plus-button { background-image:url(http://ilstream.com/images/plus-icon.gif) !important; }
+
+.iconCell, .iconCell * { padding:0px !important; margin:0px !important; }
+
+.undo-button,
+.delete-button,
+.save-button,
+.minus-button,
+.plus-button
+ { /*30px total height with margins */
+	left:0px !important;
+	top:0px !important;
+	height:16px !important; width:16px !important;
+	background-size:16px !important;
+	padding:0px !important; 
+	margin:7px 7px 0px 7px !important; 
+}

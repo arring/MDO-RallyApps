@@ -1,139 +1,63 @@
 /********************* PRODUCTION *****************/
-//console = { log: function(){} };
-	
+console = { log: function(){} };
+preferenceName = 'intel-commit-matrix';
+
 /********************* END PRODUCTION *****************/
 
 Ext.define('CommitMatrix', {
-  extend: 'Rally.app.App',
+  extend: 'IntelRallyApp',
 	mixins:[
+		'WindowListener',
+		'PrettyAlert',
+		'IframeResize',
 		'ReleaseQuery',
-		'IntelWorkweek'
+		'IntelWorkweek',
+		'AsyncQueue'
 	],
-	layout:'absolute',
-	autoScroll:false,
-		
-	/****************************************************** SHOW ERROR/TEXT MESSAGE ********************************************************/
-	_showError: function(text){
-		if(this.errMessage) this.remove(this.errMessage);
-		this.errMessage = this.add({xtype:'text', text:text});
-	},
-	/****************************************************** DATA STORE/MODEL METHODS ********************************************************/
-
-	_loadModels: function(cb){
-		var me = this;
-		Rally.data.ModelFactory.getModel({ //load project
-			type:'Project',
-			success: function(model){ 
-				me.Project = model; 
-				Rally.data.ModelFactory.getModel({ //load project
-					type:'PortfolioItem/Milestone',
-					success: function(model){ 
-						me.Milestone = model; 
-						cb(); 
-					}
-				});
-			}
-		});
-	},
 	
-	_loadProject: function(project, cb){ 
-		var me = this;
-		me.Project.load(project.ObjectID, {
-			fetch: ['ObjectID', 'Children', 'Parent', 'Name'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			callback: function(record, operation){
-				if(operation.wasSuccessful()) cb(record);
-				else me._showError('failed to retreive project: ' + project.ObjectID);
-			}
-		});
+	layout: {
+		type:'vbox',
+		align:'stretch',
+		pack:'start'
 	},
-	
-	_loadMilestone: function(milestone, cb){ 
-		var me = this;
-		me.Milestone.load(milestone.ObjectID, {
-			fetch: ['ObjectID', 'Parent', 'Name'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			callback: function(record, operation){
-				if(operation.wasSuccessful()) cb(record);
-				else me._showError('failed to retreive milestone: ' + milestone.ObjectID);
+	items:[{
+		xtype:'container',
+		itemId:'navbox',
+		padding:'0 10px 10px 10px',
+		layout: {
+			type:'hbox',
+			pack:'start'
+		},
+		items:[{
+			xtype:'container',
+			flex:3,
+			itemId:'navbox_left',
+			layout: 'hbox',
+			items:[{
+				xtype:'container',
+				flex:1,
+				itemId:'navbox_left_vert',
+				layout: 'vbox'
+			}]
+		},{
+			xtype:'container',
+			flex:2,
+			itemId:'navbox_right',
+			layout: {
+				type:'hbox',
+				pack:'end'
 			}
-		});
-	},
+		}]
+	}],
+	minWidth:910,
 	
-	_loadMatrixFeatures: function(cb){ 
-		var me = this;
-		me.MatrixProductHash = {};
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'PortfolioItem/Feature',
-			autoLoad:true,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID', 'Project', 'Parent', 'FormattedID', 
-				'UserStories', 'c_TeamCommits', 'DragAndDropRank', 'PlannedEndDate'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Release.Name',
-					value: me.ReleaseRecord.data.Name
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(featureStore, featureRecords){
-						console.log('features loaded:', featureRecords);
-						me.MatrixFeatureStore = featureStore;
-						var finished = -1;
-						var done = function(){ if(++finished == featureRecords.length) { cb(); } };
-						done();
-						featureRecords.forEach(function(fr){
-							var frData = fr.data;
-							if(frData.Parent){
-								me._loadMilestone(frData.Parent, function(milestoneRecord){
-									var p = milestoneRecord.data.Parent;
-									me.MatrixProductHash[frData.ObjectID] = ((p && p.Name ) ? p.Name : '');
-									done();
-								});
-							}
-							else {
-								me.MatrixProductHash[frData.ObjectID] = '';
-								done();
-							}
-							
-						});
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
-	_loadMatrixUserStoryBreakdown: function(cb){
-		var me = this;
-		me.MatrixUserStoryBreakdown = {};
-		me.MatrixProjectMap = {};
-		var fRecords = me.MatrixFeatureStore.getRecords();
-		var finished = -1;
-		var done = function(){ 
-			if(++finished == fRecords.length){ 
-				console.log('Stories loaded:', me.MatrixUserStoryBreakdown);
-				cb(); 
-			}
-		};
-		done();
-		fRecords.forEach(function(fRecord){
-			Ext.create('Rally.data.wsapi.Store',{
+	_loadFeatureUserStoriesInRelease: function(fRecord){
+		var me = this,
+			FName = fRecord.data.Name,
+			storyStore = Ext.create('Rally.data.wsapi.Store',{
 				model:'HierarchicalRequirement',
 				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID', 'PlanEstimate'],
 				limit:Infinity,
-				autoLoad:true,
 				context:{
 					workspace: me.getContext().getWorkspace()._ref,
 					project: null
@@ -146,260 +70,239 @@ Ext.define('CommitMatrix', {
 						property:'Feature.ObjectID',
 						value:fRecord.data.ObjectID
 					}
-				],
-				listeners: {
-					load: {
-						fn: function(storyStore, storyRecords){
-							storyRecords.forEach(function(sr){
-								var PName = sr.data.Project.Name;
-								var FName = fRecord.data.Name;
-								if(!me.MatrixUserStoryBreakdown[PName]) 
-									me.MatrixUserStoryBreakdown[PName] = {};
-								if(!me.MatrixUserStoryBreakdown[PName][FName]) 
-									me.MatrixUserStoryBreakdown[PName][FName] = [];
-								me.MatrixUserStoryBreakdown[PName][FName].push(sr);	
-								me.MatrixProjectMap[PName] = sr.data.Project.ObjectID;					
-							});
-							done();
-						},
-						single:true
-					}
+				]
+			});	
+		return me._reloadStore(storyStore)
+			.then(function(storyStore){ 
+				var storyRecords = storyStore.data.items;
+				for(var i=0, len=storyRecords.length; i<len; ++i){
+					var sr = storyRecords[i],
+						PName = sr.data.Project.Name;		
+					if(!me.MatrixUserStoryBreakdown[PName]) 
+						me.MatrixUserStoryBreakdown[PName] = {};
+					if(!me.MatrixUserStoryBreakdown[PName][FName]) 
+						me.MatrixUserStoryBreakdown[PName][FName] = [];
+					me.MatrixUserStoryBreakdown[PName][FName].push(sr);						
+					me.MatrixProjectMap[PName] = sr.data.Project.ObjectID;
 				}
 			});
-		});
+	},	
+		
+	_loadFeatures: function(){
+		var me=this, 
+			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
+			featureStore = Ext.create('Rally.data.wsapi.Store',{
+				model: 'PortfolioItem/Feature',
+				limit:Infinity,
+				remoteSort:false,
+				fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'Project', 'PlannedEndDate', 'Parent', 'DragAndDropRank'],
+				context:{
+					workspace: me.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[{ property:'Dummy', value:'value' }]
+			});
+		
+		featureStore._hydrateModelAndLoad = function(options){
+			var deferred = new Deft.Deferred();
+			this.hydrateModel().then({
+					success: function(model) {
+						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
+							return filterString;
+						};
+						this.load(options).then({
+								success: Ext.bind(deferred.resolve, deferred),
+								failure: Ext.bind(deferred.reject, deferred)
+						});
+					},
+					scope: this
+			});
+		};
+		return me._reloadStore(featureStore)
+			.then(function(featureStore){ 
+				var promises = [], 
+					featureRecords = featureStore.data.items;
+				me.FeatureStore = featureStore;
+				console.log('features loaded:', featureRecords);
+				featureRecords.forEach(function(fr){
+					var frData = fr.data;
+					if(frData.Parent){
+						promises.push(me._loadMilestone(frData.Parent.ObjectID).then(function(milestoneRecord){
+							var p = milestoneRecord.data.Parent;
+							if(p && p.Name){ 
+								me.FeatureProductHash[frData.ObjectID] = p.Name;
+								/*** this should not be possible ***/
+								//if(!_.find(me.ProductNames, function(pn){ return pn.ProductName === p.Name; }))
+								//	me.ProductNames.push({ProductName: p.Name});
+							} 
+							else me.FeatureProductHash[frData.ObjectID] = '';
+						}));
+						promises.push(me._loadFeatureUserStoriesInRelease(fr));
+					}
+					else me.FeatureProductHash[frData.ObjectID] = '';
+				});
+				return Q.all(promises).fail(function(reason){
+					me._alert('ERROR', reason || 'Failed to load Features');
+				});
+			});
 	},	
 	
 	/****************************************************** PROJECTS ************************************/
 		
 	_getProjectsInScope:function(){
 		var projects = "__PROJECT_OIDS_IN_SCOPE__";
-		projects = projects.match(/^\d+/)? projects.split(','): [this.context.getProject().ObjectID];
+		projects = projects.match(/^\d+/) ? projects.split(',') : [this.context.getProject().ObjectID];
 		projectsInScope = {};
 		_.each(projects,function(projectID){
 			projectsInScope[projectID] = true;
 		});
 		return projectsInScope;
 	},
-	
-	_addDefaultProjects:function(cb){
-		var processedProjects = {}, me=this,
-			cached = me._cachedDefaults,
+
+	_addDefaultProjectsToStructures: function(msub, mpm, feats, projects){
+		var me=this;
+		_.each(projects, function(p){ 
+			if(!msub[p.data.Name]){
+				msub[p.data.Name] = {}; 
+				_.each(feats, function(f){ 
+					msub[p.data.Name][f.data.Name] = [];
+					mpm[p.data.Name] = p.data.ObjectID;
+				});
+			}
+		});
+	},
+			
+	_loadDefaultProjects:function(){
+		var me=this,
 			inScope = me._getProjectsInScope(),
 			msub = me.MatrixUserStoryBreakdown,
-			feats = me.MatrixFeatureStore.getRange(),
+			feats = me.FeatureStore.data.items,
 			mpm = me.MatrixProjectMap,
-			curProjRef = '/project/' + me.getContext().getProject().ObjectID;
-
-		function addDefaults(projects){
-			_.each(projects, function(p){ 
-				if(!msub[p.data.Name]){
-					msub[p.data.Name] = {}; 
-					_.each(feats, function(f){ 
-						msub[p.data.Name][f.data.Name] = [];
-						mpm[p.data.Name] = p.data.ObjectID;
-					});
+			projectStore = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
+				limit:Infinity,
+				context: {
+					workspace: this.getContext().getWorkspace()._ref,
+					project:null
 				}
 			});
-		}
-		if(cached) { addDefaults(cached); if(cb) cb(); }
-		
-		Ext.create('Rally.data.wsapi.Store', {
-			model: "Project",
-			fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
-			limit:Infinity,
-			context: {
-				workspace: '/workspace/' + this.getContext().getWorkspace().ObjectID,
-				project:null
-			}
-		})
-		.load({
-			callback: function(projects){
-				//filter here
+		return me._reloadStore(projectStore)
+			.then(function(projectStore){
+				var projects = projectStore.data.items;
 				projects = _.filter(projects, function(project){ 
 					return inScope[project.data.ObjectID] && project.data.TeamMembers.Count > 0; 
 				});
-				addDefaults(projects); //add some default projects
-				me._cachedDefaults = projects;
+				me._addDefaultProjectsToStructures(msub, mpm, feats, projects); //add some default projects
 				console.log('default projects', projects);
-				if(cb) cb();
-			}
-		});
+			});
 	},
 		
-	/*************************************************** DEFINE MODELS ******************************************************/
-	_defineModels: function(){								
-		Ext.define('IntelFeature', {
-			extend: 'Ext.data.Model',
-			fields: [
-				{name: 'Rank', type:'string'},
-				{name: 'FormattedID', type:'string'},
-				{name: 'ObjectID', type:'string'},
-				{name: 'FeatureName',  type: 'string'},
-				{name: 'ProductName', type:'string'},
-				{name: 'PlannedEndDate', type:'string'}
-			]
-		});
+	/************************************************* TEAM COMMITS *************************************/
+	_getTeamCommitFromFeature: function(featureRecord){
+		var me=this,
+			tcString = featureRecord.data.c_TeamCommits;
+		try{ return JSON.parse(atob(tcString)) || {}; }
+		catch(e){ return {}; }
 	},
 	
-	/*************************************************** Reload Stores ******************************************************/
-	_isReloadRefresh: false,
-	
-	_reloadMatrixStores: function(){
-		var me = this;
-		me._loadMatrixFeatures(function(){
-			me.featureTCAECache = {};
-			if(me.CustomMatrixStore){
-				var scroll = me.MatrixGrid.view.getEl().getScrollTop();
-				me._isReloadRefresh = true;
-				me.CustomMatrixStore.load({ //we use load here because the logic is handled in the renderers
-					callback: function(){
-						me.MatrixGrid.view.getEl().setScrollTop(scroll);
-						setTimeout(function(){ me._isReloadRefresh = false; }, 10);
-					}
-				});
-			}
-		});
+	_getTeamCommit: function(featureRecord, ProjectName){	
+		var me=this,
+			projectID = me.MatrixProjectMap[ProjectName],
+			featureTC = me._getTeamCommitFromFeature(featureRecord);
+		return featureTC[projectID] || {};
 	},
 	
-	/*************************************************** RANDOM HELPERS ******************************************************/	
-	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
-		var me = this;
-		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART');
-		if(split.length>1) cb(projectRecord);
-		else { 
-			var parent = projectRecord.data.Parent;
-			if(!parent) cb();
-			else {
-				me._loadProject(parent, function(parentRecord){
-					me._projectInWhichTrain(parentRecord, cb);
-				});
-			}
+	_setExpected: function(featureRecord, ProjectName, value){
+		var me=this,
+			projectID = me.MatrixProjectMap[ProjectName],
+			featureTC = me._getTeamCommitFromFeature(featureRecord),
+			deferred = Q.defer();	
+		if(!featureTC[projectID]) featureTC[projectID] = {};
+		featureTC[projectID].Expected = value;		
+		var str = btoa(JSON.stringify(featureTC, null, '\t'));
+		if(str.length >= 32768) deferred.reject('TeamCommits field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
+		else {
+			featureRecord.set('c_TeamCommits', str);
+			featureRecord.save({ 
+				callback:function(record, operation, success){
+					if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.data.FormattedID);
+					else deferred.resolve(featureRecord);
+				}
+			});
 		}
+		return deferred.promise;
 	},
 
+	/************************************************** Preferences FUNCTIONS ***************************************************/
 	
-	/************************************************** Event Handler/ window size/scroll config *********************************************/
-	
-	_alert: function(title, str){
-		var me = this;
-		Ext.MessageBox.alert(title, str).setY(me._msgBoxY);
-		setTimeout(function(){ 
-			var x = Ext.MessageBox.down('button');
-			while(x.isHidden()) x = x.nextSibling();
-			x.focus();
-		}, 10);
-	},
-	
-	_getIframe: function(){
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location;
-		return pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
-	},
-	
-	_applyMessageBoxConfig: function(){
-		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
-			ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
-			iyOffset = Math.floor(ph/2 - ofy + ps - 50);		
-		me._msgBoxY = iyOffset<0 ? 0 : iyOffset;
-	},
-	
-	_changeGridHeight: function(){
-		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
-			ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
-			height = Math.max(ph - ofy - 150, 200); //height of the app yo		
-		me._gridHeight = height;
-		if(me.MatrixGrid) me.MatrixGrid.setHeight(height);
-	},
-	
-	_getDistanceFromBottomOfScreen: function(innerY){
-		var me = this, w = window, p = w.parent, iframe = me._getIframe(),
-			ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
-			actualY = ofy + innerY;
-		return ph - actualY;
-	},
-	
-	_changeGridWidth: function(){
-		var me = this, mg = me.MatrixGrid;
-		if(mg) mg.setWidth(Math.min(
-			_.reduce(mg.config.columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
-			me.getWidth()-40
-		));
-	},
-	
-	_applyEventListeners: function(){
-		var me=this, p = window.parent;
-		
-		function screenChanged(){
-			me._applyMessageBoxConfig();
-			me._changeGridHeight();
-			me._changeGridWidth();
-		}
-		screenChanged();
-		p.onresize = screenChanged;
-		p.onscroll = screenChanged;
-	},
-	
-	/******************************************************* LAUNCH/UPDATE APP********************************************************/
-	_loadAllData: function(cb){
-		var me = this;
-		me._loadMatrixFeatures(function(){	
-			me._loadMatrixUserStoryBreakdown(function(){
-				me._addDefaultProjects(function(){ if(cb) cb(); });
-			});
+	_loadPreferences: function(){ //parse all settings too
+		var me=this,
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
+		Rally.data.PreferenceManager.load({
+			appID: me.getAppId(),
+      filterByName:preferenceName+ uid,
+			success: function(prefs) {
+				var appPrefs = prefs[preferenceName + uid];
+				try{ appPrefs = JSON.parse(appPrefs); }
+				catch(e){ appPrefs = { projs:{}, refresh:30};}
+				console.log('loaded prefs', appPrefs);
+				deferred.resolve(appPrefs);
+			},
+			failure: deferred.reject
 		});
+		return deferred.promise;
 	},
-	
-	launch: function(){
-		var me = this;
-		me._showError('Loading Data...');
-		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
-			me.removeAll();
-			me._showError('You do not have permissions to edit this project');
-			return;
-		}
-		Ext.tip.QuickTipManager.init();
-		Ext.apply(Ext.tip.QuickTipManager.getQuickTip(), {showDelay: 1000 });
-		me._defineModels();
-		me._applyEventListeners();
-		setInterval(function(){ me._reloadMatrixStores();}, 10000); 
-		me._loadModels(function(){
-			var scopeProject = me.getContext().getProject();
-			me._loadProject(scopeProject, function(scopeProjectRecord){
-				me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
-					if(trainRecord){
-						me.TrainRecord = trainRecord; 
-						console.log('train loaded:', trainRecord);
-						me._loadReleasesInTheFuture(me.TrainRecord).then(function(releaseStore){
-							me.ReleaseStore = releaseStore;
-							var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.TrainRecord.data.ObjectID, me.AppPrefs);
-							if(currentRelease){
-								me.ReleaseRecord = currentRelease;
-								console.log('release loaded', currentRelease);
-								me._loadAllData(function(){
-									me.removeAll();
-									me._loadMatrixGrid();
-								});
-							} else {
-								me.removeAll();
-								me._showError('This ART has no releases');
-							}
-						});
-					} else{
-						me.removeAll();
-						me._showError('Please scope to an ART');
-					}
-				});
-			});
+
+	_savePreferences: function(prefs){ // stringify and save only the updated settings
+		var me=this, s = {}, 
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
+		prefs = {projs: prefs.projs, refresh:prefs.refresh};
+    s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    console.log('saving prefs', prefs);
+		Rally.data.PreferenceManager.update({
+			appID: this.getAppId(),
+			settings: s,
+			success: deferred.resolve,
+			failure: deferred.reject
 		});
+		return deferred.promise;
+	},
+	/************************************************** Event Handler  *********************************************************/
+
+	_getGridHeight: function(){
+		var me = this, 
+			loc = window.location,
+			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]'));
+		return iframe.getHeight() - me.down('#navbox').getHeight();
+	},
+
+	_getGridWidth: function(columnCfgs){
+		var me = this; 
+		if(!me.MatrixGrid) return;
+		else return Math.min(
+			_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
+			window.parent.innerWidth - 20
+		);
 	},
 	
-	/******************************************************* RENDER ********************************************************/
+	_changeGridSize: function(){
+		var me=this;
+		if(!me.MatrixGrid) return;
+		else me.MatrixGrid.setSize(me._getGridWidth(me.MatrixGrid.config.columnCfgs), me._getGridHeight());
+	},
+	
+	_initGridResize: function(){
+		var me=this;
+		if(me._addWindowEventListener){
+			me._addWindowEventListener('resize', me._changeGridSize.bind(me));
+		}
+	},	
+
+	/******************************************************* Utility FUnctions ******************************************************/
+
 	_clearToolTip: function(){
 		var me = this;
 		if(me.tooltip){
@@ -407,256 +310,249 @@ Ext.define('CommitMatrix', {
 			me.tooltip.triangle.hide();
 			me.tooltip.panel.destroy();
 			me.tooltip.triangle.destroy();
-			delete me.tooltip;
+			me.tooltip = null;
 		}
 	},
 	
-	_loadMatrixGrid: function(){
-		var me = this, mode='Details'; //Flag and Details
+	_setCellColor:function(td, commitment, expected, usCount){
+		var currentColors = td.className.match(/intel-team-commits-(.*)$/)[1].split('-'),
+			colors = ['WHITE', 'GREY', 'GREEN', 'RED'],
+			newColors = [];
+		switch(commitment){
+			case 'Undecided': newColors[0] = 'WHITE'; break;
+			case 'N/A': newColors[0] = 'GREY'; break;
+			case 'Committed': newColors[0] = 'GREEN'; break;
+			case 'Not Committed': newColors[0] = 'RED'; break;
+			default: newColors[0] = 'WHITE'; break;
+		}
+		if(expected) newColors[1] = 'YELLOW';
+		if(newColors[0] != currentColors[0] || newColors[1] != currentColors[1] || td.innerText*1 !== usCount*1){
+			td.classList.remove('intel-team-commits-' + currentColors.join('-'));
+			td.classList.add('intel-team-commits-' + newColors.join('-'));
+			td.childNodes[0].innerText = usCount;
+		}
+	},
 		
-		me.featureTCAECache = {};
-		
-		function getTeamCommit(featureRecord, ProjectName){	
-			var tcs = featureRecord.data.c_TeamCommits;
-			var featureID = featureRecord.data.ObjectID;
-			var projectID = me.MatrixProjectMap[ProjectName];
-			var this_tc;
-			try{ 
-				var parsed_tcs;
-				if(me.featureTCAECache[featureID]) 
-					parsed_tcs = me.featureTCAECache[featureID];
-				else {
-					parsed_tcs = JSON.parse(atob(tcs)) || {};
-					me.featureTCAECache[featureID] = parsed_tcs;
-				}
-				this_tc = parsed_tcs[projectID] || {}; 
-			} 
-			catch(e){ me.featureTCAECache[featureID] = this_tc = {}; }
-			return this_tc;
+	_getDistanceFromBottomOfScreen: function(innerY){
+		var me = this, 
+			loc = window.location,
+			iframe = window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]'),
+			ph = window.parent.getWindowHeight(), 
+			ps = window.parent.getScrollY(), 
+			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe
+			actualY = ofy + innerY;
+		return ph - actualY;
+	},
+	
+	/************************************************************ UPDATE *************************************************************/
+	
+	_showGrids: function(){
+		var me=this;
+		me._loadMatrixGrid();
+	},
+	
+	_updateGrids: function(){
+		var me=this;
+		if(me.FeatureStore){
+			if(me.CustomMatrixStore) me.CustomMatrixStore.intelUpdate();
+		}
+	},
+
+	_reloadStores: function(){
+		var me = this, promises = [];
+		if(me.FeatureStore) promises.push(me._reloadStore(me.FeatureStore));
+		else {			
+			//have to reset these
+			me.MatrixUserStoryBreakdown = {}; // {projectNames: {featureNames: [userStories] }}
+			me.MatrixProjectMap = {}; // teamName -> teamOID 
+			me.FeatureProductHash = {}; // featureOID -> productName
+			promises.push(me._loadFeatures().then(function(){
+				return me._loadDefaultProjects();
+			}));
+		}
+		return Q.all(promises);
+	},
+
+	_reloadEverything: function(){
+		var me=this;
+
+		me._clearToolTip();
+		if(me.MatrixGrid) {
+			me.MatrixGrid.up().remove(me.MatrixGrid);
+			me.MatrixGrid = undefined;
+		}
+		if(me.ProductPicker) {
+			me.ProductPicker.up().remove(me.ProductPicker);
+			me.ProductPicker = undefined;
 		}
 		
-		function setExpected(featureRecord, ProjectName, value){
-			var tcs = featureRecord.get('c_TeamCommits');
-			var featureID = featureRecord.data.ObjectID;
-			var projectID = me.MatrixProjectMap[ProjectName];
-			try{ 
-				if(me.featureTCAECache[featureID]) 
-					tcs = me.featureTCAECache[featureID];
-				else {
-					tcs = JSON.parse(atob(tcs)) || {};
-					me.featureTCAECache[featureID] = tcs;
-				}
-			} 
-			catch(e){ me.featureTCAECache[featureID] = tcs = {}; }
-			if(!tcs[projectID]) 
-				tcs[projectID] = {};
-			tcs[projectID].Expected = value;		
-			var str = btoa(JSON.stringify(tcs, null, '\t'));
-			if(str.length >= 32768){
-				me._alert('ERROR', 'TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
-				if(cb) cb();
-			}
-			featureRecord.set('c_TeamCommits', str);
-			featureRecord.save();
+		me.UserStoryStore = undefined;
+		me.FeatureStore = undefined;
+		
+		me.CustomMatrixStore = undefined;
+		
+		me.setLoading(true);
+		
+		if(!me.ReleasePicker){
+			me._loadReleasePicker();
+			me._loadModePicker();
+			me._loadProductPicker();
+			me._loadMatrixLegend();
+		}		
+		else me._loadProductPicker();
+		
+		me.setLoading(true);
+		me._enqueue(function(unlockFunc){
+			me._reloadStores()
+				.then(function(){
+					me._updateGrids();
+				})
+				.then(function(){
+					me.setLoading(false);
+					me._showGrids();
+					unlockFunc();
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason);
+					unlockFunc();
+				})
+				.done();
+		});
+	},
+	
+	/******************************************************* AUTOREFRESHING ********************************************************/
+	
+	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
+		var me=this;
+		me._enqueue(function(unlockFunc){
+			me._reloadStores()
+				.then(function(){
+					me._updateGrids();
+					unlockFunc();
+				})
+				.fail(function(reason){
+					me._alert('ERROR', reason);
+					me._removeLoadingMasks();
+					unlockFunc();
+				})
+				.done();
+		});
+	},
+	
+	_setRefreshInterval: function(){
+		var me=this;
+		me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 10000);
+	},
+		
+	/******************************************************* LAUNCH ********************************************************/
+	
+	launch: function(){
+		var me = this;
+		me.Mode = 'Details';
+		me._initDisableResizeHandle();
+		me._initFixRallyDashboard();
+		me._initGridResize();
+		me.setLoading(true);
+		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+			me.setLoading(false);
+			me._alert('ERROR', 'You do not have permissions to edit this project');
+		} 
+		else {
+			me._loadModels()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me._loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return me._loadPreferences();
+				})
+				.then(function(appPrefs){
+					me.AppPrefs = appPrefs;
+					return me._projectInWhichTrain(me.ProjectRecord);
+				})
+				.then(function(trainRecord){
+					if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
+						me.TrainRecord = trainRecord;
+						me.ProjectRecord = trainRecord;
+						console.log('train loaded:', trainRecord);
+						return me._loadProducts(trainRecord);
+					} 
+					else return Q.reject('You are not scoped to a train.');
+				})
+				.then(function(productStore){
+					me.ProductNames = _.map(productStore.data.items, function(product){ return {ProductName: product.data.Name}; });
+					me.ProductNames = [{ProductName: 'All Products'}].concat(me.ProductNames);
+					return me._loadReleasesInTheFuture(me.TrainRecord);
+				})
+				.then(function(releaseStore){		
+					me.ReleaseStore = releaseStore;
+					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
+					if(currentRelease){
+						me.ReleaseRecord = currentRelease;
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						console.log('release loaded', currentRelease);
+						me._setRefreshInterval(); 
+						me._reloadEverything();
+					}
+					else return Q.reject('This train has no releases.');
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason || '');
+				})
+				.done();
 		}
-
-		var customMatrixRecords = _.map(me.MatrixFeatureStore.getRecords(), function(featureRecord){
-			var ed = featureRecord.get('PlannedEndDate');
-			return {
-				Rank: featureRecord.get('DragAndDropRank'),
-				FormattedID: featureRecord.get('FormattedID'),
-				ObjectID: featureRecord.get('ObjectID'),
-				FeatureName: featureRecord.get('Name'),
-				ProductName: me.MatrixProductHash[featureRecord.get('ObjectID')],
-				PlannedEndDate: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-')
-			};
-		});		
-
-		me.CustomMatrixStore = Ext.create('Ext.data.Store', {
-			data: customMatrixRecords,
-			model: 'IntelFeature',
-			autoSync:true,
-			limit:Infinity,
-			proxy: {
-				type:'sessionstorage',
-				id: 'Session-proxy-' + Math.random()
-			}
-		});
-
-		var defColumnCfgs = [
-			{
-				text:'Rank', 
-				dataIndex:'Rank',
-				width:50,
-				editor:false,
-				sortable:true,
-				resizable:false,
-				draggable:false,
-				menuDisabled:true,
-				locked:true,
-				renderer: function(oid, meta, f1){
-					var rank = 1;
-					var f1OID = f1.data.ObjectID;
-					f1 = me.MatrixFeatureStore.findRecord('ObjectID', f1OID);
-					var f1DADR = f1.data.DragAndDropRank;
-					me.MatrixFeatureStore.getRecords().forEach(function(f2){
-						if((f2.get('ObjectID') != f1OID) && (f1DADR > f2.get('DragAndDropRank')))
-							++rank;
-					});
-					return rank;
-				}
-			},{
-				text:'F#', 
-				dataIndex:'FormattedID',
-				width:50,
-				editor:false,
-				resizable:false,
-				draggable:false,
-				menuDisabled:true,
-				sortable:true,
-				locked:true,
-				renderer:function(FID){
-					var feature = me.MatrixFeatureStore.findRecord('FormattedID', FID);
-					if(feature.get('Project')) {
-						var pid = feature.get('Project')._ref.split('/project/')[1];
-						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/portfolioitem/feature/' + 
-								feature.get('ObjectID') + '" target="_blank">' + FID + '</a>';
-					}
-					else return name;
-				}
-			},{
-				text:'Feature', 
-				dataIndex:'FeatureName',
-				width:250,
-				editor:false,
-				resizable:false,
-				draggable:false,
-				menuDisabled:true,
-				locked:true,
-				sortable:true,
-				renderer: function(value, metaData) {
-					metaData.tdAttr = 'data-qtip="' + value + '"';
-					return value;
-				}
-			},{
-				text:'Product', 
-				dataIndex:'ProductName',
-				width:60,
-				editor:false,
-				resizable:false,
-				draggable:false,
-				menuDisabled:true,
-				locked:true,
-				sortable:true
-			},{
-				text:'Planned End',
-				dataIndex:'PlannedEndDate',
-				width:60,
-				editor:false,
-				resizable:false,
-				draggable:false,
-				menuDisabled:true,
-				locked:true,
-				sortable:true
-			}
-		];
-		var columnCfgs = [].concat(defColumnCfgs);
-		Object.keys(me.MatrixUserStoryBreakdown).sort().forEach(function(ProjectName){
-			columnCfgs.push({
-				text: ProjectName,
-				dataIndex:'ObjectID',
-				width:50,
-				editor:'textfield',
-				draggable:false,
-				menuDisabled:true,
-				align:'center',
-				tdCls: 'intel-editor-cell',
-				sortable:false,
-				resizable:false,
-				tooltip:ProjectName,
-				tooltipType:'title',
-				renderer: function(oid, metaData, matrixRecord, row, col){
-					var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [];
-					var count = array.length;
-					var tcae = getTeamCommit(featureRecord, ProjectName);
-					var Expected = tcae.Expected || false;
-					var Commitment = tcae.Commitment || 'Undecided'; 
-					if(Commitment === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
-					if(Commitment === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
-					if(Commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
-					if(Commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
-					if(Expected) metaData.tdCls += '-YELLOW';
-					return count;
-				}
-			});
-		});
+	},
+	
+	/******************************************************* RENDER NAVBAR ********************************************************/
 		
-		me.MatrixReleasePicker = me.add({
-			xtype:'combobox',
-			x:0, y:0,
-			store: Ext.create('Ext.data.Store', {
-				fields: ['Name'],
-				data: _.map(me.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
-			}),
-			displayField: 'Name',
-			fieldLabel: 'Release:',
-			editable:false,
-			value:me.ReleaseRecord.get('Name'),
+	_releasePickerSelected: function(combo, records){
+		var me=this;
+		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+		me.setLoading(true);
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		var pid = me.ProjectRecord.data.ObjectID;		
+		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+		me._savePreferences(me.AppPrefs)
+			.then(function(){ me._reloadEverything(); })
+			.fail(function(reason){
+				me._alert('ERROR', reason || '');
+				me.setLoading(false);
+			})
+			.done();
+	},
+	
+	_loadReleasePicker: function(){
+		var me=this;
+		me.ReleasePicker = me.down('#navbox_left_vert').add({
+			xtype:'intelreleasepicker',
+			labelWidth: 80,
+			width: 200,
+			releases: me.ReleaseStore.data.items,
+			currentRelease: me.ReleaseRecord,
 			listeners: {
-				select: function(combo, records){
-					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-					me.ReleaseRecord = me.ReleaseStore.findRecord('Name', records[0].get('Name'));	
-					me._clearToolTip();
-					me.setLoading(true);					
-					setTimeout(function(){
-						me._loadAllData(function(){
-							me.removeAll();
-							me._loadMatrixGrid();
-							me.setLoading(false);		
-						});
-					}, 0);
-				}
+				select: me._releasePickerSelected.bind(me)
 			}
 		});
-		
-		me.MatrixProductPicker = me.add({
-			xtype:'combobox',
-			x:0, y:30,
-			fieldLabel:'Product Filter',
-			store: Ext.create('Ext.data.Store', {
-				fields:['ProductName'],
-				data: _.map(_.reduce(Object.keys(me.MatrixProductHash), function(items, ObjectID){
-					var projectName = me.MatrixProductHash[ObjectID];
-					if(items.indexOf(projectName) == -1) items.push(projectName);
-					return items;
-				}, ['All Products']), function(name){ return {ProductName: name}; })
-			}),
-			displayField: 'ProductName',
-			editable:false,
-			value:'All Products',
-			listeners: {
-				select: function(combo, records){
-					var value = records[0].get('ProductName');
-					me.CustomMatrixStore.filters.getRange().forEach(function(filter){
-						me.CustomMatrixStore.removeFilter(filter);
-					});
-					if(value !== 'All Products'){
-						me.CustomMatrixStore.addFilter(new Ext.util.Filter({
-							filterFn: function(matrixRecord){
-								return matrixRecord.get('ProductName') === value;
-							}
-						}));
-					}
-					me._clearToolTip();
-				}
-			}
-		});
-		
-		me.ModePicker = me.add({
-			xtype:'combobox',
-			x:0, y:60,
+	},
+
+	_modePickerSelected: function(combo, records){
+		var me=this, value = records[0].data.Mode;
+		if(value === me.Mode) return;
+		else me.Mode = value;
+		me._clearToolTip();
+	},
+				
+	_loadModePicker: function(){
+		var me=this;
+		me.ModePicker = me.down('#navbox_left_vert').add({
+			xtype:'intelfixedcombo',
 			fieldLabel:'Click Mode',
+			labelWidth: 80,
+			width: 200,
 			store: Ext.create('Ext.data.Store', {
 				fields:['Mode'],
 				data: [
@@ -665,23 +561,56 @@ Ext.define('CommitMatrix', {
 				]
 			}),
 			displayField: 'Mode',
-			editable:false,
-			value:mode,
+			value:me.Mode,
 			listeners: {
-				select: function(combo, records){
-					var value = records[0].get('Mode');
-					if(value === mode) return;
-					else mode = value;
-					me._clearToolTip();
-				}
+				select: me._modePickerSelected.bind(me)
 			}
 		});
+	},
+	
+	_productPickerSelected: function(combo, records){
+		var me=this,
+			value = records[0].data.ProductName;
+		me.CustomMatrixStore.clearFilter();
+		if(value !== 'All Products'){
+			me.CustomMatrixStore.addFilter(new Ext.util.Filter({
+				filterFn: function(matrixRecord){
+					return matrixRecord.data.ProductName === value;
+				}
+			}));
+		}
+		me._clearToolTip();
+	},
+				
+	_loadProductPicker: function(){
+		var me=this;
+		me.ProductPicker = me.down('#navbox_left_vert').add({
+			xtype:'intelfixedcombo',
+			fieldLabel:'Product Filter',
+			labelWidth: 80,
+			width: 200,
+			store: Ext.create('Ext.data.Store', {
+				fields:['ProductName'],
+				data: me.ProductNames
+			}),
+			displayField: 'ProductName',
+			value:'All Products',
+			listeners: {
+				select: me._productPickerSelected.bind(me)
+			}
+		});
+	},
 		
-		me.MatrixLegend = me.add({
+	_loadMatrixLegend: function(){
+		var me=this;
+		me.MatrixLegend = me.down('#navbox_right').add({
 			xtype:'container',
-			layout:'table',
-			columns:5,
-			width:600, x:300, y:0,
+			width:120,	
+			layout: {
+				type:'vbox',
+				align:'stretch',
+				pack:'start'
+			},
 			border:true,
 			frame:false,
 			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected'], function(name){
@@ -701,77 +630,238 @@ Ext.define('CommitMatrix', {
 				};
 			})
 		});
+	},
+
+	/************************************************************* RENDER ********************************************************************/
+
+	_loadMatrixGrid: function(){
+		var me = this,
+			sortedFeatures = _.sortBy(me.FeatureStore.data.items, function(f){ return f.data.DragAndDropRank; }),
+			customMatrixRecords = _.map(sortedFeatures, function(featureRecord, index){
+				return {
+					Rank: index+1,
+					FormattedID: featureRecord.data.FormattedID,
+					ObjectID: featureRecord.data.ObjectID,
+					FeatureName: featureRecord.data.Name,
+					ProductName: me.FeatureProductHash[featureRecord.data.ObjectID],
+					PlannedEndDate: featureRecord.data.PlannedEndDate*1
+				};
+			});		
+		me.CustomMatrixStore = Ext.create('Intel.data.FastStore', {
+			data: customMatrixRecords,
+			model: 'CommitsMatrixFeature',
+			autoSync:true,
+			limit:Infinity,
+			proxy: {
+				type:'fastsessionproxy',
+				id: 'Session-proxy-' + Math.random()
+			},
+			intelUpdate: function(){			
+				var store = me.CustomMatrixStore,
+					records = store.data.items,
+					projectNames = Object.keys(me.MatrixUserStoryBreakdown).sort(),
+					pnamesLength = projectNames.length;
+				for(var i=0, len=records.length; i<len; ++i){
+					var matrixRecord = records[i],
+						featureRecord = me.FeatureStore.findExactRecord('ObjectID', matrixRecord.data.ObjectID),
+						tr = me.MatrixGrid.view.getNode(i); //view is the scrollView, not lockedView
+					for(var j=0;j<pnamesLength; ++j){
+						var projectName = projectNames[j],
+							usCount = (me.MatrixUserStoryBreakdown[projectName][featureRecord.data.Name] || []).length,
+							td = tr.childNodes[j], //ignore fixed columns on left
+							tcae = me._getTeamCommit(featureRecord, projectName),
+							expected = tcae.Expected || false,
+							commitment = tcae.Commitment || 'Undecided'; 
+						me._setCellColor(td, commitment, expected, usCount);
+					}
+				}
+			}
+		});
+
+		var defColumnCfgs = [
+			{
+				text:'Rank', 
+				dataIndex:'Rank',
+				width:50,
+				maxHeight:80,
+				editor:false,
+				sortable:true,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true
+			},{
+				text:'F#', 
+				dataIndex:'FormattedID',
+				width:50,
+				maxHeight:80,
+				editor:false,
+				sortable:true,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				renderer:function(FID){
+					var feature = me.FeatureStore.findExactRecord('FormattedID', FID);
+					if(feature.data.Project) {
+						var pid = feature.data.Project._ref.split('/project/')[1];
+						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/portfolioitem/feature/' + 
+								feature.data.ObjectID + '" target="_blank">' + FID + '</a>';
+					}
+					else return name;
+				}
+			},{
+				text:'Feature', 
+				dataIndex:'FeatureName',
+				width:200,
+				maxHeight:80,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true,
+				renderer: function(value, metaData) {
+					metaData.tdAttr = 'title="' + value + '"';
+					return value;
+				}
+			},{
+				text:'Product', 
+				dataIndex:'ProductName',
+				width:60,
+				maxHeight:80,
+				editor:false,
+				sortable:true,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true
+			},{
+				text:'Planned End',
+				dataIndex:'PlannedEndDate',
+				width:60,
+				maxHeight:80,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true,
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-'); }
+			}
+		];
+	
+		var columnCfgs = defColumnCfgs.slice();
+		Object.keys(me.MatrixUserStoryBreakdown).sort().forEach(function(ProjectName){
+			columnCfgs.push({
+				text: ProjectName,
+				dataIndex:'ObjectID',
+				width:50,
+				maxHeight:80,
+				editor:'textfield',
+				draggable:false,
+				menuDisabled:true,
+				align:'center',
+				tdCls: 'intel-editor-cell',
+				sortable:false,
+				resizable:false,
+				tooltip:ProjectName,
+				tooltipType:'title',
+				renderer: function(oid, metaData, matrixRecord, row, col){
+					var featureRecord = me.FeatureStore.findExactRecord('ObjectID', matrixRecord.data.ObjectID);
+					if(!featureRecord) return;
+					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [],
+						count = array.length,
+						tcae = me._getTeamCommit(featureRecord, ProjectName),
+						expected = tcae.Expected || false,
+						commitment = tcae.Commitment || 'Undecided'; 
+					if(commitment === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
+					else if(commitment === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
+					else if(commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
+					else if(commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
+					if(expected) metaData.tdCls += '-YELLOW';
+					return count;
+				}
+			});
+		});
 		
 		me.MatrixGrid = me.add({
 			xtype: 'grid',
-			x:0, y:100,
-			width: Math.min(_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), me.getWidth()-40),
-			height:me._gridHeight,
+			width: me._getGridWidth(columnCfgs),
+			height: me._getGridHeight(),
 			scroll:'both',
 			resizable:false,
 			columns: columnCfgs,
-			plugins: [
-				Ext.create('Ext.grid.plugin.CellEditing', {
-					triggerEvent:'cellclick'
-				})
-			],
+			disableSelection: true,
+			plugins: [ 'fastcellediting' ],
 			viewConfig: {
-				preserveScrollOnRefresh: true
+				xtype:'scrolltableview',
+				preserveScrollOnRefresh:true
 			},
 			listeners: {
-				sortchange: function(){
-					me._clearToolTip();
+				sortchange: function(){ 
+					me._clearToolTip(); 
 				},
 				beforeedit: function(editor, e){
-					var ProjectName = e.column.text,
+					var projectName = e.column.text,
 						matrixRecord = e.record;
-					if(mode === 'Flag'){
-						var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-						var tcae = getTeamCommit(featureRecord, ProjectName);
-						setExpected(featureRecord, ProjectName, !tcae.Expected);
-						matrixRecord.commit(); //just so it rerenders this record 
+						
+					if(me.Mode === 'Flag'){
+						me.MatrixGrid.setLoading(true);
+						me._enqueue(function(unlockFunc){
+							me._loadFeature(matrixRecord.data.ObjectID)
+								.then(function(featureRecord){
+									var tcae = me._getTeamCommit(featureRecord, projectName);
+									return me._setExpected(featureRecord, projectName, !tcae.Expected);
+								})
+								.then(function(featureRecord){
+									me.MatrixGrid.setLoading(false);
+									var storeRecord = me.FeatureStore.findExactRecord('ObjectID', matrixRecord.data.ObjectID);
+									storeRecord.data.c_TeamCommits = featureRecord.data.c_TeamCommits;
+									me.MatrixGrid.view.refreshNode(me.CustomMatrixStore.indexOf(matrixRecord));
+									unlockFunc();
+								})
+								.fail(function(reason){
+									me.MatrixGrid.setLoading(false);
+									me._alert('ERROR', reason || '');
+									unlockFunc();
+								})
+								.done();
+						});
 					}
 					return false;
 				}, 
 				afterrender: function (grid) {
 					var view = grid.view.normalView;	//lockedView and normalView		
 					
-					view.getEl().on('scroll', function(){ if(!me._isReloadRefresh) me._clearToolTip(); });
+					view.getEl().on('scroll', function(){ me._clearToolTip(); });
 					
-					// record the current cellIndex for tooltip stuff
 					grid.mon(view, {
 						uievent: function (type, view, cell, row, col, e) {
-							if(mode === 'Details' && type === 'mousedown') {
-								var matrixRecord = me.CustomMatrixStore.getAt(row);
-								var ProjectName = view.getGridColumns()[col].text;
-								var featureRecord = me.MatrixFeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID'));
-								var tcae = getTeamCommit(featureRecord, ProjectName);
-								var pos = cell.getBoundingClientRect();
-								if(me.tooltip){
-									me.tooltip.panel.hide();
-									me.tooltip.triangle.hide();
-									me.tooltip.panel.destroy();
-									me.tooltip.triangle.destroy();
-									if(me.tooltip.row == row && me.tooltip.col == col) {
-										delete me.tooltip;
-										return;
-									}
+							if(me.Mode === 'Details' && type === 'mousedown') {
+								var matrixRecord = me.CustomMatrixStore.getAt(row),
+									ProjectName = view.getGridColumns()[col].text,
+									featureRecord = me.FeatureStore.findRecord('ObjectID', matrixRecord.data.ObjectID),
+									tcae = me._getTeamCommit(featureRecord, ProjectName),
+									pos = cell.getBoundingClientRect(),
+									t = me.tooltip;
+								if(t){
+									me._clearToolTip();
+									if(t.row == row && t.col == col) return;
 								}
 								
-								//if(col <= 3) return; //this applied to non-locked grid
 								var panelWidth = 400;
 								var theHTML = 
-											//'<p><b>Team: </b>' + ProjectName + 
-											//'<p><b>Feature: </b>' + featureRecord.get('FormattedID') + 
-											'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
-											'<p><b>PlanEstimate: </b>' + 
-											_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
-												return sum + (sr.get('PlanEstimate') || 0); }, 0) +
-											'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
+									'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
+									'<p><b>PlanEstimate: </b>' + 
+									_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
+										return sum + (sr.data.PlanEstimate || 0); }, 0) +
+									'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
 								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
 									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
-										'd/detail/userstory/' + sr.get('ObjectID') + '" target="_blank">' + sr.get('FormattedID') + '</a>: ' + 
-										sr.get('Name').substring(0, 40) + (sr.get('Name').length>40 ? '...' : '') + '</li>';
+										'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
+										'<span title="' + sr.data.Name + '">' + 
+										sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
 								});
 								theHTML += '</ol></div>';
 								
@@ -792,7 +882,7 @@ Ext.define('CommitMatrix', {
 										html:theHTML,
 										listeners:{
 											afterrender: function(panel){
-												var upsideDown = (dbs < panel.getHeight() + 40);
+												var upsideDown = (dbs < panel.getHeight() + 80);
 												panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
 											}
 										}
@@ -806,7 +896,7 @@ Ext.define('CommitMatrix', {
 										listeners:{
 											afterrender: function(panel){
 												setTimeout(function(){
-													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 40);
+													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
 													if(upsideDown) {
 														panel.removeCls('intel-tooltip-triangle');
 														panel.addCls('intel-tooltip-triangle-up');

@@ -1,25 +1,5 @@
-/********************* General app stuff *************/
-.x-grid-row.intel-row-35px > .x-grid-cell { height:35px !important; }
-.x-grid-row.intel-row-45px  > .x-grid-cell { height:45px !important; }
-.x-grid-row.intel-row-80px  > .x-grid-cell { height:80px !important; }
-.x-grid-row.intel-row-115px  > .x-grid-cell { height:115px !important; }
-.x-grid-row.intel-row-150px  > .x-grid-cell { height:150px !important; }
-.x-grid-row.intel-row-185px  > .x-grid-cell { height:185px !important; }
-.x-grid-row.intel-row-220px  > .x-grid-cell { height:220px !important; }
-.x-grid-row.intel-row-255px  > .x-grid-cell { height:255px !important; }
-.x-grid-row.intel-row-290px  > .x-grid-cell { height:290px !important; }
-.x-grid-row.intel-row-325px  > .x-grid-cell { height:325px !important; }
-.x-grid-row.intel-row-360px  > .x-grid-cell { height:360px !important; }
-
 .x-grid-row .intel-editor-cell {  cursor:pointer !important; }
 .x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
-
-.pred-dep-header {
-	display: inline-block !important;
-	line-height:100% !important;
-	font-weight:500 !important;
-}
-
 
 .grey-row .x-grid-cell { background-color:rgba(224, 224, 224, 0.15) !important; }
 .grey-row.x-grid-row-selected .x-grid-cell { background-color:rgba(224, 224, 224, 0.25) !important; }
@@ -50,25 +30,19 @@
 .x-grid-row-selected .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
 
 
-/************ buttons stuff ******************/
-.undo-button { background-image:url(http://png-4.findicons.com/files/icons/2315/default_icon/256/undo.png) !important; }
-.delete-button { background-image:url(http://superadm.com/wp-content/uploads/2014/05/delete.png) !important; }
-.save-button { background-image:url(http://www.iconpng.com/png/windows8_icons2/save.png) !important; }
-.minus-button { background-image:url(http://www.pubzi.com/f/minus-sign.svg) !important; }
-.plus-button { background-image:url(http://ilstream.com/images/plus-icon.gif) !important; }
 
-.iconCell, .iconCell * { padding:0px !important; margin:0px !important; }
 
-.undo-button,
-.delete-button,
-.save-button,
-.minus-button,
-.plus-button
- { /*30px total height with margins */
-	left:0px !important;
-	top:0px !important;
-	height:16px !important; width:16px !important;
-	background-size:16px !important;
-	padding:0px !important; 
-	margin:7px 7px 0px 7px !important; 
+
+/* 
+
+.x-column-header-over, .x-column-header-sort-ASC, .x-column-header-sort-DESC {
+	background-color: rgba(0,0,0,0) !important;
+	background-image: none !important;
 }
+.x-grid-row-selected:not(.x-grid-row-over) > .x-grid-td { 
+	background-color: transparent !important;
+}
+
+.x-grid-row-selected.x-grid-row-over > .x-grid-td, .x-grid-row-over > .x-grid-td {
+	background-color: #ecf8fb;
+} */

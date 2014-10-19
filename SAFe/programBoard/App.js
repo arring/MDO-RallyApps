@@ -62,18 +62,19 @@
 */
 
 /********************* PRODUCTION *****************/
-//console = { log: function(){} }; // DEBUG!!!!		
+console = { log: function(){} }; // DEBUG!!!!		
 preferenceName = 'intel-program-board';
 
 /********************* END PRODUCTION *****************/
 Ext.define('ProgramBoard', {
-	extend: 'Rally.app.App',
+	extend: 'IntelRallyApp',
 	mixins:[
 		'WindowListener',
 		'PrettyAlert',
 		'IframeResize',
 		'IntelWorkweek',
-		'ReleaseQuery'
+		'ReleaseQuery',
+		'AsyncQueue'
 	],
 	
 	layout: {
@@ -83,6 +84,7 @@ Ext.define('ProgramBoard', {
 	},
 	items:[{
 		xtype:'container',
+		padding:'0 10px 0 10px',
 		layout: {
 			type:'hbox',
 			align:'stretch',
@@ -108,345 +110,33 @@ Ext.define('ProgramBoard', {
 		}]
 	},{
 		xtype:'container',
+		padding:'0 10px 0 10px',
 		layout: {
 			type:'hbox',
 			align:'stretch',
 			pack:'start'
 		},
-		height:320,
+		height:350,
 		itemId:'tc_vel_box'
 	}],
 	minWidth:910, //thats when rally adds a horizontal scrollbar for a pagewide app
-		
+	
 	/****************************************************** DATA STORE METHODS ********************************************************/
-	
-	//___________________________________GENERAL LOADING STUFF___________________________________	
-	_loadModels: function(cb){
-		var me=this, promises = [],
-			models = {
-				Project: 'Project',
-				UserStory: 'HierarchicalRequirement',
-				Feature:'PortfolioItem/Feature',
-				Milestone:'PortfolioItem/Milestone'
-			};
-		_.each(models, function(modelType, modelName){
-			var deferred = Q.defer();
-			Rally.data.WsapiModelFactory.getModel({ //load project
-				type:modelType, 
-				success: function(loadedModel){ 
-					me[modelName] = loadedModel;
-					deferred.resolve();
-				}
-			});
-			promises.push(deferred.promise);
-		});
-		Q.all(promises).then(cb);
-	},
-	
-	_loadProject: function(oid, cb){ 
-		var me = this; 
-		if(!oid){ cb(); return; }
-		if(!me.Project){ me._loadModels(function(){ me._loadProject(oid, cb); }); return; }
-		me.Project.load(oid, {
-			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			callback: cb
-		});
-	},
-	
-	_loadFeature: function(oid, cb){ 
-		var me = this;
-		if(!oid){ cb(); return; }
-		if(!me.Feature){ me._loadModels(function(){ me._loadFeature(oid, cb); }); return; }
-		if(!oid){ cb(); return; }
-		me.Feature.load(oid, {
-			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.data._ref
-			},
-			callback: cb
-		});
-	},
-	
-	_loadUserStory: function(oid, cb){ 
-		var me = this;
-		if(!oid){ cb(); return; }
-		if(!me.UserStory){ me._loadModels(function(){ me._loadUserStory(oid, cb); }); return; }
-		me.UserStory.load(oid, {
-			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
-				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: me.ProjectRecord.data._ref
-			},
-			callback: cb
-		});
-	},
-	
-	_loadMilestone: function(oid, cb){ 
-		var me = this;
-		if(!oid){ cb(); return; }
-		if(!me.Milestone){ me._loadModels(function(){ me._loadMilestone(oid, cb); }); return; }
-		me.Milestone.load(oid, {
-			fetch: ['ObjectID', 'Parent', 'Name'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			callback: cb
-		});
-	},
-	
-	_loadRootProject: function(projectRecord, cb){
-		var me=this, n = projectRecord.get('Name');
-		if(n === 'All Scrums' || n === 'All Scrums Sandbox' || !projectRecord.data.Parent) {
-			me.RootProjectRecord = projectRecord;
-			cb();
-		} else {
-			me._loadProject(projectRecord.data.Parent.ObjectID, function(parentRecord){
-				me._loadRootProject(parentRecord, cb);
-			});
-		}
-	},
-	
-	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
-		if(!projectRecord) cb();
-		var me=this, split = projectRecord.get('Name').split(' ART');
-		if(split.length>1) cb(projectRecord);
-		else { 
-			var parent = projectRecord.get('Parent');
-			if(!parent) cb();
-			else {
-				me._loadProject(parent.ObjectID, function(parentRecord){
-					me._projectInWhichTrain(parentRecord, cb);
-				});
-			}
-		}
-	},
-	
-	_loadAllTrains: function(cb){
-		var me=this;
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Project',
-			autoLoad:true,
-			remoteSort:false,
-			limit:Infinity,
-			fetch: ['Name', 'ObjectID'],
-			context:{
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{
-					property:'Name',
-					operator: 'contains',
-					value: ' ART'
-				},{
-					property: 'Name',
-					operator: '!contains',
-					value: 'Test'
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(projectStore, projectRecords){
-						me.AllTrainRecordsStore = projectStore;
-						me.TrainNames = _.map(projectRecords, function(pr){ return {Name: pr.get('Name').split(' ART')[0]};  });
-						console.log('AllTrainRecords loaded', projectRecords);
-						cb();
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
-	_allValidProjectsLoaded: function(scrums, cb){ //we filter projects based on permissions
+	_loadFeatures: function(){ 
 		var me=this, 
-			vp = {}, 
-			names = [], 
-			len = scrums.length, 
-			permissions = me.getContext().getPermissions(), 
-			i, scrum;
-		for(i=0;i<scrums.length;++i){
-			scrum = scrums[i];
-			vp[scrum.data.ObjectID] = scrum;
-			names.push({Name:scrum.data.Name});
-		}
-		me.ValidProjects = vp;
-		me.ProjectNames = names;
-		console.log('valid scrums loaded:', scrums);
-		if(cb) cb(); 
-	},
-	
-	_loadValidProjects: function(cb){
-		var scrums = [];
-		var loadChildren = (function(project, _cb){
-			if(project.get('TeamMembers').Count > 0) //valid scrums have people
-				scrums.push(project);
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Project',
-				autoLoad:true,
-				remoteSort:false,
+			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
+			featureStore = Ext.create('Rally.data.wsapi.Store',{
+				model: 'PortfolioItem/Feature',
 				limit:Infinity,
-				fetch: ['Name', 'ObjectID', 'Parent', 'TeamMembers'],
+				remoteSort:false,
+				fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
 				context:{
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{
-						property:'Parent.ObjectID',
-						value: project.get('ObjectID')
-					}
-				],
-				listeners: {
-					load: {
-						fn: function(projectStore, projectRecords){
-							var promises = [], 
-								len = projectRecords.length,
-								i, deferred, project;
-							for(i=0;i<len;++i){
-								deferred = Q.defer();
-								promises.push(deferred.promise);
-								project = projectRecords[i];
-								loadChildren(project, deferred.resolve);
-							}
-							Q.all(promises).then(_cb);
-						},
-						single:true,
-						scope:this
-					}
-				}
+				filters:[{ property:'Dummy', value:'value' }]
 			});
-		}).bind(this);
-
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Project',
-			autoLoad:true,
-			remoteSort:false,
-			pageSize:1,
-			limit:1,
-			fetch: ['Name', 'ObjectID', 'TeamMembers'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{
-					property:'Name',
-					value: this.RootProjectRecord.get('Name')
-				}
-			],
-			listeners:{
-				load:{
-					fn: function(ps, recs){
-						loadChildren(recs[0], this._allValidProjectsLoaded.bind(this, scrums, cb));
-					},
-					single:true,
-					scope:this
-				}
-			}
-		});
-	},
-				
-	_loadRandomUserStory: function(ProjectRef, cb){ //get the most recent one!!
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'HierarchicalRequirement',
-			autoLoad:true,
-			limit:1,
-			pageSize:1,
-			fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: ProjectRef
-			},
-			sorters: [
-				{
-					property: 'CreationDate', 
-					direction:'DESC'
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(userStoryStore, userStoryRecords){
-						cb(userStoryRecords.pop());
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
-	_loadUserStoryByFID: function(FormattedID, ProjectRef, cb){
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'HierarchicalRequirement',
-			autoLoad:true,
-			limit:1,
-			pageSize:1,
-			fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: ProjectRef
-			},
-			filters: [
-				{
-					property:'FormattedID',
-					value:FormattedID
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(userStoryStore, userStoryRecords){
-						cb(userStoryRecords.pop());
-					},
-					single:true
-				}
-			}
-		});
-	},
-	
-	_milestoneLoaded: function(frData, deferred, milestoneRecord){
-		var p = milestoneRecord.data.Parent;
-		this.FeatureProductHash[frData.ObjectID] = ((p && p.Name ) ? p.Name : '');
-		deferred.resolve();
-	},
-						
-	_getFeatureFilterString: function(){
-		var coreFilter = Ext.create('Rally.data.wsapi.Filter', {
-			property:'Release.Name',
-			value: this.ReleaseRecord.get('Name')
-		});
-		if(!this.TrainRecord) { 
-			throw 'You should have a train here'; //even non-train teams
-		}
-		else {
-			if(this.TrainRecord.get('Name') == 'Test ART (P&E)'){
-				return '((Project.Name = "Test ART (P&E)") AND (Release.Name = "' + this.ReleaseRecord.get('Name') + '"))';
-			}
-			var trainName = this.TrainRecord.get('Name').split(' ART')[0];
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.Parent.Name',
-				value: trainName + ' POWG Portfolios'
-			}).and(coreFilter).toString();
-		}
-	},
-	
-	_loadFeatures: function(cb){ 
-		var filterString = this._getFeatureFilterString();
-		this.FeatureStore = Ext.create('Rally.data.wsapi.Store',{
-			model: 'PortfolioItem/Feature',
-			limit:Infinity,
-			remoteSort:false,
-			fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{ property:'Dummy', value:'value' }]
-		});
-		this.FeatureStore._hydrateModelAndLoad = function(options){
+		featureStore._hydrateModelAndLoad = function(options){
 			var deferred = new Deft.Deferred();
 			this.hydrateModel().then({
 					success: function(model) {
@@ -461,128 +151,98 @@ Ext.define('ProgramBoard', {
 					scope: this
 			});
 		};
-		this.FeatureStore.load({
-			scope:this,
-			callback: function(featureRecords){
+		return me._reloadStore(featureStore)
+			.then(function(featureStore){ 
+				var promises = [],
+					featureRecords = featureStore.data.items;
 				console.log('features loaded:', featureRecords);
-				var promises = [];
-				this.FeatureProductHash = {};
+				me.FeatureStore = featureStore; 
+				me.FeatureProductHash = {};
 				featureRecords.forEach(function(fr){
-					var deferred = Q.defer();
 					var frData = fr.data;
-					if(frData.Parent) this._loadMilestone(frData.Parent.ObjectID, this._milestoneLoaded.bind(this, frData, deferred));
-					else {
-						this.FeatureProductHash[frData.ObjectID] = '';
-						deferred.resolve();
+					if(frData.Parent){
+						promises.push(me._loadMilestone(frData.Parent.ObjectID).then(function(milestoneRecord){
+							var p = milestoneRecord.data.Parent;
+							me.FeatureProductHash[frData.ObjectID] = ((p && p.Name ) ? p.Name : '');
+						}));
 					}
-					promises.push(deferred.promise);
-				}, this);
-				Q.all(promises).then(cb);
-			}
-		});
+					else me.FeatureProductHash[frData.ObjectID] = '';
+				});
+				return Q.all(promises);
+			});
 	},
 	
-	_loadIterations: function(cb){
-		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
-			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
-		this.IterationStore = Ext.create("Rally.data.WsapiDataStore", {
-			model: "Iteration",
-			autoLoad: true,
-			remoteSort: false,
-			limit:Infinity,
-      fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: this.getContext().getProject()._ref
-			},
-      filters: [
-				{
-					property: "EndDate",
-					operator: ">=",
-					value: startDate
-				},{
-					property: "StartDate",
-					operator: "<=",
-					value: endDate  
-				}
-			],
-			listeners: {
-				load: function(store) {
-					console.log('Iterations loaded:', store.getRecords());
-          cb();
-        },
-				scope:this,
-				single:true
-			}
-    });
+	_loadIterations: function(){
+		var me=this,
+			startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.data.ReleaseStartDate),
+			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.data.ReleaseDate);
+			iterationStore = Ext.create("Rally.data.WsapiDataStore", {
+				model: "Iteration",
+				remoteSort: false,
+				limit:Infinity,
+				fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: this.getContext().getProject()._ref
+				},
+				filters: [
+					{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}
+				]
+			});
+		return me._reloadStore(iterationStore)
+			.then(function(iterationStore){ 
+				console.log('iterations loaded:', iterationStore.data.items);
+				me.IterationStore = iterationStore; 
+			});
 	},
 	
 	_loadUserStoryFilterString: function(){
-		var startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseStartDate')),
-			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.get('ReleaseDate'));
+		var me=this;
 		
-		/*************************************** core Filter ********************************************/
 		var coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
 			property:'Release.Name',
-			value: this.ReleaseRecord.get('Name')
+			value: me.ReleaseRecord.data.Name
 		}).and(Ext.create('Rally.data.wsapi.Filter', {
 			property:'Project.Name',
-			value: this.ProjectRecord.get('Name')
-		}));
+			value: me.ProjectRecord.data.Name
+		}));	
 		
-		/*************************************** Dependencies Filter ********************************************/		
 		var depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
 			property:'Project.Name',
-			value: this.ProjectRecord.get('Name')
+			value: me.ProjectRecord.data.Name
 		}).and(Ext.create('Rally.data.wsapi.Filter', {
 			property:'c_Dependencies',
 			operator:'!=',
 			value:''
 		}));
 
-		/*************************************** TeamCommits Filter ********************************************/
-		//no teamCommits Specific filter
-		
-		/*************************************** Velocity Filter ********************************************/
-		// var velocityFilter = Ext.create('Rally.data.wsapi.Filter', { //overlaps with coreFilter....not needed
-			// property: "Iteration.EndDate",
-			// operator: ">=",
-			// value: startDate
-		// }).and(Ext.create('Rally.data.wsapi.Filter', { 
-			// property: "Iteration.StartDate",
-			// operator: "<=",
-			// value: endDate  
-		// })).and(coreFilter);
-		
-		/*************************************** Store Stuff********************************************/
 		return coreFilter.or(depFilter).toString();
 	},
 	
-	_loadUserStories: function(cb){	
-		var filterString = this._loadUserStoryFilterString();
-		
-		this.UserStoryStore = Ext.create('Rally.data.wsapi.Store',{
-			model: 'HierarchicalRequirement',
-			limit:Infinity,
-			remoteSort:false,
-			fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
-				'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{ property:'Dummy', value:'value' }], //need this or filterString wont get injected
-			listeners: {
-				load: {
-					fn: function(userStoryStore, userStoryRecords){
-						console.log('user stories loaded:', userStoryRecords);
-						cb();
-					},
-					single:true
-				}
-			}
-		});
-		this.UserStoryStore._hydrateModelAndLoad = function(options){
+	_loadUserStories: function(){	
+		var me=this, 
+			filterString = this._loadUserStoryFilterString(me.TrainRecord, me.ReleaseRecord);
+			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
+				model: 'HierarchicalRequirement',
+				limit:Infinity,
+				remoteSort:false,
+				fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
+					'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[{ property:'Dummy', value:'value' }] //need this or filterString wont get injected
+			});
+		userStoryStore._hydrateModelAndLoad = function(options){
       var deferred = new Deft.Deferred();
       this.hydrateModel().then({
         success: function(model) {
@@ -597,22 +257,26 @@ Ext.define('ProgramBoard', {
 				scope: this
 			});
 		};
-		this.UserStoryStore.load();
+		return me._reloadStore(userStoryStore)
+			.then(function(userStoryStore){ 
+				console.log('userStories loaded:', userStoryStore.data.items);
+				me.UserStoryStore = userStoryStore; 
+			});
 	},
 	
 	/**___________________________________TEAM COMMITS STUFF___________________________________**/
 			
 	_getTeamCommit: function(featureRecord){	
-		var tcs = featureRecord.get('c_TeamCommits'),
-			projectID = this.ProjectRecord.get('ObjectID');
+		var tcs = featureRecord.data.c_TeamCommits,
+			projectID = this.ProjectRecord.data.ObjectID;
 		try{ tcs = JSON.parse(atob(tcs))[projectID] || {}; } 
 		catch(e){ tcs = {}; }
 		return tcs;
 	},
 		
 	_setTeamCommit: function(featureRecord, tc){
-		var tcs = featureRecord.get('c_TeamCommits'),
-			projectID = this.ProjectRecord.get('ObjectID'),
+		var tcs = featureRecord.data.c_TeamCommits,
+			projectID = this.ProjectRecord.data.ObjectID,
 			deferred = Q.defer();
 		try{ tcs = JSON.parse(atob(tcs)) || {}; }
 		catch(e){ tcs = {}; }
@@ -621,12 +285,12 @@ Ext.define('ProgramBoard', {
 		tcs[projectID].Objective = tc.Objective;
 		var str = btoa(JSON.stringify(tcs, null, '\t'));
 		if(str.length >= 32768)
-			deferred.reject('TeamCommits field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+			deferred.reject('TeamCommits field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			featureRecord.set('c_TeamCommits', str);
 			featureRecord.save({ 
 				callback:function(record, operation, success){
-					if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.get('FormattedID'));
+					if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.data.FormattedID);
 					else {
 						console.log('added teamCommits to feature:', featureRecord, tcs);
 						deferred.resolve();
@@ -640,9 +304,11 @@ Ext.define('ProgramBoard', {
 	_TeamCommitsCountHash: {},
 	_getStoryCount: function(FID){	
 		if(this._TeamCommitsCountHash[FID]) return this._TeamCommitsCountHash[FID];
-		var count = _.reduce(this.UserStoryStore.getRecords(), function(total, us){ 
-			return (us.get('Feature') && us.get('Feature').ObjectID == FID)*1 + total;
-		}, 0);
+		var count = 0, recs = this.UserStoryStore.data.items;
+		for(var i=0, len=recs.length; i<len; ++i){
+			var us = recs[i];
+			count += (us.data.Feature && us.data.Feature.ObjectID == FID)*1;
+		}
 		this._TeamCommitsCountHash[FID] = count;
 		return count;
 	},
@@ -651,34 +317,36 @@ Ext.define('ProgramBoard', {
 	_getStoriesEstimate: function(FID){	
 		if(this._TeamCommitsEstimateHash[FID]) 
 			return this._TeamCommitsEstimateHash[FID];
-		var estimate = _.reduce(this.UserStoryStore.getRecords(), function(total, us){ 
-			return (us.get('Feature') && us.get('Feature').ObjectID == FID ? us.get('PlanEstimate') : 0)*1 + total;
-		}, 0);
+		var estimate = 0, recs = this.UserStoryStore.data.items;
+		for(var i=0, len=recs.length; i<len; ++i){
+			var us = recs[i];
+			estimate += (us.data.Feature && us.data.Feature.ObjectID == FID ? us.data.PlanEstimate : 0)*1;
+		}
 		this._TeamCommitsEstimateHash[FID] = estimate;
 		return estimate;
 	},
-		
-	/**___________________________________VELOCITY STUFF___________________________________ **/
-	
+
 	/**___________________________________ RISKS STUFF___________________________________**/
 	_updateFColumnStores: function(){ //updates the dropdown stores with the most recent features in the release (in case some were added
-		var me = this;
+		var me = this, 
+			features = me.FeatureStore.data.items, 
+			i, len;
 		if(me.FeatureFIDStore){
 			me.FeatureFIDStore.removeAll();
-			_.each(me.FeatureStore.getRange(), function(f){
-				me.FeatureFIDStore.add({'FormattedID': f.get('FormattedID')});
-			});
+			for(i=0, len=features.length; i<len; ++i){
+				me.FeatureFIDStore.add({'FormattedID': features[i].data.FormattedID});
+			}
 		}
 		if(me.FeatureNameStore) {
 			me.FeatureNameStore.removeAll();
-			_.each(me.FeatureStore.getRange(), function(f){
-				me.FeatureNameStore.add({'Name': f.get('Name')});
-			});
+			for(i=0, len=features.length; i<len; ++i){
+				me.FeatureNameStore.add({'Name': features[i].data.Name});
+			}
 		}
 	},
 	
 	_getRisks: function(featureRecord){
-		var risks = featureRecord.get('c_Risks');
+		var risks = featureRecord.data.c_Risks;
 		try{ risks = JSON.parse(atob(risks)) || {}; } //b64 decode yosef. we approve of xss.
 		catch(e) { risks = {}; }
 		return risks;
@@ -732,7 +400,7 @@ Ext.define('ProgramBoard', {
 	
 	_removeRisk: function(featureRecord, riskData){ 
 		var risks = this._getRisks(featureRecord),
-			projectID = this.ProjectRecord.get('ObjectID'),
+			projectID = this.ProjectRecord.data.ObjectID,
 			deferred = Q.defer();
 			
 		if(risks[projectID]){
@@ -742,12 +410,12 @@ Ext.define('ProgramBoard', {
 			});
 			var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
 			if(str.length >= 32768) 
-				deferred.reject('Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+				deferred.reject('Risks field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 			else {
 				featureRecord.set('c_Risks', str);
 				featureRecord.save({
 					callback:function(record, operation, success){
-						if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.get('FormattedID'));
+						if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.data.FormattedID);
 						else {
 							console.log('removed risk from feature:', featureRecord, riskData, risks);
 							deferred.resolve();
@@ -762,7 +430,7 @@ Ext.define('ProgramBoard', {
 	
 	_addRisk: function(featureRecord, riskData){
 		var risks = this._getRisks(featureRecord),
-			projectID = this.ProjectRecord.get('ObjectID'),
+			projectID = this.ProjectRecord.data.ObjectID,
 			deferred = Q.defer();
 
 		riskData = Ext.clone(riskData);
@@ -788,12 +456,12 @@ Ext.define('ProgramBoard', {
 		if(!parseDataAdded) this.RisksParsedData.push(riskData);
 		var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
 		if(str.length >= 32768)
-			deferred.reject('Risks field for ' + featureRecord.get('FormattedID') + ' ran out of space! Cannot save');
+			deferred.reject('Risks field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			featureRecord.set('c_Risks', str);
 			featureRecord.save({
 				callback:function(record, operation, success){
-					if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.get('FormattedID'));
+					if(!success) deferred.reject('Failed to modify Feature ' + featureRecord.data.FormattedID);
 					else {
 						console.log('added risk to feature:', featureRecord, riskData, risks);
 						deferred.resolve();
@@ -808,18 +476,20 @@ Ext.define('ProgramBoard', {
 	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/
 	
 	_updateUSColumnStores: function(){ //updates the dropdown stores with the most recent user stories in the release (in case some were added
-		var me = this;
+		var me = this,
+			uses = me.DependenciesReleaseUserStories, 
+			i, len;
 		if(me.UserStoryFIDStore){
 			me.UserStoryFIDStore.removeAll();
-			_.each(me.DependenciesReleaseUserStories, function(usr){
-				me.UserStoryFIDStore.add({'FormattedID': usr.get('FormattedID')});
-			});
+			for(i=0, len=uses.length; i<len; ++i){
+				me.UserStoryFIDStore.add({'FormattedID': uses[i].data.FormattedID});
+			}
 		}
 		if(me.UserStoryNameStore) {
 			me.UserStoryNameStore.removeAll();
-			_.each(me.DependenciesReleaseUserStories, function(usr){
-				me.UserStoryNameStore.add({'Name': usr.get('Name')});
-			});
+			for(i=0, len=uses.length; i<len; ++i){
+				me.UserStoryNameStore.add({'Name': uses[i].data.Name});
+			}
 		}
 	},
 	
@@ -895,7 +565,7 @@ Ext.define('ProgramBoard', {
 		return {Predecessors:predDepsList, Successors:succDepsList};
 	},
 	
-	_buildDependenciesData: function(){	
+	_parseDependenciesData: function(){	
 		var me=this, 
 			predDepsList = [], succDepsList = [], 
 			records = me.UserStoryStore.getRecords(),
@@ -915,7 +585,7 @@ Ext.define('ProgramBoard', {
 		
 	_newTeamDep: function(){
 		return {
-			TID: (new Date() * 1) + '' + (Math.random() * 10000000),
+			TID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 			PID: '',
 			Sup:'No',
 			USID:'',
@@ -945,44 +615,50 @@ Ext.define('ProgramBoard', {
 					collectionStore = this,
 					collectionRecords = collectionStore.getRange();
 				usAddList.forEach(function(dep){
-					var deferred = Q.defer();
-					promises.push(deferred.promise);
-					if(!_.find(collectionRecords, function(cr){ return cr.get('FormattedID') === dep.USID; })) { //add it
-						var project = me.ValidProjects[dep.PID];
-						me._loadUserStoryByFID(dep.USID, project.get('_ref'), function(us){
-							if(us) { syncCollectionProxy = true; collectionStore.add(us); }
-							deferred.resolve();
-						});
-					} else deferred.resolve();
+					if(!_.find(collectionRecords, function(cr){ return cr.data.FormattedID === dep.USID; })) { //add it
+						var project = me.ValidProjects[dep.PID]; //we already checked if we can edit this project, no need to check here
+						promises.push(me._loadUserStoryByFID(dep.USID, project.data._ref).then(function(us){
+							if(us) { 
+								syncCollectionProxy = true; 
+								collectionStore.add(us); 
+							}
+						}));
+					}
 				});
 				usRemoveList.forEach(function(dep){
 					var realDep = _.find(collectionRecords, function(cr) { return cr.data.FormattedID===dep.USID; });
-					if(realDep) { collectionStore.remove(realDep); syncCollectionProxy = true;}
+					if(realDep) { 
+						collectionStore.remove(realDep); 
+						syncCollectionProxy = true;
+					}
 				});
 				
 				//attempt to sync collection until it passes, 4 == max attempts
 				var attempts = 0;
-				Q.all(promises).then(function retrySync(){
-					if(++attempts > 4){
-						console.log('Quit trying to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
-						funcDeferred.resolve();		
-					}
-					else if(syncCollectionProxy) {
-						collectionStore.sync({ 
-							failure:function(){
-								console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
-								retrySync(); //we will succeed, after 4 attempts we quit
-							},
-							success:function(){ 
-								console.log('Successfully modified ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
-								funcDeferred.resolve(); 
-							} //ignore failures, sigh
-						});
-					}
-					else funcDeferred.resolve();
-				}, function(reason){ 
-					funcDeferred.reject(reason); 
-				});
+				Q.all(promises)
+					.then(function retrySync(){
+						if(++attempts > 4){
+							console.log('Quit trying to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
+							funcDeferred.resolve();		
+						}
+						else if(syncCollectionProxy) {
+							collectionStore.sync({ 
+								failure:function(){
+									console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
+									retrySync(); //we will succeed, after 4 attempts we quit
+								},
+								success:function(){ 
+									console.log('Successfully modified ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
+									funcDeferred.resolve(); 
+								} //ignore failures, sigh
+							});
+						}
+						else funcDeferred.resolve();
+					})
+					.fail(function(reason){ 
+						funcDeferred.reject(reason); 
+					})
+					.done();
 			}
 		});	
 		return funcDeferred.promise;
@@ -993,12 +669,12 @@ Ext.define('ProgramBoard', {
 			str = btoa(JSON.stringify(dependencies, null, '\t')),
 			deferred = Q.defer();
 		if(str.length >= 32768) 
-			deferred.reject('Dependencies field for ' + userStoryRecord.get('FormattedID') + ' ran out of space! Cannot save');
+			deferred.reject('Dependencies field for ' + userStoryRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			userStoryRecord.set('c_Dependencies', str);
 			userStoryRecord.save({
 				callback:function(record, operation, success){
-					if(!success) deferred.reject('Failed to modify User Story ' + userStoryRecord.get('FormattedID'));
+					if(!success) deferred.reject('Failed to modify User Story ' + userStoryRecord.data.FormattedID);
 					else {
 						console.log(msg, userStoryRecord, depData, dependencies);
 						deferred.resolve();
@@ -1057,7 +733,7 @@ Ext.define('ProgramBoard', {
 		}
 			
 		//update or append to the cache, this predDepData
-		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.data.Project.ObjectID === me.ProjectRecord.data.ObjectID){
 			for(i=0;i<cacheSuccs.length; ++i){ //remove suddDep from cache
 				dpds = cacheSuccs[i];
 				//need formattedID because can be multiple same succ DepIDs
@@ -1096,7 +772,7 @@ Ext.define('ProgramBoard', {
 		};
 
 		//update or append to the cache, this predDepData
-		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.data.Project.ObjectID === me.ProjectRecord.data.ObjectID){
 			for(i=0;i<cachePreds.length; ++i){
 				dpdp = cachePreds[i];
 				if(dpdp.DependencyID === predDepData.DependencyID){
@@ -1152,7 +828,7 @@ Ext.define('ProgramBoard', {
 		if(!replaced) dependencies.Succs.push(newSucc);
 
 		//update or append to the cache, this succDepData
-		if(userStoryRecord.get('Project').ObjectID === me.ProjectRecord.get('ObjectID')){
+		if(userStoryRecord.data.Project.ObjectID === me.ProjectRecord.data.ObjectID){
 			for(i=0;i<cacheSuccs.length; ++i){ //update or append to the cache, this succDepData
 				dpds = cacheSuccs[i];
 				//could be multiple succs with same DepID
@@ -1183,16 +859,16 @@ Ext.define('ProgramBoard', {
 			tmpNewUSData = tmpNewUSRecord && tmpNewUSRecord.data,
 			newUSRecord,
 			deferred = Q.defer();
-
+			
 		if(tmpNewUSData && (tmpNewUSData.ObjectID != depData.ObjectID)){ //load new one
-			me._loadUserStory(tmpNewUSData.ObjectID, function(usRecord){
+			me._loadUserStory(tmpNewUSData.ObjectID).then(function(usRecord){
 				newUSRecord = usRecord; 
 				loadOriginalParent();
 			});
 		} else loadOriginalParent();
 
 		function loadOriginalParent(){
-			me._loadUserStory(depData.ObjectID, function(oldUSRecord){
+			me._loadUserStory(depData.ObjectID).then(function(oldUSRecord){
 				newUSRecord = newUSRecord || oldUSRecord; //if depRecord is new...has no ObjectID
 				deferred.resolve([oldUSRecord, newUSRecord]);
 			});
@@ -1241,32 +917,36 @@ Ext.define('ProgramBoard', {
 			permissions = me.getContext().getPermissions(),
 			promises = [];
 		teamDeps.forEach(function(teamDepData){
-			var deferred = Q.defer(), project = me.ValidProjects[teamDepData.PID];
-			promises.push(deferred.promise);
-			if(!permissions.isProjectEditor(project)) deferred.reject('You lack permissions to modify project: ' + project.get('Name'));
-			else me._loadRandomUserStory(project.get('_ref'), function(us){
-				if(!us) deferred.reject('Project ' + project.get('Name') + ' has no user stories, cannot continue');
-				else deferred.resolve(function(){ 
-					teamDepData.USID = us.get('FormattedID');
-					teamDepData.USName = us.get('Name');
-					var succDep = {
-						DependencyID: predDepData.DependencyID,
-						SuccUserStoryName: predDepData.UserStoryName,
-						SuccFormattedID: predDepData.FormattedID,
-						SuccProjectID: me.ProjectRecord.get('ObjectID'),
-						UserStoryName: '', //not assigned yet 
-						FormattedID: '',  //not assigned yet
-						Description: predDepData.Description,
-						Checkpoint: predDepData.Checkpoint,
-						Supported: 'No',
-						Assigned: false,
-						ReleaseStartDate: me.ReleaseRecord.get('ReleaseStartDate'),
-						ReleaseDate: me.ReleaseRecord.get('ReleaseDate'),
-						Edited: false
-					};
-					return me._addSuccDep(us, succDep); //return promise
-				});
-			});
+			var project = me.ValidProjects[teamDepData.PID];
+			if(!permissions.isProjectEditor(project)) 
+				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
+			else {
+				promises.push(me._loadRandomUserStory(project.data._ref).then(function(us){
+					if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories, cannot continue');
+					else {
+						return Q(function(){ 
+							teamDepData.USID = us.data.FormattedID;
+							teamDepData.USName = us.data.Name;
+							var succDep = {
+								DependencyID: predDepData.DependencyID,
+								SuccUserStoryName: predDepData.UserStoryName,
+								SuccFormattedID: predDepData.FormattedID,
+								SuccProjectID: me.ProjectRecord.data.ObjectID,
+								UserStoryName: '', //not assigned yet 
+								FormattedID: '',  //not assigned yet
+								Description: predDepData.Description,
+								Checkpoint: predDepData.Checkpoint,
+								Supported: 'No',
+								Assigned: false,
+								ReleaseStartDate: new Date(me.ReleaseRecord.data.ReleaseStartDate)*1,
+								ReleaseDate: new Date(me.ReleaseRecord.data.ReleaseDate)*1,
+								Edited: false
+							};
+							return me._addSuccDep(us, succDep); //return promise
+						});
+					}
+				}));
+			}
 		});
 		return Q.all(promises);
 	},
@@ -1276,46 +956,50 @@ Ext.define('ProgramBoard', {
 			permissions = me.getContext().getPermissions(),
 			promises = [];
 		teamDeps.forEach(function(teamDepData){
-			var deferred = Q.defer(), project = me.ValidProjects[teamDepData.PID];
-			promises.push(deferred.promise);
-			if(!permissions.isProjectEditor(project)) deferred.reject('You lack permissions to modify project: ' + project.get('Name'));
-			else me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
-				var succDep = {
-					DependencyID: predDepData.DependencyID,
-					SuccUserStoryName: predDepData.UserStoryName,
-					SuccFormattedID: predDepData.FormattedID,
-					SuccProjectID: me.ProjectRecord.get('ObjectID'),
-					Description: predDepData.Description,
-					Checkpoint: predDepData.Checkpoint,
-					ReleaseStartDate: me.ReleaseRecord.get('ReleaseStartDate'),
-					ReleaseDate: me.ReleaseRecord.get('ReleaseDate'),
-					Supported: teamDepData.Sup,
-					Edited: false
-				};
-				if(!us){
-					me._loadRandomUserStory(project.get('_ref'), function(us){
-						if(!us) deferred.reject('Project ' + project.get('Name') + ' has no user stories, cannot continue');
-						else deferred.resolve(function(){ // got deleted from user story
-							teamDepData.USID = us.get('FormattedID');
-							teamDepData.USName = us.get('Name');
-							teamDepData.A = false;
-							
-							succDep.UserStoryName = '';
-							succDep.FormattedID = '';
-							succDep.Assigned = false;						
+			var project = me.ValidProjects[teamDepData.PID];
+			if(!permissions.isProjectEditor(project)) 
+				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
+			else {
+				promises.push(me._loadUserStoryByFID(teamDepData.USID, project.data._ref).then(function(us){
+					var succDep = {
+						DependencyID: predDepData.DependencyID,
+						SuccUserStoryName: predDepData.UserStoryName,
+						SuccFormattedID: predDepData.FormattedID,
+						SuccProjectID: me.ProjectRecord.data.ObjectID,
+						Description: predDepData.Description,
+						Checkpoint: predDepData.Checkpoint,
+						ReleaseStartDate: new Date(me.ReleaseRecord.data.ReleaseStartDate)*1,
+						ReleaseDate: new Date(me.ReleaseRecord.data.ReleaseDate)*1,
+						Supported: teamDepData.Sup,
+						Edited: false
+					};
+					if(!us){
+						return me._loadRandomUserStory(project.data._ref).then(function(us){
+							if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories, cannot continue');
+							else {
+								return Q(function(){ // got deleted from user story
+									teamDepData.USID = us.data.FormattedID;
+									teamDepData.USName = us.data.Name;
+									teamDepData.A = false;
+									
+									succDep.UserStoryName = '';
+									succDep.FormattedID = '';
+									succDep.Assigned = false;						
+									return me._addSuccDep(us, succDep); //return promise
+								});
+							}
+						});
+					}
+					else{
+						return Q(function(){
+							succDep.UserStoryName = teamDepData.USName;
+							succDep.FormattedID = teamDepData.USID;
+							succDep.Assigned = teamDepData.A;
 							return me._addSuccDep(us, succDep); //return promise
 						});
-					});
-				}
-				else{
-					deferred.resolve(function(){
-						succDep.UserStoryName = teamDepData.USName;
-						succDep.FormattedID = teamDepData.USID;
-						succDep.Assigned = teamDepData.A;
-						return me._addSuccDep(us, succDep); //return promise
-					});
-				}
-			});
+					}
+				}));
+			}
 		});
 		return Q.all(promises);
 	},
@@ -1325,97 +1009,107 @@ Ext.define('ProgramBoard', {
 			permissions = me.getContext().getPermissions(),
 			promises = [];
 		teamDeps.forEach(function(teamDepData){
-			var deferred = Q.defer(), project = me.ValidProjects[teamDepData.PID];
-			promises.push(deferred.promise);
-			if(!permissions.isProjectEditor(project)) deferred.reject('You lack permissions to modify project: ' + project.get('Name'));
-			else me._loadUserStoryByFID(teamDepData.USID, project.get('_ref'), function(us){
-				if(!us) deferred.resolve(function(){}); // looks as if the userStory doesn't exist. so we ignore it
-				else deferred.resolve(function(){
-					var succDepData = { //we only need these fields to delete it!
-						FormattedID: teamDepData.USID,
-						DependencyID: predDepData.DependencyID
-					};
-					return me._removeSuccDep(us, succDepData);
-				});
-			});
+			var project = me.ValidProjects[teamDepData.PID];
+			if(!permissions.isProjectEditor(project)) 
+				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
+			else {
+				promises.push(me._loadUserStoryByFID(teamDepData.USID, project.data._ref).then(function(us){
+					if(!us) return Q(function(){}); // looks as if the userStory doesn't exist. so we ignore it
+					else {
+						return Q(function(){
+							var succDepData = { //we only need these fields to delete it!
+								FormattedID: teamDepData.USID,
+								DependencyID: predDepData.DependencyID
+							};
+							return me._removeSuccDep(us, succDepData);
+						});
+					}
+				}));
+			}
 		});
 		return Q.all(promises);
 	},
 
+	/** returns some errors in an array to signal to delete the dependency 
+			because the fail was causes by the dependency being out of sync
+	*/
 	_updateSuccessor: function(succDepData, newUSRecord){
 		var me=this, 
 			permissions = me.getContext().getPermissions(),
-			deferred = Q.defer();
-		
-		var project = me.ValidProjects[succDepData.SuccProjectID];
+			project = me.ValidProjects[succDepData.SuccProjectID];
 		if(!permissions.isProjectEditor(project)) 
-			deferred.reject('You lack permissions to modify project: ' + project.data.Name);
-		else me._loadUserStoryByFID(succDepData.SuccFormattedID, project.data._ref, function(us){	
-			if(!us) deferred.reject(['Successor UserStory has been deleted.']);
-			else {
-				var deps = me._getDependencies(us);
-				var rppData = deps.Preds[succDepData.DependencyID];
-				if(rppData){
-					var predDepData = {
-						DependencyID: succDepData.DependencyID,
-						FormattedID: us.data.FormattedID,
-						UserStoryName: us.data.Name,
-						Description: rppData.Desc,
-						Checkpoint: rppData.CP,
-						Status: rppData.Sta,
-						Predecessors: rppData.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
-						Edited: false //not in pending edit mode
-					};
-					var predecessors = predDepData.Predecessors;
-					for(var i = 0;i<predecessors.length;++i){
-						//have to make sure this dep is actually in the JSON teamDep object
-						if(predecessors[i].PID == me.ProjectRecord.data.ObjectID){ 
-							predecessors[i].Sup = succDepData.Supported;
-							predecessors[i].USID = newUSRecord.data.FormattedID;
-							predecessors[i].USName = newUSRecord.data.Name;
-							predecessors[i].A = succDepData.Assigned;
-							deferred.resolve(me._addPredDep(us, predDepData));
-							return;
+			return Q.reject('You lack permissions to modify project: ' + project.data.Name);
+		else {
+			return me._loadUserStoryByFID(succDepData.SuccFormattedID, project.data._ref).then(function(us){	
+				if(!us) return Q.reject(['Successor UserStory has been deleted.']);
+				else {
+					var deps = me._getDependencies(us);
+					var rppData = deps.Preds[succDepData.DependencyID];
+					if(rppData){
+						var predDepData = {
+							DependencyID: succDepData.DependencyID,
+							FormattedID: us.data.FormattedID,
+							UserStoryName: us.data.Name,
+							Description: rppData.Desc,
+							Checkpoint: rppData.CP,
+							Status: rppData.Sta,
+							Predecessors: rppData.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
+							Edited: false //not in pending edit mode
+						};
+						var predecessors = predDepData.Predecessors;
+						for(var i = 0;i<predecessors.length;++i){
+							//have to make sure this dep is actually in the JSON teamDep object
+							if(predecessors[i].PID == me.ProjectRecord.data.ObjectID){ 
+								predecessors[i].Sup = succDepData.Supported;
+								predecessors[i].USID = newUSRecord.data.FormattedID;
+								predecessors[i].USName = newUSRecord.data.Name;
+								predecessors[i].A = succDepData.Assigned;
+								return Q(me._addPredDep(us, predDepData));
+							}
 						}
+						return Q.reject(['Successor removed this dependency.']);
 					}
-					deferred.reject(['Successor removed this dependency.']);
-				}
-				else deferred.reject(['Successor removed this dependency.']);
-			} 
-		});
-		return deferred.promise;
+					else return Q.reject(['Successor removed this dependency.']);
+				} 
+			});
+		}
 	},
 	
 	/************************************************** Preferences FUNCTIONS ***************************************************/
 	
-	_loadPreferences: function(cb){ //parse all settings too
-		var uid = this.getContext().getUser().ObjectID;
+	_loadPreferences: function(){ //parse all settings too
+		var me=this,
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
-			appID: this.getAppId(),
+			appID: me.getAppId(),
       filterByName:preferenceName+ uid,
 			success: function(prefs) {
 				var appPrefs = prefs[preferenceName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}, refresh:30};}
-				this.AppPrefs = appPrefs;
 				console.log('loaded prefs', appPrefs);
-        cb();
+				deferred.resolve(appPrefs);
 			},
-			scope:this
+			failure: deferred.reject
 		});
+		return deferred.promise;
 	},
 
-	_savePreferences: function(prefs, cb){ // stringify and save only the updated settings
-		var s = {}, uid = this.getContext().getUser().ObjectID;
+	_savePreferences: function(prefs){ // stringify and save only the updated settings
+		var me=this, s = {}, 
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
     s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
 			appID: this.getAppId(),
 			settings: s,
-			success: cb,
-			scope:this
+			success: deferred.resolve,
+			failure: deferred.reject
 		});
+		return deferred.promise;
 	},
 	
 	/************************************************** MISC HELPERS ***************************************************/
@@ -1445,8 +1139,16 @@ Ext.define('ProgramBoard', {
 			if(records[i].data.Edited) return true;
 		return false;
 	},
+		
+	_showGrids: function(){
+		var me=this;
+		me._loadTeamCommitsGrid();
+		me._loadVelocityGrid(); 
+		me._loadRisksGrid();
+		me._loadDependenciesGrids();
+	},
 	
-	_updateAllGrids: function(){ //synchronous function
+	_updateGrids: function(){ //synchronous function
 		var me=this,
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
 			isEditingDeps = me._isEditing(me.CustomPredDepStore) || me._isEditing(me.CustomSuccDepStore);
@@ -1460,7 +1162,7 @@ Ext.define('ProgramBoard', {
 			if(me.CustomRisksStore) me.CustomRisksStore.intelUpdate();
 		}
 		if(!isEditingDeps && me.UserStoryStore && me.FeatureStore){
-			me._buildDependenciesData(); //reparse the data
+			me._parseDependenciesData(); //reparse the data
 			me._updateUSColumnStores();
 			if(me.CustomPredDepStore) me.CustomPredDepStore.intelUpdate();
 			if(me.CustomSuccDepStore) me.CustomSuccDepStore.intelUpdate();
@@ -1473,34 +1175,20 @@ Ext.define('ProgramBoard', {
 			isEditingDeps = me._isEditing(me.CustomPredDepStore) || me._isEditing(me.CustomSuccDepStore),
 			promises = [];
 		if(!me._isEditingVelocity){
-			var def1 = Q.defer();
-			if(me.IterationStore) me.IterationStore.load({ callback: def1.resolve});
-			else me._loadIterations(def1.resolve);
-			promises.push(def1.promise);
+			if(me.IterationStore) promises.push(me._reloadStore(me.IterationStore));
+			else promises.push(me._loadIterations());
 		}
 		if(!me._isEditingTeamCommits && !isEditingRisks){
-			var def2 = Q.defer();
-			if(me.FeatureStore) me.FeatureStore.load({ callback: def2.resolve});
-			else me._loadFeatures(def2.resolve);
-			promises.push(def2.promise);
+			if(me.FeatureStore) promises.push(me._reloadStore(me.FeatureStore));
+			else promises.push(me._loadFeatures());
 		}
 		if(!me._isEditingVelocity && !me._isEditingTeamCommits && !isEditingDeps){
-			var def3 = Q.defer();
-			if(me.UserStoryStore) me.UserStoryStore.load({ callback: def3.resolve});
-			else me._loadUserStories(def3.resolve);
-			promises.push(def3.promise);
+			if(me.UserStoryStore) promises.push(me._reloadStore(me.UserStoryStore));
+			else promises.push(me._loadUserStories());
 		}
 		return Q.all(promises);
 	},
-	
-	_storesReloaded: function(){
-		var me=this;
-		me._loadTeamCommitsGrid();
-		me._loadVelocityGrid(); 
-		me._loadRisksGrid();
-		me._loadDependenciesGrids();
-	},
-	
+
 	_reloadEverything:function(){
 		var me = this;
 		me._isEditingTeamCommits = false;
@@ -1538,15 +1226,23 @@ Ext.define('ProgramBoard', {
 			me._loadRefreshIntervalCombo();
 			me._loadManualRefreshButton();
 		}		
-		me._reloadStores()
-			.then(function(){ 
-				me._updateAllGrids();
-			})
-			.then(function(){
-				me.setLoading(false);
-				me._storesReloaded();
-			})
-			.done();
+		me._enqueue(function(unlockFunc){
+			me._reloadStores()
+				.then(function(){
+					me._updateGrids();
+				})
+				.then(function(){
+					me.setLoading(false);
+					me._showGrids();
+					unlockFunc();
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason);
+					unlockFunc();
+				})
+				.done();
+		});
 	},
 	
 	/******************************************************* REFRESHING WSAPI DATA ***********************************************/
@@ -1563,26 +1259,35 @@ Ext.define('ProgramBoard', {
 	},
 	
 	_removeLoadingMasks: function(){
-		var me=this;
-		if(me.TeamCommitsGrid) me.TeamCommitsGrid.setLoading(false);
-		if(me.VelocityGrid) me.VelocityGrid.setLoading(false);
-		if(me.RisksGrid) me.RisksGrid.setLoading(false);
-		if(me.PredDepGrid) me.PredDepGrid.setLoading(false);
-		if(me.SuccDepGrid) me.SuccDepGrid.setLoading(false);
+		var me=this,
+			isEditingRisks = me._isEditing(me.CustomRisksStore),
+			isEditingDeps = me._isEditing(me.CustomPredDepStore) || me._isEditing(me.CustomSuccDepStore);		
+		if(me.TeamCommitsGrid && !me._isEditingTeamCommits) me.TeamCommitsGrid.setLoading(false);
+		if(me.VelocityGrid && !me._isEditingVelocity) me.VelocityGrid.setLoading(false);
+		if(me.RisksGrid && !isEditingRisks) me.RisksGrid.setLoading(false);
+		if(me.PredDepGrid && !isEditingDeps) me.PredDepGrid.setLoading(false);
+		if(me.SuccDepGrid && !isEditingDeps) me.SuccDepGrid.setLoading(false);
 	},
 	
 	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
 		var me=this;
-		me._setLoadingMasks();	
-		me._reloadStores()
-			.then(function(){ 
-				me._updateAllGrids();
-			})
-			.then(function(){
-				me._removeLoadingMasks();
-				me._fireParentWindowEvent('resize');
-			})
-			.done();
+		me._enqueue(function(unlockFunc){
+			me._setLoadingMasks();
+			me._reloadStores()
+				.then(function(){
+					me._updateGrids();
+				})
+				.then(function(){
+					me._removeLoadingMasks();
+					unlockFunc();
+				})
+				.fail(function(reason){
+					me._alert('ERROR', reason);
+					me._removeLoadingMasks();
+					unlockFunc();
+				})
+				.done();
+		});
 	},
 	
 	_setRefreshInterval: function(){
@@ -1596,154 +1301,169 @@ Ext.define('ProgramBoard', {
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-	_releasesLoaded: function(releaseStore){ //finally we can render!!!
-		var me=this;
-		me.ReleaseStore = releaseStore;
-		var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.ProjectRecord.data.ObjectID, me.AppPrefs);
-		if(currentRelease){
-			me.ReleaseRecord = currentRelease;
-			console.log('release loaded', currentRelease);
-			me._setRefreshInterval(); 
-			me._reloadEverything();
-		} else {
-			me.setLoading(false);
-			me._alert('ERROR', 'This team has no releases');
-		}
-	},
-	
-	_trainRecordLoaded: function(trainRecord){ //now we set the TrainRecord based on trainRecord and this.AppPrefs
-		var me=this;
-		if(trainRecord)	me.TrainRecord = trainRecord;
-		else {
-			me.ProjectNotInTrain = true;
-			var pid = me.ProjectRecord.get('ObjectID');
-			if(me.AppPrefs.projs[pid] && me.AppPrefs.projs[pid].Train) {
-				me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('ObjectID', me.AppPrefs.projs[pid].Train);
-				if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecordsStore.first();
-			}
-			else me.TrainRecord = me.AllTrainRecordsStore.first();
-		}
-		console.log('train loaded:', trainRecord);
-		me._loadReleasesInTheFuture(me.ProjectRecord).then(me._releasesLoaded.bind(me));
-	},
-	
-	_allTrainRecordsLoaded: function(){
-		this._projectInWhichTrain(this.ProjectRecord, this._trainRecordLoaded.bind(this));
-	},
-	
-	_preferencesLoaded: function(){
-		this._loadAllTrains(this._allTrainRecordsLoaded.bind(this));
-	},
-	
-	_validProjectsLoaded: function(){
-		this.ProjectRecord = this.ValidProjects[this.ProjectRecord.get('ObjectID')];
-		if(this.ProjectRecord) this._loadPreferences(this._preferencesLoaded.bind(this));
-		else{
-			this.removeAll();
-			this._alert('ERROR', 'Please scope to a team that has members');
-		}
-	},
-	
-	_rootProjectLoaded: function(){
-		this._loadValidProjects(this._validProjectsLoaded.bind(this));
-	},
-	
-	_currentProjectLoaded: function(scopeProjectRecord){
-		this.ProjectRecord = scopeProjectRecord;
-		this._loadRootProject(scopeProjectRecord, this._rootProjectLoaded.bind(this));
-	},
-	
-	_modelsLoaded: function(){
-		var scopeProject = this.getContext().getProject();
-		this._loadProject(scopeProject.ObjectID, this._currentProjectLoaded.bind(this));
-	},
-	
+
 	launch: function(){
 		var me=this;
 		me.setLoading(true);
-		me._initPrettyAlert();
-		me._initIframeResize();	
+		me._initDisableResizeHandle();
+		me._initFixRallyDashboard();
 		if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 			me.setLoading(false);
 			me._alert('ERROR', 'You do not have permissions to edit this project');
 		} 
-		else me._loadModels(me._modelsLoaded.bind(me));
+		else {
+			me._loadModels()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me._loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return me._loadRootProject(scopeProjectRecord);
+				})
+				.then(function(rootProject){
+					me.RootProject = rootProject;
+					return me._loadValidProjects(rootProject);
+				})
+				.then(function(validProjects){
+					me.ValidProjects = validProjects;
+					me.ProjectNames = [];
+					for(var projOID in validProjects){
+						me.ProjectNames.push({Name: validProjects[projOID].data.Name });
+					}
+					if(me.ValidProjects[me.ProjectRecord.data.ObjectID]) return me._loadPreferences();
+					else Q.reject('Please scope to a team that has members');
+				})
+				.then(function(appPrefs){
+					me.AppPrefs = appPrefs;
+					return me._loadAllTrains(me.RootProject);
+				})
+				.then(function(allTrainStore){
+					var trainRecs = allTrainStore.data.items;
+					me.AllTrainRecordsStore = allTrainStore;
+					me.TrainNames = [];
+					for(var i=0, len=trainRecs.length; i<len; ++i){
+						me.TrainNames[i] = {Name: trainRecs[i].data.Name.split(' ART')[0]};
+					}
+					return me._projectInWhichTrain(me.ProjectRecord);
+				})
+				.then(function(trainRecord){
+					if(trainRecord)	me.TrainRecord = trainRecord;
+					else {
+						me.ProjectNotInTrain = true;
+						var pid = me.ProjectRecord.data.ObjectID;
+						if(me.AppPrefs.projs[pid] && me.AppPrefs.projs[pid].Train) {
+							me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('ObjectID', me.AppPrefs.projs[pid].Train);
+							if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecordsStore.first();
+						}
+						else me.TrainRecord = me.AllTrainRecordsStore.first();
+					}
+					console.log('train loaded:', trainRecord);
+					return me._loadReleasesInTheFuture(me.ProjectRecord);
+				})
+				.then(function(releaseStore){		
+					me.ReleaseStore = releaseStore;
+					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
+					if(currentRelease){
+						me.ReleaseRecord = currentRelease;
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						console.log('release loaded', currentRelease);
+						me._setRefreshInterval(); 
+						me._reloadEverything();
+					}
+					else return Q.reject('This train has no releases.');
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason || '');
+				})
+				.done();
+		}
 	},
-
-	/******************************************************* RENDER TOP BAR ITEMS********************************************************/	
+	
+	/************************************************ NAVIGATION AND STATE ****************************************************/
 	
 	_releasePickerSelected: function(combo, records){
-		if(this.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-		this.setLoading(true);
-		this.ReleaseRecord = this.ReleaseStore.findExactRecord('Name', records[0].get('Name'));			
-		var pid = this.ProjectRecord.get('ObjectID');		
-		if(typeof this.AppPrefs.projs[pid] !== 'object') this.AppPrefs.projs[pid] = {};
-		this.AppPrefs.projs[pid].Release = this.ReleaseRecord.get('ObjectID');
-		this._savePreferences(this.AppPrefs, this._reloadEverything.bind(this));
+		var me=this;
+		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+		me.setLoading(true);
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		var pid = me.ProjectRecord.data.ObjectID;		
+		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+		me._savePreferences(me.AppPrefs)
+			.then(function(){ me._reloadEverything(); })
+			.fail(function(reason){
+				me._alert('ERROR', reason || '');
+				me.setLoading(false);
+			})
+			.done();
 	},
 				
 	_loadReleasePicker: function(){
-		this.ReleasePicker = this.down('#navbox_left').add({
-			xtype:'combobox',
-			width:240,
+		var me=this;
+		me.ReleasePicker = me.down('#navbox_left').add({
+			xtype:'intelreleasepicker',
 			padding:'0 10px 0 0',
-			labelWidth:50,
-			store: Ext.create('Ext.data.Store', {
-				fields: ['Name'],
-				data: _.map(this.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
-			}),
-			displayField: 'Name',
-			fieldLabel: 'Release:',
-			editable:false,
-			value:this.ReleaseRecord.get('Name'),
+			releases: me.ReleaseStore.data.items,
+			currentRelease: me.ReleaseRecord,
 			listeners: {
-				select: this._releasePickerSelected.bind(this)
+				select: me._releasePickerSelected.bind(me)
 			}
 		});
 	},
 	
 	_trainPickerSelected: function(combo, records){
-		if(this.TrainRecord.get('Name').indexOf(records[0].get('Name')) === 0) return;
-		this.setLoading(true);
-		this.TrainRecord = this.AllTrainRecordsStore.findRecord('Name', records[0].get('Name'));			
-		var pid = this.ProjectRecord.get('ObjectID');
-		if(typeof this.AppPrefs.projs[pid] !== 'object') this.AppPrefs.projs[pid] = {};
-		this.AppPrefs.projs[pid].Train = this.TrainRecord.get('ObjectID');
-		this._savePreferences(this.AppPrefs, this._reloadEverything.bind(this));
+		var me=this;
+		if(me.TrainRecord.data.Name.indexOf(records[0].data.Name) === 0) return;
+		me.setLoading(true);
+		me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('Name', records[0].data.Name);			
+		var pid = me.ProjectRecord.data.ObjectID;
+		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+		me.AppPrefs.projs[pid].Train = me.TrainRecord.data.ObjectID;
+		me._savePreferences(me.AppPrefs)
+			.then(function(){ me._reloadEverything(); })
+			.fail(function(reason){
+				me._alert('ERROR', reason || '');
+				me.setLoading(false);
+			})
+			.done();
 	},
 	
 	_loadTrainPicker: function(){
-		if(this.ProjectNotInTrain){
-			this.down('#navbox_left').add({
-				xtype:'combobox',
+		var me=this;
+		if(me.ProjectNotInTrain){
+			me.down('#navbox_left').add({
+				xtype:'intelfixedcombo',
 				width:240,
 				labelWidth:40,
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],
-					data: this.TrainNames
+					data: me.TrainNames
 				}),
 				displayField: 'Name',
 				fieldLabel: 'Train:',
-				editable:false,
-				value:this.TrainRecord.get('Name').split(' ART')[0],
+				value:me.TrainRecord.data.Name.split(' ART')[0],
 				listeners: {
-					select: this._trainPickerSelected.bind(this)
+					select: me._trainPickerSelected.bind(me)
 				}
 			});
 		}
 	},
 	
 	_refreshComboSelected: function(combo, records){
-		var rate = records[0].get('Rate');
-		if(this.AppPrefs.refresh === rate) return;
-		this.AppPrefs.refresh = rate;
-		this._setRefreshInterval();
-		this._savePreferences(this.AppPrefs);
+		var me=this, 
+			rate = records[0].data.Rate;
+		if(me.AppPrefs.refresh === rate) return;
+		me.AppPrefs.refresh = rate;
+		me._setRefreshInterval();
+		me._savePreferences(me.AppPrefs);
 	},
 				
 	_loadRefreshIntervalCombo: function(){
-		this.down('#navbox_right').add({
-			xtype:'combobox',
+		var me=this;
+		me.down('#navbox_right').add({
+			xtype:'intelfixedcombo',
 			store: Ext.create('Ext.data.Store', {
 				fields: ['Rate'],
 				data: [
@@ -1757,22 +1477,22 @@ Ext.define('ProgramBoard', {
 			}),
 			displayField: 'Rate',
 			fieldLabel: 'Auto-Refresh Rate (seconds):',
-			editable:false,
-			value:this.AppPrefs.refresh,
+			value:me.AppPrefs.refresh,
 			listeners: {
-				select: this._refreshComboSelected.bind(this)
+				select: me._refreshComboSelected.bind(me)
 			}
 		});
 	},
 	
 	_loadManualRefreshButton: function(){
-		this.down('#navbox_right').add({
+		var me=this;
+		me.down('#navbox_right').add({
 			xtype:'button',
 			text:'Refresh Data',
 			style:'margin: 5px 0 0 5px',
 			width:100,
 			listeners:{
-				click: this._refreshDataFunc.bind(this)
+				click: me._refreshDataFunc.bind(me)
 			}
 		});
 	},
@@ -1786,15 +1506,15 @@ Ext.define('ProgramBoard', {
 		me._TeamCommitsEstimateHash = {};
 		
 		var customTeamCommitsRecords = _.map(me.FeatureStore.getRecords(), function(featureRecord){
-			var tc = me._getTeamCommit(featureRecord), ed = featureRecord.get('PlannedEndDate');
+			var tc = me._getTeamCommit(featureRecord);
 			return {
 				Commitment: tc.Commitment || 'Undecided',
 				Objective: tc.Objective || '',
-				Name: featureRecord.get('Name'),
-				FormattedID: featureRecord.get('FormattedID'),
-				ObjectID: featureRecord.get('ObjectID'),
-				Product: me.FeatureProductHash[featureRecord.get('ObjectID')],
-				PlannedEnd: (ed ? 'WW' + me._getWorkweek(new Date(ed)) : '-') //planned end in workweeks
+				Name: featureRecord.data.Name,
+				FormattedID: featureRecord.data.FormattedID,
+				ObjectID: featureRecord.data.ObjectID,
+				Product: me.FeatureProductHash[featureRecord.data.ObjectID],
+				PlannedEnd: new Date(featureRecord.data.PlannedEndDate)*1
 			};
 		});		
 		
@@ -1813,12 +1533,12 @@ Ext.define('ProgramBoard', {
 				tcStore.suspendEvents(true);
 				console.log('syncing teamCommits with features', tcRecords, me.FeatureStore.getRecords());
 				tcRecords.forEach(function(tcRecord){
-					var featureRecord = me.FeatureStore.findRecord('ObjectID', tcRecord.get('ObjectID'));
+					var featureRecord = me.FeatureStore.findExactRecord('ObjectID', tcRecord.data.ObjectID);
 					if(featureRecord) {
 						var newVal = me._getTeamCommit(featureRecord);
-						if(tcRecord.get('Commitment') != newVal.Commitment)
+						if(tcRecord.data.Commitment != newVal.Commitment)
 							tcRecord.set('Commitment', newVal.Commitment || 'Undecided');
-						if(tcRecord.get('Objective') != (newVal.Objective || ''))
+						if(tcRecord.data.Objective != (newVal.Objective || ''))
 							tcRecord.set('Objective', newVal.Objective || '');
 					}
 				});
@@ -1837,9 +1557,9 @@ Ext.define('ProgramBoard', {
 				resizable:false,
 				renderer:function(FID){
 					var feature = me.FeatureStore.findExactRecord('FormattedID', FID);
-					if(feature.get('Project')) {
-						return '<a href="https://rally1.rallydev.com/#/' + feature.get('Project').ObjectID + 'd/detail/portfolioitem/feature/' + 
-								feature.get('ObjectID') + '" target="_blank">' + FID + '</a>';
+					if(feature.data.Project) {
+						return '<a href="https://rally1.rallydev.com/#/' + feature.data.Project.ObjectID + 'd/detail/portfolioitem/feature/' + 
+								feature.data.ObjectID + '" target="_blank">' + FID + '</a>';
 					}
 					else return FID;
 				}
@@ -1866,7 +1586,7 @@ Ext.define('ProgramBoard', {
 					var field = this.getSortParam();
 					ds.sort({
 						sorterFn: function(f1, f2){ //sort by stories for this team in each feature
-							var diff = me._getStoryCount(f1.get('ObjectID')) - me._getStoryCount(f2.get('ObjectID'));
+							var diff = me._getStoryCount(f1.data.ObjectID) - me._getStoryCount(f2.data.ObjectID);
 							if(diff === 0) return 0;
 							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
 						}
@@ -1887,7 +1607,7 @@ Ext.define('ProgramBoard', {
 					var field = this.getSortParam();
 					ds.sort({
 						sorterFn: function(f1, f2){ //sort by stories for this team in each feature
-							var diff = me._getStoriesEstimate(f1.get('ObjectID')) - me._getStoriesEstimate(f2.get('ObjectID'));
+							var diff = me._getStoriesEstimate(f1.data.ObjectID) - me._getStoriesEstimate(f2.data.ObjectID);
 							if(diff === 0) return 0;
 							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
 						}
@@ -1903,7 +1623,10 @@ Ext.define('ProgramBoard', {
 				sortable:true, 
 				editor:false,
 				resizable:false,
-				width:70
+				width:70,
+				renderer: function(ed){
+					return (ed ? 'ww' + me._getWorkweek(new Date(ed)) : '-');
+				}
 			},{
 				dataIndex:'Commitment',
 				text:'Status',	
@@ -1912,35 +1635,24 @@ Ext.define('ProgramBoard', {
 				sortable:true, 
 				resizable:false,
 				editor:{
-					xtype:'combobox',
+					xtype:'intelfixedcombo',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Status'],
 						data:[
-							{'Status':'Undecided'},
-							{'Status':'N/A'},
-							{'Status':'Committed'},
-							{'Status':'Not Committed'}
+							{Status:'Undecided'},
+							{Status:'N/A'},
+							{Status:'Committed'},
+							{Status:'Not Committed'}
 						]
 					}),
-					editable: false,
-					displayField: 'Status',
-					listeners:{
-						focus: function(combo) {
-							combo.expand();
-						}
-					}
+					displayField: 'Status'
 				}
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
 				flex:1,
-				editor: {
-					xtype: 'textarea',
-					grow:true,
-					growMin:20,
-					growMax:160,
-					enterIsSpecial:true
-				},
+				tdCls: 'intel-editor-cell',	
+				editor: 'inteltextarea',
 				resizable:false,
 				sortable:false,
 				renderer: function(val){ return val || '-'; }
@@ -1950,19 +1662,19 @@ Ext.define('ProgramBoard', {
 		me.TeamCommitsGrid = me.down('#tc_vel_box').add({
 			xtype: 'rallygrid',
       title: "Team Commits",
-			//width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20), //770
 			height:300,
 			flex:2,
 			padding:'0 20px 0 0',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
+			disableSelection: true,
 			plugins: [ 'fastcellediting' ],
 			viewConfig:{
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(tcRecord, index, rowParams, store){
-					var val = tcRecord.get('Commitment') || 'Undecided';					
+					var val = tcRecord.data.Commitment || 'Undecided';					
 					if(val == 'N/A') return 'grey-row';
 					if(val == 'Committed') return 'green-row';
 					if(val == 'Not Committed') return 'red-row';
@@ -1977,34 +1689,42 @@ Ext.define('ProgramBoard', {
 				},
 				edit: function(editor, e){
 					var grid = e.grid, tcRecord = e.record,
-						field = e.field, value = e.value, originalValue = e.originalValue;					
-					
-					me._isEditingTeamCommits = false;
-					
-					if(value === originalValue) return; 
-					if(field==='Objective'){
+						field = e.field, value = e.value, originalValue = e.originalValue;						
+					if(value === originalValue) {
+						me._isEditingTeamCommits = false;
+						return; 
+					}
+					else if(!value) { 
+						tcRecord.set(field, originalValue); 
+						me._isEditingTeamCommits = false;
+						return; 
+					}
+					else if(field==='Objective'){
 						value = me._htmlEscape(value);			
 						tcRecord.set(field, value);
 					}
-					
-					var tc = {Commitment: tcRecord.get('Commitment'), Objective: tcRecord.get('Objective') };
-					
-					me._isEditingTeamCommits = true;
+					var tc = {
+						Commitment: tcRecord.data.Commitment, 
+						Objective: tcRecord.data.Objective 
+					};	
 					me.TeamCommitsGrid.setLoading(true);
-					me._loadFeature(tcRecord.get('ObjectID'), function(realFeature){
-						if(!realFeature) {
-							console.log('ERROR: realFeature not found, ObjectID: ' + oid);
-							me._isEditingTeamCommits = false;
+					me._enqueue(function(unlockFunc){
+						me._loadFeature(tcRecord.data.ObjectID).then(function(realFeature){
+							if(!realFeature) console.log('ERROR: realFeature not found, ObjectID: ' + oid);
+							else return me._setTeamCommit(realFeature, tc);
+						})
+						.then(function(){ 
 							me.TeamCommitsGrid.setLoading(false);
-						} else {
-							me._setTeamCommit(realFeature, tc)
-								.then(function(){			
-									me._isEditingTeamCommits = false;
-									me.TeamCommitsGrid.setLoading(false);
-								})
-								.fail(function(reason){ me._alert('ERROR', reason); })
-								.done();
-						}
+							me._isEditingTeamCommits = false;
+							unlockFunc();
+						})
+						.fail(function(reason){ 
+							me._alert('ERROR', reason);
+							me.TeamCommitsGrid.setLoading(false); 
+							me._isEditingTeamCommits = false;
+							unlockFunc();
+						})
+						.done();
 					});
 				}
 			},
@@ -2019,16 +1739,16 @@ Ext.define('ProgramBoard', {
 	_loadVelocityGrid: function() {
 		var me = this;	
 		var iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
-			return us.get('Iteration') ? us.get("Iteration").Name : '__DELETE__' ; });
+			return us.data.Iteration ? us.data.Iteration.Name : '__DELETE__' ; });
 		delete iterationGroups.__DELETE__; //ignore those not in an iteration
         
     var iterationGroupTotals = _.sortBy(_.map(me.IterationStore.getRecords(), function(iteration) {
-			var iName = iteration.get('Name');
+			var iName = iteration.data.Name;
 			return {    
 				Name:iName, 
-				PlannedVelocity: iteration.get('PlannedVelocity') || 0,
+				PlannedVelocity: iteration.data.PlannedVelocity || 0,
 				RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) {
-						return sum + us.get("PlanEstimate");
+						return sum + us.data.PlanEstimate;
 				}, 0)
 			};
 		}), 'Name');
@@ -2048,11 +1768,11 @@ Ext.define('ProgramBoard', {
 				velStore.suspendEvents(true);
 				console.log('syncing velocity with current iterations', velRecords, me.IterationStore.getRecords());
 				velRecords.forEach(function(velRecord){
-					var iterationName = velRecord.get('Name');
+					var iterationName = velRecord.data.Name;
 					var iteration = me.IterationStore.findExactRecord('Name', iterationName);
-					var newVal = iteration.get('PlannedVelocity') || 0;
-					if(newVal != velRecord.get('PlannedVelocity')){
-						velRecord.set('PlannedVelocity', iteration.get('PlannedVelocity') || 0);
+					var newVal = iteration.data.PlannedVelocity || 0;
+					if(newVal != velRecord.data.PlannedVelocity){
+						velRecord.set('PlannedVelocity', iteration.data.PlannedVelocity || 0);
 						console.log('velocity record update', velRecord);
 					}
 				});
@@ -2071,34 +1791,36 @@ Ext.define('ProgramBoard', {
 				sortable:true,
 				renderer:function(name, meta, velocityRecord){
 					var iteration = me.IterationStore.findExactRecord('Name', name);
-					if(iteration.get('Project')) {
-						var pid = iteration.get('Project')._ref.split('/project/')[1];
+					if(iteration.data.Project) {
+						var pid = iteration.data.Project._ref.split('/project/')[1];
 						return '<a href="https://rally1.rallydev.com/#/' + pid + 'd/detail/iteration/' + 
-								iteration.get('ObjectID') + '" target="_blank">' + name + '</a>';
+								iteration.data.ObjectID + '" target="_blank">' + name + '</a>';
 					}
 					else return name;
 				}
 			},{
-				text: 'Target Capacity (Planned Velocity)',
+				text: 'Target Capacity',
 				dataIndex: 'PlannedVelocity',
 				flex:1,
 				tdCls: 'intel-editor-cell',
-				//xtype:'numbercolumn',
 				editor:'textfield',
 				resizable:false,
 				sortable:true,
+				tooltip:'(Planned Velocity)',
+				tooltipType:'title',
 				renderer:function(n, m){
 					m.tdCls += (n*1===0 ? ' red-cell' : '');
 					return n;
 				}
 			},{
-				text: 'Actual Load (Plan Estimate)',
+				text: 'Actual Load',
 				dataIndex: 'RealVelocity',
-				//xtype:'numbercolumn',
 				flex:1,
 				editor:false,
 				resizable:false,
 				sortable:false,
+				tooltip:'(Plan Estimate)',
+				tooltipType:'title',
 				renderer:function(realVel, m, r){
 					m.tdCls += ((realVel*1 < r.data.PlannedVelocity*0.9) ? ' yellow-cell' : '');
 					m.tdCls += ((realVel*1 === 0 || realVel*1 > r.data.PlannedVelocity*1) ? ' red-cell' : '');
@@ -2110,11 +1832,11 @@ Ext.define('ProgramBoard', {
 			xtype: 'rallygrid',
 			title: "Velocity",
 			scroll:'vertical',
-			//width: _.reduce(columnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			height:300,
 			flex:1,
 			showPagingToolbar: false,
 			showRowActionsColumn:false,
+			disableSelection: true,
 			viewConfig: {
 				stripeRows: true,
 				preserveScrollOnRefresh:true
@@ -2139,8 +1861,8 @@ Ext.define('ProgramBoard', {
 						return; 
 					}
 					value = value*1 || 0; //value*1 || null to remove the 0's from teams
-					var iterationName = velocityRecord.get('Name');
-					var iteration = me.IterationStore.findExactRecord('Name', iterationName);
+					var iterationName = velocityRecord.data.Name,
+						iteration = me.IterationStore.findExactRecord('Name', iterationName); //we don't need the most recent iteration here
 					iteration.set('PlannedVelocity', value);
 					me.VelocityGrid.setLoading(true);
 					iteration.save({ 
@@ -2169,16 +1891,13 @@ Ext.define('ProgramBoard', {
 	},
 
 	_loadRisksGrid: function(){
-		var me = this, 
-			rd = me.ReleaseRecord.data,
-			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; }),
-			riskSorter = function(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }; //new come first
+		var me = this;
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.FeatureFIDStore = Ext.create('Ext.data.Store', {
 			fields: ['FormattedID'],
 			data: _.map(me.FeatureStore.getRange(), function(f){
-				return {'FormattedID': f.get('FormattedID')};
+				return {'FormattedID': f.data.FormattedID};
 			}),
 			sorters: { property: 'FormattedID' }
 		});
@@ -2186,12 +1905,15 @@ Ext.define('ProgramBoard', {
 		me.FeatureNameStore = Ext.create('Ext.data.Store', {
 			fields: ['Name'],
 			data: _.map(me.FeatureStore.getRange(), function(f){
-				return {'Name': f.get('Name') };
+				return {'Name': f.data.Name };
 			}),
 			sorters: { property: 'Name' }
 		});
 		
 		/****************************** RISKS STUFF  ***********************************************/	
+		
+		function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; } //new come first
+		
 		me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
 			data: Ext.clone(me.RisksParsedData),
 			autoSync:true,
@@ -2212,7 +1934,7 @@ Ext.define('ProgramBoard', {
 				riskStore.suspendEvents(true);
 				for(var i = 0;i<riskRecords.length;++i){
 					var riskRecord =  riskRecords[i];
-					var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), realRisksDatas);
+					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, realRisksDatas);
 					
 					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType === 'New' || dirtyType === 'Edited') continue; //we don't want to remove any pending changes on a record							
@@ -2265,20 +1987,14 @@ Ext.define('ProgramBoard', {
 					displayField: 'Name'
 				},
 				resizable:false,
-				sortable:true	,
+				sortable:true,
 				renderer:function(val){ return val || '-'; }			
 			},{
 				text:'Risk Description', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
-				editor: {
-					xtype: 'textarea',
-					grow:true,
-					growMin:20,
-					growMax:160,
-					enterIsSpecial:true
-				},
+				editor: 'inteltextarea',
 				resizable:false,
 				sortable:false,
 				renderer:function(val){ return val || '-'; }		
@@ -2289,38 +2005,28 @@ Ext.define('ProgramBoard', {
 				flex:1,
 				resizable:false,
 				sortable:false,
-				editor: {
-					xtype: 'textarea',
-					grow:true,
-					growMin:20,
-					growMax:160,
-					enterIsSpecial:true
-				},
+				editor: 'inteltextarea',
 				renderer:function(val){ return val || '-'; }		
 			},{
-				text:'Status(ROAM)',
+				text:'Status',
 				dataIndex:'Status',
 				tdCls: 'intel-editor-cell',	
-				width:100,				
+				width:100,		
+				tooltip:'(ROAM)',
+				tooltipType:'title',		
 				editor:{
-					xtype:'combobox',
+					xtype:'intelfixedcombo',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Status'],
 						data:[
-							{'Status':'Undefined'},
-							{'Status':'Resolved'},
-							{'Status':'Owned'},
-							{'Status':'Accepted'},
-							{'Status':'Mitigated'}
+							{Status:'Undefined'},
+							{Status:'Resolved'},
+							{Status:'Owned'},
+							{Status:'Accepted'},
+							{Status:'Mitigated'}
 						]
 					}),
-					editable: false,
-					displayField:'Status',
-					listeners:{
-						focus: function(combo) {
-							combo.expand();
-						}
-					}
+					displayField:'Status'
 				},
 				resizable:false,
 				sortable:true,
@@ -2333,13 +2039,7 @@ Ext.define('ProgramBoard', {
 				dataIndex:'Contact',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
-				editor: {
-					xtype: 'textarea',
-					grow:true,
-					growMin:20,
-					growMax:160,
-					enterIsSpecial:true
-				},
+				editor: 'inteltextarea',
 				sortable:false,
 				resizable:false,
 				renderer:function(val){ return val || '-'; }			
@@ -2350,22 +2050,17 @@ Ext.define('ProgramBoard', {
 				width:80,
 				resizable:false,				
 				editor:{
-					xtype:'combobox',
+					xtype:'intelfixedcombo',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
-						fields: ['Week'],
-						data: workweeks
+						model:'WorkweekDropdown',
+						data: me._workweekData
 					}),
-					editable: false,
-					displayField: 'Week',
-					listeners:{
-						focus: function(combo) {
-							combo.expand();
-						}
-					}
+					displayField: 'Workweek',
+					valueField: 'DateVal'
 				},
 				sortable:true,
-				renderer:function(val){ return val || '-'; }		
+				renderer:function(date){ return date ? 'ww' + me._getWorkweek(date) : '-'; }		
 			},{
 				text:'',
 				width:30,
@@ -2373,7 +2068,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
+					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType !== 'Edited') return;
 					meta.tdAttr = 'title="Undo"';
@@ -2385,7 +2080,7 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
+									var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 									riskRecord.beginEdit();
 									for(var key in realRiskData)
 										riskRecord.set(key, realRiskData[key]);	
@@ -2402,7 +2097,7 @@ Ext.define('ProgramBoard', {
 				width:30,
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), me.RisksParsedData.slice(0));
+					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType === 'New') dirtyType = 'Save'; //setEditing only if save or resave is true
 					else if(dirtyType === 'Edited') dirtyType = 'Save';
@@ -2416,57 +2111,62 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){//DONT NEED ObjectID. that only is to reference previous parent!
-									if(!riskRecord.get('FormattedID') || !riskRecord.get('FeatureName')){
+									if(!riskRecord.data.FormattedID || !riskRecord.data.FeatureName){
 										me._alert('ERROR', 'You must set the Feature affected by this risk'); return; } 
-									else if(!riskRecord.get('Checkpoint')){
+									else if(!riskRecord.data.Checkpoint){
 										me._alert('ERROR', 'You must set the Checkpoint date for this risk'); return; }
-									else if(!riskRecord.get('Description')){
+									else if(!riskRecord.data.Description){
 										me._alert('ERROR', 'You must set the Description date for this risk'); return; }
-									else if(!riskRecord.get('Impact')){
+									else if(!riskRecord.data.Impact){
 										me._alert('ERROR', 'You must set the Impact date for this risk'); return; }
-									else if(!riskRecord.get('Status')){
+									else if(!riskRecord.data.Status){
 										me._alert('ERROR', 'You must set the Status date for this risk'); return; }
-									else if(!riskRecord.get('Contact')){
+									else if(!riskRecord.data.Contact){
 										me._alert('ERROR', 'You must set the Contact date for this risk'); return; }
 									me.RisksGrid.setLoading(true);
-									var riskRecordData = riskRecord.data,
-										tmpNewFeatureRecord = me.FeatureStore.findExactRecord('FormattedID', riskRecordData.FormattedID),
-										newFeatureRecord;
-								
-									if(tmpNewFeatureRecord.get('ObjectID') != riskRecord.get('ObjectID')){ //load new one
-										me._loadFeature(tmpNewFeatureRecord.get('ObjectID'), function(featureRecord){
-											newFeatureRecord = featureRecord; 
-											loadOriginalParent();
-										});
-									} else loadOriginalParent();
-									
-									function loadOriginalParent(){
-										me._loadFeature(riskRecord.get('ObjectID'), function(oldFeatureRecord){							
-											newFeatureRecord = newFeatureRecord || oldFeatureRecord; //if new is same as old			
-											var lastAction = function(){
-												riskRecord.beginEdit();
-												riskRecord.set('Edited', false);
-												riskRecord.set('ObjectID', newFeatureRecord.get('ObjectID'));
-												riskRecord.endEdit();
-												me.RisksGrid.setLoading(false);
-											},
-											nextAction = function(){
-												return me._addRisk(newFeatureRecord, riskRecordData).then(lastAction);
-											};	
-											if(!oldFeatureRecord){ nextAction(); return; } //for newly added 
-											else {
-												var oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
-													oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);						
-												if(oldFeatureRecord.get('ObjectID') !== newFeatureRecord.get('ObjectID') && oldRealRiskData){
-													me._removeRisk(oldFeatureRecord, oldRealRiskData)
-														.then(nextAction)
-														.fail(function(reason){ me._alert('ERROR', reason); })
-														.done();
-												}
-												else nextAction();					
-											}
-										});
-									}
+									me._enqueue(function(unlockFunc){
+										var riskRecordData = riskRecord.data,
+											tmpNewFeatureRecord = me.FeatureStore.findExactRecord('FormattedID', riskRecordData.FormattedID),
+											newFeatureRecord;
+										Q((tmpNewFeatureRecord.data.ObjectID != riskRecord.data.ObjectID) ?
+											me._loadFeature(tmpNewFeatureRecord.data.ObjectID).then(function(featureRecord){
+												newFeatureRecord = featureRecord; 
+											}) :
+											undefined
+										)
+										.then(function(){
+											return me._loadFeature(riskRecord.data.ObjectID).then(function(oldFeatureRecord){							
+												newFeatureRecord = newFeatureRecord || oldFeatureRecord; //if new is same as old
+												return Q(oldFeatureRecord && 
+													(function(){										
+														var oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
+															oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
+														if(oldRealRiskData && (oldFeatureRecord.data.ObjectID !== newFeatureRecord.data.ObjectID))
+															return me._removeRisk(oldFeatureRecord, oldRealRiskData);
+													}())
+												)
+												.then(function(){
+													return me._addRisk(newFeatureRecord, riskRecordData);
+												})
+												.then(function(){
+													riskRecord.beginEdit();
+													riskRecord.set('Edited', false);
+													riskRecord.set('ObjectID', newFeatureRecord.data.ObjectID);
+													riskRecord.endEdit();
+												});
+											});
+										})
+										.then(function(){
+											me.RisksGrid.setLoading(false);
+											unlockFunc();
+										})
+										.fail(function(reason){
+											me._alert('ERROR:', reason);
+											me.RisksGrid.setLoading(false);
+											unlockFunc();
+										})
+										.done();
+									});
 								}
 							}
 						}
@@ -2491,23 +2191,30 @@ Ext.define('ProgramBoard', {
 									me._confirm('Confirm', 'Delete Risk?', function(msg){
 										if(msg.toLowerCase() !== 'yes') return;
 										me.RisksGrid.setLoading(true);
-										me._loadFeature(riskRecord.get('ObjectID'), function(featureRecord){
-											var lastAction = function(){
+										me._enqueue(function(unlockFunc){
+											me._loadFeature(riskRecord.data.ObjectID).then(function(oldFeatureRecord){					
+												return Q(oldFeatureRecord && 
+													(function(){										
+														var riskRecordData = riskRecord.data,
+															oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
+															oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
+														if(oldRealRiskData) 
+															return me._removeRisk(oldFeatureRecord, oldRealRiskData);
+													}())
+												);
+											})
+											.then(function(){
 												me.CustomRisksStore.remove(riskRecord);
 												me.RisksGrid.setLoading(false);
-											};	
-											if(!featureRecord){ lastAction(); return; } 
-											else {
-												var realRisksData = me._parseRisksFromFeature(featureRecord),
-													realRiskData = me._removeRiskFromList(riskRecord.get('RiskID'), realRisksData);
-												if(realRiskData){
-													me._removeRisk(featureRecord, realRiskData)
-														.then(lastAction)
-														.fail(function(reason){ me._alert('ERROR', reason); })
-														.done();
-												}
-												else lastAction();	
-											}
+												unlockFunc();
+											})
+											.fail(function(reason){
+												me._alert('ERROR:', reason);
+												me.CustomRisksStore.remove(riskRecord);
+												me.RisksGrid.setLoading(false);
+												unlockFunc();
+											})
+											.done();
 										});
 									});
 								}
@@ -2530,7 +2237,7 @@ Ext.define('ProgramBoard', {
 						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
 						else if(me.CustomRisksStore) {
 							var model = Ext.create('IntelRisk', {
-								RiskID: (new Date() * 1) + '' + (Math.random() * 10000000),
+								RiskID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 								ObjectID: '',
 								FormattedID: '',
 								FeatureName: '',
@@ -2554,20 +2261,19 @@ Ext.define('ProgramBoard', {
 			xtype: 'rallygrid',
       title: 'Risks',
 			minHeight:150,
-			maxHeight:450,
-			style:'margin-top:10px',
+			maxHeight:400,
+			style:'margin:10px 10px 0 10px',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
+			disableSelection: true,
 			plugins: [ 'fastcellediting' ],
 			viewConfig:{
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-35px';},
-				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
+				getRowClass: function(){ return 'intel-row-35px';}
 			},
 			listeners: {
-				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){			
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/
@@ -2576,13 +2282,15 @@ Ext.define('ProgramBoard', {
 						field = e.field,
 						value = e.value,
 						originalValue = e.originalValue;
+						
 					if(value === originalValue) return; 
-					if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
+					else if(!value) { risksRecord.set(field, originalValue); return; }
+					else if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
 						value = me._htmlEscape(value);			
 						risksRecord.set(field, value);
 					}
 
-					var previousEdit = risksRecord.get('Edited');
+					var previousEdit = risksRecord.data.Edited;
 					risksRecord.set('Edited', true);
 					
 					var featureRecord;
@@ -2591,34 +2299,31 @@ Ext.define('ProgramBoard', {
 						if(!featureRecord){
 							risksRecord.set('FeatureName', originalValue);
 							risksRecord.set('Edited', previousEdit);
-						} else risksRecord.set('FormattedID', featureRecord.get('FormattedID'));
+						} else risksRecord.set('FormattedID', featureRecord.data.FormattedID);
 					} else if(field === 'FormattedID'){
 						featureRecord = me.FeatureStore.findExactRecord('FormattedID', value);
 						if(!featureRecord) {
 							risksRecord.set('FormattedID', originalValue);
 							risksRecord.set('Edited', previousEdit); 
-						} else risksRecord.set('FeatureName', featureRecord.get('Name'));
+						} else risksRecord.set('FeatureName', featureRecord.data.Name);
 					} 
 				}
 			},
 			showRowActionsColumn:false,
 			showPagingToolbar:false,
 			enableEditing:false,
-			context: this.getContext(),
 			store: me.CustomRisksStore
 		});	
 	},
 	
 	_loadDependenciesGrids: function(){
-		var me = this,
-			rd = me.ReleaseRecord.data,
-			workweeks = _.map(me._getWorkweeks(rd.ReleaseStartDate, rd.ReleaseDate), function(ww){ return {Week: ww}; });
+		var me = this;
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.UserStoryFIDStore = Ext.create('Ext.data.Store', {
 			fields: ['FormattedID'],
 			data: _.map(me.DependenciesReleaseUserStories, function(usr){
-				return {'FormattedID': usr.get('FormattedID')};
+				return {'FormattedID': usr.data.FormattedID};
 			}),
 			sorters: { property: 'FormattedID' }
 		});
@@ -2626,7 +2331,7 @@ Ext.define('ProgramBoard', {
 		me.UserStoryNameStore = Ext.create('Ext.data.Store', {
 			fields: ['Name'],
 			data: _.map(me.DependenciesReleaseUserStories, function(usr){
-				return {'Name': usr.get('Name') };
+				return {'Name': usr.data.Name };
 			}),
 			sorters: { property: 'Name' }
 		});
@@ -2658,7 +2363,7 @@ Ext.define('ProgramBoard', {
 				predDepStore.suspendEvents(true);
 				for(var i = 0;i<predDepRecs.length;++i){
 					var depRec =  predDepRecs[i], //predecessor dependency record to be updated
-						depID = depRec.get('DependencyID'),
+						depID = depRec.data.DependencyID,
 						realDep = me._removeDepFromList(depID, realPredDepsData),	
 						dirtyType = me._getDirtyType(depRec, realDep),
 						teamStore = me.PredDepTeamStores[depID],
@@ -2669,7 +2374,7 @@ Ext.define('ProgramBoard', {
 						if(teamStore) me.PredDepTeamStores[depID] = undefined;
 						if(teamCont) me.PredDepContainers[depID] = undefined;
 					} else {
-						if(!_.isEqual(depRec.get('Predecessors'), realDep.Predecessors)){ //faster to delete and readd if preds are different
+						if(!_.isEqual(depRec.data.Predecessors, realDep.Predecessors)){ //faster to delete and readd if preds are different
 							if(teamCont) {
 								me.PredDepContainers[depID].destroy();
 								me.PredDepContainers[depID] = undefined;
@@ -2687,7 +2392,7 @@ Ext.define('ProgramBoard', {
 							depRec.endEdit();
 						}
 					}				
-					var preds = depRec.get('Predecessors');
+					var preds = depRec.data.Predecessors;
 					//DO NOT SET EDITED==true, because it is already true! only new or edited will ever have preds.length==0
 					if(!preds.length) {
 						depRec.set('Predecessors', [me._newTeamDep()]); 
@@ -2712,83 +2417,73 @@ Ext.define('ProgramBoard', {
 			{
 				text:'US#', 
 				dataIndex:'FormattedID',
-				tdCls: 'intel-editor-cell',
 				width:80,
-				resizable:false,
+				resizable:false,				
+				sortable:true,
+				tdCls: 'intel-editor-cell',
 				editor:{
 					xtype:'intelcombobox',
 					width:80,
 					store: me.UserStoryFIDStore,
 					displayField: 'FormattedID'
 				},
-				sortable:true,
 				renderer: function(val){ return val || '-'; }		
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
 				flex:1,
-				resizable:false,
+				resizable:false,			
+				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
 					xtype:'intelcombobox',
 					store: me.UserStoryNameStore,
 					displayField: 'Name'
 				},
-				sortable:true,
 				renderer: function(val){ return val || '-'; }			
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
 				flex:1,
-				resizable:false,
-				tdCls: 'intel-editor-cell',
-				editor: {
-					xtype: 'textarea',
-					grow:true,
-					growMin:20,
-					growMax:160,
-					enterIsSpecial:true
-				},
+				resizable:false,			
 				sortable:false,
+				tdCls: 'intel-editor-cell',
+				editor: 'inteltextarea',
 				renderer: function(val){ return val || '-'; }				
 			},{
+				text:'Needed By',			
 				dataIndex:'Checkpoint',
 				width:80,
 				resizable:false,
-				tdCls: 'intel-editor-cell',
-				text:'Needed By',					
+				sortable:true,
+				tdCls: 'intel-editor-cell',		
 				editor:{
-					xtype:'combobox',
+					xtype:'intelfixedcombo',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
-						fields: ['Week'],
-						data: workweeks
+						model:'WorkweekDropdown',
+						data: me._workweekData
 					}),
-					editable: false,
-					displayField: 'Week',
-					listeners:{
-						focus: function(combo) {
-							combo.expand();
-						}
-					}
+					displayField: 'Workweek',
+					valueField: 'DateVal'
 				},
-				sortable:true,
-				renderer: function(val){ return val || '-'; }
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}
 			},{
 				text:'Teams Depended On',
+				dataIndex:'DependencyID',
+				xtype:'fastgridcolumn',
 				html:	'<div class="pred-dep-header" style="width:30px !important;"></div>' +
 						'<div class="pred-dep-header" style="width:140px !important;">Team Name</div>' +
 						'<div class="pred-dep-header" style="width:65px  !important;">Supported</div>' +
 						'<div class="pred-dep-header" style="width:70px  !important;">US#</div>' +
 						'<div class="pred-dep-header" style="width:130px !important;">User Story</div>',
-				dataIndex:'DependencyID',
 				width:480,
 				resizable:false,
 				sortable:false,
-				xtype:'fastgridcolumn',
 				renderer: function (depID){
-					var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
-					var predecessors = predDepRecord.get('Predecessors');
+					var predDepStore = me.CustomPredDepStore,
+						predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
+						predecessors = predDepRecord.data.Predecessors;
 					if(!me.PredDepTeamStores[depID]){
 						me.PredDepTeamStores[depID] = Ext.create('Intel.data.FastStore', { 
 							model:'IntelDepTeam',
@@ -2801,10 +2496,11 @@ Ext.define('ProgramBoard', {
 							},
 							sorters:[depTeamSorter],
 							intelUpdate: function(){
-								var depTeamStore = me.PredDepTeamStores[depID],
+								var predDepStore = me.CustomPredDepStore,
+									depTeamStore = me.PredDepTeamStores[depID],
 									depTeamRecords = depTeamStore.getRange(),
-									predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
-									predecessors = predDepRecord.get('Predecessors').slice(0);
+									predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
+									predecessors = predDepRecord.data.Predecessors.slice(0);
 								depTeamStore.suspendEvents(true);
 								Outer:
 								for(var i = 0;i<depTeamRecords.length;++i){
@@ -2812,7 +2508,7 @@ Ext.define('ProgramBoard', {
 										realTeamDep, key,
 										remoteChanged = false; //if someone else updated this while it was idle on our screen	
 									for(var j=0; j<predecessors.length;++j){
-										if(predecessors[j].TID === depTeamRecord.get('TID')){
+										if(predecessors[j].TID === depTeamRecord.data.TID){
 											realTeamDep = predecessors.splice(j, 1)[0];
 											for(key in realTeamDep){
 												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ remoteChanged = true; break; }
@@ -2856,9 +2552,9 @@ Ext.define('ProgramBoard', {
 							dataIndex:'PID',
 							width:145,
 							resizable:false,
-							renderer: function(val, meta, depTeamRecord){
+							renderer: function(val, meta){
 								var projectRecord = me.ValidProjects[val];
-								if(val && projectRecord) return projectRecord.get('Name');
+								if(val && projectRecord) return projectRecord.data.Name;
 								else {
 									meta.tdCls += 'intel-editor-cell';
 									return '-';
@@ -2878,7 +2574,7 @@ Ext.define('ProgramBoard', {
 							width:50,
 							resizable:false,
 							editor: false,
-							renderer: function(val, meta, depTeamRecord){
+							renderer: function(val, meta){
 								if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
 								else meta.tdCls = 'intel-supported-cell';
 								return val;
@@ -2889,7 +2585,7 @@ Ext.define('ProgramBoard', {
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta, depTeamRecord){
-								if(depTeamRecord.get('A')) return val;
+								if(depTeamRecord.data.A) return val;
 								else return '-';
 							}
 						},{
@@ -2898,7 +2594,7 @@ Ext.define('ProgramBoard', {
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta, depTeamRecord){
-								if(depTeamRecord.get('A')) return val;
+								if(depTeamRecord.data.A) return val;
 								else return '-';
 							}				
 						},{
@@ -2916,12 +2612,13 @@ Ext.define('ProgramBoard', {
 										click: {
 											element: 'el',
 											fn: function(){
-												var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
-													predecessors = Ext.clone(predDepRecord.get('Predecessors')),
+												var predDepStore = me.CustomPredDepStore,
+													predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
+													predecessors = Ext.clone(predDepRecord.data.Predecessors),
 													teamStore = me.PredDepTeamStores[depID];										
 												teamStore.suspendEvents(true);
 												for(var i=0; i<predecessors.length; ++i)
-													if(predecessors[i].TID === depTeamRecord.get('TID')){
+													if(predecessors[i].TID === depTeamRecord.data.TID){
 														predecessors.splice(i, 1); break; }
 												teamStore.remove(depTeamRecord);
 												
@@ -2963,8 +2660,9 @@ Ext.define('ProgramBoard', {
 										fn: function(){
 											if(me.PredDepTeamStores[depID]) {
 												//scrolling is taken care of by the scrollsteadytableview
-												var predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID);
-												var newItem = me._newTeamDep();
+												var predDepStore = me.CustomPredDepStore,
+													predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
+													newItem = me._newTeamDep();
 												me.PredDepTeamStores[depID].insert(0, [Ext.create('IntelDepTeam', newItem)]);
 												predDepRecord.set('Predecessors', predDepRecord.data.Predecessors.concat([newItem])); //use set() to update rowheight
 												predDepRecord.set('Edited', true);	
@@ -2974,15 +2672,16 @@ Ext.define('ProgramBoard', {
 								}
 							},{
 								xtype: 'rallygrid',	
-								width:_.reduce(teamColumnCfgs, function(sum, i){ return sum + i.width; }, 0),
+								width:450,
 								rowLines:false,
 								flex:1,
 								columnCfgs: teamColumnCfgs,
+								disableSelection: true,
 								plugins: [ 'fastcellediting' ],
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
-										if(!teamDepRecord.get('PID')) return 'intel-row-35px intel-team-dep-row';
+										if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
 										else return 'intel-row-35px';
 									}
 								},
@@ -2997,7 +2696,8 @@ Ext.define('ProgramBoard', {
 											field = e.field,
 											value = e.value,
 											originalValue = e.originalValue,
-											predDepRecord = me.CustomPredDepStore.findRecord('DependencyID', depID),
+											predDepStore = me.CustomPredDepStore,
+											predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
 											predecessors = predDepRecord.data.Predecessors,
 											i;			
 										if(value === originalValue) return;										
@@ -3008,24 +2708,24 @@ Ext.define('ProgramBoard', {
 												return;
 											} else {
 												for(i = 0;i<predecessors.length;++i){
-													if(predecessors[i].PID == projectRecord.get('ObjectID')){
+													if(predecessors[i].PID == projectRecord.data.ObjectID){
 														me._alert('ERROR', value + ' already included in this dependency');
 														depTeamRecord.set('PID', originalValue);
 														return;
 													}
 												}
-												if(projectRecord.get('ObjectID') === me.ProjectRecord.get('ObjectID')){
+												if(projectRecord.data.ObjectID === me.ProjectRecord.data.ObjectID){
 													me._alert('ERROR', 'You cannot depend on yourself');
 													depTeamRecord.set('PID', originalValue);
 													return;
 												}
-												depTeamRecord.set('PID', projectRecord.get('ObjectID'));
+												depTeamRecord.set('PID', projectRecord.data.ObjectID);
 											}
 										}
 												
 										for(i=0; i<predecessors.length; ++i){
-											if(predecessors[i].TID === depTeamRecord.get('TID')){
-												predecessors[i].PID = depTeamRecord.get('PID'); //update the predDepRecord, but dont need to propagate using set()
+											if(predecessors[i].TID === depTeamRecord.data.TID){
+												predecessors[i].PID = depTeamRecord.data.PID; //update the predDepRecord, but dont need to propagate using set()
 												break; 
 											}
 										}
@@ -3060,12 +2760,12 @@ Ext.define('ProgramBoard', {
 			},{
 				text:'',
 				dataIndex:'Edited',
-				width:30,
 				xtype:'fastgridcolumn',
-				tdCls: 'iconCell',
+				width:30,
 				resizable:false,
+				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){	
-					var realDepData = me._removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
+					var realDepData = me._removeDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0));
 					var dirtyType = me._getDirtyType(predDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Undo"';
@@ -3077,7 +2777,7 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var depID = predDepRecord.get('DependencyID');
+									var depID = predDepRecord.data.DependencyID;
 									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));
 									predDepRecord.beginEdit();
 									for(var key in realDep){
@@ -3094,12 +2794,12 @@ Ext.define('ProgramBoard', {
 			},{
 				text:'',
 				dataIndex:'Edited',
-				width:30,
 				xtype:'fastgridcolumn',
-				tdCls: 'iconCell',
+				width:30,
 				resizable:false,
+				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){				
-					var realDepData = me._removeDepFromList(predDepRecord.get('DependencyID'), me.DependenciesParsedData.Predecessors.slice(0));
+					var realDepData = me._removeDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0));
 					var dirtyType = me._getDirtyType(predDepRecord, realDepData);
 					if(dirtyType === 'New') dirtyType = 'Save';
 					else if(dirtyType === 'Edited') dirtyType = 'Save';
@@ -3114,64 +2814,70 @@ Ext.define('ProgramBoard', {
 								element: 'el',
 								fn: function(){
 									//validate fields first
-									if(predDepRecord.get('FormattedID') === '' || predDepRecord.get('UserStoryName') === ''){
+									if(predDepRecord.data.FormattedID === '' || predDepRecord.data.UserStoryName === ''){
 										me._alert('ERROR', 'A UserStory is not selected'); return; }
-									if(predDepRecord.get('Description') === ''){
+									if(predDepRecord.data.Description === ''){
 										me._alert('ERROR', 'The description is empty'); return; }
-									if(predDepRecord.get('Checkpoint') === ''){
+									if(predDepRecord.data.Checkpoint === ''){
 										me._alert('ERROR', 'Select When the dependency is needed by'); return; }
-									var predecessors = predDepRecord.get('Predecessors');
+									var predecessors = predDepRecord.data.Predecessors;
 									if(predecessors.length === 0){
 										me._alert('ERROR', 'You must specify a team you depend on'); return; }
 									if(_.find(predecessors, function(p){ return p.PID === ''; })){
 										me._alert('ERROR', 'All Team Names must be valid'); return; }
 									
 									me.PredDepGrid.setLoading(true);
-									var predDepData = predDepRecord.data;
-									/** NOTE ON ERROR HANDLING: we do NOT proceed at all if permissions are insufficient to edit a project, or a project has no user stories to attach to
-											we first edit all the successors fields and collections for the teams we depend upon, and then we edit the predecessor field on THIS user story.
-											If a collection sync fails, it retries 4 times, and then it gives up. It is not imperative that the predecessor/successor fields are exactly perfect
-											if a user story save fails, JUST THAT USER STORY FAILS, everything else will continue on normally. */
-									me._getOldAndNewUSRecords(predDepData).then(function(records){
-										var oldUSRecord = records[0], newUSRecord = records[1],
-											realDepData = me._getRealDepData(oldUSRecord, predDepData, 'Predecessors'),
-											teamDeps = me._getTeamDepArrays(predDepData, realDepData),
-											i, len;
-										return me._getAddedTeamDepCallbacks(teamDeps.added, predDepData).then(function(addedCallbacks){	
-											return me._getUpdatedTeamDepCallbacks(teamDeps.updated, predDepData).then(function(updatedCallbacks){
-												return me._getRemovedTeamDepCallbacks(teamDeps.removed, predDepData).then(function(removedCallbacks){
-													for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-													for(i=0, len=addedCallbacks.length; i<len; ++i){ addedCallbacks[i](); }//execute the added teams now
-													for(i=0, len=updatedCallbacks.length; i<len; ++i){ updatedCallbacks[i](); }//execute the updated teams now
-													
-													var promise = Q.fcall(function(){
-														var newTeamDeps = teamDeps.added.concat(teamDeps.updated);
-														predDepRecord.beginEdit();
-														predDepRecord.set('ObjectID', newUSRecord.get('ObjectID'));
-														predDepRecord.set('Predecessors', newTeamDeps); //NOTE: added and updated teamDeps DO GET MUTATED before here!
-													});
-													
-													if(realDepData && (oldUSRecord.data.ObjectID !== newUSRecord.data.ObjectID)){
-														promise = promise.then(function(){
-															return me._removePredDep(oldUSRecord, realDepData);
+									me._enqueue(function(unlockFunc){
+										var predDepData = predDepRecord.data;
+										/** NOTE ON ERROR HANDLING: we do NOT proceed at all if permissions are insufficient to edit a project, or a project has no user stories to attach to
+												we first edit all the successors fields and collections for the teams we depend upon, and then we edit the predecessor field on THIS user story.
+												If a collection sync fails, it retries 4 times, and then it gives up. It is not imperative that the predecessor/successor fields are exactly perfect
+												if a user story save fails, JUST THAT USER STORY FAILS, everything else will continue on normally. */
+										me._getOldAndNewUSRecords(predDepData).then(function(records){
+											var oldUSRecord = records[0], newUSRecord = records[1],
+												realDepData = me._getRealDepData(oldUSRecord, predDepData, 'Predecessors'),
+												teamDeps = me._getTeamDepArrays(predDepData, realDepData),
+												i, len;
+											return me._getAddedTeamDepCallbacks(teamDeps.added, predDepData).then(function(addedCallbacks){	
+												return me._getUpdatedTeamDepCallbacks(teamDeps.updated, predDepData).then(function(updatedCallbacks){
+													return me._getRemovedTeamDepCallbacks(teamDeps.removed, predDepData).then(function(removedCallbacks){
+														for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
+														for(i=0, len=addedCallbacks.length; i<len; ++i){ addedCallbacks[i](); }//execute the added teams now
+														for(i=0, len=updatedCallbacks.length; i<len; ++i){ updatedCallbacks[i](); }//execute the updated teams now
+														
+														var promise = Q.fcall(function(){
+															var newTeamDeps = teamDeps.added.concat(teamDeps.updated);
+															predDepRecord.beginEdit();
+															predDepRecord.set('ObjectID', newUSRecord.data.ObjectID);
+															predDepRecord.set('Predecessors', newTeamDeps); //NOTE: added and updated teamDeps DO GET MUTATED before here!
 														});
-													}
-													return promise
-														.then(function(){
-															return me._addPredDep(newUSRecord, predDepData);
-														})
-														.then(function(){							
-															predDepRecord.set('Edited', false);
-															predDepRecord.endEdit();
-															me.PredDepGrid.setLoading(false);
-														}); //we now have a long chain of asynchronous events completed serially because we get concurrency errors otherwise
+														
+														if(realDepData && (oldUSRecord.data.ObjectID !== newUSRecord.data.ObjectID)){
+															promise = promise.then(function(){
+																return me._removePredDep(oldUSRecord, realDepData);
+															});
+														}
+														return promise
+															.then(function(){
+																return me._addPredDep(newUSRecord, predDepData);
+															})
+															.then(function(){							
+																predDepRecord.set('Edited', false);
+																predDepRecord.endEdit();
+															});
+													});
 												});
 											});
-										});
-									}).fail(function(reason){
-										me._alert('ERROR:', reason);
-										me.PredDepGrid.setLoading(false);
-									}).done();
+										}).then(function(){
+											me.PredDepGrid.setLoading(false);
+											unlockFunc();
+										})
+										.fail(function(reason){
+											me._alert('ERROR:', reason);
+											me.PredDepGrid.setLoading(false);
+											unlockFunc();
+										}).done();
+									});
 								}
 							}
 						}
@@ -3179,10 +2885,10 @@ Ext.define('ProgramBoard', {
 				}
 			},{
 				text:'',
-				width:30,
 				xtype:'fastgridcolumn',
-				tdCls: 'iconCell',
+				width:30,
 				resizable:false,
+				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){		
 					meta.tdAttr = 'title="Delete Dependency"';
 					return {
@@ -3196,31 +2902,39 @@ Ext.define('ProgramBoard', {
 									me._confirm('Confirm', 'Delete Dependency?', function(msg){
 										if(msg.toLowerCase() !== 'yes') return;										
 										me.PredDepGrid.setLoading(true);
-										var predDepData = predDepRecord.data;
-										me._getOldAndNewUSRecords(predDepData).then(function(records){
-											var oldUSRecord = records[0],
-												realDepData = me._getRealDepData(oldUSRecord, predDepData, 'Predecessors'),
-												teamDeps = me._getTeamDepArrays(predDepData, realDepData), 
-												depsToDelete = teamDeps.removed.concat(teamDeps.updated), //dont care about added 
-												i, len;
-											return me._getRemovedTeamDepCallbacks(depsToDelete, predDepData).then(function(removedCallbacks){
-												for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-												var promise = Q.fcall(function(){});
-												if(realDepData){
-													promise = promise.then(function(){
-														return me._removePredDep(oldUSRecord, realDepData);
-													});
-												}
-												return promise
-													.then(function(){	
-														me.CustomPredDepStore.remove(predDepRecord);
-														me.PredDepGrid.setLoading(false);
-													});
-											});
-										}).fail(function(reason){
-											me._alert('ERROR:', reason);
-											me.PredDepGrid.setLoading(false);
-										}).done();
+										me._enqueue(function(unlockFunc){
+											var predDepData = predDepRecord.data;
+											me._getOldAndNewUSRecords(predDepData).then(function(records){
+												var oldUSRecord = records[0],
+													realDepData = me._getRealDepData(oldUSRecord, predDepData, 'Predecessors'),
+													teamDeps = me._getTeamDepArrays(predDepData, realDepData), 
+													depsToDelete = teamDeps.removed.concat(teamDeps.updated), //dont care about added 
+													i, len;											
+												return me._getRemovedTeamDepCallbacks(depsToDelete, predDepData).then(function(removedCallbacks){
+													for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
+													var promise = Q.fcall(function(){});
+													if(realDepData){
+														promise = promise.then(function(){
+															return me._removePredDep(oldUSRecord, realDepData);
+														});
+													}
+													return promise
+														.then(function(){	
+															me.CustomPredDepStore.remove(predDepRecord);
+														});
+												});
+											})
+											.then(function(){
+												me.PredDepGrid.setLoading(false);
+												unlockFunc();
+											})
+											.fail(function(reason){
+												me._alert('ERROR', reason);
+												me.PredDepGrid.setLoading(false);
+												unlockFunc();
+											})
+											.done();
+										});
 									});
 								}
 							}
@@ -3241,7 +2955,7 @@ Ext.define('ProgramBoard', {
 						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
 						else if(me.CustomPredDepStore) {
 							var model = Ext.create('IntelPredDep', {
-								DependencyID: (new Date() * 1) + '' + (Math.random() * 10000000),
+								DependencyID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 								ObjectID:'',
 								FormattedID: '',
 								UserStoryName: '',
@@ -3262,12 +2976,12 @@ Ext.define('ProgramBoard', {
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
       title: "Dependencies We Have on Other Teams",
-			//width: _.reduce(predDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			minHeight:150,
-			maxHeight:500,
-			style:'margin-top:10px',
+			maxHeight:450,
+			style:'margin:10px 10px 0 10px',
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
+			disableSelection: true,
 			plugins: [ 'fastcellediting' ],
 			viewConfig:{
 				xtype:'scrolltableview',
@@ -3276,11 +2990,9 @@ Ext.define('ProgramBoard', {
 				getRowClass: function(predDepRecord){ 
 					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
 					return cls;
-				},
-				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
+				}
 			},
 			listeners: {
-				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				edit: function(editor, e){		
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/			
@@ -3295,22 +3007,22 @@ Ext.define('ProgramBoard', {
 						predDepRecord.set(field, value);
 					}
 
-					var previousEdit = predDepRecord.get('Edited'); 
+					var previousEdit = predDepRecord.data.Edited; 
 					predDepRecord.set('Edited', true);
 					
 					var userStoryRecord;
 					if(field === 'UserStoryName'){
-						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('Name') === value; });
+						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.data.Name === value; });
 						if(!userStoryRecord){
 							predDepRecord.set('UserStoryName', originalValue);
 							predDepRecord.set('Edited', previousEdit);
-						} else predDepRecord.set('FormattedID', userStoryRecord.get('FormattedID'));
+						} else predDepRecord.set('FormattedID', userStoryRecord.data.FormattedID);
 					} else if(field === 'FormattedID'){
-						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
+						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.data.FormattedID === value; });
 						if(!userStoryRecord) {
 							predDepRecord.set('FormattedID', originalValue);
 							predDepRecord.set('Edited', previousEdit);
-						} else predDepRecord.set('UserStoryName', userStoryRecord.get('Name'));
+						} else predDepRecord.set('UserStoryName', userStoryRecord.data.Name);
 					}
 				}
 			},
@@ -3342,7 +3054,7 @@ Ext.define('ProgramBoard', {
 				for(var i = 0;i<customSuccDepRecs.length;++i){
 					var depRec =  customSuccDepRecs[i]; //predecessor dependency record to be updated
 					
-					var depID = depRec.get('DependencyID');
+					var depID = depRec.data.DependencyID;
 					var realDep = me._removeDepFromList(depID, realSuccDepsData);	
 						
 					var dirtyType = me._getDirtyType(depRec, realDep);
@@ -3380,7 +3092,7 @@ Ext.define('ProgramBoard', {
 				sortable:true,
 				renderer: function(pid){
 					var project = me.ValidProjects[pid];
-					return project ? project.get('Name') : pid;
+					return project ? project.data.Name : pid;
 				}
 			},{
 				text:'Req Team US#',
@@ -3415,7 +3127,7 @@ Ext.define('ProgramBoard', {
 				resizable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
-					xtype:'combobox',
+					xtype:'intelfixedcombo',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Sup'],
@@ -3424,13 +3136,7 @@ Ext.define('ProgramBoard', {
 							{Sup:'No'}
 						]
 					}),
-					editable: false,
-					displayField: 'Sup',
-					listeners:{
-						focus: function(combo) {
-							combo.expand();
-						}
-					}
+					displayField: 'Sup'
 				},
 				renderer: function(val, meta){
 					if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
@@ -3451,10 +3157,7 @@ Ext.define('ProgramBoard', {
 					displayField: 'FormattedID'
 				},
 				sortable:true,
-				renderer: function(val){
-					if(!val) return '-';
-					else return val;
-				}
+				renderer:function(val){ return val || '-'; }	
 			},{
 				text:'Sup UserStory', 
 				dataIndex:'UserStoryName',
@@ -3467,10 +3170,7 @@ Ext.define('ProgramBoard', {
 					displayField: 'Name'
 				},
 				sortable: true,
-				renderer: function(val){
-					if(!val) return '-';
-					else return val;
-				}
+				renderer:function(val){ return val || '-'; }	
 			},{
 				text:'',
 				dataIndex:'Edited',
@@ -3479,7 +3179,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){			
-					if(!succDepRecord.get('FormattedID')) return '';
+					if(!succDepRecord.data.FormattedID) return '';
 					meta.tdAttr = 'title="' + 'Remove User Story' + '"';
 					return {
 						xtype:'container',
@@ -3506,7 +3206,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){		
-					var realDepData = me._removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
+					var realDepData = me._removeDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0));
 					var dirtyType = me._getDirtyType(succDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Undo"';
@@ -3518,7 +3218,7 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var depID = succDepRecord.get('DependencyID');
+									var depID = succDepRecord.data.DependencyID;
 									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
 									succDepRecord.beginEdit(true);
 									for(var key in realDep)
@@ -3536,7 +3236,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, succDepRecord){	
-					var realDepData = me._removeDepFromList(succDepRecord.get('DependencyID'), me.DependenciesParsedData.Successors.slice(0));
+					var realDepData = me._removeDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0));
 					var dirtyType = me._getDirtyType(succDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Save Dependency"';
@@ -3550,46 +3250,62 @@ Ext.define('ProgramBoard', {
 								fn: function(){
 									//no field validation needed
 									me.SuccDepGrid.setLoading(true);
-									var succDepData = succDepRecord.data, oldUSRecord, newUSRecord;
-									me._getOldAndNewUSRecords(succDepData).then(function(records){
-										oldUSRecord = records[0];
-										newUSRecord = records[1];
-										
-										var realDepData = me._getRealDepData(oldUSRecord, succDepData, 'Successors'); //might be undefined if pred team deleted then readded this team on the dep!
-										if(!realDepData) return Q.reject(['Successor removed this dependency.']);
-										
-										succDepData.ObjectID = newUSRecord.data.ObjectID; //we set this in case we are changing the depended upon US
-										
-										return me._updateSuccessor(succDepData, newUSRecord)
-											.then(function(){									
-												if(oldUSRecord.data.ObjectID !== newUSRecord.data.ObjectID)
-													return me._removeSuccDep(oldUSRecord, realDepData);
-											})
-											.then(function(){
-												return me._addSuccDep(newUSRecord, succDepData);
-											})
-											.then(function(){
-												succDepRecord.set('Edited', false);
-												me.SuccDepGrid.setLoading(false);
-											});
-									}).fail(function(reason){
-										if(typeof reason === 'string'){
-											me._alert('ERROR', reason);
+									me._enqueue(function(unlockFunc){
+										var succDepData = succDepRecord.data, oldUSRecord, newUSRecord;
+										me._getOldAndNewUSRecords(succDepData).then(function(records){
+											oldUSRecord = records[0];
+											newUSRecord = records[1];
+											
+											var realDepData = me._getRealDepData(oldUSRecord, succDepData, 'Successors'); //might be undefined if pred team deleted then readded this team on the dep!
+											if(!realDepData) return Q.reject(['Successor removed this dependency.']);
+											
+											succDepData.ObjectID = newUSRecord.data.ObjectID; //we set this in case we are changing the depended upon US
+											
+											return me._updateSuccessor(succDepData, newUSRecord)
+												.then(function(){									
+													if(oldUSRecord.data.ObjectID !== newUSRecord.data.ObjectID)
+														return me._removeSuccDep(oldUSRecord, realDepData);
+												})
+												.then(function(){
+													return me._addSuccDep(newUSRecord, succDepData);
+												})
+												.then(function(){
+													succDepRecord.set('Edited', false);
+												});
+										})
+										.then(function(){
 											me.SuccDepGrid.setLoading(false);
-										} else {
-											me._alert('ERROR', reason[0] + ' Deleting this dependency now');
-											if(realDepData){
-												me._removeSuccDep(oldUSRecord, realDepData).then(function(){
+											unlockFunc();
+										})
+										.fail(function(reason){ //hacky way to tell if we should delete this successor dependency
+											if(typeof reason === 'string'){
+												me._alert('ERROR', reason);
+												me.SuccDepGrid.setLoading(false);
+												unlockFunc();
+											} else {
+												me._alert('ERROR', reason[0] + ' Deleting this dependency now');
+												if(realDepData){
+													me._removeSuccDep(oldUSRecord, realDepData).then(function(){
+														me.CustomSuccDepStore.remove(succDepRecord);
+														me.SuccDepGrid.setLoading(false);
+														unlockFunc();
+													})
+													.fail(function(reason){
+														me._alert('ERROR', reason);
+														me.SuccDepGrid.setLoading(false);
+														unlockFunc();
+													})
+													.done();
+												}
+												else {
 													me.CustomSuccDepStore.remove(succDepRecord);
 													me.SuccDepGrid.setLoading(false);
-												});
+													unlockFunc();
+												}
 											}
-											else {
-												me.CustomSuccDepStore.remove(succDepRecord);
-												me.SuccDepGrid.setLoading(false);
-											}
-										}
-									}).done();
+										})
+										.done();
+									});
 								}
 							}
 						}
@@ -3601,25 +3317,23 @@ Ext.define('ProgramBoard', {
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
       title: "Dependencies Other Teams Have on Us",
-			//width: _.reduce(succDepColumnCfgs, function(sum, c){ return sum + c.width; }, 20),
 			minHeight:150,
-			style:'margin-top:40px',
-			maxHeight:500,
+			maxHeight:450,
+			style:'margin:40px 10px 0 10px',
 			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
+			disableSelection: true,
 			plugins: [ 'fastcellediting' ],
 			viewConfig:{
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-35px'; },
-				listeners: { resize: function(){ me._fireParentWindowEvent('resize'); }}
+				getRowClass: function(){ return 'intel-row-35px'; }
 			},
 			listeners: {
-				afterrender: function(){ me._fireParentWindowEvent('resize'); },
 				beforeedit: function(editor, e){
 					var succDepRecord = e.record;
-					if(succDepRecord.get('Supported') == 'No' && e.field != 'Supported') 
+					if(succDepRecord.data.Supported == 'No' && e.field != 'Supported') 
 						return false; //don't user story stuff if not supported
 				},
 				edit: function(editor, e){					
@@ -3629,26 +3343,26 @@ Ext.define('ProgramBoard', {
 						value = e.value,
 						originalValue = e.originalValue;					
 					if(value == originalValue) return;
-					var previousEdit = succDepRecord.get('Edited');
+					var previousEdit = succDepRecord.data.Edited;
 					succDepRecord.set('Edited', true);
 					
 					var userStoryRecord;
 					if(field === 'UserStoryName'){
-						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('Name') === value; });
+						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.data.Name === value; });
 						if(!userStoryRecord){
 							succDepRecord.set('UserStoryName', originalValue);
 							succDepRecord.set('Edited', previousEdit); 
 						} else {
-							succDepRecord.set('FormattedID', userStoryRecord.get('FormattedID'));	
+							succDepRecord.set('FormattedID', userStoryRecord.data.FormattedID);	
 							succDepRecord.set('Assigned', true);
 						}
 					} else if(field === 'FormattedID'){
-						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.get('FormattedID') === value; });
+						userStoryRecord = _.find(me.DependenciesReleaseUserStories, function(us){ return us.data.FormattedID === value; });
 						if(!userStoryRecord) {
 							succDepRecord.set('FormattedID', originalValue);
 							succDepRecord.set('Edited', previousEdit); 
 						} else {
-							succDepRecord.set('UserStoryName', userStoryRecord.get('Name'));	
+							succDepRecord.set('UserStoryName', userStoryRecord.data.Name);	
 							succDepRecord.set('Assigned', true);
 						}
 					}
