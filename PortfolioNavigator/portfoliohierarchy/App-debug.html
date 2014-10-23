@@ -4,14 +4,26 @@
     <title>Portfolio Hierarchy</title>
 
 
-    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc2/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
     <script type="text/javascript">
         // I am keeping the extra , in there to simplify my code. If someone is actually using an old version of IE to make an app let me know.
         Rally.loadScripts(
                 [
-                      "ProjectUserStoryTreeItem.js",
-                      "PortfolioHierarchyApp.js",
+                      "../../lib/intel-rally-app.js",
+                      "../../lib/data/intel-models.js",
+                      "../../lib/mixins/window-listener.js",
+                      "../../lib/mixins/iframe-resize.js",
+                      "../../lib/mixins/pretty-alert.js",
+                      "../../lib/mixins/release-query.js",
+                      "../../lib/mixins/async-queue.js",
+                      "../../lib/components/intel-combobox.js",
+                      "../../lib/components/intel-fixed-combobox.js",
+                      "../../lib/components/pi-projectpicker-settings.js",
+                      "lib/FittedUserStoryTreeItem.js",
+                      "lib/FittedPortfolioItemTreeItem.js",
+                      "App.js",
                 ],
         function() {
             Rally.launchApp('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
@@ -20,7 +32,7 @@
         }, true);
     </script>
 
-    <link rel="stylesheet" type="text/css" href="PortfolioHierarchyApp.css">
+    <link rel="stylesheet" type="text/css" href="app.css">
 </head>
 <body>
 </body>

@@ -379,32 +379,66 @@ Ext.define('CommitsMatrixFeature', {
 			}).and(coreFilter).toString();
 		}
 		else {
-			return Ext.create('Rally.data.wsapi.Filter', {
+			return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
 				property:'Project.Parent.Name',
 				value: trainName + ' POWG Portfolios'
-			}).and(coreFilter).toString();
+			}).or(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project.Name',
+				value: trainName + ' POWG Portfolios'
+			})).and(coreFilter).toString();
 		}
 	},
 	
 	/*************************************************** Products ********************************************/
+	_getProductFilterString: function(trainRecord){ //products can be in 2 different levels of the portfolio hierarchy
+		var me=this,
+			trainName = trainRecord.data.Name.split(' ART')[0];
+		if(trainName === 'Test'){
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project.Name',
+				value: 'Test ART (P&E)'
+			}).toString();
+		}
+		else {
+			return Ext.create('Rally.data.wsapi.Filter', {//NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+				property:'Project.Parent.Name',
+				value: trainName + ' POWG Portfolios'
+			}).or(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project.Name',
+				value: trainName + ' POWG Portfolios'
+			})).toString();
+		}
+	},
 	
 	_loadProducts: function(trainRecord){
-		var me=this,
-			trainName = trainRecord.data.Name.split(' ART')[0],
+		var me=this, 
+			filterString = me._getProductFilterString(trainRecord),
 			store = Ext.create('Rally.data.wsapi.Store',{
 				model: 'PortfolioItem/Product',
-				remoteSort:false,
 				limit:Infinity,
+				remoteSort:false,
 				fetch: ['Name'],
 				context:{
-					workspace: me.getContext().getWorkspace()._ref,
+					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{
-					property:'Project.Parent.Name',
-					value: trainName + ' POWG Portfolios'
-				}]
+				filters:[{ property:'Dummy', value:'value' }]
 			});
+		store._hydrateModelAndLoad = function(options){
+			var deferred = new Deft.Deferred();
+			this.hydrateModel().then({
+					success: function(model) {
+						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
+							return filterString;
+						};
+						this.load(options).then({
+								success: Ext.bind(deferred.resolve, deferred),
+								failure: Ext.bind(deferred.reject, deferred)
+						});
+					},
+					scope: this
+			});
+		};
 		return me._reloadStore(store).then(function(store){
 			console.log('Products loaded', store.data.items);
 			return Q(store);
@@ -1366,12 +1400,7 @@ Ext.define('CommitMatrix', {
 					if(frData.Parent){
 						promises.push(me._loadMilestone(frData.Parent.ObjectID).then(function(milestoneRecord){
 							var p = milestoneRecord.data.Parent;
-							if(p && p.Name){ 
-								me.FeatureProductHash[frData.ObjectID] = p.Name;
-								/*** this should not be possible ***/
-								//if(!_.find(me.ProductNames, function(pn){ return pn.ProductName === p.Name; }))
-								//	me.ProductNames.push({ProductName: p.Name});
-							} 
+							if(p && p.Name) me.FeatureProductHash[frData.ObjectID] = p.Name;
 							else me.FeatureProductHash[frData.ObjectID] = '';
 						}));
 						promises.push(me._loadFeatureUserStoriesInRelease(fr));
@@ -1728,7 +1757,7 @@ Ext.define('CommitMatrix', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._setRefreshInterval(); 
 						me._reloadEverything();
@@ -1749,7 +1778,8 @@ Ext.define('CommitMatrix', {
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
@@ -2078,7 +2108,7 @@ Ext.define('CommitMatrix', {
 							if(me.Mode === 'Details' && type === 'mousedown') {
 								var matrixRecord = me.CustomMatrixStore.getAt(row),
 									ProjectName = view.getGridColumns()[col].text,
-									featureRecord = me.FeatureStore.findRecord('ObjectID', matrixRecord.get('ObjectID')),
+									featureRecord = me.FeatureStore.findRecord('ObjectID', matrixRecord.data.ObjectID),
 									tcae = me._getTeamCommit(featureRecord, ProjectName),
 									pos = cell.getBoundingClientRect(),
 									t = me.tooltip;
@@ -2092,11 +2122,11 @@ Ext.define('CommitMatrix', {
 									'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
 									'<p><b>PlanEstimate: </b>' + 
 									_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
-										return sum + (sr.get('PlanEstimate') || 0); }, 0) +
+										return sum + (sr.data.PlanEstimate || 0); }, 0) +
 									'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
 								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
 									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
-										'd/detail/userstory/' + sr.get('ObjectID') + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
+										'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
 										'<span title="' + sr.data.Name + '">' + 
 										sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
 								});

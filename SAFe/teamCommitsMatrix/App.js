@@ -129,12 +129,7 @@ Ext.define('CommitMatrix', {
 					if(frData.Parent){
 						promises.push(me._loadMilestone(frData.Parent.ObjectID).then(function(milestoneRecord){
 							var p = milestoneRecord.data.Parent;
-							if(p && p.Name){ 
-								me.FeatureProductHash[frData.ObjectID] = p.Name;
-								/*** this should not be possible ***/
-								//if(!_.find(me.ProductNames, function(pn){ return pn.ProductName === p.Name; }))
-								//	me.ProductNames.push({ProductName: p.Name});
-							} 
+							if(p && p.Name) me.FeatureProductHash[frData.ObjectID] = p.Name;
 							else me.FeatureProductHash[frData.ObjectID] = '';
 						}));
 						promises.push(me._loadFeatureUserStoriesInRelease(fr));
@@ -491,7 +486,7 @@ Ext.define('CommitMatrix', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._setRefreshInterval(); 
 						me._reloadEverything();
@@ -512,7 +507,8 @@ Ext.define('CommitMatrix', {
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;

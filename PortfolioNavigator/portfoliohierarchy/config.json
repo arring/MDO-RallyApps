@@ -2,12 +2,24 @@
    "name": "Portfolio Hierarchy",
    "className": "Rally.apps.portfoliohierarchy.PortfolioHierarchyApp",
    "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc2",
+   "sdk": "2.0rc3",
    "javascript": [
-      "ProjectUserStoryTreeItem.js",
-      "PortfolioHierarchyApp.js"
+      "../../lib/intel-rally-app.js",
+      "../../lib/data/intel-models.js",
+      "../../lib/mixins/window-listener.js",
+      "../../lib/mixins/iframe-resize.js",
+      "../../lib/mixins/pretty-alert.js",
+      "../../lib/mixins/release-query.js",
+      "../../lib/mixins/async-queue.js",
+      "../../lib/components/intel-combobox.js",
+      "../../lib/components/intel-fixed-combobox.js",
+      "../../lib/components/pi-projectpicker-settings.js",
+      "lib/FittedUserStoryTreeItem.js",
+      "lib/FittedPortfolioItemTreeItem.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "App.js"
    ],
    "css": [
-      "PortfolioHierarchyApp.css"
+      "app.css"
    ]
 }

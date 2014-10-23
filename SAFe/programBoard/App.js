@@ -633,11 +633,11 @@ Ext.define('ProgramBoard', {
 					}
 				});
 				
-				//attempt to sync collection until it passes, 4 == max attempts
+				//attempt to sync collection until it passes, 5 == max attempts
 				var attempts = 0;
 				Q.all(promises)
 					.then(function retrySync(){
-						if(++attempts > 4){
+						if(++attempts > 5){
 							console.log('Quit trying to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
 							funcDeferred.resolve();		
 						}
@@ -645,7 +645,7 @@ Ext.define('ProgramBoard', {
 							collectionStore.sync({ 
 								failure:function(){
 									console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
-									retrySync(); //we will succeed, after 4 attempts we quit
+									retrySync(); //we will succeed, after 5 attempts we quit
 								},
 								success:function(){ 
 									console.log('Successfully modified ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
@@ -672,15 +672,28 @@ Ext.define('ProgramBoard', {
 			deferred.reject('Dependencies field for ' + userStoryRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			userStoryRecord.set('c_Dependencies', str);
-			userStoryRecord.save({
-				callback:function(record, operation, success){
-					if(!success) deferred.reject('Failed to modify User Story ' + userStoryRecord.data.FormattedID);
-					else {
-						console.log(msg, userStoryRecord, depData, dependencies);
-						deferred.resolve();
-					}
+			//attempt to save until it passes, 5 == max attempts
+			var attempts = 0;
+			(function retrySync(){
+				if(++attempts > 5){
+					deferred.reject('Failed to modify User Story ' + userStoryRecord.data.FormattedID);
+					return;
 				}
-			});
+				else {
+					userStoryRecord.save({
+						callback:function(record, operation, success){
+							if(!success){
+								console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
+								retrySync();
+							}
+							else {
+								console.log(msg, userStoryRecord, depData, dependencies);
+								deferred.resolve();
+							}
+						}
+					});
+				}
+			}());
 		}
 		return deferred.promise;
 	},
@@ -1064,7 +1077,7 @@ Ext.define('ProgramBoard', {
 								predecessors[i].USID = newUSRecord.data.FormattedID;
 								predecessors[i].USName = newUSRecord.data.Name;
 								predecessors[i].A = succDepData.Assigned;
-								return Q(me._addPredDep(us, predDepData));
+								return me._addPredDep(us, predDepData);
 							}
 						}
 						return Q.reject(['Successor removed this dependency.']);
@@ -1366,7 +1379,7 @@ Ext.define('ProgramBoard', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._setRefreshInterval(); 
 						me._reloadEverything();
@@ -1387,7 +1400,8 @@ Ext.define('ProgramBoard', {
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);	
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);		
 		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
@@ -2674,15 +2688,15 @@ Ext.define('ProgramBoard', {
 								xtype: 'rallygrid',	
 								width:450,
 								rowLines:false,
-								flex:1,
 								columnCfgs: teamColumnCfgs,
 								disableSelection: true,
 								plugins: [ 'fastcellediting' ],
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
-										if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
-										else return 'intel-row-35px';
+										if(!teamDepRecord.data.PID) return 'intel-team-dep-row';
+										//if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
+										//else return 'intel-row-35px';
 									}
 								},
 								listeners: {
@@ -2753,7 +2767,8 @@ Ext.define('ProgramBoard', {
 							click: defaultHandler,
 							dblclick: defaultHandler,
 							contextmenu: defaultHandler,
-							render: function(){ me.PredDepContainers[depID] = this; }
+							render: function(){ me.PredDepContainers[depID] = this; },
+							resize: function(){ me.PredDepGrid.view.updateLayout(); }
 						}
 					};
 				}
@@ -2814,14 +2829,14 @@ Ext.define('ProgramBoard', {
 								element: 'el',
 								fn: function(){
 									//validate fields first
-									if(predDepRecord.data.FormattedID === '' || predDepRecord.data.UserStoryName === ''){
+									if(!predDepRecord.data.FormattedID || !predDepRecord.data.UserStoryName){
 										me._alert('ERROR', 'A UserStory is not selected'); return; }
-									if(predDepRecord.data.Description === ''){
+									if(!predDepRecord.data.Description){
 										me._alert('ERROR', 'The description is empty'); return; }
-									if(predDepRecord.data.Checkpoint === ''){
+									if(!predDepRecord.data.Checkpoint){
 										me._alert('ERROR', 'Select When the dependency is needed by'); return; }
 									var predecessors = predDepRecord.data.Predecessors;
-									if(predecessors.length === 0){
+									if(!predecessors.length){
 										me._alert('ERROR', 'You must specify a team you depend on'); return; }
 									if(_.find(predecessors, function(p){ return p.PID === ''; })){
 										me._alert('ERROR', 'All Team Names must be valid'); return; }
@@ -2841,11 +2856,12 @@ Ext.define('ProgramBoard', {
 											return me._getAddedTeamDepCallbacks(teamDeps.added, predDepData).then(function(addedCallbacks){	
 												return me._getUpdatedTeamDepCallbacks(teamDeps.updated, predDepData).then(function(updatedCallbacks){
 													return me._getRemovedTeamDepCallbacks(teamDeps.removed, predDepData).then(function(removedCallbacks){
-														for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-														for(i=0, len=addedCallbacks.length; i<len; ++i){ addedCallbacks[i](); }//execute the added teams now
-														for(i=0, len=updatedCallbacks.length; i<len; ++i){ updatedCallbacks[i](); }//execute the updated teams now
+														var promise = Q();
+														for(i=0, len=removedCallbacks.length; i<len; ++i){ promise = promise.then(removedCallbacks[i]); }//execute the removed teams now
+														for(i=0, len=addedCallbacks.length; i<len; ++i){ promise = promise.then(addedCallbacks[i]); }//execute the added teams now
+														for(i=0, len=updatedCallbacks.length; i<len; ++i){ promise = promise.then(updatedCallbacks[i]); }//execute the updated teams now
 														
-														var promise = Q.fcall(function(){
+														promise = promise.then(function(){
 															var newTeamDeps = teamDeps.added.concat(teamDeps.updated);
 															predDepRecord.beginEdit();
 															predDepRecord.set('ObjectID', newUSRecord.data.ObjectID);
@@ -2911,8 +2927,8 @@ Ext.define('ProgramBoard', {
 													depsToDelete = teamDeps.removed.concat(teamDeps.updated), //dont care about added 
 													i, len;											
 												return me._getRemovedTeamDepCallbacks(depsToDelete, predDepData).then(function(removedCallbacks){
-													for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-													var promise = Q.fcall(function(){});
+													var promise = Q();
+													for(i=0, len=removedCallbacks.length; i<len; ++i){ promise = promise.then(removedCallbacks[i]); }//execute the removed teams now
 													if(realDepData){
 														promise = promise.then(function(){
 															return me._removePredDep(oldUSRecord, realDepData);
@@ -2988,8 +3004,8 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(predDepRecord){ 
-					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
-					return cls;
+					//var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
+					//return cls;
 				}
 			},
 			listeners: {
@@ -3002,6 +3018,7 @@ Ext.define('ProgramBoard', {
 						originalValue = e.originalValue;
 					
 					if(value === originalValue) return; 
+					else if(!value) { predDepRecord.set(field, originalValue); return; }
 					if(field === 'Description') {
 						value = me._htmlEscape(value);			
 						predDepRecord.set(field, value);
@@ -3119,7 +3136,8 @@ Ext.define('ProgramBoard', {
 				width:80,
 				resizable:false,
 				editor: false,
-				sortable:true					
+				sortable:true,
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}				
 			},{
 				text:'Supported',					
 				dataIndex:'Supported',
@@ -3249,6 +3267,8 @@ Ext.define('ProgramBoard', {
 								element: 'el',
 								fn: function(){
 									//no field validation needed
+									if(!succDepRecord.data.Supported){
+										me._alert('ERROR', 'You must set the Supported field.'); return; }
 									me.SuccDepGrid.setLoading(true);
 									me._enqueue(function(unlockFunc){
 										var succDepData = succDepRecord.data, oldUSRecord, newUSRecord;
@@ -3259,7 +3279,9 @@ Ext.define('ProgramBoard', {
 											var realDepData = me._getRealDepData(oldUSRecord, succDepData, 'Successors'); //might be undefined if pred team deleted then readded this team on the dep!
 											if(!realDepData) return Q.reject(['Successor removed this dependency.']);
 											
-											succDepData.ObjectID = newUSRecord.data.ObjectID; //we set this in case we are changing the depended upon US
+											succDepData.ObjectID = newUSRecord.data.ObjectID;
+											succDepData.SuccFormattedID = realDepData.SuccFormattedID;
+											succDepData.SuccUserStoryName = realDepData.SuccUserStoryName;
 											
 											return me._updateSuccessor(succDepData, newUSRecord)
 												.then(function(){									
@@ -3278,11 +3300,7 @@ Ext.define('ProgramBoard', {
 											unlockFunc();
 										})
 										.fail(function(reason){ //hacky way to tell if we should delete this successor dependency
-											if(typeof reason === 'string'){
-												me._alert('ERROR', reason);
-												me.SuccDepGrid.setLoading(false);
-												unlockFunc();
-											} else {
+											if(reason instanceof Array){
 												me._alert('ERROR', reason[0] + ' Deleting this dependency now');
 												if(realDepData){
 													me._removeSuccDep(oldUSRecord, realDepData).then(function(){
@@ -3302,6 +3320,11 @@ Ext.define('ProgramBoard', {
 													me.SuccDepGrid.setLoading(false);
 													unlockFunc();
 												}
+											}
+											else {
+												me._alert('ERROR', reason);
+												me.SuccDepGrid.setLoading(false);
+												unlockFunc();
 											}
 										})
 										.done();
@@ -3341,8 +3364,10 @@ Ext.define('ProgramBoard', {
 						succDepRecord = e.record,
 						field = e.field,
 						value = e.value,
-						originalValue = e.originalValue;					
+						originalValue = e.originalValue;	
+						
 					if(value == originalValue) return;
+					else if(!value) { succDepRecord.set(field, originalValue); return; }
 					var previousEdit = succDepRecord.data.Edited;
 					succDepRecord.set('Edited', true);
 					

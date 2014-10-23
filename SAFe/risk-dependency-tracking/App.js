@@ -62,8 +62,7 @@
 */
 
 /********************* PRODUCTION *****************/
-console = { log: function(){} };
-preferenceName = 'intel-risks-deps-board';		
+console = { log: function(){} };	
 
 /********************* END PRODUCTION *****************/
 Ext.define('RisksDepsApp', {
@@ -76,6 +75,7 @@ Ext.define('RisksDepsApp', {
 		'ReleaseQuery',
 		'AsyncQueue'
 	],
+	_prefName: 'intel-risks-deps-board',
 	
 	layout: {
 		type:'vbox',
@@ -351,31 +351,34 @@ Ext.define('RisksDepsApp', {
 	
 	_parseDependenciesFromUserStory: function(userStoryRecord){
 		var deps = this._getDependencies(userStoryRecord),
-			projectData = this.ValidProjects[userStoryRecord.data.Project.ObjectID].data,
-			preds = deps.Preds, succs = deps.Succs,
-			predDepsList = [], succDepsList = [],
-			startDate =	new Date(this.ReleaseRecord.data.ReleaseStartDate),
-			endDate =	new Date(this.ReleaseRecord.data.ReleaseDate),
-			ObjectID = userStoryRecord.data.ObjectID,
-			FormattedID = userStoryRecord.data.FormattedID,
-			UserStoryName = userStoryRecord.data.Name;
-			
-		if(this._isInRelease(userStoryRecord)){
-			for(var predDepID in preds){
-				var predDep = preds[predDepID];
-				predDepsList.push({
-					ProjectName:projectData.Name,
-					ProjectID: projectData.ObjectID,
-					DependencyID: predDepID,
-					ObjectID: ObjectID,
-					FormattedID: FormattedID,
-					UserStoryName: UserStoryName,
-					Description: predDep.Desc,
-					Checkpoint: predDep.CP,
-					Status: predDep.Sta,
-					Predecessors: predDep.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
-					Edited: false //not in pending edit mode
-				});
+			project = this.ValidProjects[userStoryRecord.data.Project.ObjectID],
+			predDepsList = [];
+		if(project){
+			var projectData = project.data,
+				preds = deps.Preds,
+				startDate =	new Date(this.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	new Date(this.ReleaseRecord.data.ReleaseDate),
+				ObjectID = userStoryRecord.data.ObjectID,
+				FormattedID = userStoryRecord.data.FormattedID,
+				UserStoryName = userStoryRecord.data.Name;
+				
+			if(this._isInRelease(userStoryRecord)){
+				for(var predDepID in preds){
+					var predDep = preds[predDepID];
+					predDepsList.push({
+						ProjectName:projectData.Name,
+						ProjectID: projectData.ObjectID,
+						DependencyID: predDepID,
+						ObjectID: ObjectID,
+						FormattedID: FormattedID,
+						UserStoryName: UserStoryName,
+						Description: predDep.Desc,
+						Checkpoint: predDep.CP,
+						Status: predDep.Sta,
+						Predecessors: predDep.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
+						Edited: false //not in pending edit mode
+					});
+				}
 			}
 		}
 		return {Predecessors:predDepsList};
@@ -487,9 +490,9 @@ Ext.define('RisksDepsApp', {
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
 			appID: me.getAppId(),
-      filterByName:preferenceName+ uid,
+      filterByName:me._prefName+ uid,
 			success: function(prefs) {
-				var appPrefs = prefs[preferenceName + uid];
+				var appPrefs = prefs[me._prefName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}};}
 				console.log('loaded prefs', appPrefs);
@@ -504,7 +507,7 @@ Ext.define('RisksDepsApp', {
 			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
-    s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
 			appID: this.getAppId(),
@@ -646,7 +649,7 @@ Ext.define('RisksDepsApp', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;				
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._reloadEverything();
 					}
@@ -665,7 +668,8 @@ Ext.define('RisksDepsApp', {
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
@@ -966,7 +970,8 @@ Ext.define('RisksDepsApp', {
 						value = e.value,
 						originalValue = e.originalValue;
 					if(value === originalValue) return; 
-					if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
+					else if(!value) { risksRecord.set(field, originalValue); return; }
+					else if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
 						value = me._htmlEscape(value);			
 						risksRecord.set(field, value);
 					}
@@ -1143,13 +1148,12 @@ Ext.define('RisksDepsApp', {
 							xtype: 'rallygrid',	
 							width:410,
 							rowLines:false,
-							flex:1,
 							columnCfgs: teamColumnCfgs,
 							viewConfig: {
 								stripeRows:false,
 								getRowClass: function(teamDepRecord, index, rowParams, store){
-									if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
-									else return 'intel-row-35px';
+									// if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
+									// else return 'intel-row-35px';
 								}
 							},
 							disableSelection: true,
@@ -1171,7 +1175,8 @@ Ext.define('RisksDepsApp', {
 							click: defaultHandler,
 							dblclick: defaultHandler,
 							contextmenu: defaultHandler,
-							render: function(){ me.PredDepContainers[depID] = this; }
+							render: function(){ me.PredDepContainers[depID] = this; },
+							resize: function(){ me.PredDepGrid.view.updateLayout(); }
 						}
 					};
 				}
@@ -1216,8 +1221,8 @@ Ext.define('RisksDepsApp', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(predDepRecord){ 
-					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
-					return cls;
+					//var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
+					//return cls;
 				}
 			},
 			listeners: {
@@ -1230,6 +1235,8 @@ Ext.define('RisksDepsApp', {
 						originalValue = e.originalValue,
 						predDepData = predDepRecord.data;			
 					if(value === originalValue) return; 
+					else if(!value) { predDepRecord.set(field, originalValue); return; }
+					
 					me.PredDepGrid.setLoading(true);
 					me._enqueue(function(unlockFunc){
 						me._getOldAndNewUSRecords(predDepData).then(function(records){
