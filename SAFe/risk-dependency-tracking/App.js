@@ -117,7 +117,6 @@ Ext.define('RisksDepsApp', {
 		
 	_loadFeatures: function(){ 
 		var me=this, 
-			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'PortfolioItem/Feature',
 				limit:Infinity,
@@ -127,23 +126,8 @@ Ext.define('RisksDepsApp', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }]
+				filters:[me._getFeatureFilter(me.TrainRecord, me.ReleaseRecord)]
 			});
-		featureStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
-						});
-					},
-					scope: this
-			});
-		};
 		return me._reloadStore(featureStore)
 			.then(function(featureStore){ 
 				var promises = [],
@@ -174,26 +158,28 @@ Ext.define('RisksDepsApp', {
 			});
 	},
 	
-	_loadUserStoryFilterString: function(trainRecord, releaseRecord){
-		var coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-			property:'Release.Name',
-			value: releaseRecord.data.Name
-		}).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'Project.Name',
-			operator: 'contains',
-			value: trainRecord.data.Name.split(' ART')[0]
-		})).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'c_Dependencies',
-			operator: '!=',
-			value: ''
-		}));
-		
-		return coreFilter.toString();
+	_loadUserStoryFilter: function(trainRecord, releaseRecord){
+		var trainName = trainRecord.data.Name.split(' ART')[0],
+			coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+				property:'Feature.Release.Name',
+				value: releaseRecord.data.Name
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'c_Dependencies',
+				operator: '!=',
+				value: ''
+			})),
+			featureParentFilter = Ext.create('Rally.data.wsapi.Filter', {
+				property:'Feature.Project.Name',
+				value: trainName + ' POWG Portfolios'
+			}).or(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Feature.Project.Parent.Name',
+				value: trainName + ' POWG Portfolios'
+			}));
+		return coreFilter.and(featureParentFilter);
 	},
 	
 	_loadUserStories: function(){	
 		var me=this, 
-			filterString = this._loadUserStoryFilterString(me.TrainRecord, me.ReleaseRecord);
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'HierarchicalRequirement',
 				limit:Infinity,
@@ -201,26 +187,11 @@ Ext.define('RisksDepsApp', {
 				fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 					'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 				context:{
-					workspace: this.getContext().getWorkspace()._ref,
+					workspace: me.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }] //need this or filterString wont get injected
+				filters:[me._loadUserStoryFilter(me.TrainRecord, me.ReleaseRecord)]
 			});
-		userStoryStore._hydrateModelAndLoad = function(options){
-      var deferred = new Deft.Deferred();
-      this.hydrateModel().then({
-        success: function(model) {
-					this.proxy.encodeFilters = function(){//inject custom filter here. woot
-						return filterString;
-					};
-					this.load(options).then({
-						success: Ext.bind(deferred.resolve, deferred),
-						failure: Ext.bind(deferred.reject, deferred)
-					});
-				},
-				scope: this
-			});
-		};
 		return me._reloadStore(userStoryStore)
 			.then(function(userStoryStore){ 
 				console.log('userStories loaded:', userStoryStore.data.items);
@@ -664,13 +635,13 @@ Ext.define('RisksDepsApp', {
 	},
 
 	/******************************************************* RENDER TOP BAR ITEMS********************************************************/	
+	
 	_releasePickerSelected: function(combo, records){
-		var me=this;
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
-		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
-		var pid = me.ProjectRecord.data.ObjectID;		
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);	
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -690,6 +661,7 @@ Ext.define('RisksDepsApp', {
 			releases: me.ReleaseStore.data.items,
 			currentRelease: me.ReleaseRecord,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._releasePickerSelected.bind(me)
 			}
 		});

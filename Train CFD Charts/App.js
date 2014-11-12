@@ -1,11 +1,10 @@
 /************************** PRODUCTION *****************************/
 console = { log: function(){} };	////DEBUG!!!	
-preferenceName = 'intel-ART-CFD';
 
 /****************************************************************/
 
 Ext.define('TrainCfdCharts', {
-	extend: 'Rally.app.App',
+	extend: 'IntelRallyApp',
 	requires:[
 		'FastCfdCalculator'
 	],
@@ -17,6 +16,8 @@ Ext.define('TrainCfdCharts', {
 		'ReleaseQuery',
 		'ChartUpdater'
 	],
+	_prefName: 'intel-ART-CFD',
+	
 	minWidth:910,
 	
 	/****************************************************** SOME CONFIG CONSTANTS *******************************************************/
@@ -45,10 +46,15 @@ Ext.define('TrainCfdCharts', {
 				x: -5,
 				y: 4
 			}
-		},
+		},			
 		tooltip: {
 			formatter: function () {
-				return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ")<br />" + this.series.name + ": " + this.y;
+				var sum = 0;
+				for(var i=4; i>= this.series.index; --i) 
+					sum += this.series.chart.series[i].data[this.point.x].y;
+				return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ')' + 
+					"<br /><b>" + this.series.name + "</b>: " + this.y +
+					(this.series.index <=4 ? "<br /><b>Total</b>: " + sum : '');
 			}
 		},
 		plotOptions: {
@@ -84,35 +90,6 @@ Ext.define('TrainCfdCharts', {
 	},
 	
 	/****************************************************** DATA STORE METHODS ********************************************************/
-
-	_loadModels: function(cb){
-		Rally.data.ModelFactory.getModel({ //load project
-			type:'Project',
-			scope:this,
-			success: function(model){ 
-				this.Project = model; 
-				cb(); 
-			}
-		});
-	},
-	
-	_loadProject: function(project, cb){ //callback(project) project IS NOT a projectRecord
-		var me = this;
-		me.Project.load(project.ObjectID, {
-			fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project: null
-			},
-			callback: function(record, operation){
-				if(operation.wasSuccessful()) cb(record);
-				else {
-					me._alert('ERROR', 'failed to retreive project: ' + project.ObjectID);
-					cb();
-				}
-			}
-		});
-	},
 
 	_loadSnapshotStores: function(){
 		var me = this, 
@@ -162,59 +139,47 @@ Ext.define('TrainCfdCharts', {
 			trainName = me.TrainRecord.data.Name.split(' ART')[0];			
 		return me._loadReleasesWithName(releaseName, trainName)
 			.then(function(releaseStore){
-				me.ReleasesWithName = releaseStore.getRange();
+				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ return r.data.Project.TeamMembers.Count > 0; });
 			});
 	},
 	
 	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
-	_loadPreferences: function(cb){ //parse all settings too
-		var me = this,uid = me.getContext().getUser().ObjectID;
+	_loadPreferences: function(){ //parse all settings too
+		var me=this,
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
 			appID: me.getAppId(),
-      filterByName:preferenceName+ uid,
+      filterByName: me._prefName + uid,
 			success: function(prefs) {
-				prefs = prefs[preferenceName + uid];
-				try{ prefs = JSON.parse(prefs); }
-				catch(e){ prefs = {projs: {}}; }
-				me.AppPrefs = prefs;
-				console.log('loaded prefs', prefs);
-        cb();
-			}
+				var appPrefs = prefs[me._prefName + uid];
+				try{ appPrefs = JSON.parse(appPrefs); }
+				catch(e){ appPrefs = { projs:{}};}
+				console.log('loaded prefs', appPrefs);
+				deferred.resolve(appPrefs);
+			},
+			failure: deferred.reject
 		});
+		return deferred.promise;
 	},
 
-	_savePreferences: function(prefs, cb){ // stringify and save only the updated settings
-		var me = this, s = {}, uid = me.getContext().getUser().ObjectID;
+	_savePreferences: function(prefs){ // stringify and save only the updated settings
+		var me=this, s = {}, 
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
 		prefs = {projs: prefs.projs};
-    s[preferenceName + uid] = JSON.stringify(prefs);
+    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID,
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
-			appID: me.getAppId(),
+			appID: this.getAppId(),
 			settings: s,
-			success: cb,
-			scope:me
+			success: deferred.resolve,
+			failure: deferred.reject
 		});
-	},
-	
-	/*************************************************** RANDOM HELPERS ******************************************************/	
-	_projectInWhichTrain: function(projectRecord, cb){ // returns train the projectRecord is in, otherwise null.
-		var me = this;
-		if(!projectRecord) cb();
-		var split = projectRecord.data.Name.split(' ART');
-		if(split.length>1) cb(projectRecord);
-		else { 
-			var parent = projectRecord.data.Parent;
-			if(!parent) cb();
-			else {
-				me._loadProject(parent, function(parentRecord){
-					me._projectInWhichTrain(parentRecord, cb);
-				});
-			}
-		}
+		return deferred.promise;
 	},
 
-	/******************************************************* LAUNCH ********************************************************/
+	/******************************************************* Reloading ********************************************************/
 		
 	_resizeWhenRendered: function(){
 		var me = this;
@@ -226,90 +191,104 @@ Ext.define('TrainCfdCharts', {
 	_reloadEverything:function(){
 		var me=this;
 		me.setLoading(true);		
-		me._loadAllChildReleases().then(function(){
-			me._loadSnapshotStores().then(function(){
+		return me._loadAllChildReleases()
+			.then(function(){
+				return me._loadSnapshotStores();
+			})
+			.then(function(){
 				me.removeAll();
 				me.setLoading(false);
-				me._renderReleasePicker();
+				me._loadReleasePicker();
 				me._renderCharts(); 
 			});
-		});
-	},
-	
-	_loadReleases: function(){
-		var me=this;
-		me._loadReleasesInTheFuture(me.TrainRecord).then(function(releaseStore){
-			me.ReleaseStore = releaseStore;
-			var currentRelease = me._getScopedRelease(me.ReleaseStore.getRange(), me.TrainRecord.data.ObjectID, me.AppPrefs);
-			if(currentRelease){
-				me.ReleaseRecord = currentRelease;
-				console.log('release loaded', currentRelease);
-				me._reloadEverything();
-			} else {
-				me.setLoading(false);
-				me._alert('ERROR', 'This ART has no valid releases');
-			}
-		});
 	},
 
+	/******************************************************* LAUNCH ********************************************************/
+	
 	launch: function(){
 		var me = this;
-		me._initPrettyAlert();
-		me._initIframeResize();	
+		me._initDisableResizeHandle();
+		me._initFixRallyDashboard();
 		me.setLoading(true);
 		if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
 			Rally.sdk.dependencies.Analytics.load(function(){	
-				me._loadPreferences(function(){
-					me._loadModels(function(){
+				me._loadModels()
+					.then(function(){
 						var scopeProject = me.getContext().getProject();
-						me._loadProject(scopeProject, function(scopeProjectRecord){
-							me._projectInWhichTrain(scopeProjectRecord, function(trainRecord){
-								if(trainRecord){
-									me.TrainRecord = trainRecord; 
-									console.log('train loaded:', trainRecord);
-									me._loadReleases();
-								} else {
-									me.removeAll();
-									me._alert('ERROR', 'Project "' + scopeProject.Name + '" not a train or sub-project of train');
-								}
-							});
-						});
-					});
-				});
+						return me._loadProject(scopeProject.ObjectID);
+					})
+					.then(function(scopeProjectRecord){
+						me.ProjectRecord = scopeProjectRecord;
+						return me._loadPreferences();
+					})
+					.then(function(appPrefs){
+						me.AppPrefs = appPrefs;
+						return me._projectInWhichTrain(me.ProjectRecord);
+					})
+					.then(function(trainRecord){
+						if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
+							me.TrainRecord = trainRecord;
+							console.log('train loaded:', trainRecord);
+							var twelveWeeks = 1000*60*60*24*12;
+							return me._loadReleasesAfterGivenDate(me.TrainRecord, (new Date()*1 - twelveWeeks));
+						} 
+						else return Q.reject('You are not scoped to a train.');
+					})
+					.then(function(releaseStore){
+						me.ReleaseStore = releaseStore;
+						var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
+						if(currentRelease){
+							me.ReleaseRecord = currentRelease;
+							console.log('release loaded', currentRelease);
+							return me._reloadEverything();
+						}
+						else return Q.reject('This train has no releases.');
+					})
+					.fail(function(reason){
+						me.setLoading(false);
+						me._alert('ERROR', reason || '');
+					})
+					.done();
 			});
 		}
 	},
 	
-	
 	/******************************************************* RENDERING CHARTS ********************************************************/
-
-	_renderReleasePicker: function(){
+	_releasePickerSelected: function(combo, records){
+		var me=this;
+		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+		me.setLoading(true);
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
+		var pid = me.ProjectRecord.data.ObjectID;		
+		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+		me._savePreferences(me.AppPrefs)
+			.then(function(){ 
+				return me._reloadEverything(); 
+			})
+			.fail(function(reason){
+				me._alert('ERROR', reason || '');
+				me.setLoading(false);
+			})
+			.done();
+	},
+	
+	_loadReleasePicker: function(){
 		var me=this;
 		me.ReleasePicker = me.add({
-			xtype:'combobox',
-			padding:'0 0 10px 0',
-			store: Ext.create('Ext.data.Store', {
-				fields: ['Name'],
-				data: _.map(me.ReleaseStore.getRecords(), function(r){ return {Name: r.get('Name') }; })
-			}),
-			displayField: 'Name',
-			fieldLabel: 'Release:',
-			editable:false,
-			value:me.ReleaseRecord.get('Name'),
+			xtype:'intelreleasepicker',
+			labelWidth: 80,
+			width: 240,
+			releases: me.ReleaseStore.data.items,
+			currentRelease: me.ReleaseRecord,
 			listeners: {
-				select: function(combo, records){
-					if(me.ReleaseRecord.get('Name') === records[0].get('Name')) return;
-					me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].get('Name'));
-					var pid = me.TrainRecord.data.ObjectID;
-					if(!me.AppPrefs.projs[pid]) me.AppPrefs.projs[pid] = {};
-					me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-					me._savePreferences(me.AppPrefs, function(){ me._reloadEverything(); });					
-				}, 
-				focus: function(combo){ combo.expand(); }
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+				select: me._releasePickerSelected.bind(me)
 			}
 		});
 	},
-	
+
   _renderCharts: function(){
 		var me = this;
 		
@@ -331,8 +310,8 @@ Ext.define('TrainCfdCharts', {
 		});
 	
 		var calc = Ext.create('FastCfdCalculator', {
-			startDate: me.ReleaseRecord.get('ReleaseStartDate'),
-			endDate: me.ReleaseRecord.get('ReleaseDate')
+			startDate: me.ReleaseRecord.data.ReleaseStartDate,
+			endDate: me.ReleaseRecord.data.ReleaseDate
 		});
 		
 		me.trainPanel.add({
@@ -356,14 +335,14 @@ Ext.define('TrainCfdCharts', {
 					itemWidth:100
 				},
 				title: {
-					text: me.TrainRecord.get('Name')
+					text: me.TrainRecord.data.Name
 				},
 				subtitle:{
-					text: me.ReleaseRecord.get('Name')
+					text: me.ReleaseRecord.data.Name
 				},
 				xAxis:{
 					tickInterval: me._getConfiguredChartTicks(
-						me.ReleaseRecord.get('ReleaseStartDate'), me.ReleaseRecord.get('ReleaseDate'), me.getWidth()*0.66)
+						me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
 				}
 			}, me._defaultChartConfig),
 			listeners:{
@@ -385,7 +364,7 @@ Ext.define('TrainCfdCharts', {
 				height:360,
 				padding:"20px 0 0 0",
 				chartColors:me._chartColors,
-				chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName]), {noDatemap:true}),
+				chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),
 				chartConfig: Ext.Object.merge({
 					chart: {
 						height:300
@@ -401,7 +380,7 @@ Ext.define('TrainCfdCharts', {
 					},
 					xAxis: {
 						tickInterval: me._getConfiguredChartTicks(
-							me.ReleaseRecord.get('ReleaseStartDate'), me.ReleaseRecord.get('ReleaseDate'), me.getWidth()*0.32)
+							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
 					}
 				}, me._defaultChartConfig),
 				listeners:{

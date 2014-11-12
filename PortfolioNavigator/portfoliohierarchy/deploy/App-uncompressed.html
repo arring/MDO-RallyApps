@@ -135,6 +135,18 @@
 		}
 	},
 	
+	_loadTopProject: function(projectRecord){
+		if(!projectRecord) return Q.reject('Invalid arguments: LTP');
+		var me=this, 
+			n = projectRecord.data.Name;
+		if(!projectRecord.data.Parent) return Q(projectRecord);
+		else {
+			return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+				return me._loadTopProject(parentRecord);
+			});
+		}
+	},
+	
 	_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
 		else {
@@ -225,7 +237,7 @@
 					property:'FormattedID',
 					value:formattedID
 				},{
-					property:'Project._ref',
+					property:'Project',
 					value: projectRef
 				}]
 			});
@@ -262,11 +274,13 @@
 	_getFeatureFilter: function(trainRecord, releaseRecord){
 		if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
 		var me=this,
-			trainName = trainRecord.data.Name.split(' ART')[0];
+			trainName = trainRecord.data.Name.split(' ART')[0],
+			relSplit = releaseRecord.data.Name.split(' '),
 			coreFilter = Ext.create('Rally.data.wsapi.Filter', {
 				property:'Release.Name',
 				value: releaseRecord.data.Name
 			});
+		trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
 		if(trainRecord.data.Name == 'Test ART (P&E)'){
 			return Ext.create('Rally.data.wsapi.Filter', {
 				property:'Project.Name',
@@ -315,7 +329,7 @@
 				remoteSort:false,
 				fetch: ['Name'],
 				context:{
-					workspace: this.getContext().getWorkspace()._ref,
+					workspace: me.getContext().getWorkspace()._ref,
 					project: null
 				},
 				filters:[me._getProductFilter(trainRecord)]
@@ -339,7 +353,7 @@
 		}
 	},
 	
-	_loadValidProjects: function(rootProjectRecord){ //all projects under All Scrums that have team Members
+	_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
 		if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
 		var me=this,
 			validProjects = {}, 
@@ -414,7 +428,6 @@
 			return Q(childrenProjects);
 		});	
 	},
-	
 	
 	/********************************************** Generic store loading, returns promise ********************************************/
 	
@@ -760,6 +773,41 @@ Ext.define('ReleaseQuery', {
 		return deferred.promise;
 	},
 	
+		/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+	_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[
+				{
+					property:'Project.ObjectID',
+					value: projectRecord.data.ObjectID
+				},{
+					property:'ReleaseDate',
+					operator:'>=',
+					value: new Date(givenDate).toISOString()
+				}
+			],
+			listeners: {
+				load: {
+					fn: function(releaseStore, releaseRecords){
+						console.log('releases loaded:', releaseRecords);
+						deferred.resolve(releaseStore);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
 	/** gets the most likely release to scope to base on the following order:
 		1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
 						to use preferences for this one)
@@ -1017,7 +1065,9 @@ Ext.define('Intel.form.field.ComboBox', {
 		);
 	}
 });
-                Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
+                console = { log: function(){} }; // DEBUG!!!!		
+
+Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 	extend: 'IntelRallyApp',
 	appName: 'Portfolio Hierarchy',
 	mixins: [
@@ -1173,7 +1223,7 @@ Ext.define('Intel.form.field.ComboBox', {
 			})
 			.then(function(userStory){
 				me.HasUserStories = !!userStory;
-				return me._loadProjectByName('All Releases');
+				return me._loadTopProject(me.ProjectRecord);
 			})
 			.then(function(rootProject){
 				return me._loadAllChildrenProjects(rootProject);
@@ -1241,7 +1291,7 @@ Ext.define('Intel.form.field.ComboBox', {
 	_onPreferenceChanged: function(field, newValue){
 		var me=this,
 			pid = me.ProjectRecord.data.ObjectID;
-		if(me[field] === newValue) return;
+		if(me[field] === newValue) return Q();
 		else me[field] = newValue;
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid][field] = newValue;

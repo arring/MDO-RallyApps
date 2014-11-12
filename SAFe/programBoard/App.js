@@ -63,7 +63,6 @@
 
 /********************* PRODUCTION *****************/
 console = { log: function(){} }; // DEBUG!!!!		
-preferenceName = 'intel-program-board';
 
 /********************* END PRODUCTION *****************/
 Ext.define('ProgramBoard', {
@@ -76,6 +75,7 @@ Ext.define('ProgramBoard', {
 		'ReleaseQuery',
 		'AsyncQueue'
 	],
+	_prefName: 'intel-program-board',
 	
 	layout: {
 		type:'vbox',
@@ -124,7 +124,6 @@ Ext.define('ProgramBoard', {
 	/****************************************************** DATA STORE METHODS ********************************************************/
 	_loadFeatures: function(){ 
 		var me=this, 
-			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'PortfolioItem/Feature',
 				limit:Infinity,
@@ -134,23 +133,8 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }]
+				filters:[me._getFeatureFilter(me.TrainRecord, me.ReleaseRecord)]
 			});
-		featureStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
-						});
-					},
-					scope: this
-			});
-		};
 		return me._reloadStore(featureStore)
 			.then(function(featureStore){ 
 				var promises = [],
@@ -182,7 +166,6 @@ Ext.define('ProgramBoard', {
 				limit:Infinity,
 				fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
 				context:{
-					workspace: this.getContext().getWorkspace()._ref,
 					project: this.getContext().getProject()._ref
 				},
 				filters: [
@@ -204,32 +187,32 @@ Ext.define('ProgramBoard', {
 			});
 	},
 	
-	_loadUserStoryFilterString: function(){
-		var me=this;
-		
-		var coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-			property:'Release.Name',
-			value: me.ReleaseRecord.data.Name
-		}).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'Project.Name',
-			value: me.ProjectRecord.data.Name
-		}));	
-		
-		var depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
-			property:'Project.Name',
-			value: me.ProjectRecord.data.Name
-		}).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'c_Dependencies',
-			operator:'!=',
-			value:''
-		}));
-
-		return coreFilter.or(depFilter).toString();
+	_loadUserStoryFilter: function(){
+		var me=this,
+			coreFilter = Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project',
+				value: me.ProjectRecord.data._ref
+			}).and(
+				Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+					property:'Release.Name',
+					value: me.ReleaseRecord.data.Name
+				}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+					property:'Feature.Release.Name',
+					value: me.ReleaseRecord.data.Name
+				}))),
+			depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
+				property:'Project',
+				value: me.ProjectRecord.data._ref
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'c_Dependencies',
+				operator:'!=',
+				value:''
+			}));
+		return coreFilter.or(depFilter);
 	},
 	
 	_loadUserStories: function(){	
 		var me=this, 
-			filterString = this._loadUserStoryFilterString(me.TrainRecord, me.ReleaseRecord);
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'HierarchicalRequirement',
 				limit:Infinity,
@@ -240,23 +223,8 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }] //need this or filterString wont get injected
+				filters:[me._loadUserStoryFilter()]
 			});
-		userStoryStore._hydrateModelAndLoad = function(options){
-      var deferred = new Deft.Deferred();
-      this.hydrateModel().then({
-        success: function(model) {
-					this.proxy.encodeFilters = function(){//inject custom filter here. woot
-						return filterString;
-					};
-					this.load(options).then({
-						success: Ext.bind(deferred.resolve, deferred),
-						failure: Ext.bind(deferred.reject, deferred)
-					});
-				},
-				scope: this
-			});
-		};
 		return me._reloadStore(userStoryStore)
 			.then(function(userStoryStore){ 
 				console.log('userStories loaded:', userStoryStore.data.items);
@@ -493,8 +461,9 @@ Ext.define('ProgramBoard', {
 		}
 	},
 	
-	_isInRelease: function(usr){
-		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name;
+	_isInRelease: function(usr){ //some user stories are not themselves in releases
+		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name ||
+			usr.data.Feature && usr.data.Feature.Release && usr.data.Feature.Release.Name === this.ReleaseRecord.data.Name;
 	},
 	
 	_getDependencies: function(userStoryRecord){
@@ -1096,9 +1065,9 @@ Ext.define('ProgramBoard', {
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
 			appID: me.getAppId(),
-      filterByName:preferenceName+ uid,
+      filterByName:me._prefName+ uid,
 			success: function(prefs) {
-				var appPrefs = prefs[preferenceName + uid];
+				var appPrefs = prefs[me._prefName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}, refresh:30};}
 				console.log('loaded prefs', appPrefs);
@@ -1114,7 +1083,7 @@ Ext.define('ProgramBoard', {
 			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
-    s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
 			appID: this.getAppId(),
@@ -1345,7 +1314,7 @@ Ext.define('ProgramBoard', {
 						me.ProjectNames.push({Name: validProjects[projOID].data.Name });
 					}
 					if(me.ValidProjects[me.ProjectRecord.data.ObjectID]) return me._loadPreferences();
-					else Q.reject('Please scope to a team that has members');
+					else return Q.reject('Please scope to a team that has members');
 				})
 				.then(function(appPrefs){
 					me.AppPrefs = appPrefs;
@@ -1359,6 +1328,9 @@ Ext.define('ProgramBoard', {
 						me.TrainNames[i] = {Name: trainRecs[i].data.Name.split(' ART')[0]};
 					}
 					return me._projectInWhichTrain(me.ProjectRecord);
+				})
+				.fail(function(error){
+					if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
 				})
 				.then(function(trainRecord){
 					if(trainRecord)	me.TrainRecord = trainRecord;
@@ -1397,12 +1369,11 @@ Ext.define('ProgramBoard', {
 	/************************************************ NAVIGATION AND STATE ****************************************************/
 	
 	_releasePickerSelected: function(combo, records){
-		var me=this;
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
 		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);	
 		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);		
-		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -1422,17 +1393,17 @@ Ext.define('ProgramBoard', {
 			releases: me.ReleaseStore.data.items,
 			currentRelease: me.ReleaseRecord,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._releasePickerSelected.bind(me)
 			}
 		});
 	},
 	
 	_trainPickerSelected: function(combo, records){
-		var me=this;
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.TrainRecord.data.Name.indexOf(records[0].data.Name) === 0) return;
 		me.setLoading(true);
-		me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('Name', records[0].data.Name);			
-		var pid = me.ProjectRecord.data.ObjectID;
+		me.TrainRecord = me.AllTrainRecordsStore.findRecord('Name', records[0].data.Name + ' ART');	//NOT FINDEXACTRECORD!	
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Train = me.TrainRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -1452,13 +1423,15 @@ Ext.define('ProgramBoard', {
 				width:240,
 				labelWidth:40,
 				store: Ext.create('Ext.data.Store', {
-					fields: ['Name'],
+					fields: ['Name'],				
+					sorters: [function(o1, o2){ return o1.data.Name < o2.data.Name ? -1 : 1; }],
 					data: me.TrainNames
 				}),
 				displayField: 'Name',
 				fieldLabel: 'Train:',
 				value:me.TrainRecord.data.Name.split(' ART')[0],
 				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					select: me._trainPickerSelected.bind(me)
 				}
 			});
@@ -1493,6 +1466,7 @@ Ext.define('ProgramBoard', {
 			fieldLabel: 'Auto-Refresh Rate (seconds):',
 			value:me.AppPrefs.refresh,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._refreshComboSelected.bind(me)
 			}
 		});
@@ -1559,7 +1533,6 @@ Ext.define('ProgramBoard', {
 				tcStore.resumeEvents();
 			}
 		});
-		me.CustomTeamCommitsStore.intelUpdate();
 		
 		var columnCfgs = [
 			{
@@ -1793,7 +1766,6 @@ Ext.define('ProgramBoard', {
 				velStore.resumeEvents();
 			}
 		});
-		me.CustomVelocityStore.intelUpdate();		
 		
 		var columnCfgs = [
 			{	
@@ -1973,7 +1945,6 @@ Ext.define('ProgramBoard', {
 				riskStore.resumeEvents();
 			}
 		});
-		me.CustomRisksStore.intelUpdate();
 		
 		var columnCfgs = [
 			{
@@ -2371,7 +2342,6 @@ Ext.define('ProgramBoard', {
 				var predDepStore = me.CustomPredDepStore, 
 					predDepRecs = predDepStore.getRange(),
 					realPredDepsData = me.DependenciesParsedData.Predecessors.slice(), //shallow copy of it	
-					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing predDeps with current userStories', predDepRecs, realPredDepsData);
 				predDepStore.suspendEvents(true);
@@ -2425,7 +2395,6 @@ Ext.define('ProgramBoard', {
 				predDepStore.resumeEvents();
 			}
 		});
-		me.CustomPredDepStore.intelUpdate();
 		
 		var predDepColumnCfgs = [
 			{
@@ -2514,26 +2483,22 @@ Ext.define('ProgramBoard', {
 									depTeamStore = me.PredDepTeamStores[depID],
 									depTeamRecords = depTeamStore.getRange(),
 									predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
-									predecessors = predDepRecord.data.Predecessors.slice(0);
+									predecessors = predDepRecord.data.Predecessors.slice();
 								depTeamStore.suspendEvents(true);
 								Outer:
 								for(var i = 0;i<depTeamRecords.length;++i){
 									var depTeamRecord = depTeamRecords[i],
-										realTeamDep, key,
-										remoteChanged = false; //if someone else updated this while it was idle on our screen	
+										realTeamDep, key;
 									for(var j=0; j<predecessors.length;++j){
 										if(predecessors[j].TID === depTeamRecord.data.TID){
 											realTeamDep = predecessors.splice(j, 1)[0];
 											for(key in realTeamDep){
-												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ remoteChanged = true; break; }
+												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ 
+													depTeamStore.remove(depTeamRecord);
+													depTeamStore.add(Ext.create('IntelDepTeam', Ext.clone(realTeamDep)));
+													continue Outer;
+												}
 											}
-											if(remoteChanged){
-												depTeamRecord.beginEdit();
-												for(key in realTeamDep)
-													depTeamRecord.set(key, realTeamDep[key]);
-												depTeamRecord.endEdit();
-											}
-											continue Outer;
 										}
 									}
 									depTeamStore.remove(depTeamRecord);
@@ -2768,7 +2733,17 @@ Ext.define('ProgramBoard', {
 							dblclick: defaultHandler,
 							contextmenu: defaultHandler,
 							render: function(){ me.PredDepContainers[depID] = this; },
-							resize: function(){ me.PredDepGrid.view.updateLayout(); }
+							resize: function(d, w, h, oldw, oldh){ 
+								var viewHeight = me.PredDepGrid.view.el.clientHeight,
+									viewScrollHeight = me.PredDepGrid.view.el.dom.scrollHeight,
+									maxHeight = me.PredDepGrid.maxHeight - 
+										(me.PredDepGrid.view.headerCt.el.dom.clientHeight + me.PredDepGrid.header.el.dom.clientHeight) + 2;
+									changeHeight = h - oldh;
+								if(viewScrollHeight < maxHeight || 
+									((viewScrollHeight - changeHeight <=  maxHeight) != (viewScrollHeight <= maxHeight))){
+									me.PredDepGrid.view.updateLayout(); 
+								}
+							}
 						}
 					};
 				}
@@ -2982,7 +2957,7 @@ Ext.define('ProgramBoard', {
 							});
 							me.CustomPredDepStore.insert(0, [model]);	
 							me.PredDepGrid.view.getEl().setScrollTop(0);
-							me.PredDepGrid.getSelectionModel().select(model);
+							//me.PredDepGrid.getSelectionModel().select(model);
 						}
 					}
 				}
@@ -3098,7 +3073,6 @@ Ext.define('ProgramBoard', {
 				succDepStore.resumeEvents();
 			}
 		});
-		me.CustomSuccDepStore.intelUpdate();
 		
 		var succDepColumnCfgs = [
 			{

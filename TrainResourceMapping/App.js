@@ -1,17 +1,112 @@
-Ext.define('CustomApp', {
-    extend: 'Rally.app.App',
+Ext.define('TrainResourceMapping', {
+	extend: 'IntelRallyApp',
+	mixins:[
+		'WindowListener',
+		'PrettyAlert',
+		'IframeResize',
+		'IntelWorkweek',
+		'ReleaseQuery',
+		'AsyncQueue'
+	],
+	_prefName: 'intel-train-resource-mapping',
 	
-	/****************************************************** SHOW ERROR/TEXT MESSAGE ********************************************************/
-	_showError: function(text){
-		if(this.errMessage) this.remove(this.errMessage);
-		this.errMessage = this.add({xtype:'text', text:text});
+	_newOldTrainMaps:{
+		Rave: 'Al/Ch',
+		Light: 'Br/De',
+		Echo: '',
+		Romeo: '',
+		Golf: '',
+		Sierra: 'Ho/Fo',
+		Julio: 'Ju/Ki'
+	},
+	_trainGrouping:[['Rave'], ['Light'], ['Echo'], ['Romeo', 'Golf'], ['Sierra'], ['Julio']], //current groupings
+	
+	_isMap: {
+		'TVPV' : { is : ['TVPV', 'Trace'], isnot : [] },
+		'Fuse' : { is : ['Fuse', 'FOG'], isnot : [] },
+		'HTD' : { is : [], isnot : [] },
+		'Array1' : { is : [], isnot : [] },
+		'Array2' : { is : [], isnot : [] },
+		'Scan1' : { is : [], isnot : [] },
+		'Scan2' : { is : [], isnot : [] },
+		'Scan3' : { is : [], isnot : [] },
+		'Func Module1' : { is : [], isnot : [] },
+		'Func Module2' : { is : [], isnot : [] },
+		'Func Module3' : { is : [], isnot : [] },
+		'Func Content' : { is : [], isnot : [] },
+		'Virtual Module' : { is : [], isnot : [] },
+		'GT Content' : { is : [], isnot : [] },
+		'GT Module' : { is : [], isnot : [] },
+		'SIO' : { is : [], isnot : [] },
+		'MIO' : { is : [], isnot : [] },
+		'PT' : { is : [], isnot : [] },
+		'CLK' : { is : [], isnot : [] },
+		'Class TPI1' : { is : [], isnot : [] },
+		'Sort TPI1' : { is : [], isnot : [] },
+		'Sort Class TPI1' : { is : [], isnot : [] },
+		'Sort Class TPI2' : { is : [], isnot : [] },
+		'Class TPI2' : { is : [], isnot : [] },
+		'Class TPI3' : { is : [], isnot : [] },
+		'Class TPI4' : { is : [], isnot : [] },
+		'MPV' : { is : [], isnot : [] },
+		'Yield PHI' : { is : [], isnot : [] },
+		'Binsplit' : { is : [], isnot : [] },
+		'Binning UPS' : { is : [], isnot : [] },
+		
+	_orgMap: {
+		SCI	: ['TMM', 'TVPV', 'Fuse'],
+		DCD	: ['Func', 'Scan', 'Cache', 'Reset'],
+		ACD	: ['P/T', 'PLL', 'SIO','MIO'],
+		TPI	: ['S/C TPI'],
+		MPV	: ['MPV/PPV'],
+		PHI	: ['Yield/BS']
 	},
 	
 	/************************************************** DATA LOADING/Parsing METHODS **********************************************/
 	
+	_loadProjectTree: function(rootProjectRecord){
+		if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
+		var me=this,
+			projTree = {};
+		var store = Ext.create('Rally.data.wsapi.Store', {
+			model: "Project",
+			fetch: ['Name', 'Parent', 'ObjectID'],
+			limit:Infinity,
+			context: {
+				workspace: me.getContext().getWorkspace()._ref,
+				project:null
+			}
+		});
+		return me._reloadStore(store).then(function(store){
+			var projects = store.data.items;
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			return Q(projTree[rootProjectRecord.data.ObjectID]);
+		});	
+	},
+	
+	_buildMaps: function(projectTree){
+		var me=this,
+			productTypeMap = {}, //trainOID -> type (SOC, CLI...)
+			productMap = {}, //trainOID -> [productNames]
+			teamMemberMap = {}, //projectOID -> [teamMemberRecords]
+			
+	},
+	
 	_loadAllProjects: function(cb){
-		var me = this, TSMap = {}, // {trainName: {train:<trainRecord>, scrums:[<scrumRecords>]}}
-			peopleMap = {}, trainName, split;
+		var me = this, 
+			TSMap = {}, // {trainName: {train:<trainRecord>, scrums:[<scrumRecords>]}}
+			peopleMap = {}, 
+			trainName, split;
 		function loadChildren(project, _cb){
 			Ext.create('Rally.data.wsapi.Store',{
 				model: 'Project',
@@ -74,10 +169,9 @@ Ext.define('CustomApp', {
 				project: null
 			},
 			filters:[{
-					property:'Name',
-					value: 'All Scrums'
-				}
-			],
+				property:'Name',
+				value: 'All Scrums'
+			}],
 			listeners:{
 				load:{
 					fn: function(ps, recs){
@@ -140,32 +234,6 @@ Ext.define('CustomApp', {
 		me.TSMap = newTSMap;
 		console.log('new TSMap loaded', newTSMap);
 		cb();
-	},
-
-	_isMap: {
-		TMM : { is : ['TMM', 'EVG', 'Evergreen'], isnot : [] },
-		TVPV : { is : ['TVPV', 'Trace'], isnot : [] },
-		Fuse : { is : ['Fuse', 'FOG'], isnot : [] },
-		Func : { is : ['Func', 'GFX', 'Writing', 'FTW', 'SBFT', 'Core', 'UnCore', 'IPU'], isnot : ['Boot'] },
-		Scan : { is : ['Scan', 'ATPG', 'Struct', 'DFX'], isnot : ['Infra'] },
-		Cache : { is : ['Cache', 'Array'], isnot : [] },
-		Reset : { is : ['Reset', 'HTD', 'Simode'], isnot : [] },
-		'P/T' : { is : ['Power', 'PTA'], isnot : ['Performance'] },
-		PLL : { is : ['PLL'], isnot : [] },
-		SIO : { is : ['IO', 'Serial', 'Analog '], isnot : ['MIO', 'Memory', 'Func'] },
-		MIO : { is : ['MIO', 'DDR', 'Memory'], isnot : [] },
-		'S/C TPI' : { is : ['TP DevOps', 'Program', 'Sort'], isnot : ['BinC', 'TPV'] },
-		'MPV/PPV' : { is : ['PPV', 'TPV', 'MPV'], isnot : [] },
-		'Yield/BS' : { is : ['Yield', 'Binsplit', 'PHI', 'Binning', 'BinC', 'Performance', 'ISSG'], isnot : [] }
-	},
-	
-	_orgMap: {
-		SCI	: ['TMM', 'TVPV', 'Fuse'],
-		DCD	: ['Func', 'Scan', 'Cache', 'Reset'],
-		ACD	: ['P/T', 'PLL', 'SIO','MIO'],
-		TPI	: ['S/C TPI'],
-		MPV	: ['MPV/PPV'],
-		PHI	: ['Yield/BS']
 	},
 	
 	/************************************************** SAVING AND LOADING TO THE APP PREFS **********************************************/
@@ -233,14 +301,14 @@ Ext.define('CustomApp', {
 	/******************************************************* LAUNCH/UPDATE APP********************************************************/
 	launch: function(){
 		var me = this;
-		me._showError('Loading Data...');
+		me.setLoading(true);
 		me._loadAllProjects(function(){	
 			me._applyTeamNameFilters(function(){
 				me._getSettings(function(settings){
 					me.Settings = settings;
 					me.TrainGroupings = me._getGroupings();
 					//me._setGroupings(me.TrainGroupings); //for resetting groups
-					me.removeAll();
+					me.setLoading(false);
 					me._loadDnD();
 					me._loadGrid();
 					me._loadExperimentalStuff();

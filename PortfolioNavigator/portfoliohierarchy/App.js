@@ -1,3 +1,5 @@
+console = { log: function(){} }; // DEBUG!!!!		
+
 Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 	extend: 'IntelRallyApp',
 	appName: 'Portfolio Hierarchy',
@@ -154,7 +156,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			})
 			.then(function(userStory){
 				me.HasUserStories = !!userStory;
-				return me._loadProjectByName('All Releases');
+				return me._loadTopProject(me.ProjectRecord);
 			})
 			.then(function(rootProject){
 				return me._loadAllChildrenProjects(rootProject);
@@ -222,7 +224,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 	_onPreferenceChanged: function(field, newValue){
 		var me=this,
 			pid = me.ProjectRecord.data.ObjectID;
-		if(me[field] === newValue) return;
+		if(me[field] === newValue) return Q();
 		else me[field] = newValue;
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid][field] = newValue;
