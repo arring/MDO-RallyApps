@@ -1,0 +1,67 @@
+.app {
+     /* Add app styles here */
+}
+
+
+.iteration-summary tr td {
+	border:1px solid #427BD6;
+	border-collapse: collapse;
+	padding : 3px;
+	text-align : center;
+    
+}
+
+.iteration-summary {
+	border:1px solid #427BD6;
+	border-collapse: collapse;
+	padding : 3px;
+	/*height:150px;*/
+    table-layout: fixed;
+    
+}
+
+.comitted tr td {
+	border:1px solid #427BD6;
+	border-collapse: collapse;
+	padding : 3px;
+	text-align : center;
+    width: 20px;
+    width:100px
+}
+
+.accepted {
+	border:1px solid #427BD6;
+	border-collapse: collapse;
+	padding : 3px;
+	background-color: #F2F5A9; /*yellow*/
+    
+    
+}
+.x-tip {
+
+  width: auto !important;
+
+ } 
+
+ .x-tip-body {
+
+  width: auto !important;
+
+ } 
+
+ .x-tip-body span {
+
+  width: auto !important;
+
+ }
+ .custom-grid .x-grid-header-ct { 
+    background-color: #E0ECF8; 
+    border-bottom-color: #ffc; 
+    border-top-color: #ff5; 
+    color: #009;
+}
+ .dataRetrivalPanel {
+
+  height: 200px;
+
+ }
