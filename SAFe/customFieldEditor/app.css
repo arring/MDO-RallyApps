@@ -1,15 +1,8 @@
 .app { background-color: black !important; padding:30px; }
+
 .header-cls { background-color:white !important; }
 
-.intel-feature-not-committed .x-grid-cell {
-	background-color:rgba(255, 0, 0, 0.15) !important;
-}
-.intel-feature-not-committed.x-grid-row-selected .x-grid-cell {
-	background-color:rgba(255, 0, 0, 0.25) !important;
-}
-.intel-feature-committed .x-grid-cell{
-	background-color:rgba(0, 255, 0, 0.15) !important;
-}
-.intel-feature-committed.x-grid-row-selected .x-grid-cell {
-	background-color:rgba(0, 255, 0, 0.25) !important;
-}
+.pre-wrap-cell { white-space:pre-wrap !important; }
+
+.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
+.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }

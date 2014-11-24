@@ -5,7 +5,7 @@
    "sdk": "2.0rc3",
    "javascript": [
       "../lib/intel-models.js",
-      "../lib/intel-rally-app.js",
+      "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",
       "../../lib/mixins/iframe-resize.js",

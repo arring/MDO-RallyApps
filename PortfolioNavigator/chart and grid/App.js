@@ -1,50 +1,50 @@
 Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
-	extend: "Rally.app.App",
-	cls: "portfolio-cfd-app",
-	
-	requires: [
-		'Rally.ui.combobox.ComboBox',
-		'Rally.util.Test',
-		'Rally.ui.chart.Chart'
+  extend: 'IntelRallyApp',
+	mixins:[
+		'WindowListener',
+		'PrettyAlert',
+		'ReleaseQuery',
+		'IntelWorkweek',
+		'AsyncQueue',
+		'ChartUpdater'
 	],
+	requires:[
+		'FastCfdCalculator'
+	],
+	cls: "portfolio-cfd-app",
 
 	layout: {
 		type:   'vbox',
 		align:  'left'
 	},
-	
-	help: {
-		cls: 'portfolio-cfd-help-container',
-		id: 274
-	},
-	
-	items: [
-		{
+
+	items: [{
+		xtype:  'container',
+		itemId: 'top',
+		items: [{
 			xtype:  'container',
-			itemId: 'top',
-			items: [{
-				xtype:  'container',
-				itemId: 'header',
-				cls:	'header'
-			}],
-			height: 420,
-			padding:'0 0 5 0'
-		},{
-			xtype:  'container',
-			itemId: 'bottom',
-			minHeight: 100
-		}
-	],
+			itemId: 'header',
+			cls:	'header'
+		}],
+		height: 420,
+		padding:'0 0 5 0'
+	},{
+		xtype:  'container',
+		itemId: 'bottom',
+		minHeight: 100
+	}],
+		
+	/********************************************************* chart stuff **********************************************************/
+
+	_chartColors: ['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],
 	
 	_defaultChartConfig: {
 		chart: {
 			defaultSeriesType: "area",
 			zoomType: "xy"
 		},
-		colors:['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],
 		xAxis: {
 			tickmarkPlacement: "on",
-			tickInterval: 5,
 			title: {
 				text: "Days",
 				margin: 10
@@ -61,15 +61,16 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 				x: -5,
 				y: 4
 			}
-		},
+		},			
 		tooltip: {
 			formatter: function () {
-				return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ")<br />" + this.series.name + ": " + this.y;
+				var sum = 0;
+				for(var i=4; i>= this.series.index; --i) 
+					sum += this.series.chart.series[i].data[this.point.x].y;
+				return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ')' + 
+					"<br /><b>" + this.series.name + "</b>: " + this.y +
+					(this.series.index <=4 ? "<br /><b>Total</b>: " + sum : '');
 			}
-		},
-		legend:{
-			itemWidth:100,
-			width:100*5	
 		},
 		plotOptions: {
 			series: {
@@ -94,116 +95,26 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 		}
 	},
 	
+	_getConfiguredChartTicks: function (startDate, endDate, width) {
+		var pixelTickWidth = 40,
+			ticks = Math.floor(width / pixelTickWidth);
+		var days = Math.floor((endDate*1 - startDate*1) / (86400000*5/7)); //only workdays
+		var interval = Math.floor(Math.floor(days / ticks) / 5) * 5;
+		if(interval < 5) return 5; //make it weekly at the minimum
+		else return interval;
+	},
+	
 	/********************************************************* launch and config/setup **********************************************************/
-	_defineClasses:function(){
-		Ext.define("lameCalculator", {
-			constructor: function(config) { //you MUST give this calculator scheduleStates, startDate, and endDate. That is all
-				for(var k in config) this[k] = config[k];
-				return this;
-			},
-			
-			_getDates:function(){
-				var dates = [], curDay = this.startDate, day=1000*60*60*24;
-				while(curDay<=this.endDate){
-					var n = curDay.getDay(); 
-					if(n!==0 && n!==6) dates.push(curDay); //dont get weekends
-					curDay = new Date(curDay*1 + day);
-				}
-				return dates;
-			},
-			
-			_dateToStringDisplay: function (date) {
-				return Ext.Date.format(date, 'm/d/Y');
-			},
-			
-			_getIndexHelper:function(d,ds){ //binsearches for the closest date to d
-				var curVal = (ds.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
-				while(curInt !== lastInt){
-					if(ds[curInt]===d) return curInt;
-					else if(ds[curInt]>d) curVal-=div;
-					else curVal+=div;
-					div/=2;
-					lastInt = curInt;
-					curInt = curVal>>0;
-				}
-				return curInt;
-			},
-			
-			_getIndexOnOrBefore: function(d, ds){
-				if(ds.length===0) return -1;
-				var pos = this._getIndexHelper(d,ds);
-				if(pos===0) { if(ds[pos] <= d) return pos; else return -1; } //either start of list or everything is after d
-				else if(ds[pos] <= d) return pos;
-				else return pos-1;
-			},
-			
-			_getIndexOnOrAfter: function(d, ds){
-				if(ds.length===0) return -1;
-				var pos = this._getIndexHelper(d,ds);
-				if(pos===ds.length-1) { if(ds[pos] >= d) return pos; else return -1; } //either start of list or everything is after d
-				else if(ds[pos] >= d) return pos;
-				else return pos+1;
-			},
-			
-			runCalculation:function(items){
-				if(!this.scheduleStates || !this.startDate || !this.endDate) {
-					console.log('invalid constructor config', this); return; }
-				var dates = this._getDates(), day=1000*3600*24;
-				var totals = _.reduce(this.scheduleStates, function(map, ss){ 
-					map[ss] = _.map(new Array(dates.length), function(){ return 0;}); 
-					return map; 
-				}, {});
-				_.each(items, function(item){
-					item = item.raw; //dont work with records;
-					var iStart = new Date(item._ValidFrom),
-						iEnd = new Date(item._ValidTo), 
-						state = item.ScheduleState, 
-						pe = item.PlanEstimate;
-					if(!pe || ((iStart/day>>0) === (iEnd/day>>0))) return; //no need to continue with this one
-					var startIndex = this._getIndexOnOrAfter(iStart, dates), 
-						endIndex = this._getIndexOnOrBefore(iEnd, dates);
-					if(startIndex===-1 || endIndex===-1) return; //no need to continue here
-					for(var i=startIndex;i<=endIndex;++i)
-						totals[state][i]+=pe;
-				}, this);
-				return {
-					categories:_.map(dates, function(d){ return this._dateToStringDisplay(d); }, this), 
-					series: _.reduce(this.scheduleStates, function(ar, ss){
-						return ar.concat([{name:ss, type:'area', dashStyle:'Solid', data:totals[ss]}]);
-					}, [])
-				};
-			}
-		});
-	},
-	
-	_initModels: function(cb){ //these only needs to be loaded once, unless accepted ScheduleState values change frequently
-		Rally.data.ModelFactory.getModel({
-			type: 'UserStory',
-			success: function (model) {
-				this.UserStory = model;
-				cb();
-			},
-			scope: this
-		});
-	},
-	
-	_initScheduleStateValues: function (cb) {
-		var me = this;
-		me.UserStory.getField('ScheduleState').getAllowedValueStore().load({
-			callback: function (records, operation, success) {
-				me.ScheduleStateValues = Ext.Array.map(records, function (record) {
-					return record.get('StringValue');
-				});
-				cb();
-			}
-		});
-	},
 
 	_subscribeToBus: function(){
-		this.subscribe(this, 'portfoliotreeitemselected', function(treeItem){					
-			this.currentPiRecord = treeItem.getRecord();
-			this._refreshComponents();
-		}, this);
+		var me=this;
+		me.subscribe(me, 'portfoliotreeitemselected', function(treeItem){		
+			me._enqueue(function(unlockFunc){
+				me.currentPiRecord = treeItem.getRecord();
+				me._refreshComponents();
+				unlockFunc();
+			});
+		});
 	},
 	
 	launch: function () {
@@ -211,15 +122,17 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 		console.log('chart app launched');
 		me.down('#top').setWidth(me.getWidth()-20);
 		me.down('#bottom').setWidth(me.getWidth()-20);
-		me._defineClasses();
 		if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
 			Rally.sdk.dependencies.Analytics.load(function(){			
-				me._initModels(function(){
-					me._initScheduleStateValues(function(){
+				me._loadModels()
+					.then(function(){
 						me._subscribeToBus();
 						me._drawHeader();
-					});
-				});
+					})
+					.fail(function(reason){
+						me._alert('ERROR', reason);
+					})
+					.done();
 			});
 		}
 	},
@@ -227,32 +140,23 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 	/************************************************* header componenets and event functions **************************************************/
 	
 	_drawHeader: function(){
-		var header = this.down('#header');
-		header.add(this._buildHelpComponent());
-		header.add(this._buildCurrentProjectOnlyCheckbox());
-		header.add(this._buildShowGridCheckbox());
-	},
-	
-	_buildHelpComponent: function () {
-		return Ext.create('Ext.Component', {
-			renderTpl: Rally.util.Help.getIcon({
-				cls: Rally.util.Test.toBrowserTestCssClass(this.help.cls),
-				id: this.help.id
-			})
-		});
+		var me=this;
+		me._buildCurrentProjectOnlyCheckbox();
+		me._buildShowGridCheckbox();
 	},
 
 	_buildCurrentProjectOnlyCheckbox: function(){
-		return Ext.create('Rally.ui.CheckboxField', {
+		var me=this;
+		me.down('#header').add({
+			xtype:'rallycheckboxfield',
 			boxLabel: 'Only Stories in Current Project',
-			value: this.onlyStoriesInCurrentProject,
+			value: me.onlyStoriesInCurrentProject,
 			listeners: {
 				change: {
 					fn: function(checkbox){
-						this.onlyStoriesInCurrentProject = checkbox.getValue();
-						this._refreshComponents();
-					},
-					scope: this
+						me.onlyStoriesInCurrentProject = checkbox.getValue();
+						me._refreshComponents();
+					}
 				}
 			},
 			componentCls: 'current-project-only-float',
@@ -261,16 +165,17 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 	},
 	
 	_buildShowGridCheckbox: function() {
-		return Ext.create('Rally.ui.CheckboxField', {
+		var me=this;
+		me.down('#header').add({
+			xtype:'rallycheckboxfield',
 			boxLabel: 'Show Grid',
-			value: this.showGrid,
+			value: me.showGrid,
 			listeners: {
 				change: {
 					fn: function(checkbox){
-						this.showGrid = checkbox.getValue();
-						this._refreshComponents();
-					},
-					scope: this
+						me.showGrid = checkbox.getValue();
+						me._refreshComponents();
+					}
 				}
 			},
 			componentCls: 'show-grid-checkbox-only-float',
@@ -281,9 +186,9 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 	/************************************************* rendering/updating functions **************************************************/
 	
 	_refreshComponents: function() {
-		var grid = this.down('rallygrid'), 
-			chart = this.down('rallychart'),
-			me = this;		
+		var me = this,
+			grid = me.down('rallygrid'), 
+			chart = me.down('rallychart');		
 		
 		if(!me.currentPiRecord) return;
 		me._showOrHideCheckboxes();
@@ -473,6 +378,7 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 			_renderChart: function () { //have to do this to place the series in the highchart config. we are going past the Ext.js plugin for updates
 				var chartConfig = this.getChartConfig(), chartEl = this.down('#chart');
 				if (chartEl) {
+					this._setChartColorsOnSeries(this.chartData.series);
 					chartConfig.xAxis.categories = this.chartData.categories;
 					chartConfig.series = this.chartData.series;
 					var highChartConfig = {
@@ -519,11 +425,10 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 	},
 	
 	_loadChartCalculator: function(){
-		var piData = this.currentPiRecord.data;
-		return Ext.create('lameCalculator', {
-			startDate: this._getChartStartDate(piData),
-			endDate: this._getChartEndDate(piData),
-			scheduleStates: this.ScheduleStateValues
+		var me=this;
+		return Ext.create('FastCfdCalculator', {
+			startDate: me._getChartStartDate(me.currentPiRecord.data),
+			endDate: me._getChartEndDate(me.currentPiRecord.data)
 		});
 	},
 	
@@ -540,8 +445,14 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 		return {
 			title: this._getChartTitle(piData),
 			subtitle: this._getChartSubtitle(piData),
+			legend:{
+				borderWidth:0,
+				width:500,
+				itemWidth:100
+			},
 			xAxis: { 
-				tickInterval: this._getConfiguredChartTicks(this._getChartStartDate(piData), this._getChartEndDate(piData)) 
+				tickInterval: 
+					this._getConfiguredChartTicks(this._getChartStartDate(piData), this._getChartEndDate(piData), this.getWidth()-20) 
 			}
 		};
 	},
@@ -605,91 +516,9 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 			align: "center"
 		};
 	},
-	
-	_getConfiguredChartTicks: function (startDate, endDate) {
-		var pixelTickWidth = 80,
-			appWidth = this.getWidth(),
-			ticks = Math.floor(appWidth / pixelTickWidth);
-		var days = Math.floor((endDate*1 - startDate*1) / (86400000*5/7)); //only workdays
-		var interval = Math.floor(Math.floor(days / ticks) / 5) * 5;
-		if(interval < 5) return 5; //make it weekly at the minimum
-		else return interval;
-	},
-			
-	/************************************************** updating/fixing chart data *********************************************/
-	
-	_updateChartData: function(data){
-		var me = this, now = new Date();
-		window.Datemap = []; //for the tooltip to have extra info to display on the chart
-		
-		//get ideal trendline
-		var total = _.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); }, 0) || 0,
-			idealTrend = {type:'spline', dashStyle:'Solid', name:'Ideal', data:new Array(data.categories.length)},
-			ratio = (total/(data.categories.length-1)) || 0; //for NaN
-		idealTrend.data = _.map(idealTrend.data, function(e, i){ return Math.round(100*(0 + i*ratio))/100; });
-		
-		//zero future points, convert to workweeks, and set window.Datemap
-		_.each(data.categories, function(c, i, a){
-			var d = new Date(c);
-			a[i] = 'WW' + me._getWorkweek(d);
-			window.Datemap[i] = c;
-			if(d>now){
-				_.each(data.series, function(s, j){
-					s.data = s.data.slice(0, i).concat(_.map(new Array(a.length - i), function(){ return 0; }));
-				});
-			}
-		});
-		
-		//get projected trendline
-		var s = _.find(data.series, function(s){ return s.name === 'Accepted'; }), i,
-			projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:s.data.slice()},
-			begin=0, end=projectedTrend.data.length-1;
-		for(i=1;i<projectedTrend.data.length;++i)
-			if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
-				begin = i-1; break; }
-		for(i=begin+1;i<projectedTrend.data.length;++i)
-			if(projectedTrend.data[i]===0){
-				end = i-1; break; }
-		ratio = end===begin ? 0 : (projectedTrend.data[end] - 0)/(end-begin);
-		projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
-			if(j>=begin) return Math.round(100*(0 + (j-begin)*ratio))/100;
-			else return p; 
-		});
 
-		//apply label to correct point if needed
-		for(i=0;i<projectedTrend.data.length;++i)
-			if(projectedTrend.data[i] >= total){
-				projectedTrend.data[i] = {
-					dataLabels: {
-						enabled: true,
-						backgroundColor:'white',
-						borderColor:'black',
-						borderRadius:3,
-						borderWidth:1,
-						formatter: function () {
-							return "<b>100% Complete</b><br />" + 
-								"<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ")";
-						},
-						align:'center', y:-24
-					},
-					color:'red',
-					marker:{
-						enabled:true,
-						lineWidth:4,
-						symbol:'circle',
-						fillColor:'red',
-						lineColor:'red'
-					},
-					y: projectedTrend.data[i]
-				};
-				break;
-			}
-		
-		data.series.push(projectedTrend);
-		data.series.push(idealTrend);
-		return data;
-	},
-	
+	/************************************************** updating/fixing chart data *********************************************/
+
 	_updateHighchart: function(chart, chartData, dynConf){ //directly manipulate the highchart, avoid the Ext.js highchart extension
 		var wrapper = chart.getChartWrapper(), wc = wrapper.chart, newSeries = chartData.series, y, x;
 		wc.xAxis[0].update({categories:chartData.categories, tickInterval:dynConf.xAxis.tickInterval});
@@ -704,22 +533,7 @@ Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
 	},
 	
 	/************************************************** misc Date/time functions *********************************************/
-	
-	_getWorkweek: function(date){ //calculates intel workweek, returns integer
-		if(!(date instanceof Date)) return;
-		var me = this, oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay(),
-			weekCount = ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52; //intel weeks in this year
-		return weekCount < ww ? (ww - weekCount) : ww;
-	},
-	
+
 	_dateToStringDisplay: function (date) {
 		return Ext.Date.format(date, 'm/d/Y');
 	},

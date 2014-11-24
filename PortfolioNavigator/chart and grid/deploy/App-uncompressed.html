@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>TrainCFDCharts</title>
+    <title>Portfolio CFD</title>
 
     <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
@@ -796,7 +796,7 @@ Ext.define('ReleaseQuery', {
 			model: 'Release',
 			limit:Infinity,
 			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
 			context:{
 				workspace: this.getContext().getWorkspace()._ref,
 				project: null
@@ -891,53 +891,33 @@ Ext.define('ReleaseQuery', {
 			}, null);
 	}
 });
-                Ext.define('Intel.form.field.FixedComboBox', {
-	extend:'Ext.form.field.ComboBox',
-	alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
+                //given named queues, only allows one function at a time in each queue to execute. 
+Ext.define('AsyncQueue', {
 	
-	constructor: function(options) {
-		options = options || {};
-		options = Ext.merge({
-			editable: false,	
-			allowBlank:false,
-			listeners: {
-				focus: function(combo) {
-					combo.setValue('');
-					combo.expand();
-				}
-			}
-		}, options);
-		this.callParent([options]);
-	}	
-});
-                /** YOU MUST PASS IT 2 THINGS IN THE CONFIG
-	1: releases (array of release records)
-	2: currentRelease (what to show as initial value
-*/
-Ext.define('Intel.form.field.ReleasePicker', {
-	extend: 'Intel.form.field.FixedComboBox',
-	alias: ['widget.intelreleasepicker'],
+	QueueOfFuncs: {},
 	
-	constructor: function(options){
-		if(!options.releases || !options.currentRelease) return;
-		
-		options.displayField = 'Name';
-		options.value = options.currentRelease.data.Name;
-		options.store = Ext.create('Ext.data.Store', {
-			fields: ['Name'],
-			sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
-			data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
-		});
-		
-		options.fieldLabel = options.fieldLabel || 'Release:';
-		options.editable = options.editable || false;
-		options.width = options.width || 240;
-		options.labelWidth = options.labelWidth || 50;
-		
-		this.callParent([options]); //now that we have the extra stuff added
+	_dequeue: function(queueName){
+		var me=this;
+		queueName = queueName || 'undefined'; //to be clear
+		if(me.QueueOfFuncs[queueName]){
+			me.QueueOfFuncs[queueName].shift();
+			if(!me.QueueOfFuncs[queueName].length) return;
+			else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+		}
+	},
+	
+	//callback(done)...make sure you call done when you are finished
+	_enqueue: function(callback, queueName){
+		var me=this;
+		queueName = queueName || 'undefined'; //to be clear
+		if(typeof callback !== 'function') return console.log('ERR: not a function', callback);
+		if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
+			me.QueueOfFuncs[queueName] = [callback];
+			callback.call(me, me._dequeue.bind(me, queueName));
+		}
+		else me.QueueOfFuncs[queueName].push(callback);
 	}
 });
-
                 /** Fast CFD Calculator is like 1000x faster than the rally build in calculators because this is not a generic 
 	calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields, in an area chart
 	between two dates. Example app using this is Train CFD Charts */
@@ -1113,29 +1093,44 @@ Ext.define('ChartUpdater', {
 		return data;
 	}
 });
-                /************************** PRODUCTION *****************************/
-console = { log: function(){} };	////DEBUG!!!	
-
-/****************************************************************/
-
-Ext.define('TrainCfdCharts', {
-	extend: 'IntelRallyApp',
-	requires:[
-		'FastCfdCalculator'
-	],
+                Ext.define("Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp", {
+  extend: 'IntelRallyApp',
 	mixins:[
 		'WindowListener',
 		'PrettyAlert',
-		'IframeResize',
-		'IntelWorkweek',
 		'ReleaseQuery',
+		'IntelWorkweek',
+		'AsyncQueue',
 		'ChartUpdater'
 	],
-	_prefName: 'intel-ART-CFD',
-	
-	minWidth:910,
-	
-	/****************************************************** SOME CONFIG CONSTANTS *******************************************************/
+	requires:[
+		'FastCfdCalculator'
+	],
+	cls: "portfolio-cfd-app",
+
+	layout: {
+		type:   'vbox',
+		align:  'left'
+	},
+
+	items: [{
+		xtype:  'container',
+		itemId: 'top',
+		items: [{
+			xtype:  'container',
+			itemId: 'header',
+			cls:	'header'
+		}],
+		height: 420,
+		padding:'0 0 5 0'
+	},{
+		xtype:  'container',
+		itemId: 'bottom',
+		minHeight: 100
+	}],
+		
+	/********************************************************* chart stuff **********************************************************/
+
 	_chartColors: ['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],
 	
 	_defaultChartConfig: {
@@ -1204,311 +1199,447 @@ Ext.define('TrainCfdCharts', {
 		else return interval;
 	},
 	
-	/****************************************************** DATA STORE METHODS ********************************************************/
+	/********************************************************* launch and config/setup **********************************************************/
 
-	_loadSnapshotStores: function(){
-		var me = this, 
-			promises = [];		
-		me.AllSnapshots = [];
-		me.TeamStores = {};
-		me.ReleasesWithName.forEach(function(releaseRecord){
-			var deferred = Q.defer();
-			promises.push(deferred.promise);
-			Ext.create('Rally.data.lookback.SnapshotStore', {
-				autoLoad:true,
-				limit: Infinity,
-				context:{ 
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
-				},
-				sort:{_ValidFrom:1},
-				compress:true,
-				find: { 
-					_TypeHierarchy:-51038, 
-					Children:null,
-					PlanEstimate: {$gte:0},
-					Release: releaseRecord.get('ObjectID')
-				},
-				fetch:['ScheduleState', 'PlanEstimate'],
-				hydrate:['ScheduleState', 'PlanEstimate'],
-				listeners: {
-					load: function(store, records){
-						if(records.length > 0){
-							me.TeamStores[releaseRecord.data.Project.Name] = records;
-							me.AllSnapshots = me.AllSnapshots.concat(records);
-						}
-						deferred.resolve();
-					},
-					single:true
-				}
-			});
-		});
-		return Q.all(promises).then(function(){ 
-			console.log('all snapshots done', me.AllSnapshots, me.TeamStores);
-		});
-	},
-			
-	_loadAllChildReleases: function(){ 
-		var me = this,
-			releaseName = me.ReleaseRecord.data.Name,
-			trainName = me.TrainRecord.data.Name.split(' ART')[0];			
-		return me._loadReleasesWithName(releaseName, trainName)
-			.then(function(releaseStore){
-				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ return r.data.Project.TeamMembers.Count > 0; });
-			});
-	},
-	
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	_loadPreferences: function(){ //parse all settings too
-		var me=this,
-			uid = me.getContext().getUser().ObjectID,
-			deferred = Q.defer();
-		Rally.data.PreferenceManager.load({
-			appID: me.getAppId(),
-      filterByName: me._prefName + uid,
-			success: function(prefs) {
-				var appPrefs = prefs[me._prefName + uid];
-				try{ appPrefs = JSON.parse(appPrefs); }
-				catch(e){ appPrefs = { projs:{}};}
-				console.log('loaded prefs', appPrefs);
-				deferred.resolve(appPrefs);
-			},
-			failure: deferred.reject
-		});
-		return deferred.promise;
-	},
-
-	_savePreferences: function(prefs){ // stringify and save only the updated settings
-		var me=this, s = {}, 
-			uid = me.getContext().getUser().ObjectID,
-			deferred = Q.defer();
-		prefs = {projs: prefs.projs};
-    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID,
-    console.log('saving prefs', prefs);
-		Rally.data.PreferenceManager.update({
-			appID: this.getAppId(),
-			settings: s,
-			success: deferred.resolve,
-			failure: deferred.reject
-		});
-		return deferred.promise;
-	},
-
-	/******************************************************* Reloading ********************************************************/
-		
-	_resizeWhenRendered: function(){
-		var me = this;
-		setTimeout(function(){ 
-			me._fireParentWindowEvent('resize');
-		}, 0);
-	},
-	
-	_reloadEverything:function(){
+	_subscribeToBus: function(){
 		var me=this;
-		me.setLoading(true);		
-		return me._loadAllChildReleases()
-			.then(function(){
-				return me._loadSnapshotStores();
-			})
-			.then(function(){
-				me.removeAll();
-				me.setLoading(false);
-				me._loadReleasePicker();
-				me._renderCharts(); 
+		me.subscribe(me, 'portfoliotreeitemselected', function(treeItem){		
+			me._enqueue(function(unlockFunc){
+				me.currentPiRecord = treeItem.getRecord();
+				me._refreshComponents();
+				unlockFunc();
 			});
+		});
 	},
-
-	/******************************************************* LAUNCH ********************************************************/
 	
-	launch: function(){
+	launch: function () {
 		var me = this;
-		me._initDisableResizeHandle();
-		me._initFixRallyDashboard();
-		me.setLoading(true);
+		console.log('chart app launched');
+		me.down('#top').setWidth(me.getWidth()-20);
+		me.down('#bottom').setWidth(me.getWidth()-20);
 		if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
-			Rally.sdk.dependencies.Analytics.load(function(){	
+			Rally.sdk.dependencies.Analytics.load(function(){			
 				me._loadModels()
 					.then(function(){
-						var scopeProject = me.getContext().getProject();
-						return me._loadProject(scopeProject.ObjectID);
-					})
-					.then(function(scopeProjectRecord){
-						me.ProjectRecord = scopeProjectRecord;
-						return me._loadPreferences();
-					})
-					.then(function(appPrefs){
-						me.AppPrefs = appPrefs;
-						return me._projectInWhichTrain(me.ProjectRecord);
-					})
-					.then(function(trainRecord){
-						if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-							me.TrainRecord = trainRecord;
-							console.log('train loaded:', trainRecord);
-							var twelveWeeks = 1000*60*60*24*12;
-							return me._loadReleasesAfterGivenDate(me.TrainRecord, (new Date()*1 - twelveWeeks));
-						} 
-						else return Q.reject('You are not scoped to a train.');
-					})
-					.then(function(releaseStore){
-						me.ReleaseStore = releaseStore;
-						var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
-						if(currentRelease){
-							me.ReleaseRecord = currentRelease;
-							console.log('release loaded', currentRelease);
-							return me._reloadEverything();
-						}
-						else return Q.reject('This train has no releases.');
+						me._subscribeToBus();
+						me._drawHeader();
 					})
 					.fail(function(reason){
-						me.setLoading(false);
-						me._alert('ERROR', reason || '');
+						me._alert('ERROR', reason);
 					})
 					.done();
 			});
 		}
 	},
+
+	/************************************************* header componenets and event functions **************************************************/
 	
-	/******************************************************* RENDERING CHARTS ********************************************************/
-	_releasePickerSelected: function(combo, records){
+	_drawHeader: function(){
 		var me=this;
-		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
-		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
-		var pid = me.ProjectRecord.data.ObjectID;		
-		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
-		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-		me._savePreferences(me.AppPrefs)
-			.then(function(){ 
-				return me._reloadEverything(); 
-			})
-			.fail(function(reason){
-				me._alert('ERROR', reason || '');
-				me.setLoading(false);
-			})
-			.done();
-	},
-	
-	_loadReleasePicker: function(){
-		var me=this;
-		me.ReleasePicker = me.add({
-			xtype:'intelreleasepicker',
-			labelWidth: 80,
-			width: 240,
-			releases: me.ReleaseStore.data.items,
-			currentRelease: me.ReleaseRecord,
-			listeners: {
-				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-				select: me._releasePickerSelected.bind(me)
-			}
-		});
+		me._buildCurrentProjectOnlyCheckbox();
+		me._buildShowGridCheckbox();
 	},
 
-  _renderCharts: function(){
-		var me = this;
-		
-		if(me.AllSnapshots.length === 0){
-			me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
-			return;
-		}
-		
-		/************************************** CHART STUFF *********************************************/
-		me.panel = me.add({
-			xtype: 'container',
-			layout: 'column',
-			width:'100%'
-		});	
-		me.trainPanel = me.panel.add({	
-			xtype: 'container',
-			layout: 'column',
-			columnWidth:1
-		});
-	
-		var calc = Ext.create('FastCfdCalculator', {
-			startDate: me.ReleaseRecord.data.ReleaseStartDate,
-			endDate: me.ReleaseRecord.data.ReleaseDate
-		});
-		
-		me.trainPanel.add({
-			xtype:'panel',
-			html:'',
-			columnWidth:0.16
-		});
-		me.trainPanel.add({
-			xtype:'rallychart',
-			columnWidth:0.66,
-			loadMask:false,
-			chartColors:me._chartColors,
-			chartData: me._updateChartData(calc.runCalculation(me.AllSnapshots)),
-			chartConfig: Ext.Object.merge({
-				chart: {
-					height:400
-				},
-				legend:{
-					borderWidth:0,
-					width:500,
-					itemWidth:100
-				},
-				title: {
-					text: me.TrainRecord.data.Name
-				},
-				subtitle:{
-					text: me.ReleaseRecord.data.Name
-				},
-				xAxis:{
-					tickInterval: me._getConfiguredChartTicks(
-						me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
-				}
-			}, me._defaultChartConfig),
-			listeners:{
-				afterrender: me._resizeWhenRendered.bind(me)
-			}
-		});
-		me.trainPanel.add({
-			xtype:'panel',
-			html:'',
-			columnWidth:0.16
-		});	
-		
-		/************************************** Scrum CHARTS STUFF *********************************************/	
-		for(var projectName in me.TeamStores){
-			me.panel.add({
-				xtype:'rallychart',
-				columnWidth:0.32,
-				loadMask:false,
-				height:360,
-				padding:"20px 0 0 0",
-				chartColors:me._chartColors,
-				chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),
-				chartConfig: Ext.Object.merge({
-					chart: {
-						height:300
-					},
-					legend: {
-						enabled: false
-					},
-					title: {
-						text: null
-					},
-					subtitle:{
-						text: projectName
-					},
-					xAxis: {
-						tickInterval: me._getConfiguredChartTicks(
-							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
+	_buildCurrentProjectOnlyCheckbox: function(){
+		var me=this;
+		me.down('#header').add({
+			xtype:'rallycheckboxfield',
+			boxLabel: 'Only Stories in Current Project',
+			value: me.onlyStoriesInCurrentProject,
+			listeners: {
+				change: {
+					fn: function(checkbox){
+						me.onlyStoriesInCurrentProject = checkbox.getValue();
+						me._refreshComponents();
 					}
-				}, me._defaultChartConfig),
-				listeners:{
-					afterrender: me._resizeWhenRendered.bind(me)
 				}
+			},
+			componentCls: 'current-project-only-float',
+			id: 'only-stories-in-current-project-element'
+		});
+	},
+	
+	_buildShowGridCheckbox: function() {
+		var me=this;
+		me.down('#header').add({
+			xtype:'rallycheckboxfield',
+			boxLabel: 'Show Grid',
+			value: me.showGrid,
+			listeners: {
+				change: {
+					fn: function(checkbox){
+						me.showGrid = checkbox.getValue();
+						me._refreshComponents();
+					}
+				}
+			},
+			componentCls: 'show-grid-checkbox-only-float',
+			id: 'show-grid-checkbox-element'
+		});
+	},
+	
+	/************************************************* rendering/updating functions **************************************************/
+	
+	_refreshComponents: function() {
+		var me = this,
+			grid = me.down('rallygrid'), 
+			chart = me.down('rallychart');		
+		
+		if(!me.currentPiRecord) return;
+		me._showOrHideCheckboxes();
+		
+		function refreshChart(){
+			me.chartMask = me.chartMask || new Ext.LoadMask(me.down('#top'), { msg:"Loading chart..."});
+			me.chartMask.show();
+			me._loadChartStore(function(store){
+				me.chartMask.hide();
+				var chartData = me._updateChartData(me._loadChartCalculator().runCalculation(store.getRange())),
+					dynConf = me._loadDynamicConfigValues();
+				if(!chart) me._showChart(chartData, dynConf);
+				else me._updateHighchart(chart, chartData, dynConf);
 			});
 		}
+		
+		if(me.showGrid){
+			if(grid) grid.destroy();
+			me._loadGridStore(refreshChart);
+		} else {
+			if(grid) grid.destroy();
+			refreshChart();
+		}
+	},
+	
+	_showOrHideCheckboxes: function() {
+		var piLevel = this.currentPiRecord.self.ordinal,
+		currentProjectOnlyCheckbox = this.down('#only-stories-in-current-project-element');
+		if (piLevel === 0) currentProjectOnlyCheckbox.show();
+		else currentProjectOnlyCheckbox.hide();
+	},
+	
+	/************************************************* grid handler functions **************************************************/
+	
+	_loadGridStore: function(cb) {
+		var piRecord = this.currentPiRecord,
+			piData = piRecord.data,
+			piLevel = piRecord.self.ordinal,
+			filters = [], sorters = [];
+		if (piLevel === 0) {
+			sorters.push({
+				property: 'ScheduleState',
+				direction: 'ASC'
+			});
+			if (this.onlyStoriesInCurrentProject) {
+				filters.push({
+					property: 'Project.ObjectID',
+					value: this.getContext().getProject().ObjectID
+				});
+			}
+		}
+		this.gridMask = this.gridMask || new Ext.LoadMask(this.down('#bottom'), { msg:"Loading grid..."});
+		this.gridMask.show();
+		Ext.create('Rally.data.wsapi.Store', {
+			model:(piLevel === 0 ? 'HierarchicalRequirement' : 'PortfolioItem'),
+			limit:Infinity, 
+			autoLoad:true,
+			remoteSort:false,
+			fetch:(piLevel === 0 ? [
+				'ObjectID', 'FormattedID', 'Name', 'PlanEstimate', 'Iteration', 'ScheduleState', 'Project', 'DirectChildrenCount'] : [
+				'ObjectID', 'FormattedID', 'Name', 'Project']),
+			context:{
+				workspace:this.getContext().getWorkspace()._ref,
+				project:null
+			},
+			sorters:sorters,
+			filters: filters.concat([{
+				property:(piLevel === 0 ? 'PortfolioItem.ObjectID' : 'Parent.ObjectID'),
+				value:piRecord.data.ObjectID
+			}]),
+			listeners:{
+				load: {
+					fn: function(store){ this._showGrid(store, piLevel, cb); },
+					scope:this,
+					single:true
+				}
+			}
+		});
+	},
+	
+	_showGrid: function(store, piLevel, cb){
+		this.gridMask.hide();
+		var grid = this.down('#bottom').add({
+			xtype: 'rallygrid',
+			store: store,
+			width: this.down('#bottom').getWidth()-5,
+			columnCfgs: (piLevel===0) ? [
+				{
+					dataIndex:'FormattedID',
+					editor:false,
+					renderer: function(v, m ,r){
+						return '<a href="https://rally1.rallydev.com/#/' + r.data.Project.ObjectID + 
+							'd/detail/userstory/' + r.data.ObjectID + '" target="_blank">' + v + '</a>';
+					}
+				},
+				'Name',
+				'PlanEstimate',
+				{
+					dataIndex: 'Iteration',
+					doSort: function(state) {
+						this.up('grid').getStore().sort({
+							sorterFn: function(r1, r2){
+								var i1 = r1.data.Iteration ? r1.data.Iteration.Name || '_' : '_',
+									i2 = r2.data.Iteration ? r2.data.Iteration.Name || '_' : '_';
+								return ((state==='ASC') ? 1 : -1) * (i1 < i2 ? -1 : 1);
+							}
+						});
+					},
+					renderer: function(v, m ,r){
+						if(v) return '<a href="https://rally1.rallydev.com/#/' + r.data.Iteration.Project.ObjectID + 
+							'd/detail/iteration/' + r.data.Iteration.ObjectID + '" target="_blank">' + v.Name + '</a>';
+							
+					}
+				},{
+					dataIndex:'ScheduleState',	
+					editor:false
+				},{
+					dataIndex: 'Project',
+					doSort: function(state) {
+						this.up('grid').getStore().sort({
+							sorterFn: function(r1, r2){
+								var i1 = r1.data.Project ? r1.data.Project.Name || '_' : '_',
+									i2 = r2.data.Project ? r2.data.Project.Name || '_' : '_';
+								return ((state==='ASC') ? 1 : -1) * (i1 < i2 ? -1 : 1);
+							}
+						});
+					}
+				},{
+					dataIndex: 'DirectChildrenCount',
+					text:'Children',
+					renderer: function(v, m ,r){
+						return '<a href="https://rally1.rallydev.com/#/' + r.data.Project.ObjectID + 
+							'd/detail/userstory/' + r.data.ObjectID + '/children" target="_blank">' + v + '</a>';
+					}
+				}
+			] : [
+				'FormattedID',
+				'Name',
+				'Project'
+			],
+			showRowActionsColumn: false,
+			selType:'checkboxmodel',
+			selModel:{
+				ignoreRightMouseSelection:true,
+				checkOnly:true
+			},
+			enableEditing: false,
+			autoScroll: true,
+			height: 500,
+			showPagingToolbar: false,
+			listeners:{
+				selectionchange:{
+					fn:this._onSelectionChange,
+					scope:this
+				},
+				add:{
+					fn:function(){ if(cb) cb(); }
+				}
+			}
+		});
+		grid.getSelectionModel().selectAll(true);
+	},
+			
+	_onSelectionChange: function(grid, selected) {
+		var me = this, chart = me.down('rallychart');
+		me.chartMask.show();
+		me._loadChartStore(function(store){
+			me.chartMask.hide();
+			var chartData = me._updateChartData(me._loadChartCalculator().runCalculation(store.getRange()));
+				dynConf = me._loadDynamicConfigValues();
+			me._updateHighchart(chart, chartData, dynConf);
+		});
+	},
+	
+	/************************************************* chart handler functions **************************************************/
+	
+	_showChart: function(chartData, dynamicConfig) {
+		var me = this;
+		me.chartMask.hide();
+		me.down('#top').add({
+			xtype: "rallychart",
+			loadMask:false,
+			queryErrorMessage: "No data to display.<br /><br />Most likely, stories are either not yet available or started for this portfolio item.",
+			aggregationErrorMessage: "No data to display.<br /><br />Check the data type setting for displaying data based on count versus plan estimate.",
+			chartData:chartData,
+			chartConfig:Ext.apply(me._defaultChartConfig, dynamicConfig),
+			_renderChart: function () { //have to do this to place the series in the highchart config. we are going past the Ext.js plugin for updates
+				var chartConfig = this.getChartConfig(), chartEl = this.down('#chart');
+				if (chartEl) {
+					this._setChartColorsOnSeries(this.chartData.series);
+					chartConfig.xAxis.categories = this.chartData.categories;
+					chartConfig.series = this.chartData.series;
+					var highChartConfig = {
+						xtype: 'highchart',
+						initAnimAfterLoad:false,
+						chartConfig: chartConfig
+					};
+
+					chartEl.add(highChartConfig);
+					this._setChartReady();
+				}
+			}
+		});
+	},
+	
+	_loadChartStore: function(cb){	
+		Ext.create('Rally.data.lookback.SnapshotStore', {
+			autoLoad:true,
+			limit: Infinity,
+			context:{ 
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			sort:{_ValidFrom:1},
+			compress:false,
+			find: this._getStoreFindConfig(),
+			fetch:['ScheduleState', 'PlanEstimate'],
+			hydrate:['ScheduleState', 'PlanEstimate'],
+			listeners: { load: cb }
+		});
+	},
+	
+	_getStoreFindConfig: function (){
+		var grid = this.down('rallygrid');
+		var piRecord = this.currentPiRecord;
+		return {
+			_ItemHierarchy: grid ? 
+				{ $in: _.map(grid.getSelectionModel().getSelection(), function(record) { return record.get('ObjectID'); }) } : piRecord.data.ObjectID,
+			Project: (piRecord.self.ordinal === 0 && this.onlyStoriesInCurrentProject) ? this.getContext().getProject().ObjectID : undefined,
+			_TypeHierarchy:-51038, 
+			Children:null,
+			PlanEstimate: {$gte:0}
+		};
+	},
+	
+	_loadChartCalculator: function(){
+		var me=this;
+		return Ext.create('FastCfdCalculator', {
+			startDate: me._getChartStartDate(me.currentPiRecord.data),
+			endDate: me._getChartEndDate(me.currentPiRecord.data)
+		});
+	},
+	
+	_getChartStartDate: function (piData) {
+		return new Date(piData.PlannedStartDate || piData.ActualStartDate || new Date().toString());
+	},
+	
+	_getChartEndDate: function (piData) {
+		return new Date(piData.PlannedEndDate || piData.ActualEndDate || new Date().toString());
+	},
+
+	_loadDynamicConfigValues: function () {
+		var piData = this.currentPiRecord.data;
+		return {
+			title: this._getChartTitle(piData),
+			subtitle: this._getChartSubtitle(piData),
+			legend:{
+				borderWidth:0,
+				width:500,
+				itemWidth:100
+			},
+			xAxis: { 
+				tickInterval: 
+					this._getConfiguredChartTicks(this._getChartStartDate(piData), this._getChartEndDate(piData), this.getWidth()-20) 
+			}
+		};
+	},
+	
+	_getChartTitle: function (piData) {
+		var widthPerCharacter = 10,
+			totalCharacters = Math.floor(this.getWidth/ widthPerCharacter),
+			title = "Portfolio Item Chart",
+			align = "center";
+		if (piData) {
+			title = piData.FormattedID + ": " + piData.Name;
+		}
+		if (totalCharacters < title.length) {
+			title = title.substring(0, totalCharacters) + "...";
+			align = "left";
+		}
+		return {
+			text: title,
+			align: align,
+			margin: 30
+		};
+	},
+	
+	_getChartSubtitle: function (piData) {
+		var widthPerCharacter = 6,
+			totalCharacters = Math.floor(this.getWidth() / widthPerCharacter),
+			startDateString = ' (' + this._dateToStringDisplay(this._getChartStartDate(piData)) + ')', startDateType = '',
+			endDateString = ' (' + this._dateToStringDisplay(this._getChartEndDate(piData)) + ')', endDateType = '',
+			template = Ext.create("Ext.XTemplate",
+				'<tpl>' +
+					'<span>{startDateString}</span>' +
+					'<tpl if="tooBig">' +
+					'	<br/>' +
+					'<tpl else>' +
+					'	&nbsp;&nbsp;&nbsp;' +
+					'</tpl>' +
+					'<span>{endDateString}</span>' +
+				'</tpl>'
+			);
+		if(piData){
+			if(piData.PlannedStartDate) startDateType = 'PlannedStartDate';
+			else if(piData.ActualStartDate) startDateType = 'ActualStartDate';
+			startDateString = (!startDateType ? 'No start day set.' : 
+				(startDateType==='PlannedStartDate' ? 'Planned' : 'Actual') + ' Start: WW' + 
+				this._getWorkweek(new Date(piData[startDateType])) + startDateString);
+				
+			if(piData.PlannedEndDate) endDateType = 'PlannedEndDate';
+			else if(piData.ActualEndDate) endDateType = 'ActualEndDate';
+			endDateString = (!endDateType ? 'No end day set.' : 
+				(endDateType==='PlannedEndDate' ? 'Planned' : 'Actual') + ' End: WW' + 
+				this._getWorkweek(new Date(piData[endDateType])) + endDateString);
+		}
+		var formattedTitle = template.apply({
+			startDateString: startDateString,
+			endDateString: endDateString,
+			tooBig: totalCharacters < startDateString.length + endDateString.length + 60
+		});
+		return {
+			text: formattedTitle,
+			useHTML: true,
+			align: "center"
+		};
+	},
+
+	/************************************************** updating/fixing chart data *********************************************/
+
+	_updateHighchart: function(chart, chartData, dynConf){ //directly manipulate the highchart, avoid the Ext.js highchart extension
+		var wrapper = chart.getChartWrapper(), wc = wrapper.chart, newSeries = chartData.series, y, x;
+		wc.xAxis[0].update({categories:chartData.categories, tickInterval:dynConf.xAxis.tickInterval});
+		wc.setTitle(dynConf.title, dynConf.subtitle);
+		for(var i=0;i<newSeries.length;++i){
+			var newData = newSeries[i].data, oldData=wc.series[i];
+			var oldSerLen = oldData.points.length;
+			var newSerLen = newData.length;
+			oldData.setData(newData, false, true, false);
+		}
+		wc.redraw();
+	},
+	
+	/************************************************** misc Date/time functions *********************************************/
+
+	_dateToStringDisplay: function (date) {
+		return Ext.Date.format(date, 'm/d/Y');
+	},
+
+	_dateToString: function (date) {
+		return Ext.Date.format(date, 'Y-m-d\\TH:i:s.u\\Z');
 	}
 });
 
-
-            Rally.launchApp('TrainCfdCharts', {
-                name:"TrainCFDCharts",
+            Rally.launchApp('Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp', {
+                name:"Portfolio CFD",
 	            parentRepos:""
             });
 
@@ -1517,8 +1648,27 @@ Ext.define('TrainCfdCharts', {
 
 
     <style type="text/css">
-        .app {
-  /* Add app styles here */
+        .portfolio-cfd-app {
+  width: 100% !important;
+  /* for scrollbar */
+  overflow-y: scroll !important;
+}
+.portfolio-cfd-app .header {
+  border-bottom: 1px dotted #c6c6c6;
+  line-height: 1.1em;
+}
+.portfolio-cfd-app .rally-help-icon {
+  float: right;
+  padding-left: 1px;
+  border-left: 1px solid #CCC;
+  margin-left: 5px;
+}
+.portfolio-cfd-app .current-project-only-float {
+  float: left;
+}
+.portfolio-cfd-app .show-grid-checkbox-only-float {
+  float: left;
+  margin-left: 10px;
 }
 
     </style>

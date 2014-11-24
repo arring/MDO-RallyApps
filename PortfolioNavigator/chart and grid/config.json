@@ -1,6 +1,6 @@
 {
-   "name": "Portfolio Hierarchy",
-   "className": "Rally.apps.portfoliohierarchy.PortfolioHierarchyApp",
+   "name": "Portfolio CFD",
+   "className": "Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
@@ -9,13 +9,11 @@
       "../../lib/mixins/window-listener.js",
       "../../lib/mixins/iframe-resize.js",
       "../../lib/mixins/pretty-alert.js",
+      "../../lib/mixins/intel-workweek.js",
       "../../lib/mixins/release-query.js",
       "../../lib/mixins/async-queue.js",
-      "../../lib/components/intel-combobox.js",
-      "../../lib/components/intel-fixed-combobox.js",
-      "../../lib/components/pi-projectpicker-settings.js",
-      "lib/FittedUserStoryTreeItem.js",
-      "lib/FittedPortfolioItemTreeItem.js",
+      "../../lib/chartstuff/fast-cfd-calculator.js",
+      "../../lib/chartstuff/chart-updater.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"
    ],

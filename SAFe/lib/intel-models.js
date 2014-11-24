@@ -135,3 +135,14 @@ Ext.define('CommitsMatrixFeature', {
 		{name: 'PlannedEndDate', type:'number'}
 	]
 });
+
+/************************* USED FOR CUSTOMFIELD EDITOR *********************************************/
+Ext.define('CFEditorModel', {
+	extend: 'Ext.data.Model',
+	fields: [
+		{name: 'FormattedID', type:'string'},
+		{name: 'Name', type:'string'},
+		{name: 'Release', type:'string'},
+		{name: 'CustomFieldValue',  type: 'string'}
+	]
+});

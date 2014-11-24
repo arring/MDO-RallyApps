@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Portfolio Hierarchy</title>
+    <title>Portfolio CFD</title>
 
 
     <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
@@ -16,18 +16,16 @@
                       "../../lib/mixins/window-listener.js",
                       "../../lib/mixins/iframe-resize.js",
                       "../../lib/mixins/pretty-alert.js",
+                      "../../lib/mixins/intel-workweek.js",
                       "../../lib/mixins/release-query.js",
                       "../../lib/mixins/async-queue.js",
-                      "../../lib/components/intel-combobox.js",
-                      "../../lib/components/intel-fixed-combobox.js",
-                      "../../lib/components/pi-projectpicker-settings.js",
-                      "lib/FittedUserStoryTreeItem.js",
-                      "lib/FittedPortfolioItemTreeItem.js",
+                      "../../lib/chartstuff/fast-cfd-calculator.js",
+                      "../../lib/chartstuff/chart-updater.js",
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
-                name:"Portfolio Hierarchy"
+            Rally.launchApp('Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp', {
+                name:"Portfolio CFD"
             });
         }, true);
     </script>

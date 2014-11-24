@@ -63,7 +63,6 @@
 
 /********************* PRODUCTION *****************/
 console = { log: function(){} }; // DEBUG!!!!		
-preferenceName = 'intel-program-board';
 
 /********************* END PRODUCTION *****************/
 Ext.define('ProgramBoard', {
@@ -76,6 +75,7 @@ Ext.define('ProgramBoard', {
 		'ReleaseQuery',
 		'AsyncQueue'
 	],
+	_prefName: 'intel-program-board',
 	
 	layout: {
 		type:'vbox',
@@ -124,7 +124,6 @@ Ext.define('ProgramBoard', {
 	/****************************************************** DATA STORE METHODS ********************************************************/
 	_loadFeatures: function(){ 
 		var me=this, 
-			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'PortfolioItem/Feature',
 				limit:Infinity,
@@ -134,23 +133,8 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }]
+				filters:[me._getFeatureFilter(me.TrainRecord, me.ReleaseRecord)]
 			});
-		featureStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
-						});
-					},
-					scope: this
-			});
-		};
 		return me._reloadStore(featureStore)
 			.then(function(featureStore){ 
 				var promises = [],
@@ -182,7 +166,6 @@ Ext.define('ProgramBoard', {
 				limit:Infinity,
 				fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
 				context:{
-					workspace: this.getContext().getWorkspace()._ref,
 					project: this.getContext().getProject()._ref
 				},
 				filters: [
@@ -204,32 +187,32 @@ Ext.define('ProgramBoard', {
 			});
 	},
 	
-	_loadUserStoryFilterString: function(){
-		var me=this;
-		
-		var coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-			property:'Release.Name',
-			value: me.ReleaseRecord.data.Name
-		}).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'Project.Name',
-			value: me.ProjectRecord.data.Name
-		}));	
-		
-		var depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
-			property:'Project.Name',
-			value: me.ProjectRecord.data.Name
-		}).and(Ext.create('Rally.data.wsapi.Filter', {
-			property:'c_Dependencies',
-			operator:'!=',
-			value:''
-		}));
-
-		return coreFilter.or(depFilter).toString();
+	_loadUserStoryFilter: function(){
+		var me=this,
+			coreFilter = Ext.create('Rally.data.wsapi.Filter', {
+				property:'Project',
+				value: me.ProjectRecord.data._ref
+			}).and(
+				Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+					property:'Release.Name',
+					value: me.ReleaseRecord.data.Name
+				}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+					property:'Feature.Release.Name',
+					value: me.ReleaseRecord.data.Name
+				}))),
+			depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
+				property:'Project',
+				value: me.ProjectRecord.data._ref
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'c_Dependencies',
+				operator:'!=',
+				value:''
+			}));
+		return coreFilter.or(depFilter);
 	},
 	
 	_loadUserStories: function(){	
 		var me=this, 
-			filterString = this._loadUserStoryFilterString(me.TrainRecord, me.ReleaseRecord);
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'HierarchicalRequirement',
 				limit:Infinity,
@@ -240,23 +223,8 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }] //need this or filterString wont get injected
+				filters:[me._loadUserStoryFilter()]
 			});
-		userStoryStore._hydrateModelAndLoad = function(options){
-      var deferred = new Deft.Deferred();
-      this.hydrateModel().then({
-        success: function(model) {
-					this.proxy.encodeFilters = function(){//inject custom filter here. woot
-						return filterString;
-					};
-					this.load(options).then({
-						success: Ext.bind(deferred.resolve, deferred),
-						failure: Ext.bind(deferred.reject, deferred)
-					});
-				},
-				scope: this
-			});
-		};
 		return me._reloadStore(userStoryStore)
 			.then(function(userStoryStore){ 
 				console.log('userStories loaded:', userStoryStore.data.items);
@@ -493,8 +461,9 @@ Ext.define('ProgramBoard', {
 		}
 	},
 	
-	_isInRelease: function(usr){
-		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name;
+	_isInRelease: function(usr){ //some user stories are not themselves in releases
+		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name ||
+			usr.data.Feature && usr.data.Feature.Release && usr.data.Feature.Release.Name === this.ReleaseRecord.data.Name;
 	},
 	
 	_getDependencies: function(userStoryRecord){
@@ -633,11 +602,11 @@ Ext.define('ProgramBoard', {
 					}
 				});
 				
-				//attempt to sync collection until it passes, 4 == max attempts
+				//attempt to sync collection until it passes, 5 == max attempts
 				var attempts = 0;
 				Q.all(promises)
 					.then(function retrySync(){
-						if(++attempts > 4){
+						if(++attempts > 5){
 							console.log('Quit trying to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
 							funcDeferred.resolve();		
 						}
@@ -645,7 +614,7 @@ Ext.define('ProgramBoard', {
 							collectionStore.sync({ 
 								failure:function(){
 									console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
-									retrySync(); //we will succeed, after 4 attempts we quit
+									retrySync(); //we will succeed, after 5 attempts we quit
 								},
 								success:function(){ 
 									console.log('Successfully modified ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
@@ -672,15 +641,28 @@ Ext.define('ProgramBoard', {
 			deferred.reject('Dependencies field for ' + userStoryRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			userStoryRecord.set('c_Dependencies', str);
-			userStoryRecord.save({
-				callback:function(record, operation, success){
-					if(!success) deferred.reject('Failed to modify User Story ' + userStoryRecord.data.FormattedID);
-					else {
-						console.log(msg, userStoryRecord, depData, dependencies);
-						deferred.resolve();
-					}
+			//attempt to save until it passes, 5 == max attempts
+			var attempts = 0;
+			(function retrySync(){
+				if(++attempts > 5){
+					deferred.reject('Failed to modify User Story ' + userStoryRecord.data.FormattedID);
+					return;
 				}
-			});
+				else {
+					userStoryRecord.save({
+						callback:function(record, operation, success){
+							if(!success){
+								console.log('Failed attempt to modify ' + type + ' of User Story: ' + userStoryRecord.data.FormattedID);
+								retrySync();
+							}
+							else {
+								console.log(msg, userStoryRecord, depData, dependencies);
+								deferred.resolve();
+							}
+						}
+					});
+				}
+			}());
 		}
 		return deferred.promise;
 	},
@@ -1064,7 +1046,7 @@ Ext.define('ProgramBoard', {
 								predecessors[i].USID = newUSRecord.data.FormattedID;
 								predecessors[i].USName = newUSRecord.data.Name;
 								predecessors[i].A = succDepData.Assigned;
-								return Q(me._addPredDep(us, predDepData));
+								return me._addPredDep(us, predDepData);
 							}
 						}
 						return Q.reject(['Successor removed this dependency.']);
@@ -1083,9 +1065,9 @@ Ext.define('ProgramBoard', {
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
 			appID: me.getAppId(),
-      filterByName:preferenceName+ uid,
+      filterByName:me._prefName+ uid,
 			success: function(prefs) {
-				var appPrefs = prefs[preferenceName + uid];
+				var appPrefs = prefs[me._prefName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}, refresh:30};}
 				console.log('loaded prefs', appPrefs);
@@ -1101,7 +1083,7 @@ Ext.define('ProgramBoard', {
 			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
-    s[preferenceName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
 			appID: this.getAppId(),
@@ -1332,7 +1314,7 @@ Ext.define('ProgramBoard', {
 						me.ProjectNames.push({Name: validProjects[projOID].data.Name });
 					}
 					if(me.ValidProjects[me.ProjectRecord.data.ObjectID]) return me._loadPreferences();
-					else Q.reject('Please scope to a team that has members');
+					else return Q.reject('Please scope to a team that has members');
 				})
 				.then(function(appPrefs){
 					me.AppPrefs = appPrefs;
@@ -1346,6 +1328,9 @@ Ext.define('ProgramBoard', {
 						me.TrainNames[i] = {Name: trainRecs[i].data.Name.split(' ART')[0]};
 					}
 					return me._projectInWhichTrain(me.ProjectRecord);
+				})
+				.fail(function(error){
+					if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
 				})
 				.then(function(trainRecord){
 					if(trainRecord)	me.TrainRecord = trainRecord;
@@ -1366,7 +1351,7 @@ Ext.define('ProgramBoard', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._setRefreshInterval(); 
 						me._reloadEverything();
@@ -1384,11 +1369,11 @@ Ext.define('ProgramBoard', {
 	/************************************************ NAVIGATION AND STATE ****************************************************/
 	
 	_releasePickerSelected: function(combo, records){
-		var me=this;
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
-		var pid = me.ProjectRecord.data.ObjectID;		
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);	
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -1408,17 +1393,17 @@ Ext.define('ProgramBoard', {
 			releases: me.ReleaseStore.data.items,
 			currentRelease: me.ReleaseRecord,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._releasePickerSelected.bind(me)
 			}
 		});
 	},
 	
 	_trainPickerSelected: function(combo, records){
-		var me=this;
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.TrainRecord.data.Name.indexOf(records[0].data.Name) === 0) return;
 		me.setLoading(true);
-		me.TrainRecord = me.AllTrainRecordsStore.findExactRecord('Name', records[0].data.Name);			
-		var pid = me.ProjectRecord.data.ObjectID;
+		me.TrainRecord = me.AllTrainRecordsStore.findRecord('Name', records[0].data.Name + ' ART');	//NOT FINDEXACTRECORD!	
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Train = me.TrainRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -1438,13 +1423,15 @@ Ext.define('ProgramBoard', {
 				width:240,
 				labelWidth:40,
 				store: Ext.create('Ext.data.Store', {
-					fields: ['Name'],
+					fields: ['Name'],				
+					sorters: [function(o1, o2){ return o1.data.Name < o2.data.Name ? -1 : 1; }],
 					data: me.TrainNames
 				}),
 				displayField: 'Name',
 				fieldLabel: 'Train:',
 				value:me.TrainRecord.data.Name.split(' ART')[0],
 				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					select: me._trainPickerSelected.bind(me)
 				}
 			});
@@ -1479,6 +1466,7 @@ Ext.define('ProgramBoard', {
 			fieldLabel: 'Auto-Refresh Rate (seconds):',
 			value:me.AppPrefs.refresh,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._refreshComboSelected.bind(me)
 			}
 		});
@@ -1545,7 +1533,6 @@ Ext.define('ProgramBoard', {
 				tcStore.resumeEvents();
 			}
 		});
-		me.CustomTeamCommitsStore.intelUpdate();
 		
 		var columnCfgs = [
 			{
@@ -1779,7 +1766,6 @@ Ext.define('ProgramBoard', {
 				velStore.resumeEvents();
 			}
 		});
-		me.CustomVelocityStore.intelUpdate();		
 		
 		var columnCfgs = [
 			{	
@@ -1959,7 +1945,6 @@ Ext.define('ProgramBoard', {
 				riskStore.resumeEvents();
 			}
 		});
-		me.CustomRisksStore.intelUpdate();
 		
 		var columnCfgs = [
 			{
@@ -2357,7 +2342,6 @@ Ext.define('ProgramBoard', {
 				var predDepStore = me.CustomPredDepStore, 
 					predDepRecs = predDepStore.getRange(),
 					realPredDepsData = me.DependenciesParsedData.Predecessors.slice(), //shallow copy of it	
-					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing predDeps with current userStories', predDepRecs, realPredDepsData);
 				predDepStore.suspendEvents(true);
@@ -2411,7 +2395,6 @@ Ext.define('ProgramBoard', {
 				predDepStore.resumeEvents();
 			}
 		});
-		me.CustomPredDepStore.intelUpdate();
 		
 		var predDepColumnCfgs = [
 			{
@@ -2500,26 +2483,22 @@ Ext.define('ProgramBoard', {
 									depTeamStore = me.PredDepTeamStores[depID],
 									depTeamRecords = depTeamStore.getRange(),
 									predDepRecord = predDepStore.getAt(predDepStore.findExact('DependencyID', depID)),
-									predecessors = predDepRecord.data.Predecessors.slice(0);
+									predecessors = predDepRecord.data.Predecessors.slice();
 								depTeamStore.suspendEvents(true);
 								Outer:
 								for(var i = 0;i<depTeamRecords.length;++i){
 									var depTeamRecord = depTeamRecords[i],
-										realTeamDep, key,
-										remoteChanged = false; //if someone else updated this while it was idle on our screen	
+										realTeamDep, key;
 									for(var j=0; j<predecessors.length;++j){
 										if(predecessors[j].TID === depTeamRecord.data.TID){
 											realTeamDep = predecessors.splice(j, 1)[0];
 											for(key in realTeamDep){
-												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ remoteChanged = true; break; }
+												if(!_.isEqual(depTeamRecord.get(key), realTeamDep[key])){ 
+													depTeamStore.remove(depTeamRecord);
+													depTeamStore.add(Ext.create('IntelDepTeam', Ext.clone(realTeamDep)));
+													continue Outer;
+												}
 											}
-											if(remoteChanged){
-												depTeamRecord.beginEdit();
-												for(key in realTeamDep)
-													depTeamRecord.set(key, realTeamDep[key]);
-												depTeamRecord.endEdit();
-											}
-											continue Outer;
 										}
 									}
 									depTeamStore.remove(depTeamRecord);
@@ -2674,15 +2653,15 @@ Ext.define('ProgramBoard', {
 								xtype: 'rallygrid',	
 								width:450,
 								rowLines:false,
-								flex:1,
 								columnCfgs: teamColumnCfgs,
 								disableSelection: true,
 								plugins: [ 'fastcellediting' ],
 								viewConfig: {
 									stripeRows:false,
 									getRowClass: function(teamDepRecord, index, rowParams, store){
-										if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
-										else return 'intel-row-35px';
+										if(!teamDepRecord.data.PID) return 'intel-team-dep-row';
+										//if(!teamDepRecord.data.PID) return 'intel-row-35px intel-team-dep-row';
+										//else return 'intel-row-35px';
 									}
 								},
 								listeners: {
@@ -2753,7 +2732,18 @@ Ext.define('ProgramBoard', {
 							click: defaultHandler,
 							dblclick: defaultHandler,
 							contextmenu: defaultHandler,
-							render: function(){ me.PredDepContainers[depID] = this; }
+							render: function(){ me.PredDepContainers[depID] = this; },
+							resize: function(d, w, h, oldw, oldh){ 
+								var viewHeight = me.PredDepGrid.view.el.clientHeight,
+									viewScrollHeight = me.PredDepGrid.view.el.dom.scrollHeight,
+									maxHeight = me.PredDepGrid.maxHeight - 
+										(me.PredDepGrid.view.headerCt.el.dom.clientHeight + me.PredDepGrid.header.el.dom.clientHeight) + 2;
+									changeHeight = h - oldh;
+								if(viewScrollHeight < maxHeight || 
+									((viewScrollHeight - changeHeight <=  maxHeight) != (viewScrollHeight <= maxHeight))){
+									me.PredDepGrid.view.updateLayout(); 
+								}
+							}
 						}
 					};
 				}
@@ -2814,14 +2804,14 @@ Ext.define('ProgramBoard', {
 								element: 'el',
 								fn: function(){
 									//validate fields first
-									if(predDepRecord.data.FormattedID === '' || predDepRecord.data.UserStoryName === ''){
+									if(!predDepRecord.data.FormattedID || !predDepRecord.data.UserStoryName){
 										me._alert('ERROR', 'A UserStory is not selected'); return; }
-									if(predDepRecord.data.Description === ''){
+									if(!predDepRecord.data.Description){
 										me._alert('ERROR', 'The description is empty'); return; }
-									if(predDepRecord.data.Checkpoint === ''){
+									if(!predDepRecord.data.Checkpoint){
 										me._alert('ERROR', 'Select When the dependency is needed by'); return; }
 									var predecessors = predDepRecord.data.Predecessors;
-									if(predecessors.length === 0){
+									if(!predecessors.length){
 										me._alert('ERROR', 'You must specify a team you depend on'); return; }
 									if(_.find(predecessors, function(p){ return p.PID === ''; })){
 										me._alert('ERROR', 'All Team Names must be valid'); return; }
@@ -2841,11 +2831,12 @@ Ext.define('ProgramBoard', {
 											return me._getAddedTeamDepCallbacks(teamDeps.added, predDepData).then(function(addedCallbacks){	
 												return me._getUpdatedTeamDepCallbacks(teamDeps.updated, predDepData).then(function(updatedCallbacks){
 													return me._getRemovedTeamDepCallbacks(teamDeps.removed, predDepData).then(function(removedCallbacks){
-														for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-														for(i=0, len=addedCallbacks.length; i<len; ++i){ addedCallbacks[i](); }//execute the added teams now
-														for(i=0, len=updatedCallbacks.length; i<len; ++i){ updatedCallbacks[i](); }//execute the updated teams now
+														var promise = Q();
+														for(i=0, len=removedCallbacks.length; i<len; ++i){ promise = promise.then(removedCallbacks[i]); }//execute the removed teams now
+														for(i=0, len=addedCallbacks.length; i<len; ++i){ promise = promise.then(addedCallbacks[i]); }//execute the added teams now
+														for(i=0, len=updatedCallbacks.length; i<len; ++i){ promise = promise.then(updatedCallbacks[i]); }//execute the updated teams now
 														
-														var promise = Q.fcall(function(){
+														promise = promise.then(function(){
 															var newTeamDeps = teamDeps.added.concat(teamDeps.updated);
 															predDepRecord.beginEdit();
 															predDepRecord.set('ObjectID', newUSRecord.data.ObjectID);
@@ -2911,8 +2902,8 @@ Ext.define('ProgramBoard', {
 													depsToDelete = teamDeps.removed.concat(teamDeps.updated), //dont care about added 
 													i, len;											
 												return me._getRemovedTeamDepCallbacks(depsToDelete, predDepData).then(function(removedCallbacks){
-													for(i=0, len=removedCallbacks.length; i<len; ++i){ removedCallbacks[i](); }//execute the removed teams now
-													var promise = Q.fcall(function(){});
+													var promise = Q();
+													for(i=0, len=removedCallbacks.length; i<len; ++i){ promise = promise.then(removedCallbacks[i]); }//execute the removed teams now
 													if(realDepData){
 														promise = promise.then(function(){
 															return me._removePredDep(oldUSRecord, realDepData);
@@ -2966,7 +2957,7 @@ Ext.define('ProgramBoard', {
 							});
 							me.CustomPredDepStore.insert(0, [model]);	
 							me.PredDepGrid.view.getEl().setScrollTop(0);
-							me.PredDepGrid.getSelectionModel().select(model);
+							//me.PredDepGrid.getSelectionModel().select(model);
 						}
 					}
 				}
@@ -2988,8 +2979,8 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(predDepRecord){ 
-					var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
-					return cls;
+					//var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
+					//return cls;
 				}
 			},
 			listeners: {
@@ -3002,6 +2993,7 @@ Ext.define('ProgramBoard', {
 						originalValue = e.originalValue;
 					
 					if(value === originalValue) return; 
+					else if(!value) { predDepRecord.set(field, originalValue); return; }
 					if(field === 'Description') {
 						value = me._htmlEscape(value);			
 						predDepRecord.set(field, value);
@@ -3081,7 +3073,6 @@ Ext.define('ProgramBoard', {
 				succDepStore.resumeEvents();
 			}
 		});
-		me.CustomSuccDepStore.intelUpdate();
 		
 		var succDepColumnCfgs = [
 			{
@@ -3119,7 +3110,8 @@ Ext.define('ProgramBoard', {
 				width:80,
 				resizable:false,
 				editor: false,
-				sortable:true					
+				sortable:true,
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}				
 			},{
 				text:'Supported',					
 				dataIndex:'Supported',
@@ -3249,6 +3241,8 @@ Ext.define('ProgramBoard', {
 								element: 'el',
 								fn: function(){
 									//no field validation needed
+									if(!succDepRecord.data.Supported){
+										me._alert('ERROR', 'You must set the Supported field.'); return; }
 									me.SuccDepGrid.setLoading(true);
 									me._enqueue(function(unlockFunc){
 										var succDepData = succDepRecord.data, oldUSRecord, newUSRecord;
@@ -3259,7 +3253,9 @@ Ext.define('ProgramBoard', {
 											var realDepData = me._getRealDepData(oldUSRecord, succDepData, 'Successors'); //might be undefined if pred team deleted then readded this team on the dep!
 											if(!realDepData) return Q.reject(['Successor removed this dependency.']);
 											
-											succDepData.ObjectID = newUSRecord.data.ObjectID; //we set this in case we are changing the depended upon US
+											succDepData.ObjectID = newUSRecord.data.ObjectID;
+											succDepData.SuccFormattedID = realDepData.SuccFormattedID;
+											succDepData.SuccUserStoryName = realDepData.SuccUserStoryName;
 											
 											return me._updateSuccessor(succDepData, newUSRecord)
 												.then(function(){									
@@ -3278,11 +3274,7 @@ Ext.define('ProgramBoard', {
 											unlockFunc();
 										})
 										.fail(function(reason){ //hacky way to tell if we should delete this successor dependency
-											if(typeof reason === 'string'){
-												me._alert('ERROR', reason);
-												me.SuccDepGrid.setLoading(false);
-												unlockFunc();
-											} else {
+											if(reason instanceof Array){
 												me._alert('ERROR', reason[0] + ' Deleting this dependency now');
 												if(realDepData){
 													me._removeSuccDep(oldUSRecord, realDepData).then(function(){
@@ -3302,6 +3294,11 @@ Ext.define('ProgramBoard', {
 													me.SuccDepGrid.setLoading(false);
 													unlockFunc();
 												}
+											}
+											else {
+												me._alert('ERROR', reason);
+												me.SuccDepGrid.setLoading(false);
+												unlockFunc();
 											}
 										})
 										.done();
@@ -3341,8 +3338,10 @@ Ext.define('ProgramBoard', {
 						succDepRecord = e.record,
 						field = e.field,
 						value = e.value,
-						originalValue = e.originalValue;					
+						originalValue = e.originalValue;	
+						
 					if(value == originalValue) return;
+					else if(!value) { succDepRecord.set(field, originalValue); return; }
 					var previousEdit = succDepRecord.data.Edited;
 					succDepRecord.set('Edited', true);
 					

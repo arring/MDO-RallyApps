@@ -62,15 +62,10 @@ Ext.define('CommitMatrix', {
 					workspace: me.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters: [
-					{
-						property:'Release.Name',
-						value:me.ReleaseRecord.data.Name
-					},{
-						property:'Feature.ObjectID',
-						value:fRecord.data.ObjectID
-					}
-				]
+				filters: [{
+					property:'Feature.ObjectID',
+					value:fRecord.data.ObjectID
+				}]
 			});	
 		return me._reloadStore(storyStore)
 			.then(function(storyStore){ 
@@ -90,7 +85,6 @@ Ext.define('CommitMatrix', {
 		
 	_loadFeatures: function(){
 		var me=this, 
-			filterString = me._getFeatureFilterString(me.TrainRecord, me.ReleaseRecord),
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
 				model: 'PortfolioItem/Feature',
 				limit:Infinity,
@@ -100,24 +94,8 @@ Ext.define('CommitMatrix', {
 					workspace: me.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[{ property:'Dummy', value:'value' }]
+				filters:[me._getFeatureFilter(me.TrainRecord, me.ReleaseRecord)]
 			});
-		
-		featureStore._hydrateModelAndLoad = function(options){
-			var deferred = new Deft.Deferred();
-			this.hydrateModel().then({
-					success: function(model) {
-						this.proxy.encodeFilters = function(){ //inject custom filter here. woot
-							return filterString;
-						};
-						this.load(options).then({
-								success: Ext.bind(deferred.resolve, deferred),
-								failure: Ext.bind(deferred.reject, deferred)
-						});
-					},
-					scope: this
-			});
-		};
 		return me._reloadStore(featureStore)
 			.then(function(featureStore){ 
 				var promises = [], 
@@ -129,17 +107,12 @@ Ext.define('CommitMatrix', {
 					if(frData.Parent){
 						promises.push(me._loadMilestone(frData.Parent.ObjectID).then(function(milestoneRecord){
 							var p = milestoneRecord.data.Parent;
-							if(p && p.Name){ 
-								me.FeatureProductHash[frData.ObjectID] = p.Name;
-								/*** this should not be possible ***/
-								//if(!_.find(me.ProductNames, function(pn){ return pn.ProductName === p.Name; }))
-								//	me.ProductNames.push({ProductName: p.Name});
-							} 
+							if(p && p.Name) me.FeatureProductHash[frData.ObjectID] = p.Name;
 							else me.FeatureProductHash[frData.ObjectID] = '';
 						}));
-						promises.push(me._loadFeatureUserStoriesInRelease(fr));
 					}
 					else me.FeatureProductHash[frData.ObjectID] = '';
+					promises.push(me._loadFeatureUserStoriesInRelease(fr));
 				});
 				return Q.all(promises).fail(function(reason){
 					me._alert('ERROR', reason || 'Failed to load Features');
@@ -175,6 +148,7 @@ Ext.define('CommitMatrix', {
 	_loadDefaultProjects:function(){
 		var me=this,
 			inScope = me._getProjectsInScope(),
+			ignoreTeams = {'All Releases':true, 'All Scrums':true},
 			msub = me.MatrixUserStoryBreakdown,
 			feats = me.FeatureStore.data.items,
 			mpm = me.MatrixProjectMap,
@@ -183,7 +157,7 @@ Ext.define('CommitMatrix', {
 				fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
 				limit:Infinity,
 				context: {
-					workspace: this.getContext().getWorkspace()._ref,
+					workspace: me.getContext().getWorkspace()._ref,
 					project:null
 				}
 			});
@@ -191,7 +165,7 @@ Ext.define('CommitMatrix', {
 			.then(function(projectStore){
 				var projects = projectStore.data.items;
 				projects = _.filter(projects, function(project){ 
-					return inScope[project.data.ObjectID] && project.data.TeamMembers.Count > 0; 
+					return inScope[project.data.ObjectID] && !ignoreTeams[project.data.Name] && project.data.TeamMembers.Count > 0; 
 				});
 				me._addDefaultProjectsToStructures(msub, mpm, feats, projects); //add some default projects
 				console.log('default projects', projects);
@@ -491,7 +465,7 @@ Ext.define('CommitMatrix', {
 					var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
 					if(currentRelease){
 						me.ReleaseRecord = currentRelease;
-						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate),
+						me._workweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 						console.log('release loaded', currentRelease);
 						me._setRefreshInterval(); 
 						me._reloadEverything();
@@ -512,7 +486,8 @@ Ext.define('CommitMatrix', {
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
-		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);			
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 		var pid = me.ProjectRecord.data.ObjectID;		
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
@@ -534,6 +509,7 @@ Ext.define('CommitMatrix', {
 			releases: me.ReleaseStore.data.items,
 			currentRelease: me.ReleaseRecord,
 			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 				select: me._releasePickerSelected.bind(me)
 			}
 		});
