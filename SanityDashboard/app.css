@@ -1,6 +1,8 @@
 .app {
     margin: 0;
-    padding: 0;    
+    padding: 0;
+    overflow-x: scroll;    
+    overflow-y: hidden;
 }
 .app .jump{
      font-family: Helvetica, Arial;
@@ -8,10 +10,10 @@
      font-size: 16px;
 }
 
-.app .healthy{
+/*.app .healthy{
     color: green;
 }
 
 .app .unhealthy{
      color: red;
-}
+}*/

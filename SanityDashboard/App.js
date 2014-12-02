@@ -2,7 +2,7 @@ var newscope = true;
 Ext.define('CustomApp', {
     extend: 'Rally.app.TimeboxScopedApp',
     componentCls: 'app',
-    width: 800,
+    width: 600,
     layout:{
         type: 'vbox'
     },
@@ -22,7 +22,7 @@ Ext.define('CustomApp', {
         {  
             xtype: 'container',
             itemId: 'ribbon',
-            width: 1500,
+            width: 1400,
             height: 250,
             hidden: true,
             border: 1,
@@ -49,12 +49,12 @@ Ext.define('CustomApp', {
             {
                 xtype: 'container',
                 itemId: 'gridsLeft',
-                width: 750,
+                width: 695,
                 border: 1,
                 style: {
                     borderColor: '#AAA',
                     borderStyle: 'solid'
-                },
+                }
                 /*items: [
                 { 
                     xtype: 'component',
@@ -64,12 +64,12 @@ Ext.define('CustomApp', {
         {
             xtype: 'container',
             itemId: 'gridsRight',
-            width: 750,
+            width: 695,
             border: 1,
             style: {
                 borderColor: '#AAA',
                 borderStyle: 'solid'
-            },
+            }
             /*items: [{ 
                 xtype: 'component',
                 html: "<b>Feature Health</b>"
@@ -153,62 +153,6 @@ Ext.define('CustomApp', {
         }
     },//}}}
 
-    _buildBubbleChart: function() { //{{{
-        this.down('#ribbon').add({
-            xtype: 'rallychart',
-            flex: 1,
-            chartConfig: {
-                chart: {
-                    width: 300,
-                    height: 250,
-                    type: 'bubble',
-                    zoomType: 'xy'
-                },
-                title: {text: 'Team Analysis'}
-            },
-            chartData: { //{{{
-                series: [{
-                    name: 'Team Alpha',
-                    data: [[97, 36, 79], 
-                           [94, 74, 60], 
-                           [68, 76, 58], 
-                           [64, 87, 56], 
-                           [68, 27, 73], 
-                           [74, 99, 42], 
-                           [7, 93, 87], 
-                           [51, 69, 40], 
-                           [38, 23, 33], 
-                           [57, 86, 31]]
-                    }, 
-                    {
-                    name: 'Team Beta',
-                    data: [[25, 10, 87], 
-                           [2, 75, 59], 
-                           [11, 54, 8], 
-                           [86, 55, 93], 
-                           [5, 3, 58], 
-                           [90, 63, 44], 
-                           [91, 33, 17], 
-                           [97, 3, 56], 
-                           [15, 67, 48], 
-                           [54, 25, 81]]
-                    }, 
-                    {
-                    name: 'Team Gamma',
-                    data: [[47, 47, 21], 
-                           [20, 12, 4], 
-                           [6, 76, 91], 
-                           [38, 30, 60], 
-                           [57, 98, 64], 
-                           [61, 17, 80], 
-                           [83, 60, 13], 
-                           [67, 78, 75], 
-                           [64, 12, 10], 
-                           [30, 77, 82]]
-                }]
-            }//}}}
-        });
-    }, //}}}
 
     _buildRibbon: function() { //{{{
         var linkid = '<b><app class="jump {state}">{title}:&emsp;<a href="#C{name}">{count}</a><p></b></app>';
@@ -238,124 +182,6 @@ Ext.define('CustomApp', {
             html: newhtml
         });        
 
-    }, //}}}
-
-    _buildBarChart: function() { //{{{
-        console.log('Starting to build bar chart');
-        function compare(a,b) {
-            if(a.x < b.x)
-                return -1;
-            if (a.x > b.x)
-                return 1;
-            return 0;
-        }
-        var tempobj = this.globalStoryCount.sort(compare);
-        var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
-        var chartCfg = {
-            chart: {
-                type: 'bar',
-                width: 300,
-                height: 250
-            },
-            title: { text: 'Story Counts by Grid' },
-            yAxis: {},
-            xAxis: {
-                categories: tempcat,
-                labels: {
-                    enabled: true,
-                    step: 1,
-                    formatter: function() { return tempobj[this.value-1].name; }
-                },
-                tickInterval: 1 
-            },
-            legend: {
-                layout: 'vertical',
-                align: 'center',
-                verticalAlign: 'top',
-                x: -40,
-                y: 100,
-                floating: true,
-                borderWidth: 1,
-                backgroundColor: '#FFFFFF',
-                shadow: true,
-                enabled: false
-            },
-            credits: { enabled: false }
-        };
-        var chartDt = {
-            series: [{
-                name: 'Grid Counts',
-                data: tempobj
-            }]
-        };
-        this.down('#ribbon').add({
-            xtype: 'rallychart',
-            chartConfig: chartCfg,
-            chartData: chartDt,
-            flex: 1,
-            layout: { pack: 'center' },
-            scope: this
-        });
-    }, //}}}
-
-
-    _buildDonutChart: function() { //{{{
-        console.log('Starting to build semi-donut chart');
-        function compare(a,b) {
-            if(a.x < b.x)
-                return -1;
-            if (a.x > b.x)
-                return 1;
-            return 0;
-        }
-        var tempobj = this.globalStoryCount.sort(compare);
-        var tempcat = _.map(this.globalStoryCount, function(x) {return x.name;});
-        var chartCfg = {
-            chart: {
-                type: 'pie',
-                width: 300,
-                height: 400,
-                innerSize: '50%'
-            },
-            title: { text: 'Story Counts by Grid' },
-            yAxis: {},
-            xAxis: {
-                categories: tempcat,
-                labels: {
-                    enabled: true,
-                    step: 1,
-                    formatter: function() { return tempobj[this.value-1].name; }
-                },
-                tickInterval: 1 
-            },
-            legend: {
-                layout: 'vertical',
-                align: 'center',
-                verticalAlign: 'top',
-                x: -40,
-                y: 100,
-                floating: true,
-                borderWidth: 1,
-                backgroundColor: '#FFFFFF',
-                shadow: true,
-                enabled: false
-            },
-            credits: { enabled: false }
-        };
-        var chartDt = {
-            series: [{
-                name: 'Grid Counts',
-                data: tempobj
-            }]
-        };
-        this.down('#ribbon').add({
-            xtype: 'rallychart',
-            chartConfig: chartCfg,
-            chartData: chartDt,
-            flex: 1,
-            layout: { pack: 'center' },
-            scope: this
-        });
     }, //}}}
 
     _buildPieChart: function() { //{{{
@@ -410,6 +236,7 @@ Ext.define('CustomApp', {
 
     // Create all grids in the left/right columns
     _buildGrids: function(scope) { //{{{
+
         var grids = [ //{{{
         {
             title: 'Blocked Stories',
@@ -579,6 +406,8 @@ Ext.define('CustomApp', {
             title: linkid.replace('{name}',cnum).replace('{title}',myTitle),
             columnCfgs: myColumns,
             showPagingToolbar: true,
+            emptyText: 'This search is healthy',
+            enableBulkEdit: true,
             pagingToolbarCfg: {
                 pageSizes: [15, 25, 100],
                 autoRender: true,
@@ -602,10 +431,10 @@ Ext.define('CustomApp', {
                             x: cnum.charAt(1),
                             y: tempcount
                         };
-                        if (tempcount !== 0) {
+                        if (tempcount === 0) {
                             this.shouldiaddgrid=true;
-                            //gridContainer.add(grid);
-                        }
+                        } else
+                            this.shouldiaddgrid=false;
                         if(window.newscope) {
                             deferred.resolve([store.getTotalCount(),String(cnum),elem]);
                         } 
@@ -618,16 +447,20 @@ Ext.define('CustomApp', {
                 borderColor: '#AAA',
                 borderStyle: 'dotted',
                 borderWidth: '2px'
-                //header: '#BCED91'
             },
             padding: 10,
             syncRowHeight: false,
             scope: this
         });
         // show me the grid!
-        grid.setBodyStyle('background', '#BCED91');
+        if (this.shouldiaddgrid)
+        { 
+            grid.setBodyStyle("backgroundColor","#00ff00"); 
+            grid.setBodyStyle("textDecoration","overline"); 
+        }
         gridContainer.add(grid);
-        if (!this._gridsLoaded) { return deferred.promise; }
+        if (!this._gridsLoaded) 
+            { return deferred.promise; }
         this._refreshGrids();
         return true;
     } //}}}
