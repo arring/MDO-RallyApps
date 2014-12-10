@@ -289,7 +289,7 @@ Ext.define('CustomApp', {
             model: 'User Story',
             listeners: { scope: this },
             columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'Feature','PlanEstimate'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
+            side: 'Right',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
                 var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -400,7 +400,7 @@ Ext.define('CustomApp', {
             model: 'User Story',
             listeners: { scope: this },
             columns: ['FormattedID', 'Name', {text:'Teams', dataIndex: 'Project'}, 'Release'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
+            side: 'Right',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
                 var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
