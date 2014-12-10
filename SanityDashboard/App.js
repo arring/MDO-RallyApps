@@ -10,7 +10,7 @@ Ext.define('CustomApp', {
     launch: function() {
         console.log('Starting load of all components for Sanity Dashboard');
         this.add( //{{{
-        {
+        /*{
             xtype: 'container',
             itemId: 'releaseInfo',
             tpl: [
@@ -18,12 +18,12 @@ Ext.define('CustomApp', {
                 '<p class="release-notes">{notes}</p>',
                 'Additional information is available <a href="{detailUrl}" target="_top">here.</a></p></div>'
                ]
-        },
+        },*/
         {  
             xtype: 'container',
             itemId: 'ribbon',
             width: 1400,
-            height: 250,
+            height: 350,
             hidden: true,
             border: 1,
             layout: {
@@ -81,6 +81,7 @@ Ext.define('CustomApp', {
     },
 
     onScopeChange: function(scope) { ///{{{
+        console.log('Scope changed to', scope, this);
         this.down('#ribbon').removeAll();
         this.globalGridCount=[];   // count entry for each grid
         this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':'', 'C7': ''};
@@ -113,15 +114,47 @@ Ext.define('CustomApp', {
 
     _loadReleaseDetails: function(scope) {//{{{
         var release = scope.getRecord();
+        var project = this.getContext().getProject();
+        console.log('Release', release);
+        //console.log(release.raw.Project);
+        console.log('Project ', project);
+        console.log(project.Name);
+        //if(release.getProject() != project.ObjectID)
+        //    console.log('Not in release');
+        //console.log('Data Context', this.getContext().getDataContext());
+        //console.log('Context', this.getContext());
+        //console.log('Timebox Scope', this.getContext().getTimeboxScope());
+        //console.log('Project Down Context', this.getContext().getProjectScopeDown());
+        //this.setContext(project);
+        //console.log('New scope', this.getContext());
+        var releaseStore = Ext.create('Rally.data.wsapi.Store', {
+            model: 'Release',
+            autoLoad: true,
+            fetch: ['Name', 'Project'],
+            context: this.getContext().getProject(),
+            filters: [ { 
+                            property: 'Project.ObjectID',
+                            operator: '=',
+                            value: project.ObjectID 
+                      }],
+            listeners: {
+                        load: function(records)
+                                {
+                                  console.log('Found releases', records); 
+                                }
+                       }
+        });
+        //console.log('First in store', releaseStore);
         if (release) {
             var releaseModel = release.self;
             releaseModel.load(Rally.util.Ref.getOidFromRef(release), {
                 fetch: ['Notes'],
                 success: function(record) {
-                    this.down('#releaseInfo').update({
+                    //console.log('Found Train', this.getContext().getProject());
+                    /*this.down('#releaseInfo').update({
                         detailUrl: Rally.nav.Manager.getDetailUrl(release),
                         notes: record.get('Notes')
-                    }); 
+                    });*/ 
                 },
                 scope: this
             });
@@ -155,7 +188,7 @@ Ext.define('CustomApp', {
 
 
     _buildRibbon: function() { //{{{
-        var linkid = '<b><app class="jump {state}">{title}:&emsp;<a href="#C{name}">{count}</a><p></b></app>';
+        var linkid = '<app class="jump {state}">{title}:&emsp;<a href="#C{name}">{count}</a><p></app>';
         function compare(a,b) {
             if(a.x < b.x)
                 return -1;
@@ -167,7 +200,7 @@ Ext.define('CustomApp', {
         var newhtml = "<br>";
         var line;
         console.log("Building ribbon");
-        for(var i=0; i < 7; i++) {
+        for(var i=0; i < 8; i++) {
             line = linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y);
             if (tempobj[i].y === 0)
                 line = line.replace("{state}", "healthy");
@@ -242,7 +275,7 @@ Ext.define('CustomApp', {
             title: 'Blocked Stories',
             model: 'User Story',
             listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'Project', 'Blocked', 'BlockedReason'],
+            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'Blocked', 'BlockedReason'],
             side: 'Left',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
@@ -255,7 +288,7 @@ Ext.define('CustomApp', {
             title: 'Unsized Stories with Features',
             model: 'User Story',
             listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'Project', 'Feature','PlanEstimate'],
+            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'Feature','PlanEstimate'],
             side: 'Left',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
@@ -271,7 +304,7 @@ Ext.define('CustomApp', {
             title: 'Unsized Stories with Release',
             model: 'User Story',
             listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
+            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'PlanEstimate'],
             side: 'Left',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
@@ -322,7 +355,7 @@ Ext.define('CustomApp', {
             columns: [    
                 {text: 'Feature', dataIndex: 'Feature', flex: 3, 
                     renderer: function(value) { return value.FormattedID.link("https://rally1.rallydev.com/#/"+value.Project.ObjectID+"d/detail/portfolioitem/feature/"+value.ObjectID);}},
-                'FormattedID', 'Name','Project', 'ScheduleState'
+                'FormattedID', 'Name',{text:'Teams', dataIndex:'Project'}, 'ScheduleState'
             ],
             side: 'Right',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
@@ -341,7 +374,7 @@ Ext.define('CustomApp', {
             title: 'Improperly Sized Stories',
             model: 'User Story',
             listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'Project', 'PlanEstimate'],
+            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'PlanEstimate'],
             side: 'Left',    // TODO: ensure camelcase format to match itemId names
             pageSize: 3,
             filters: function() {
@@ -361,11 +394,32 @@ Ext.define('CustomApp', {
                     and(planSizeFour).and(planSizeEight).and(planSizeSixteen);
             },
             chartnum: 'C7'
+        },
+        {
+            title: 'Stories with Iteration in Release but no Release scoped',
+            model: 'User Story',
+            listeners: { scope: this },
+            columns: ['FormattedID', 'Name', {text:'Teams', dataIndex: 'Project'}, 'Release'],
+            side: 'Left',    // TODO: ensure camelcase format to match itemId names
+            pageSize: 3,
+            filters: function() {
+                var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
+                    property: 'Release', operator: '!=', value: 'null' });
+                var releaseDateFilter = Ext.create('Rally.data.wsapi.Filter', {
+                    property: 'Release.ReleaseDate', operator: '>', value: 'today' });
+                var iterationFilter = Ext.create('Rally.data.wsapi.Filter', {
+                    property: 'Iteration', operator: '=', value: 'null' });
+                return releaseFilter.and(releaseDateFilter).and(iterationFilter);
+            },
+            chartnum: 'C8'
         }
 
     ]; //}}}
 
     var allPromises = [];
+
+    //var appscope = this.getContext().getGlobalContext();
+    console.log('App scope ', scope);
     _.each(grids, function(grid) {
         promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.chartnum,scope);
         promise.then({
@@ -434,7 +488,7 @@ Ext.define('CustomApp', {
                         if (tempcount === 0) {
                             this.shouldiaddgrid=true;
                         } else
-                            this.shouldiaddgrid=false;
+                            gridContainer.add(grid);
                         if(window.newscope) {
                             deferred.resolve([store.getTotalCount(),String(cnum),elem]);
                         } 
@@ -458,7 +512,7 @@ Ext.define('CustomApp', {
             grid.setBodyStyle("backgroundColor","#00ff00"); 
             grid.setBodyStyle("textDecoration","overline"); 
         }
-        gridContainer.add(grid);
+        //gridContainer.add(grid);
         if (!this._gridsLoaded) 
             { return deferred.promise; }
         this._refreshGrids();
