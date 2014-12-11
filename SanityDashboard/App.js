@@ -115,18 +115,6 @@ Ext.define('CustomApp', {
     _loadReleaseDetails: function(scope) {//{{{
         var release = scope.getRecord();
         var project = this.getContext().getProject();
-        console.log('Release', release);
-        //console.log(release.raw.Project);
-        console.log('Project ', project);
-        console.log(project.Name);
-        //if(release.getProject() != project.ObjectID)
-        //    console.log('Not in release');
-        //console.log('Data Context', this.getContext().getDataContext());
-        //console.log('Context', this.getContext());
-        //console.log('Timebox Scope', this.getContext().getTimeboxScope());
-        //console.log('Project Down Context', this.getContext().getProjectScopeDown());
-        //this.setContext(project);
-        //console.log('New scope', this.getContext());
         var releaseStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'Release',
             autoLoad: true,
@@ -144,13 +132,12 @@ Ext.define('CustomApp', {
                                 }
                        }
         });
-        //console.log('First in store', releaseStore);
         if (release) {
             var releaseModel = release.self;
             releaseModel.load(Rally.util.Ref.getOidFromRef(release), {
                 fetch: ['Notes'],
                 success: function(record) {
-                    //console.log('Found Train', this.getContext().getProject());
+                    //Removing as the release info component was deprecated
                     /*this.down('#releaseInfo').update({
                         detailUrl: Rally.nav.Manager.getDetailUrl(release),
                         notes: record.get('Notes')
