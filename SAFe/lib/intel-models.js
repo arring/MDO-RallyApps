@@ -92,9 +92,10 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 Ext.define('IntelRiskWithProject', {
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'RiskID', type:'string'},
 		{name: 'ProjectName', type:'string'},
 		{name: 'ProjectID', type:'number'},
-		{name: 'RiskID', type:'string'},
+		{name: 'Product', type:'string'},
 		{name: 'ObjectID', type:'number'},
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
@@ -114,6 +115,7 @@ Ext.define('IntelPredDepWithProject', { //predecessor dependencies
 	fields: [
 		{name: 'ProjectName', type:'string'},
 		{name: 'ProjectID', type:'number'},
+		{name: 'Product', type:'string'},
 		{name: 'DependencyID', type:'string'},
 		{name: 'ObjectID', type: 'number'},
 		{name: 'FormattedID',  type: 'string'}, 
