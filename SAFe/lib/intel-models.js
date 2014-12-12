@@ -30,7 +30,9 @@ Ext.define('IntelRisk', {
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
 		{name: 'Description', type: 'string'},
-		{name: 'Impact', type: 'string'},			
+		{name: 'Impact', type: 'string'},	
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Status', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
@@ -99,6 +101,8 @@ Ext.define('IntelRiskWithProject', {
 		{name: 'Description', type: 'string'},
 		{name: 'Impact', type: 'string'},			
 		{name: 'Status', type: 'string'},
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
 		{name: 'Edited', type: 'boolean'}
@@ -116,7 +120,7 @@ Ext.define('IntelPredDepWithProject', { //predecessor dependencies
 		{name: 'UserStoryName',  type: 'string'},
 		{name: 'Description', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
-		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Status', type:'string'}, 
 		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
 		{name: 'Edited', type: 'boolean'}
 	]

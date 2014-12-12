@@ -20,6 +20,8 @@
 				Desc: //description
 				Imp: //impact
 				Sta: //status
+				Urg: //urgency
+				Mit: //mitigation plan
 			}
 		}
 	}
@@ -60,6 +62,8 @@
 	
 	ALSO, this app depends on a specific naming convention for your ARTs and Scrums within them, otherwise the releases wont load correctly
 */
+
+RALLY_MAX_STRING_SIZE = 32768;
 
 /********************* PRODUCTION *****************/
 console = { log: function(){} }; // DEBUG!!!!		
@@ -252,7 +256,7 @@ Ext.define('ProgramBoard', {
 		tcs[projectID].Commitment = tc.Commitment;
 		tcs[projectID].Objective = tc.Objective;
 		var str = btoa(JSON.stringify(tcs, null, '\t'));
-		if(str.length >= 32768)
+		if(str.length >= RALLY_MAX_STRING_SIZE)
 			deferred.reject('TeamCommits field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			featureRecord.set('c_TeamCommits', str);
@@ -311,15 +315,13 @@ Ext.define('ProgramBoard', {
 				me.FeatureNameStore.add({'Name': features[i].data.Name});
 			}
 		}
-	},
-	
+	},	
 	_getRisks: function(featureRecord){
 		var risks = featureRecord.data.c_Risks;
 		try{ risks = JSON.parse(atob(risks)) || {}; } //b64 decode yosef. we approve of xss.
 		catch(e) { risks = {}; }
 		return risks;
-	},
-	
+	},	
 	_parseRisksFromFeature: function(featureRecord){
 		var array = [],
 			projectID = this.ProjectRecord.data.ObjectID, 
@@ -337,6 +339,8 @@ Ext.define('ProgramBoard', {
 					RiskID: riskID,
 					Description: risk.Desc,
 					Impact: risk.Imp,
+					MitigationPlan: risk.Mit,
+					Urgency: risk.Urg,
 					Status: risk.Sta,
 					Contact: risk.Cont,
 					Checkpoint: risk.CP,
@@ -345,8 +349,7 @@ Ext.define('ProgramBoard', {
 			}
 		}
 		return array;
-	},
-	
+	},	
 	_parseRisksData: function(){ 
 		var me=this, 
 			array = [],
@@ -356,16 +359,14 @@ Ext.define('ProgramBoard', {
 		for(i=0,len=records.length; i<len;++i)
 			array = array.concat(me._parseRisksFromFeature(records[i]));
 		me.RisksParsedData = array;
-	},
-		
-	_removeRiskFromList: function(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
+	},		
+	_spliceRiskFromList: function(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
 		for(var i = 0; i<riskList.length; ++i){
 			if(riskList[i].RiskID == riskID) {
 				return riskList.splice(i, 1)[0];
 			}
 		}
-	},
-	
+	},	
 	_removeRisk: function(featureRecord, riskData){ 
 		var risks = this._getRisks(featureRecord),
 			projectID = this.ProjectRecord.data.ObjectID,
@@ -377,7 +378,7 @@ Ext.define('ProgramBoard', {
 				return rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID;
 			});
 			var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
-			if(str.length >= 32768) 
+			if(str.length >= RALLY_MAX_STRING_SIZE) 
 				deferred.reject('Risks field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 			else {
 				featureRecord.set('c_Risks', str);
@@ -394,8 +395,7 @@ Ext.define('ProgramBoard', {
 		} else deferred.resolve();
 		
 		return deferred.promise;
-	},
-	
+	},	
 	_addRisk: function(featureRecord, riskData){
 		var risks = this._getRisks(featureRecord),
 			projectID = this.ProjectRecord.data.ObjectID,
@@ -407,14 +407,17 @@ Ext.define('ProgramBoard', {
 		if(!risks[projectID]) risks[projectID] = {};
 		var copy = {
 			CP: riskData.Checkpoint,
-			Cont: riskData.Contact,
 			Desc:riskData.Description,
 			Imp: riskData.Impact,
-			Sta: riskData.Status
+			Mit: riskData.MitigationPlan,
+			Urg: riskData.Urgency,
+			Sta: riskData.Status,
+			Cont: riskData.Contact
 		};
 		risks[projectID][riskData.RiskID] = copy;
+		
 		var parseDataAdded = false;
-		for(var i=0;i<this.RisksParsedData.length; ++i){
+		for(var i=0;i<this.RisksParsedData.length; ++i){ //replace or append to cached risks
 			var rpd = this.RisksParsedData[i];
 			if(rpd.RiskID === riskData.RiskID && rpd.FormattedID === riskData.FormattedID){
 				this.RisksParsedData[i] = riskData;
@@ -422,8 +425,9 @@ Ext.define('ProgramBoard', {
 			}
 		}
 		if(!parseDataAdded) this.RisksParsedData.push(riskData);
+		
 		var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
-		if(str.length >= 32768)
+		if(str.length >= RALLY_MAX_STRING_SIZE)
 			deferred.reject('Risks field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			featureRecord.set('c_Risks', str);
@@ -631,13 +635,12 @@ Ext.define('ProgramBoard', {
 			}
 		});	
 		return funcDeferred.promise;
-	},
-	
+	},	
 	_collectionSynced: function(userStoryRecord, msg, depData, dependencies){
 		var me=this, 
 			str = btoa(JSON.stringify(dependencies, null, '\t')),
 			deferred = Q.defer();
-		if(str.length >= 32768) 
+		if(str.length >= RALLY_MAX_STRING_SIZE) 
 			deferred.reject('Dependencies field for ' + userStoryRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			userStoryRecord.set('c_Dependencies', str);
@@ -665,8 +668,7 @@ Ext.define('ProgramBoard', {
 			}());
 		}
 		return deferred.promise;
-	},
-	
+	},	
 	_removePredDep: function(userStoryRecord, predDepData){
 		var me=this, dependencies = me._getDependencies(userStoryRecord),
 			cachePreds = me.DependenciesParsedData.Predecessors,
@@ -700,8 +702,7 @@ Ext.define('ProgramBoard', {
 		return me._syncCollection(userStoryRecord, addUSlist, removeUSlist, 'Predecessors').then(function(){ 
 			return me._collectionSynced(userStoryRecord, 'removed predDep', predDepData, dependencies); 
 		});
-	},
-	
+	},	
 	_removeSuccDep: function(userStoryRecord, succDepData){
 		var me=this, dependencies = me._getDependencies(userStoryRecord),
 			cacheSuccs = me.DependenciesParsedData.Successors, dpds,
@@ -737,7 +738,6 @@ Ext.define('ProgramBoard', {
 			return me._collectionSynced(userStoryRecord, 'removed succdep', succDepData, dependencies);
 		});
 	},
-
 	_addPredDep: function(userStoryRecord, predDepData){ 
 		var me=this, dependencies = me._getDependencies(userStoryRecord),
 			cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
@@ -778,7 +778,6 @@ Ext.define('ProgramBoard', {
 			return me._collectionSynced(userStoryRecord, 'added predDep', predDepData, dependencies);
 		});
 	},
-	
 	_addSuccDep: function(userStoryRecord, succDepData){ 
 		var me=this, dependencies = me._getDependencies(userStoryRecord),
 			cacheSuccs = me.DependenciesParsedData.Successors, dpds,
@@ -833,8 +832,7 @@ Ext.define('ProgramBoard', {
 		return me._syncCollection(userStoryRecord, succUSlist, [], 'Successors').then(function(){
 			return me._collectionSynced(userStoryRecord, 'added succdep', succDepData, dependencies);
 		});
-	},
-	
+	},	
 	_getOldAndNewUSRecords: function(depData){
 		var me = this,
 			tmpNewUSRecord = me.UserStoryStore.findExactRecord('FormattedID', depData.FormattedID),
@@ -856,15 +854,13 @@ Ext.define('ProgramBoard', {
 			});
 		}
 		return deferred.promise;
-	},
-	
+	},	
 	_getRealDepData: function(oldUSRecord, depData, type){ //type is 'Predecessors' or 'Successors'
 		var me = this, realDepsData;
 		if(oldUSRecord) realDepsData = me._parseDependenciesFromUserStory(oldUSRecord)[type];
 		else realDepsData = [];
 		return me._removeDepFromList(depData.DependencyID, realDepsData);		
 	},
-	
 	_getTeamDepArrays: function(predDepData, realDepData){ //returns arrays of the team deps from the dependency grouped on their status
 		var me=this, 
 			addedTeams = [], 
@@ -891,8 +887,7 @@ Ext.define('ProgramBoard', {
 			updated: updatedTeams,
 			removed: removedTeams
 		};
-	},
-	
+	},	
 	//These are for adding and removing team dependency callbacks to be executed in the future. return true if all callbacks are created
 	_getAddedTeamDepCallbacks: function(teamDeps, predDepData){ //teamDeps might mutate
 		var me=this, 
@@ -931,8 +926,7 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		return Q.all(promises);
-	},
-	
+	},	
 	_getUpdatedTeamDepCallbacks: function(teamDeps, predDepData){ //teamDeps might mutate
 		var me=this, 
 			permissions = me.getContext().getPermissions(),
@@ -984,8 +978,7 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		return Q.all(promises);
-	},
-	
+	},	
 	_getRemovedTeamDepCallbacks: function(teamDeps, predDepData){
 		var me=this, 
 			permissions = me.getContext().getPermissions(),
@@ -1011,7 +1004,6 @@ Ext.define('ProgramBoard', {
 		});
 		return Q.all(promises);
 	},
-
 	/** returns some errors in an array to signal to delete the dependency 
 			because the fail was causes by the dependency being out of sync
 	*/
@@ -1057,8 +1049,7 @@ Ext.define('ProgramBoard', {
 		}
 	},
 	
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
 			uid = me.getContext().getUser().ObjectID,
@@ -1077,7 +1068,6 @@ Ext.define('ProgramBoard', {
 		});
 		return deferred.promise;
 	},
-
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
 			uid = me.getContext().getUser().ObjectID,
@@ -1094,8 +1084,7 @@ Ext.define('ProgramBoard', {
 		return deferred.promise;
 	},
 	
-	/************************************************** MISC HELPERS ***************************************************/
-			
+	/************************************************** MISC HELPERS ***************************************************/		
 	_htmlEscape: function(str) {
     return String(str)
 			//.replace(/&/g, '&amp;')
@@ -1103,8 +1092,7 @@ Ext.define('ProgramBoard', {
 			.replace(/'/g, '&#39;')
 			.replace(/</g, '&lt;')
 			.replace(/>/g, '&gt;');
-	},
-	
+	},	
 	_getDirtyType: function(localRecord, realData){ //if risk or dep record is new/edited/deleted/unchanged
 		var localData = localRecord.data;
 		if(!realData)	return localData.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
@@ -1120,16 +1108,14 @@ Ext.define('ProgramBoard', {
 		for(var records = store.getRange(), i=0, len=records.length; i<len; ++i)
 			if(records[i].data.Edited) return true;
 		return false;
-	},
-		
+	},		
 	_showGrids: function(){
 		var me=this;
 		me._loadTeamCommitsGrid();
 		me._loadVelocityGrid(); 
 		me._loadRisksGrid();
 		me._loadDependenciesGrids();
-	},
-	
+	},	
 	_updateGrids: function(){ //synchronous function
 		var me=this,
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
@@ -1149,8 +1135,7 @@ Ext.define('ProgramBoard', {
 			if(me.CustomPredDepStore) me.CustomPredDepStore.intelUpdate();
 			if(me.CustomSuccDepStore) me.CustomSuccDepStore.intelUpdate();
 		}
-	},
-	
+	},	
 	_reloadStores: function(){ //this function calls updateAllGrids
 		var me=this,
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
@@ -1170,7 +1155,6 @@ Ext.define('ProgramBoard', {
 		}
 		return Q.all(promises);
 	},
-
 	_reloadEverything:function(){
 		var me = this;
 		me._isEditingTeamCommits = false;
@@ -1227,8 +1211,7 @@ Ext.define('ProgramBoard', {
 		});
 	},
 	
-	/******************************************************* REFRESHING WSAPI DATA ***********************************************/
-	
+	/******************************************************* REFRESHING WSAPI DATA ***********************************************/	
 	_setLoadingMasks: function(){
 		var me=this, t = 'Refreshing Data',
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
@@ -1238,8 +1221,7 @@ Ext.define('ProgramBoard', {
 		if(me.RisksGrid && !isEditingRisks) me.RisksGrid.setLoading(t);
 		if(me.PredDepGrid && !isEditingDeps) me.PredDepGrid.setLoading(t);
 		if(me.SuccDepGrid && !isEditingDeps) me.SuccDepGrid.setLoading(t);
-	},
-	
+	},	
 	_removeLoadingMasks: function(){
 		var me=this,
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
@@ -1249,8 +1231,7 @@ Ext.define('ProgramBoard', {
 		if(me.RisksGrid && !isEditingRisks) me.RisksGrid.setLoading(false);
 		if(me.PredDepGrid && !isEditingDeps) me.PredDepGrid.setLoading(false);
 		if(me.SuccDepGrid && !isEditingDeps) me.SuccDepGrid.setLoading(false);
-	},
-	
+	},	
 	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
 		var me=this;
 		me._enqueue(function(unlockFunc){
@@ -1270,8 +1251,7 @@ Ext.define('ProgramBoard', {
 				})
 				.done();
 		});
-	},
-	
+	},	
 	_setRefreshInterval: function(){
 		var me=this;
 		if(me.RefreshInterval) { 
@@ -1283,7 +1263,6 @@ Ext.define('ProgramBoard', {
 	},
 	
 	/******************************************************* LAUNCH ********************************************************/
-
 	launch: function(){
 		var me=this;
 		me.setLoading(true);
@@ -1367,13 +1346,12 @@ Ext.define('ProgramBoard', {
 	},
 	
 	/************************************************ NAVIGATION AND STATE ****************************************************/
-	
 	_releasePickerSelected: function(combo, records){
 		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 		me.setLoading(true);
 		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);	
-		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);		
+		me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
 		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
 		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 		me._savePreferences(me.AppPrefs)
@@ -1383,8 +1361,7 @@ Ext.define('ProgramBoard', {
 				me.setLoading(false);
 			})
 			.done();
-	},
-				
+	},				
 	_loadReleasePicker: function(){
 		var me=this;
 		me.ReleasePicker = me.down('#navbox_left').add({
@@ -1397,8 +1374,7 @@ Ext.define('ProgramBoard', {
 				select: me._releasePickerSelected.bind(me)
 			}
 		});
-	},
-	
+	},	
 	_trainPickerSelected: function(combo, records){
 		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.TrainRecord.data.Name.indexOf(records[0].data.Name) === 0) return;
@@ -1413,8 +1389,7 @@ Ext.define('ProgramBoard', {
 				me.setLoading(false);
 			})
 			.done();
-	},
-	
+	},	
 	_loadTrainPicker: function(){
 		var me=this;
 		if(me.ProjectNotInTrain){
@@ -1436,8 +1411,7 @@ Ext.define('ProgramBoard', {
 				}
 			});
 		}
-	},
-	
+	},	
 	_refreshComboSelected: function(combo, records){
 		var me=this, 
 			rate = records[0].data.Rate;
@@ -1445,8 +1419,7 @@ Ext.define('ProgramBoard', {
 		me.AppPrefs.refresh = rate;
 		me._setRefreshInterval();
 		me._savePreferences(me.AppPrefs);
-	},
-				
+	},			
 	_loadRefreshIntervalCombo: function(){
 		var me=this;
 		me.down('#navbox_right').add({
@@ -1471,7 +1444,6 @@ Ext.define('ProgramBoard', {
 			}
 		});
 	},
-	
 	_loadManualRefreshButton: function(){
 		var me=this;
 		me.down('#navbox_right').add({
@@ -1486,7 +1458,6 @@ Ext.define('ProgramBoard', {
 	},
 	
 	/******************************************************* RENDER GRIDS ********************************************************/	
-
 	_loadTeamCommitsGrid: function(){
 		var me = this;	
 		
@@ -1721,8 +1692,7 @@ Ext.define('ProgramBoard', {
 			context: this.getContext(),
 			store: me.CustomTeamCommitsStore
 		});	
-	},
-		
+	},		
 	_loadVelocityGrid: function() {
 		var me = this;	
 		var iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
@@ -1875,29 +1845,22 @@ Ext.define('ProgramBoard', {
 			store: me.CustomVelocityStore
 		});
 	},
-
 	_loadRisksGrid: function(){
 		var me = this;
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.FeatureFIDStore = Ext.create('Ext.data.Store', {
 			fields: ['FormattedID'],
-			data: _.map(me.FeatureStore.getRange(), function(f){
-				return {'FormattedID': f.data.FormattedID};
-			}),
+			data: _.map(me.FeatureStore.getRange(), function(f){ return {'FormattedID': f.data.FormattedID}; }),
 			sorters: { property: 'FormattedID' }
-		});
-		
+		});	
 		me.FeatureNameStore = Ext.create('Ext.data.Store', {
 			fields: ['Name'],
-			data: _.map(me.FeatureStore.getRange(), function(f){
-				return {'Name': f.data.Name };
-			}),
+			data: _.map(me.FeatureStore.getRange(), function(f){ return {'Name': f.data.Name }; }),
 			sorters: { property: 'Name' }
 		});
 		
-		/****************************** RISKS STUFF  ***********************************************/	
-		
+		/****************************** RISKS STUFF  ***********************************************/		
 		function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; } //new come first
 		
 		me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
@@ -1917,16 +1880,15 @@ Ext.define('ProgramBoard', {
 					remoteChanged = false, //if someone else updated this while it was idle on our screen	
 					key;
 				console.log('syncing risks with current features', riskRecords, realRisksDatas);
-				riskStore.suspendEvents(true);
+				riskStore.suspendEvents(true); //batch
 				for(var i = 0;i<riskRecords.length;++i){
-					var riskRecord =  riskRecords[i];
-					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, realRisksDatas);
-					
-					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
+					var riskRecord =  riskRecords[i],
+						realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, realRisksDatas),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType === 'New' || dirtyType === 'Edited') continue; //we don't want to remove any pending changes on a record							
 					else if(dirtyType == 'Deleted') // the riskRecord was deleted by someone else, and we arent editing it
 						riskStore.remove(riskRecord);
-					else { //we are not editing it and it still exists, so update current copy
+					else { //we are not editing it and it still exists and it was edited somewhere else, so update current copy
 						for(key in realRiskData){
 							if(!_.isEqual(riskRecord.get(key), realRiskData[key])){ remoteChanged = true; break; }
 						}
@@ -1946,9 +1908,10 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		
+		var defaultRenderer = function(val){ return val || '-'; };
 		var columnCfgs = [
 			{
-				text:'F#', 
+				text:'F#',
 				dataIndex:'FormattedID',
 				tdCls: 'intel-editor-cell',	
 				width:80,
@@ -1960,7 +1923,7 @@ Ext.define('ProgramBoard', {
 				},			
 				resizable:false,
 				sortable:true,
-				renderer:function(val){ return val || '-'; }		
+				renderer:defaultRenderer
 			},{
 				text:'Feature', 
 				dataIndex:'FeatureName',
@@ -1973,25 +1936,34 @@ Ext.define('ProgramBoard', {
 				},
 				resizable:false,
 				sortable:true,
-				renderer:function(val){ return val || '-'; }			
+				renderer:defaultRenderer		
 			},{
-				text:'Risk Description', 
+				text:'Risk Description(If This...)', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				editor: 'inteltextarea',
 				resizable:false,
 				sortable:false,
-				renderer:function(val){ return val || '-'; }		
+				renderer:defaultRenderer	
 			},{
-				text:'Impact', 
+				text:'Impact(Then this...)', 
 				dataIndex:'Impact',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				resizable:false,
 				sortable:false,
 				editor: 'inteltextarea',
-				renderer:function(val){ return val || '-'; }		
+				renderer:defaultRenderer
+			},{
+				text:'Mitigation Plan', 
+				dataIndex:'MitigationPlan',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				resizable:false,
+				sortable:false,
+				editor: 'inteltextarea',
+				renderer:defaultRenderer
 			},{
 				text:'Status',
 				dataIndex:'Status',
@@ -2027,7 +1999,7 @@ Ext.define('ProgramBoard', {
 				editor: 'inteltextarea',
 				sortable:false,
 				resizable:false,
-				renderer:function(val){ return val || '-'; }			
+				renderer:defaultRenderer		
 			},{
 				text:'Checkpoint',	
 				dataIndex:'Checkpoint',
@@ -2053,8 +2025,8 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
-					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType !== 'Edited') return;
 					meta.tdAttr = 'title="Undo"';
 					return {
@@ -2065,7 +2037,7 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
+									var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 									riskRecord.beginEdit();
 									for(var key in realRiskData)
 										riskRecord.set(key, realRiskData[key]);	
@@ -2082,12 +2054,10 @@ Ext.define('ProgramBoard', {
 				width:30,
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
-					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
-					if(dirtyType === 'New') dirtyType = 'Save'; //setEditing only if save or resave is true
-					else if(dirtyType === 'Edited') dirtyType = 'Save';
-					else return;
-					meta.tdAttr = 'title="' + dirtyType + ' Risk"';
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData);
+					if(dirtyType !== 'New' && dirtyType !== 'Edited') return;
+					meta.tdAttr = 'title="Save Risk"';
 					return {
 						xtype:'container',
 						width:20,
@@ -2112,20 +2082,17 @@ Ext.define('ProgramBoard', {
 									me._enqueue(function(unlockFunc){
 										var riskRecordData = riskRecord.data,
 											tmpNewFeatureRecord = me.FeatureStore.findExactRecord('FormattedID', riskRecordData.FormattedID),
-											newFeatureRecord;
+											newFeatureRecord; //if we are moving the risk to a new feature 
 										Q((tmpNewFeatureRecord.data.ObjectID != riskRecord.data.ObjectID) ?
-											me._loadFeature(tmpNewFeatureRecord.data.ObjectID).then(function(featureRecord){
-												newFeatureRecord = featureRecord; 
-											}) :
-											undefined
-										)
+											me._loadFeature(tmpNewFeatureRecord.data.ObjectID).then(function(featureRecord){ newFeatureRecord = featureRecord; }) :
+											null)
 										.then(function(){
 											return me._loadFeature(riskRecord.data.ObjectID).then(function(oldFeatureRecord){							
 												newFeatureRecord = newFeatureRecord || oldFeatureRecord; //if new is same as old
 												return Q(oldFeatureRecord && 
 													(function(){										
 														var oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
-															oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
+															oldRealRiskData = me._spliceRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
 														if(oldRealRiskData && (oldFeatureRecord.data.ObjectID !== newFeatureRecord.data.ObjectID))
 															return me._removeRisk(oldFeatureRecord, oldRealRiskData);
 													}())
@@ -2141,12 +2108,10 @@ Ext.define('ProgramBoard', {
 												});
 											});
 										})
-										.then(function(){
-											me.RisksGrid.setLoading(false);
-											unlockFunc();
-										})
 										.fail(function(reason){
 											me._alert('ERROR:', reason);
+										})
+										.then(function(){ 
 											me.RisksGrid.setLoading(false);
 											unlockFunc();
 										})
@@ -2182,19 +2147,16 @@ Ext.define('ProgramBoard', {
 													(function(){										
 														var riskRecordData = riskRecord.data,
 															oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
-															oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
+															oldRealRiskData = me._spliceRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
 														if(oldRealRiskData) 
 															return me._removeRisk(oldFeatureRecord, oldRealRiskData);
 													}())
 												);
 											})
-											.then(function(){
-												me.CustomRisksStore.remove(riskRecord);
-												me.RisksGrid.setLoading(false);
-												unlockFunc();
-											})
 											.fail(function(reason){
 												me._alert('ERROR:', reason);
+											})
+											.then(function(){
 												me.CustomRisksStore.remove(riskRecord);
 												me.RisksGrid.setLoading(false);
 												unlockFunc();
@@ -2210,8 +2172,13 @@ Ext.define('ProgramBoard', {
 			}
 		];
 
-		me.AddRiskButton = me.add({
+		me.add({
 			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'stretch',
+				pack:'start'
+			},
 			padding:'20px 0 0 0',
 			items:[{
 				xtype:'button',
@@ -2228,6 +2195,8 @@ Ext.define('ProgramBoard', {
 								FeatureName: '',
 								Description: '',
 								Impact: '',
+								MitigationPlan: '',
+								Urgency: '',
 								Status: '',
 								Contact: '',
 								Checkpoint: '',
@@ -2269,8 +2238,8 @@ Ext.define('ProgramBoard', {
 						originalValue = e.originalValue;
 						
 					if(value === originalValue) return; 
-					else if(!value) { risksRecord.set(field, originalValue); return; }
-					else if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
+					else if(!value && field != 'MitigationPlan') { risksRecord.set(field, originalValue); return; }
+					else if(['Description', 'Impact', 'Contact', 'MitigationPlan'].indexOf(field)>-1) {
 						value = me._htmlEscape(value);			
 						risksRecord.set(field, value);
 					}
@@ -2299,25 +2268,19 @@ Ext.define('ProgramBoard', {
 			enableEditing:false,
 			store: me.CustomRisksStore
 		});	
-	},
-	
+	},	
 	_loadDependenciesGrids: function(){
 		var me = this;
 		
 		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 		me.UserStoryFIDStore = Ext.create('Ext.data.Store', {
 			fields: ['FormattedID'],
-			data: _.map(me.DependenciesReleaseUserStories, function(usr){
-				return {'FormattedID': usr.data.FormattedID};
-			}),
+			data: _.map(me.DependenciesReleaseUserStories, function(usr){ return {'FormattedID': usr.data.FormattedID}; }),
 			sorters: { property: 'FormattedID' }
 		});
-		
 		me.UserStoryNameStore = Ext.create('Ext.data.Store', {
 			fields: ['Name'],
-			data: _.map(me.DependenciesReleaseUserStories, function(usr){
-				return {'Name': usr.data.Name };
-			}),
+			data: _.map(me.DependenciesReleaseUserStories, function(usr){ return {'Name': usr.data.Name }; }),
 			sorters: { property: 'Name' }
 		});
 		
@@ -2396,6 +2359,7 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		
+		var defaultRenderer = function(val){ return val || '-'; };
 		var predDepColumnCfgs = [
 			{
 				text:'US#', 
@@ -2410,7 +2374,7 @@ Ext.define('ProgramBoard', {
 					store: me.UserStoryFIDStore,
 					displayField: 'FormattedID'
 				},
-				renderer: function(val){ return val || '-'; }		
+				renderer: defaultRenderer	
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
@@ -2423,7 +2387,7 @@ Ext.define('ProgramBoard', {
 					store: me.UserStoryNameStore,
 					displayField: 'Name'
 				},
-				renderer: function(val){ return val || '-'; }			
+				renderer: defaultRenderer	
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
@@ -2432,7 +2396,7 @@ Ext.define('ProgramBoard', {
 				sortable:false,
 				tdCls: 'intel-editor-cell',
 				editor: 'inteltextarea',
-				renderer: function(val){ return val || '-'; }				
+				renderer: defaultRenderer			
 			},{
 				text:'Needed By',			
 				dataIndex:'Checkpoint',

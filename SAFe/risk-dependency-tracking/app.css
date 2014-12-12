@@ -28,3 +28,5 @@
 
 .x-grid-row .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
 .x-grid-row-selected .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+
+.hidden { display:none !important; }

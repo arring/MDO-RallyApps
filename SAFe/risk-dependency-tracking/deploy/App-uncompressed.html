@@ -40,7 +40,9 @@ Ext.define('IntelRisk', {
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
 		{name: 'Description', type: 'string'},
-		{name: 'Impact', type: 'string'},			
+		{name: 'Impact', type: 'string'},	
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Status', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
@@ -109,6 +111,8 @@ Ext.define('IntelRiskWithProject', {
 		{name: 'Description', type: 'string'},
 		{name: 'Impact', type: 'string'},			
 		{name: 'Status', type: 'string'},
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
 		{name: 'Edited', type: 'boolean'}
@@ -126,7 +130,7 @@ Ext.define('IntelPredDepWithProject', { //predecessor dependencies
 		{name: 'UserStoryName',  type: 'string'},
 		{name: 'Description', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
-		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Status', type:'string'}, 
 		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
 		{name: 'Edited', type: 'boolean'}
 	]
@@ -283,6 +287,18 @@ Ext.define('CFEditorModel', {
 		}
 	},
 	
+	_loadTopProject: function(projectRecord){
+		if(!projectRecord) return Q.reject('Invalid arguments: LTP');
+		var me=this, 
+			n = projectRecord.data.Name;
+		if(!projectRecord.data.Parent) return Q(projectRecord);
+		else {
+			return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+				return me._loadTopProject(parentRecord);
+			});
+		}
+	},
+	
 	_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
 		else {
@@ -416,7 +432,7 @@ Ext.define('CFEditorModel', {
 				property:'Release.Name',
 				value: releaseRecord.data.Name
 			});
-		trainName = relSplit.length == 2 ? relSplit[1] : trainName;
+		trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
 		if(trainRecord.data.Name == 'Test ART (P&E)'){
 			return Ext.create('Rally.data.wsapi.Filter', {
 				property:'Project.Name',
@@ -560,6 +576,50 @@ Ext.define('CFEditorModel', {
 				}
 			}
 			me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+			console.log('childrenProjects', childrenProjects);
+			return Q(childrenProjects);
+		});	
+	},
+	
+	_allLeafProjectsToList: function(projTree, hash){
+		var me=this, 
+			curProj = projTree.ProjectRecord;
+		if(curProj.data.Children.Count === 0) 
+			hash[curProj.data.ObjectID] = curProj;
+		for(var childProjRef in projTree){
+			if(childProjRef !== 'ProjectRecord')
+				me._allChildProjectToList(projTree[childProjRef], hash);
+		}
+	},
+	
+	_loadAllLeafProjects: function(rootProjectRecord){
+		if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
+		var me=this,
+			childrenProjects = {}, 
+			projTree = {};
+		var store = Ext.create('Rally.data.wsapi.Store', {
+			model: "Project",
+			fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
+			limit:Infinity,
+			context: {
+				workspace: me.getContext().getWorkspace()._ref,
+				project:null
+			}
+		});
+		return me._reloadStore(store).then(function(store){
+			var projects = store.data.items;
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
 			console.log('childrenProjects', childrenProjects);
 			return Q(childrenProjects);
 		});	
@@ -791,65 +851,89 @@ Ext.define('PrettyAlert', {
 		}, 20);
 	}
 });
-                Ext.define('IntelWorkweek', {
-	
-	/** calculates intel workweek, returns integer */
-	_getWorkweek: function(_date){ 
-		var date = new Date(_date),
-			oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
-	},
-	
-	/** returns the number of intel workweeks in the year the date is in */
-	_getWeekCount: function(_date){ 
-		var date = new Date(_date),
-			leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay();
-		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
-	},
-	
-	_roundDateDownToWeekStart: function(_date){ //returns number
-		var date = new Date(_date),
-			dayLength = 1000*60*60*24,
-			day = date.getDay(),
-			monthDate = date.getDate(),
-			month = date.getMonth(),
-			year = date.getFullYear();
-		return new Date(year, month, monthDate)*1 - (day * dayLength);
-	},
-	
-	/**  gets list of date numbers for each week start between start and end date*/
-	_getWorkweekDates: function(startDate, endDate){ 
-		var oneWeek = 1000 * 60 * 60 * 24 * 7,
-			startWeekDate = this._roundDateDownToWeekStart(startDate),
-			endWeekDate = this._roundDateDownToWeekStart(endDate),
-			totalWeeks = Math.floor((endWeekDate - startWeekDate) / oneWeek),
-			weeks = new Array(totalWeeks);
-		for(var i=0; i<totalWeeks; ++i) 
-			weeks[i] = startWeekDate + oneWeek*i;
-		return weeks;
-	},
-	
-	_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
-		var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
-			data = new Array(workweeks.length);
-		for(var i=0, len=workweeks.length; i<len; ++i){
-			data[i] = { 
-				Workweek: 'ww' + this._getWorkweek(workweeks[i]),
-				DateVal: workweeks[i]
-			};
-		}
-		return data;
-	}
-});
+                (function(){
+	var intel_ww = {},
+		SECOND = 1000,
+		MINUTE = 60*SECOND,
+		HOUR = 60*MINUTE,
+		DAY = 24*HOUR,
+		WEEK = 7*DAY;
+		
+	Ext.define('IntelWorkweek', {
+		/** 
+			intel workweek utility module. you can pass in Date objects, strings, or numbers.
+			do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
+		**/
+		
+		/** calculates intel workweek, returns integer */
+		_getWorkweek: function(_date){  //ww1 always contains jan 1st
+			var date = new Date(_date),
+				yearStart = new Date(date.getFullYear(), 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01Start = new Date(yearStart - dayIndex*DAY),
+				utcDateMillis = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+				ww01Millis = Date.UTC(ww01Start.getFullYear(), ww01Start.getMonth(), ww01Start.getDate()),
+				timeDiff = utcDateMillis - ww01Millis,
+				ww = Math.floor(timeDiff/WEEK) + 1,
+				leap = (date.getFullYear() % 4 === 0),
+				weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+			return weekCount < ww ? 1 : ww;
+		},
+		
+		/** returns the number of intel workweeks in the year the date is in */
+		_getWeekCount: function(_date){  // # of intel workweeks in the year the date is in
+			var date = new Date(_date),
+				leap = (date.getFullYear() % 4 === 0),
+				day = new Date(date.getFullYear(), 0, 1).getDay();
+			return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+		},
+		
+		_roundDateDownToWeekStart: function(_date){
+			var date = new Date(_date),
+				day = date.getDay(),
+				monthDate = date.getDate(),
+				month = date.getMonth(),
+				year = date.getFullYear(),
+				sundayMidday = new Date(new Date(year, month, monthDate)*1 - (day*DAY - 0.5*DAY)); //daylight savings ._.
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		/**  gets list of date numbers for each week start between start and end date*/
+		_getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
+			var startWeekDate = this._roundDateDownToWeekStart(startDate),
+				endWeekDate = this._roundDateDownToWeekStart(endDate),
+				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
+				endMillis = Date.UTC(endWeekDate.getFullYear(), endWeekDate.getMonth(), endWeekDate.getDate()),
+				totalWeeks = Math.floor((endMillis - startMillis) / WEEK)+1,
+				weeks = new Array(totalWeeks);
+			for(var i=0; i<totalWeeks; ++i) {
+				var sundayMidday = new Date(startWeekDate*1 + (WEEK*i + HOUR*12));
+				weeks[i] = new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+			}
+			return weeks;
+		},
+		
+		_workweekToDate: function(ww, year){ //gets the Date() object of this ww and year
+			var yearStart = new Date(year, 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01StartMidday = new Date(yearStart - (dayIndex*DAY - 0.5*DAY)),
+				sundayMidday = new Date(ww01StartMidday*1 + (ww-1)*WEEK);
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
+			var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
+				data = new Array(workweeks.length);
+			for(var i=0, len=workweeks.length; i<len; ++i){
+				data[i] = { 
+					Workweek: 'ww' + this._getWorkweek(workweeks[i]),
+					DateVal: workweeks[i]*1
+				};
+			}
+			return data;
+		}	
+	});
+}());
                 /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
 	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
 	most functions return promises that resolve to stores
@@ -932,7 +1016,7 @@ Ext.define('ReleaseQuery', {
 			model: 'Release',
 			limit:Infinity,
 			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
 			context:{
 				workspace: this.getContext().getWorkspace()._ref,
 				project: null
@@ -1806,6 +1890,7 @@ Ext.define('Intel.form.field.ComboBox', {
 		options = Ext.merge({
 			editable: false,	
 			allowBlank:false,
+			queryMode:'local',
 			listeners: {
 				focus: function(combo) {
 					combo.setValue('');
@@ -2288,6 +2373,8 @@ Ext.define('Intel.grid.plugin.CellEditing', {
 	ALSO, this app depends on a specific naming convention for your ARTs and Scrums within them, otherwise the releases wont load correctly
 */
 
+RALLY_MAX_STRING_SIZE = 32768;
+
 /********************* PRODUCTION *****************/
 console = { log: function(){} };	
 
@@ -2427,13 +2514,29 @@ Ext.define('RisksDepsApp', {
 	},
 	
 	/**___________________________________ RISKS STUFF___________________________________**/
+	_updateFColumnStores: function(){ //updates the dropdown stores with the most recent features in the release (in case some were added
+		var me = this, 
+			features = me.FeatureStore.data.items, 
+			i, len;
+		if(me.FeatureFIDStore){
+			me.FeatureFIDStore.removeAll();
+			for(i=0, len=features.length; i<len; ++i){
+				me.FeatureFIDStore.add({'FormattedID': features[i].data.FormattedID});
+			}
+		}
+		if(me.FeatureNameStore) {
+			me.FeatureNameStore.removeAll();
+			for(i=0, len=features.length; i<len; ++i){
+				me.FeatureNameStore.add({'Name': features[i].data.Name});
+			}
+		}
+	},
 	_getRisks: function(featureRecord){
 		var risks = featureRecord.data.c_Risks;
 		try{ risks = JSON.parse(atob(risks)) || {}; } 
 		catch(e) { risks = {}; }
 		return risks;
-	},
-	
+	},	
 	_parseRisksFromFeature: function(featureRecord){
 		var array = [],
 			risks = this._getRisks(featureRecord),
@@ -2456,6 +2559,8 @@ Ext.define('RisksDepsApp', {
 						RiskID: riskID,
 						Description: risk.Desc,
 						Impact: risk.Imp,
+						MitigationPlan: risk.Mit,
+						Urgency: risk.Urg,
 						Status: risk.Sta,
 						Contact: risk.Cont,
 						Checkpoint: risk.CP,
@@ -2465,8 +2570,7 @@ Ext.define('RisksDepsApp', {
 			}
 		}
 		return array;
-	},
-	
+	},	
 	_parseRisksData: function(){ 
 		var me=this, 
 			array = [],
@@ -2476,16 +2580,14 @@ Ext.define('RisksDepsApp', {
 		for(i=0,len=records.length; i<len;++i)
 			array = array.concat(me._parseRisksFromFeature(records[i]));
 		me.RisksParsedData = array;
-	},
-		
-	_removeRiskFromList: function(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
+	},		
+	_spliceRiskFromList: function(riskID, riskList){ // removes and returns risk with riskID from the riskList (NOT list of records)
 		for(var i = 0; i<riskList.length; ++i){
 			if(riskList[i].RiskID == riskID) {
 				return riskList.splice(i, 1)[0];
 			}
 		}
-	},
-	
+	},	
 	_addRisk: function(featureRecord, riskData){
 		var risks = this._getRisks(featureRecord),
 			projectID = riskData.ProjectID,
@@ -2500,6 +2602,8 @@ Ext.define('RisksDepsApp', {
 			Cont: riskData.Contact,
 			Desc:riskData.Description,
 			Imp: riskData.Impact,
+			Mit: riskData.MitigationPlan,
+			Urg: riskData.Urgency,
 			Sta: riskData.Status
 		};
 		risks[projectID][riskData.RiskID] = copy;
@@ -2513,7 +2617,7 @@ Ext.define('RisksDepsApp', {
 		}
 		if(!parseDataAdded) this.RisksParsedData.push(riskData);
 		var str = btoa(JSON.stringify(risks, null, '\t')); //b64 encode yosef
-		if(str.length >= 32768)
+		if(str.length >= RALLY_MAX_STRING_SIZE)
 			deferred.reject('Risks field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			featureRecord.set('c_Risks', str);
@@ -2532,11 +2636,26 @@ Ext.define('RisksDepsApp', {
 	},
 		
 	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/
-
+	_updateUSColumnStores: function(){ //updates the dropdown stores with the most recent user stories in the release (in case some were added
+		var me = this,
+			uses = me.DependenciesReleaseUserStories, 
+			i, len;
+		if(me.UserStoryFIDStore){
+			me.UserStoryFIDStore.removeAll();
+			for(i=0, len=uses.length; i<len; ++i){
+				me.UserStoryFIDStore.add({'FormattedID': uses[i].data.FormattedID});
+			}
+		}
+		if(me.UserStoryNameStore) {
+			me.UserStoryNameStore.removeAll();
+			for(i=0, len=uses.length; i<len; ++i){
+				me.UserStoryNameStore.add({'Name': uses[i].data.Name});
+			}
+		}
+	},	
 	_isInRelease: function(usr){
 		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name;
-	},
-	
+	},	
 	_getDependencies: function(userStoryRecord){
 		var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
 		if(dependencyString === '') dependencies = { Preds:{}, Succs:[] };
@@ -2545,8 +2664,7 @@ Ext.define('RisksDepsApp', {
 			catch(e) { dependencies = { Preds:{}, Succs:[] }; }
 		}		
 		return dependencies;
-	},
-	
+	},	
 	_parseDependenciesFromUserStory: function(userStoryRecord){
 		var deps = this._getDependencies(userStoryRecord),
 			project = this.ValidProjects[userStoryRecord.data.Project.ObjectID],
@@ -2580,8 +2698,7 @@ Ext.define('RisksDepsApp', {
 			}
 		}
 		return {Predecessors:predDepsList};
-	},
-	
+	},	
 	_parseDependenciesData: function(){	
 		var me=this, 
 			predDepsList = [], 
@@ -2598,7 +2715,6 @@ Ext.define('RisksDepsApp', {
 		}
 		me.DependenciesParsedData = {Predecessors:predDepsList };
 	},
-
 	_removeDepFromList: function(dependencyID, dependencyList){ 
 		for(var i = 0; i<dependencyList.length; ++i){
 			if(dependencyList[i].DependencyID == dependencyID) {
@@ -2612,7 +2728,7 @@ Ext.define('RisksDepsApp', {
 		var me=this, 
 			str = btoa(JSON.stringify(dependencies, null, '\t')),
 			deferred = Q.defer();
-		if(str.length >= 32768) 
+		if(str.length >= RALLY_MAX_STRING_SIZE) 
 			deferred.reject('Dependencies field for ' + userStoryRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
 			userStoryRecord.set('c_Dependencies', str);
@@ -2744,6 +2860,8 @@ Ext.define('RisksDepsApp', {
 	_updateGrids: function(){
 		var me=this;
 		me._parseRisksData();
+		me._updateFColumnStores();
+		me._updateUSColumnStores();
 		me._parseDependenciesData();
 	},
 
@@ -2910,10 +3028,22 @@ Ext.define('RisksDepsApp', {
 
 	_loadRisksGrid: function(){
 		var me = this;
-
-		function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; } //new come first
+		
+		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
+		me.FeatureFIDStore = Ext.create('Ext.data.Store', {
+			fields: ['FormattedID'],
+			data: _.map(me.FeatureStore.getRange(), function(f){ return {'FormattedID': f.data.FormattedID}; }),
+			sorters: { property: 'FormattedID' }
+		});	
+		me.FeatureNameStore = Ext.create('Ext.data.Store', {
+			fields: ['Name'],
+			data: _.map(me.FeatureStore.getRange(), function(f){ return {'Name': f.data.Name }; }),
+			sorters: { property: 'Name' }
+		});
 		
 		/****************************** RISKS STUFF  ***********************************************/	
+		function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; } //new come first
+		
 		me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
 			data: Ext.clone(me.RisksParsedData),
 			autoSync:true,
@@ -2926,6 +3056,7 @@ Ext.define('RisksDepsApp', {
 			sorters: [riskSorter]
 		});
 		
+		var defaultRenderer = function(val){ return val || '-'; };
 		var columnCfgs = [
 			{
 				text:'F#', 
@@ -2950,7 +3081,7 @@ Ext.define('RisksDepsApp', {
 				editor:false,	
 				resizable:false,
 				sortable:true,
-				renderer:function(val){ return val || '-'; }	
+				renderer:defaultRenderer
 			},{
 				text:'Team', 
 				dataIndex:'ProjectName',
@@ -2958,25 +3089,58 @@ Ext.define('RisksDepsApp', {
 				editor:false,	
 				resizable:false,
 				sortable:true,
-				renderer:function(val){ return val || '-'; }	
+				renderer:defaultRenderer
 			},{
-				text:'Risk Description', 
+				text:'Risk Description(If This...)', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				editor: 'inteltextarea',
 				resizable:false,
 				sortable:false,
-				renderer:function(val){ return val || '-'; }		
+				renderer:defaultRenderer
 			},{
-				text:'Impact', 
+				text:'Impact(Then This...)', 
 				dataIndex:'Impact',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				resizable:false,
 				sortable:false,
 				editor: 'inteltextarea',
-				renderer:function(val){ return val || '-'; }		
+				renderer:defaultRenderer
+			},{
+				text:'Mitigation Plan', 
+				dataIndex:'MitigationPlan',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				resizable:false,
+				sortable:false,
+				editor: 'inteltextarea',
+				renderer:defaultRenderer
+			},{
+				text:'Urgency',
+				dataIndex:'Urgency',
+				tdCls: 'intel-editor-cell',	
+				width:100,			
+				editor:{
+					xtype:'intelfixedcombo',
+					store: Ext.create('Ext.data.Store', {
+						fields: ['Urgency'],
+						data:[
+							{Urgency:'Undefined'},
+							{Urgency:'Hot'},
+							{Urgency:'Watch'},
+							{Urgency:'Simmer'}
+						]
+					}),
+					displayField:'Urgency'
+				},
+				resizable:false,
+				sortable:true,
+				renderer:function(val, meta){
+					meta.tdCls += (val==='Hot' ? ' red-cell' : '');
+					return val || '-';
+				}	
 			},{
 				text:'Status',
 				dataIndex:'Status',
@@ -3012,7 +3176,7 @@ Ext.define('RisksDepsApp', {
 				editor: 'inteltextarea',
 				sortable:false,
 				resizable:false,
-				renderer:function(val){ return val || '-'; }			
+				renderer:defaultRenderer	
 			},{
 				text:'Checkpoint',	
 				dataIndex:'Checkpoint',
@@ -3038,7 +3202,7 @@ Ext.define('RisksDepsApp', {
 				tdCls: 'iconCell',
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType !== 'Edited') return;
 					meta.tdAttr = 'title="Undo"';
@@ -3050,7 +3214,7 @@ Ext.define('RisksDepsApp', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
+									var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 									riskRecord.beginEdit();
 									for(var key in realRiskData)
 										riskRecord.set(key, realRiskData[key]);	
@@ -3067,7 +3231,7 @@ Ext.define('RisksDepsApp', {
 				width:30,
 				resizable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._removeRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType === 'New') dirtyType = 'Save'; //setEditing only if save or resave is true
 					else if(dirtyType === 'Edited') dirtyType = 'Save';
@@ -3087,6 +3251,8 @@ Ext.define('RisksDepsApp', {
 										me._alert('ERROR', 'You must set the Description date for this risk'); return; }
 									else if(!riskRecord.data.Impact){
 										me._alert('ERROR', 'You must set the Impact date for this risk'); return; }
+									if(!riskRecord.data.Urgency){
+										me._alert('ERROR', 'You must set the Urgency date for this risk'); return; }
 									else if(!riskRecord.data.Status){
 										me._alert('ERROR', 'You must set the Status date for this risk'); return; }
 									else if(!riskRecord.data.Contact){
@@ -3108,7 +3274,7 @@ Ext.define('RisksDepsApp', {
 												return Q(oldFeatureRecord && 
 													(function(){										
 														var oldRealRisksData = me._parseRisksFromFeature(oldFeatureRecord),
-															oldRealRiskData = me._removeRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
+															oldRealRiskData = me._spliceRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
 														if(oldRealRiskData && (oldFeatureRecord.data.ObjectID !== newFeatureRecord.data.ObjectID))
 															return me._removeRisk(oldFeatureRecord, oldRealRiskData);
 													}())
@@ -3143,6 +3309,207 @@ Ext.define('RisksDepsApp', {
 			}
 		];
 		
+		var filterFID = null, filterName = null, filterTeam = null,
+				filterStatus = null, filterUrgency = null, filterCP = null;
+		function riskGridFilter(r){
+			if(filterFID && r.data.FormattedID != filterFID) return false;
+			if(filterName && r.data.FeatureName != filterName) return false;
+			if(filterTeam && r.data.ProjectName != filterTeam) return false;
+			if(filterStatus && r.data.Status != filterStatus) return false;
+			if(filterUrgency && r.data.Urgency != filterUrgency) return false;
+			//used bad workweek algorithm at first, must round down.
+			if(filterCP && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterCP) return false;
+			return true;
+		}		
+		function filterRisksRowsByFn(fn){
+			_.each(me.CustomRisksStore.getRange(), function(item, index){
+				if(fn(item)) me.RisksGrid.view.removeRowCls(index, 'hidden');
+				else me.RisksGrid.view.addRowCls(index, 'hidden');
+			});
+		}
+		
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			items:[{
+				xtype:'button',
+				text:'Clear Risk Filters',
+				width:115,
+				listeners:{
+					click: function(){
+						filterFID = null;
+						filterName = null;
+						filterTeam = null;
+						filterStatus = null;
+						filterUrgency = null;
+						filterCP = null; 
+						filterRisksRowsByFn(function(){ return true; });
+						var combos = this.up().next().query('combo');
+						combos[0].setValue('All Features');
+						combos[1].setValue('All Features');
+						combos[2].setValue('All Teams');
+						combos = this.up().next().next().query('combo');
+						combos[0].setValue('All Statuses');
+						combos[1].setValue('All Urgencies');
+						combos[2].setValue('All Workweeks');
+					}
+				}
+			}]
+		});	
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			padding:'10px 0 0 0',
+			items:[{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				fieldLabel:'Filter F#',
+				store: Ext.create('Ext.data.Store', {
+					fields:['FormattedID'],
+					data: [{FormattedID: 'All Features'}].concat(me.FeatureFIDStore.getRange())
+				}),
+				displayField: 'FormattedID',
+				value:'All Features',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.FormattedID == 'All Features') filterFID = null; 
+						else filterFID = selected[0].data.FormattedID;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			},{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Feature:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Name'],
+					data: [{Name: 'All Features'}].concat(me.FeatureNameStore.getRange())
+				}),
+				displayField: 'Name',
+				value:'All Features',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.Name == 'All Features') filterName = null; 
+						else filterName = selected[0].data.Name;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			},{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Team:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Team'],
+					data: [{Team: 'All Teams'}].concat(_.map(me.ValidProjects, function(p){ return {Team:p.data.Name}; }))
+				}),
+				displayField: 'Team',
+				value:'All Teams',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.Team == 'All Teams') filterTeam = null; 
+						else filterTeam = selected[0].data.Team;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			}]
+		});
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			padding:'5px 0 0 0',
+			items:[{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				fieldLabel:'Filter Status:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Status'],
+					data: [
+						{Status: 'All Statuses'},
+						{Status:'Undefined'},
+						{Status:'Resolved'},
+						{Status:'Owned'},
+						{Status:'Accepted'},
+						{Status:'Mitigated'}
+					]
+				}),
+				displayField: 'Status',
+				value:'All Statuses',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.Status == 'All Statuses') filterStatus = null; 
+						else filterStatus = selected[0].data.Status;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			},{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Urgency:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Urgency'],
+					data: [
+						{Urgency: 'All Urgencies'},
+						{Urgency:'Undefined'},
+						{Urgency:'Hot'},
+						{Urgency:'Watch'},
+						{Urgency:'Simmer'}
+					]
+				}),
+				displayField: 'Urgency',
+				value:'All Urgencies',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.Urgency == 'All Urgencies') filterUrgency = null; 
+						else filterUrgency = selected[0].data.Urgency;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			},{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Checkpoint',
+				store: Ext.create('Ext.data.Store', {
+					model:'WorkweekDropdown',
+					data: [{DateVal:0, Workweek:'All Workweeks'}].concat(me._workweekData)
+				}),
+				displayField: 'Workweek',
+				valueField: 'DateVal',
+				value:'All Workweeks',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.DateVal === 0) filterCP = null; 
+						else filterCP = selected[0].data.DateVal;
+						filterRisksRowsByFn(riskGridFilter);
+					}
+				}
+			}]
+		});
+		
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
       title: 'Risks',
@@ -3169,14 +3536,16 @@ Ext.define('RisksDepsApp', {
 						value = e.value,
 						originalValue = e.originalValue;
 					if(value === originalValue) return; 
-					else if(!value) { risksRecord.set(field, originalValue); return; }
-					else if(['Description', 'Impact', 'Contact'].indexOf(field)>-1) {
+					else if(!value && field != 'MitigationPlan') { risksRecord.set(field, originalValue); return; }
+					else if(['Description', 'Impact', 'Contact', 'MitigationPlan'].indexOf(field)>-1) {
 						value = me._htmlEscape(value);			
 						risksRecord.set(field, value);
 					}
 
 					var previousEdit = risksRecord.data.Edited;
 					risksRecord.set('Edited', true);
+					
+					filterRisksRowsByFn(riskGridFilter);
 				}
 			},
 			showRowActionsColumn:false,
@@ -3188,6 +3557,18 @@ Ext.define('RisksDepsApp', {
 	
 	_loadDependenciesGrids: function(){
 		var me = this;
+				
+		/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
+		me.UserStoryFIDStore = Ext.create('Ext.data.Store', {
+			fields: ['FormattedID'],
+			data: _.map(me.DependenciesReleaseUserStories, function(usr){ return {'FormattedID': usr.data.FormattedID}; }),
+			sorters: { property: 'FormattedID' }
+		});
+		me.UserStoryNameStore = Ext.create('Ext.data.Store', {
+			fields: ['Name'],
+			data: _.map(me.DependenciesReleaseUserStories, function(usr){ return {'Name': usr.data.Name }; }),
+			sorters: { property: 'Name' }
+		});
 		
 		/****************************** PREDECESSORS STUFF           ***********************************************/				
 		me.PredDepTeamStores = {}; //stores for each of the team arrays in the predecessors
@@ -3405,6 +3786,262 @@ Ext.define('RisksDepsApp', {
 			}
 		];
 		
+		var filterFID = null, filterName = null, filterProduct = null, filterOwningTeam = null,
+				filterNeededBy = null, filterDependedTeam = null, filterSupported = null, filterDisposition=null;
+		function getUserStoryProduct(depRecord){
+			var usRecord = me.UserStoryStore.findExactRecord('FormattedID', depRecord.data.FormattedID);
+			return usRecord.data.Feature ? me.FeatureProductHash[usRecord.data.Feature.ObjectID] : null;
+		}	
+		function getDependedOnTeams(depRecord){
+			return _.map(depRecord.data.Predecessors, function(teamDep){ 
+				return me.ValidProjects[teamDep.PID] ? me.ValidProjects[teamDep.PID].data.Name : ''; 
+			});
+		}	
+		function isFullySupported(depRecord){
+			return _.every(depRecord.data.Predecessors, function(teamDep){ return teamDep.Sup == 'Yes'; });
+		}
+		function dependencyGridFilter(r){
+			if(filterFID && r.data.FormattedID != filterFID) return false;
+			if(filterName && r.data.UserStoryName != filterName) return false;
+			if(filterOwningTeam && r.data.ProjectName != filterOwningTeam) return false;
+			if(filterDependedTeam && getDependedOnTeams(r).indexOf(filterDependedTeam) === -1) return false;
+			
+			if(filterProduct && getUserStoryProduct(r) != filterProduct) return false;
+			if(filterNeededBy && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterNeededBy) return false;
+			if(filterSupported){
+				var fullySupported = isFullySupported(r);
+				if((!fullySupported && filterSupported=='All') || (fullySupported && filterSupported=='Not All')) return false;
+			}
+			if(filterDisposition){
+				if(filterDisposition == 'Done' && r.data.Status != filterDisposition) return false;
+				else if(r.data.Status && r.data.Status != filterDisposition) return false; //could be undefined or 'Not Done'
+			}
+			return true;
+		}
+		function filterPredecessorRowsByFn(fn){
+			_.each(me.CustomPredDepStore.getRange(), function(item, index){
+				if(fn(item)) me.PredDepGrid.view.removeRowCls(index, 'hidden');
+				else me.PredDepGrid.view.addRowCls(index, 'hidden');
+			});
+		}
+		
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			margin:'40px 0 0 0',
+			items:[{
+				xtype:'button',
+				text:'Clear Dependency Filters',
+				width:155,
+				listeners:{
+					click: function(){
+						filterFID = null; filterName = null; filterOwningTeam = null; filterDependedTeam = null; 
+						filterProduct = null; filterNeededBy = null; filterSupported = null; filterDisposition = null;
+						filterPredecessorRowsByFn(function(){ return true; });
+						var combos = this.up().next().query('combo');
+						combos[0].setValue('All UserStories');
+						combos[1].setValue('All UserStories');
+						combos[2].setValue('All Teams');
+						combos[3].setValue('All Teams');
+						combos = this.up().next().next().query('combo');
+						combos[0].setValue('All Products');
+						combos[1].setValue('All Weeks Needed By');
+						combos[2].setValue('All Supported Statuses');
+						combos[3].setValue('All Dispositions');
+					}
+				}
+			}]
+		});	
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			padding:'10px 0 0 0',
+			items:[{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				fieldLabel:'Filter US#',
+				store: Ext.create('Ext.data.Store', {
+					fields:['FormattedID'],
+					data: [{FormattedID: 'All UserStories'}].concat(me.UserStoryFIDStore.getRange())
+				}),
+				displayField: 'FormattedID',
+				value:'All UserStories',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.FormattedID == 'All UserStories') filterFID = null; 
+						else filterFID = selected[0].data.FormattedID;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter UserStory:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Name'],
+					data: [{Name: 'All UserStories'}].concat(me.UserStoryNameStore.getRange())
+				}),
+				displayField: 'Name',
+				value:'All UserStories',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.Name == 'All UserStories') filterName = null; 
+						else filterName = selected[0].data.Name;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Team:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Team'],
+					data: [{Team: 'All Teams'}].concat(_.map(me.ValidProjects, function(p){ return {Team:p.data.Name}; }))
+				}),
+				displayField: 'Team',
+				value:'All Teams',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.Team == 'All Teams') filterOwningTeam = null; 
+						else filterOwningTeam = selected[0].data.Team;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelcombobox',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Teams Depended On:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Team'],
+					data: [{Team: 'All Teams'}].concat(_.map(me.ValidProjects, function(p){ return {Team:p.data.Name}; }))
+				}),
+				displayField: 'Team',
+				value:'All Teams',
+				listeners:{
+					select: function(combo, selected){
+						if(selected[0].data.Team == 'All Teams') filterDependedTeam = null; 
+						else filterDependedTeam = selected[0].data.Team;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			}]
+		});
+		me.add({
+			xtype:'container',
+			layout:{
+				type:'hbox',
+				align:'center',
+				pack:'start'
+			},
+			items:[{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				fieldLabel:'Filter Product:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Product'],
+					data: [{Product:'All Products'}].concat(_.map(_.union(_.values(me.FeatureProductHash)), function(productName){ 
+						return {Product:productName}; 
+					}))
+				}),
+				displayField: 'Product',
+				value:'All Products',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.Product == 'All Products') filterProduct = null; 
+						else filterProduct = selected[0].data.Product;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Needed By:',
+				store: Ext.create('Ext.data.Store', {
+					model:'WorkweekDropdown',
+					data: [{DateVal:0, Workweek:'All Workweeks'}].concat(me._workweekData)
+				}),
+				displayField: 'Workweek',
+				valueField: 'DateVal',
+				value:'All Workweeks',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.DateVal === 0) filterNeededBy = null; 
+						else filterNeededBy = selected[0].data.DateVal;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Supported:',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Supported'],
+					data: [
+						{Supported:'Fully Supported'},
+						{Supported:'Not Fully Supported'},
+						{Supported:'All Supported Statuses'}
+					]
+				}),
+				displayField: 'Supported',
+				value:'All Supported Statuses',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.Supported == 'All Supported Statuses') filterSupported = null;
+						else if(selected[0].data.Supported == 'Fully Supported') filterSupported = 'All';
+						else filterSupported = 'Not All';
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			},{
+				xtype:'intelfixedcombo',
+				labelWidth:100,
+				width:250,
+				padding:'0 0 0 20px',
+				fieldLabel:'Filter Disposition',
+				store: Ext.create('Ext.data.Store', {
+					fields:['Status'],
+					data: [
+						{Status:'All Dispositions'},
+						{Status:'Done'},
+						{Status:'Not Done'}
+					]
+				}),
+				displayField: 'Status',
+				value:'All Dispositions',
+				listeners:{
+					focus: function(combo) { combo.expand(); },
+					select: function(combo, selected){
+						if(selected[0].data.Status === 'All Dispositions') filterDisposition = null; 
+						else filterDisposition = selected[0].data.Status;
+						filterPredecessorRowsByFn(dependencyGridFilter);
+					}
+				}
+			}]
+		});
+		
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
       title: "Dependencies",
@@ -3442,12 +4079,11 @@ Ext.define('RisksDepsApp', {
 							var newUSRecord = records[1]; //ignore oldUSRecord because it won't change here
 							return me._addPredDep(newUSRecord, predDepData);
 						})
-						.then(function(){
-							me.PredDepGrid.setLoading(false);
-							unlockFunc();
-						})
 						.fail(function(reason){
 							me._alert('ERROR:', reason);
+						})
+						.then(function(){
+							filterPredecessorRowsByFn(dependencyGridFilter);
 							me.PredDepGrid.setLoading(false);
 							unlockFunc();
 						})
@@ -3612,6 +4248,9 @@ Ext.define('RisksDepsApp', {
 }
 .x-grid-row-selected .intel-supported-cell.x-grid-cell {
   background-color: rgba(0, 255, 0, 0.25) !important;
+}
+.hidden {
+  display: none !important;
 }
 
     </style>
