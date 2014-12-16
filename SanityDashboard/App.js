@@ -1,511 +1,644 @@
-var newscope = true;
-Ext.define('CustomApp', {
-    extend: 'Rally.app.TimeboxScopedApp',
-    componentCls: 'app',
-    width: 600,
-    layout:{
-        type: 'vbox'
-    },
-    scopeType: 'release',
-    launch: function() {
-        console.log('Starting load of all components for Sanity Dashboard');
-        this.add( //{{{
-        /*{
-            xtype: 'container',
-            itemId: 'releaseInfo',
-            tpl: [
-               '<div class="releaseInfo"><p><b>About this release: </b><br />',
-                '<p class="release-notes">{notes}</p>',
-                'Additional information is available <a href="{detailUrl}" target="_top">here.</a></p></div>'
-               ]
-        },*/
-        {  
-            xtype: 'container',
-            itemId: 'ribbon',
-            width: 1400,
-            height: 350,
-            hidden: true,
-            border: 1,
-            layout: {
-                type: 'hbox',
-                align: 'stretch',
-                pack: 'center',
-                margin: '20px'
-            },
-            style: {
-                borderColor: '#AAA',
-                borderStyle: 'solid'
-            }
-        },
-        {
-            xtype: 'container',
-            itemId: 'gridsContainer',
-            padding: 5,
-            layout: {
-                type: 'hbox',
-                align: 'top'
-            },
-            items: [
-            {
-                xtype: 'container',
-                itemId: 'gridsLeft',
-                width: 695,
-                border: 1,
-                style: {
-                    borderColor: '#AAA',
-                    borderStyle: 'solid'
-                }
-                /*items: [
-                { 
-                    xtype: 'component',
-                    html: "<b>Story Health</b>"
-                }]*/
-            },
-        {
-            xtype: 'container',
-            itemId: 'gridsRight',
-            width: 695,
-            border: 1,
-            style: {
-                borderColor: '#AAA',
-                borderStyle: 'solid'
-            }
-            /*items: [{ 
-                xtype: 'component',
-                html: "<b>Feature Health</b>"
-            }]*/
-       }
-        ]
-      }); //}}}
-    this.callParent(arguments);
-    },
+/************************** PRODUCTION *****************************/
+console = { log: function(){} };	////DEBUG!!!	
 
-    onScopeChange: function(scope) { ///{{{
-        console.log('Scope changed to', scope, this);
-        this.down('#ribbon').removeAll();
-        this.globalGridCount=[];   // count entry for each grid
-        this.globalGridMap={'C1':'', 'C2':'', 'C3':'','C4':'','C5':'','C6':'', 'C7': ''};
-        this.globalStoryCount=[];
-        this.globalTeamCount={};
-        //this.down('#ribbon').hide();
-        this._gridsLoaded = false;
-        this.down('#gridsLeft').removeAll();
-        this.down('#gridsRight').removeAll();
-        this._loadReleaseDetails(scope);
-        this._buildGrids(scope);
-        this.readyFired = false;
-        this._chartsReady=false;
-        window.newscope=true;
-    },///}}}
+/************************** Sanity Dashboard *****************************/
+Ext.define('SanityDashboard', {
+	extend: 'IntelRallyApp',
+	cls:'app',
+	mixins:[
+		'WindowListener',
+		'PrettyAlert',
+		'IframeResize',
+		'IntelWorkweek',
+		'ReleaseQuery'
+	],	
+	minWidth:1100,
+	items:[{ 
+		xtype: 'container',
+		id: 'controlsContainer',
+		layout:'hbox'
+	},{ 
+		xtype: 'container',
+		id: 'ribbon',
+		cls:'ribbon',
+		layout: 'column',
+		items: [{
+			xtype: 'container',
+			columnWidth:0.45,
+			id: 'pie'
+		},{
+			xtype: 'container',
+			columnWidth:0.545,
+			id: 'heatmap'
+		}]
+	},{
+		xtype:'container',
+		id:'gridsContainer',
+		cls:'grids-container',
+		layout: 'column',
+		items: [{
+			xtype: 'container',
+			columnWidth:0.495,
+			id: 'gridsLeft',
+			cls:'grids-left'
+		},{
+			xtype: 'container',
+			columnWidth:0.495,
+			id: 'gridsRight',
+			cls:'grids-right'
+		}]
+	}],
+	_prefName: 'sanity-dashboard-pref',
 
-    _refreshGrids: function() { ///{{{
-        console.log('Refreshing Grids');
-        var filter = [this.getContext().getTimeboxScope().getQueryFilter()];
-        var gridContainerLeft = this.down('#gridsLeft');
-        var gridContainerRight = this.down('#gridsRight');
-        gridContainerLeft.down('#C1').filter(filter, true, true);
-        gridContainerLeft.down('#C3').filter(filter, true, true);
-        gridContainerLeft.down('#C5').filter(filter, true, true);
-        gridContainerLeft.down('#C7').filter(filter, true, true);
-        gridContainerLeft.down('#C2').filter(filter, true, true);
-        gridContainerRight.down('#C4').filter(filter, true, true);
-        gridContainerRight.down('#C6').filter(filter, true, true);
-    },///}}}
+	/******************************************************* Reloading ********************************************************/	
+	_removeAllItems: function(){
+		var me = this;
+		Ext.getCmp('controlsContainer').removeAll();
+		Ext.getCmp('pie').removeAll();
+		Ext.getCmp('heatmap').removeAll();
+		Ext.getCmp('gridsLeft').removeAll();
+		Ext.getCmp('gridsRight').removeAll();
+	},
+	_reloadEverything:function(){
+		var me=this;
+		me.setLoading('Loading Grids');
+		me._removeAllItems();
+		me._loadReleasePicker();
+		me._loadTeamPicker();
+		return me._buildGrids()
+			.then(function(){ 
+				me.setLoading('Loading Piechart and Heatmap');
+				return me._buildRibbon();
+			})
+			.then(function(){
+				me.setLoading(false); 
+			})
+			.fail(function(reason){
+				me.setLoading(false);
+				return Q.reject(reason);
+			});
+	},
+	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
+	_loadPreferences: function(){ //parse all settings too
+		var me=this,
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
+		Rally.data.PreferenceManager.load({
+			appID: me.getAppId(),
+      filterByName:me._prefName+ uid,
+			success: function(prefs) {
+				var appPrefs = prefs[me._prefName + uid];
+				try{ appPrefs = JSON.parse(appPrefs); }
+				catch(e){ appPrefs = { projs:{}};}
+				console.log('loaded prefs', appPrefs);
+				deferred.resolve(appPrefs);
+			},
+			failure: deferred.reject
+		});
+		return deferred.promise;
+	},
+	_savePreferences: function(prefs){ // stringify and save only the updated settings
+		var me=this, s = {}, 
+			uid = me.getContext().getUser().ObjectID,
+			deferred = Q.defer();
+		prefs = {projs: prefs.projs};
+    s[me._prefName + uid] = JSON.stringify(prefs); 
+    console.log('saving prefs', prefs);
+		Rally.data.PreferenceManager.update({
+			appID: this.getAppId(),
+			settings: s,
+			success: deferred.resolve,
+			failure: deferred.reject
+		});
+		return deferred.promise;
+	},
+	
+	/******************************************************* LAUNCH ********************************************************/
+	launch: function() {
+		var me=this; 
+		me._initDisableResizeHandle();
+		me._initFixRallyDashboard();
+		me.setLoading('Loading Configuration');
+		me._loadModels()
+			.then(function(){
+				var scopeProject = me.getContext().getProject();
+				return me._loadProject(scopeProject.ObjectID);
+			})
+			.then(function(scopeProjectRecord){
+				me.ProjectRecord = scopeProjectRecord;
+				return me._projectInWhichTrain(me.ProjectRecord);
+			})
+			.then(function(trainRecord){
+				if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) return Q.reject('Not Scoped To a Train!');
+				return me._loadAllLeafProjects(me.ProjectRecord);
+			})
+			.then(function(leafProjects){
+				me.LeafProjects = leafProjects;
+				me.CurrentTeam = null;
+				return me._loadProducts(me.ProjectRecord);
+			})
+			.then(function(productStore){
+				me.Products = productStore.getRange();
+				return me._loadPreferences();
+			})
+			.then(function(appPrefs){
+				me.AppPrefs = appPrefs;
+				var twelveWeeks = 1000*60*60*24*12;
+				return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+			})
+			.then(function(releaseStore){
+				me.ReleaseStore = releaseStore;
+				var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
+				if(currentRelease){
+					me.ReleaseRecord = currentRelease;
+					console.log('release loaded', currentRelease);
+					return me._reloadEverything();
+				}
+				else return Q.reject('This project has no releases.');
+			})
+			.fail(function(reason){
+				me.setLoading(false);
+				me._alert('ERROR', reason || '');
+			})
+			.done();
+	},
 
-    _loadReleaseDetails: function(scope) {//{{{
-        var release = scope.getRecord();
-        var project = this.getContext().getProject();
-        var releaseStore = Ext.create('Rally.data.wsapi.Store', {
-            model: 'Release',
-            autoLoad: true,
-            fetch: ['Name', 'Project'],
-            context: this.getContext().getProject(),
-            filters: [ { 
-                            property: 'Project.ObjectID',
-                            operator: '=',
-                            value: project.ObjectID 
-                      }],
-            listeners: {
-                        load: function(records)
-                                {
-                                  console.log('Found releases', records); 
-                                }
-                       }
-        });
-        if (release) {
-            var releaseModel = release.self;
-            releaseModel.load(Rally.util.Ref.getOidFromRef(release), {
-                fetch: ['Notes'],
-                success: function(record) {
-                    //Removing as the release info component was deprecated
-                    /*this.down('#releaseInfo').update({
-                        detailUrl: Rally.nav.Manager.getDetailUrl(release),
-                        notes: record.get('Notes')
-                    });*/ 
-                },
-                scope: this
-            });
-        }
-    },//}}}
+	/******************************************************* RELEASE PICKER ********************************************************/
+	_releasePickerSelected: function(combo, records){
+		var me=this, pid = me.ProjectRecord.data.ObjectID;
+		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+		me.setLoading(true);
+		me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);
+		if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+		me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+		me._savePreferences(me.AppPrefs)
+			.then(function(){ return me._reloadEverything(); })
+			.fail(function(reason){
+				me._alert('ERROR', reason || '');
+				me.setLoading(false);
+			})
+			.done();
+	},
+	_loadReleasePicker: function(){
+		var me=this;
+		Ext.getCmp('controlsContainer').add({
+			xtype:'intelreleasepicker',
+			labelWidth: 80,
+			width: 240,
+			releases: me.ReleaseStore.data.items,
+			currentRelease: me.ReleaseRecord,
+			listeners: {
+				change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+				select: me._releasePickerSelected.bind(me)
+			}
+		});
+	},	
+	_teamPickerSelected: function(combo, records){
+		var me=this,
+			recName = records[0].data.Name;
+		if((!me.CurrentTeam && recName == 'All') || (me.CurrentTeam && me.CurrentTeam.data.Name == recName)) return;
+		if(recName == 'All') me.CurrentTeam = null;
+		else me.CurrentTeam = _.find(me.LeafProjects, function(p){ return p.data.Name == recName; });
+		return me._reloadEverything();
+		
+	},
+	_loadTeamPicker: function(){
+		var me=this;
+		Ext.getCmp('controlsContainer').add({
+			xtype:'intelcombobox',
+			width: 200,
+			padding:'0 0 0 40px',
+			fieldLabel: 'Team:',
+			labelWidth:50,
+			store: Ext.create('Ext.data.Store', {
+				fields: ['Name'],
+				data: [{Name:'All'}].concat(_.map(_.sortBy(me.LeafProjects, 
+					function(s){ return s.data.Name; }),
+					function(p){ return {Name: p.data.Name}; }))
+			}),
+			displayField:'Name',
+			value:me.CurrentTeam ? me.CurrentTeam.data.Name : 'All',
+			listeners: {
+				select: me._teamPickerSelected.bind(me)
+			}
+		});
+	},
+	
+	/******************************************************* Render Ribbon ********************************************************/
+	_hideHighchartsLinks: function(){
+		$('.highcharts-container > svg > text:last-child').hide();
+	},
+	_getCountForTeamAndGrid: function(project, grid){ //genius!
+		var me=this,
+			store = Ext.create('Rally.data.wsapi.Store',{
+				model: 'UserStory',
+				limit:1,
+				pageSize:1,
+				remoteSort:false,
+				fetch: false,
+				context:{
+					workspace: me.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters: me.CurrentTeam ?	
+					grid.originalConfig.filters :
+					[grid.originalConfig.filters[0].and(Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: project.data._ref }))]
 
-    // Create all charts in the header ribbon
-    _buildCharts: function() { //{{{
-        if(_.every(this.globalGridCount, function(elem) { return elem===0;})) {
-            this.down('#ribbon').add({
-                xtype: 'component',
-                html: '<b><font color="green" size=18>Congrats! The Train is healthy for this release</font></b>'
-            });
-        } else {
-            console.log('Now building charts');
-            this.down('#ribbon').add({
-                xtype: 'component',
-                layout: {align: 'stretch', pack: 'center', margin: '40px'},
-                html: '&emsp;&emsp;&emsp;&emsp;'
-            });
-            this._buildRibbon();
-            this.down('#ribbon').add({
-                xtype: 'component',
-                layout: {align: 'stretch', pack: 'center', margin: '40px'},
-                html: '&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;'
-            });
-            this._buildPieChart();
-            this._chartsReady = true;
-        }
-    },//}}}
+			});
+		if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID == project.data.ObjectID) 
+			return me._reloadStore(store).then(function(store){ return store.totalCount; });
+		else return Q(0);
+	},
+	_getHeatMapConfig: function() { 
+		var me=this,
+			userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
+				return grid.originalConfig.model == 'UserStory'; 
+			}),
+			chartData = [],
+			promises = [];
+		_.each(userStoryGrids, function(grid, gindex) {
+			_.each(_.sortBy(me.LeafProjects, function(p){ return p.data.Name; }), function(project, pindex){
+				promises.push(me._getCountForTeamAndGrid(project, grid).then(function(gridCount){
+					return chartData.push([pindex, gindex, gridCount]);
+				}));
+			});
+		});
+		return Q.all(promises).then(function(){
+			return {       
+				chart: {
+					type: 'heatmap',
+					height:340,
+					marginTop: 10,
+					marginLeft: 30,
+					marginBottom: 80
+				},
+				title: {
+					text: null
+				},
+				xAxis: {
+					categories: _.sortBy(_.map(me.LeafProjects, 
+						function(project){ return project.data.Name.split('-')[0].trim(); }),
+						function(p){ return p; }),
+					labels: {
+						style: { width:100 },
+						rotation: -45
+					}
+				},
+				yAxis: {
+					categories: _.map(userStoryGrids, function(grid){ return grid.originalConfig.title; }),
+					title: null,
+					labels: { enabled: false }
+				},
+				colorAxis: {
+					min: 0,
+					minColor: '#FFFFFF',
+					maxColor: Highcharts.getOptions().colors[0]
+				},
+				legend: { enabled:false },
+				tooltip: {
+					hideDelay:200,
+					formatter: function () {
+						return '<div class="my-heatmap-tooltip"><b>' + 
+							'<b>' + this.series.yAxis.categories[this.point.y] + '</b><br>' + 
+							this.series.xAxis.categories[this.point.x] + '</b>: ' + this.point.value + ' Stories';
+					},
+					positioner:function(boxWidth, boxHeight, point){
+						return {x:point.plotX - boxWidth + 20,y:point.plotY+30}; 
+					},
+					borderRadius: 0,
+					borderWidth: 0,
+					shadow: false,
+					backgroundColor: 'none',
+					useHTML:true
+				},
+				series: [{
+					name: 'Errors per Violation per Team',
+					borderWidth: 1,
+					data: chartData,
+					dataLabels: {
+						enabled: true,
+						color: 'black',
+						style: {
+							textShadow: 'none'
+						}
+					}
+				}]  
+			};
+		});
+	},
+	_getPieChartConfig: function() { 
+		var me=this,
+			chartData = _.map(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid) { 
+				return {
+					name: grid.originalConfig.title,
+					y: grid.store.totalCount,
+					href: '#' + grid.originalConfig.id
+				};
+			});
+		return {
+			chart: {
+				height:340,
+				plotBackgroundColor: null,
+				plotBorderWidth: 0,
+				plotShadow: false
+			},
+			title: { text: null },
+			tooltip: { enabled:false },
+			plotOptions: {
+				pie: {
+					dataLabels: {
+						enabled: true,
+						crop:false,
+						overflow:'none',
+						format:'<b>{point.name}</b>: {y}',
+						style: { 
+							cursor:'pointer',
+							width:100,
+							color: 'black'
+						}
+					},
+					startAngle: -90,
+					endAngle: 90,
+					center: ['50%', '80%']
+					//showInLegend:true
+				}
+			},
+			series: [{
+				type: 'pie',
+				name: 'Grid Count',
+				innerSize: '25%',
+				size:'80%',
+				point: {
+					events: {
+						click: function(e) {
+							location.href = e.point.href;
+							e.preventDefault();
+						}
+					}
+				},
+				data: chartData
+			}]
+		};
+	},	
+	_buildRibbon: function() {
+		var me=this;
+		$('#pie').highcharts(me._getPieChartConfig());
+		return me._getHeatMapConfig()
+			.then(function(chartConfig){
+				$('#heatmap').highcharts(chartConfig);
+				me._hideHighchartsLinks();
+			})
+			.fail(function(reason){
+				me._alert('ERROR', reason);
+			});
+	},
+	
+	/******************************************************* Render GRIDS ********************************************************/
+	_addGrid: function(gridConfig){
+		var me=this,
+			gridTitleLink = '<a id="' + gridConfig.id + '">' + gridConfig.title + '</a>',
+			deferred = Q.defer(),
+			grid = Ext.create('Rally.ui.grid.Grid', {
+				title: gridTitleLink,
+				columnCfgs: gridConfig.columns,
+				showPagingToolbar: true,
+				originalConfig:gridConfig,
+				showRowActionsColumn: true,
+				emptyText: ' ',
+				enableBulkEdit: true,
+				pagingToolbarCfg: {
+					pageSizes: [10, 15, 25, 100],
+					autoRender: true,
+					resizable: false
+				},
+				storeConfig: {
+					model: gridConfig.model,
+					autoLoad:{start: 0, limit: 10},
+					pageSize: 10,
+					context: { workspace: me.getContext().getWorkspace()._ref, project:null },
+					filters: gridConfig.filters,
+					listeners: {
+						load: function(store) {
+							if(!store.getRange().length){
+								var goodGrid = Ext.create('Rally.ui.grid.Grid', {
+									xtype:'rallygrid',
+									cls:' sanity-grid grid-healthy',
+									title: gridTitleLink,
+									originalConfig: gridConfig,
+									emptyText: '0 Problems!',
+									store: Ext.create('Rally.data.custom.Store', { data:[] }),
+									showPagingToolbar: false,
+									showRowActionsColumn: false
+								});
+								goodGrid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
+								deferred.resolve(goodGrid);
+							} else{
+								grid.addCls('grid-unhealthy sanity-grid');
+								grid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
+								deferred.resolve(grid);
+							}
+						}  
+					}
+				}
+			});
+		return deferred.promise;
+	},	
+	_buildGrids: function() { 
+		var me = this,
+			releaseName = me.ReleaseRecord.data.Name,
+			releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+			releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+			trainName = me.ProjectRecord.data.Name.split(' ART')[0],
+			defaultUserStoryColumns = [{
+					text:'FormattedID',
+					dataIndex:'FormattedID', 
+					editor:false
+				},{
+					text:'Name',
+					dataIndex:'Name', 
+					editor:false
+				}].concat(!me.CurrentTeam ? [{
+					text: 'Team', 
+					dataIndex: 'Project',
+					editor:false
+				}] : []),
+			defaultFeatureColumns = [{
+					text:'FormattedID',
+					dataIndex:'FormattedID', 
+					editor:false
+				},{
+					text:'Name',
+					dataIndex:'Name', 
+					editor:false
+				},{
+					text:'PlannedEndDate',
+					dataIndex:'PlannedEndDate', 
+					editor:false
+				}],
+			releaseNameFilter = 
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })),
+			userStoryProjectFilter = me.CurrentTeam ? 
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: me.CurrentTeam.data._ref }) : 
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName}),
+			featureProductFilter = _.reduce(me.Products, function(filter, product){
+				var thisFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.Parent.Name',  value:product.data.Name });
+				return filter ? filter.or(thisFilter) : thisFilter;
+			}, null),
+			gridConfigs = [{
+				showIfLeafProject:true,
+				title: 'Blocked Stories',
+				id: 'grid-blocked-stories',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'Blocked',
+					dataIndex:'Blocked'
+				},{
+					text:'BlockedReason',
+					dataIndex:'BlockedReason',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Left',
+				filters:[
+					Ext.create('Rally.data.wsapi.Filter', { property: 'blocked', value: 'true' })
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Unsized Stories',
+				id: 'grid-unsized-stories',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'PlanEstimate',
+					dataIndex:'PlanEstimate',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Left',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '=', value: null })
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Improperly Sized Stories',
+				id: 'grid-improperly-sized-stories',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'PlanEstimate',
+					dataIndex:'PlanEstimate',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Left',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: null }).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '1' })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '2' })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '4' })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '8' })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '16' }))
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Stories in Release without Iteration',
+				id: 'grid-stories-in-release-without-iteration',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'Iteration',
+					dataIndex:'Iteration',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Left',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration', value: null })
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Stories in Release not attached to Release',
+				id: 'grid-stories-in-release-not-attached-to-release',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'Iteration',
+					dataIndex:'Iteration',
+					tdCls:'editor-cell'
+				},{
+					text:'Release',
+					dataIndex:'Release',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Right',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: null }))
+					.and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Unaccepted Stories in Past Iterations',
+				id: 'grid-unaccepted-stories-in-past-iterations',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'Iteration',
+					dataIndex:'Iteration',
+					editor:false
+				},{
+					text:'ScheduleState',
+					dataIndex:'ScheduleState',
+					tdCls:'editor-cell'
+				}]),
+				side: 'Right',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '<', value: 'Today' }).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'ScheduleState', operator: '<', value: 'Accepted' }))
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:true,
+				title: 'Stories with End Date past Feature End Date',
+				id: 'grid-stories-with-end-past-feature-end',
+				model: 'UserStory',
+				columns: defaultUserStoryColumns.concat([{
+					text:'Iteration',
+					dataIndex:'Iteration',
+					editor:false
+				},{
+					text:'Feature',
+					dataIndex:'Feature',
+					editor:false
+				}]),
+				side: 'Right',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '>', value: releaseDate})
+					.and(releaseNameFilter).and(userStoryProjectFilter)
+				]
+			},{
+				showIfLeafProject:false,
+				title: 'Features with no stories',
+				id: 'grid-features-with-no-stories',
+				model: 'PortfolioItem/Feature',
+				columns: defaultFeatureColumns,
+				side: 'Right',
+				filters: [
+					Ext.create('Rally.data.wsapi.Filter', { property: 'UserStories.ObjectID', value: null  }).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }))
+					.and(featureProductFilter)
+				]
+			}];
 
-
-    _buildRibbon: function() { //{{{
-        var linkid = '<app class="jump {state}">{title}:&emsp;<a href="#C{name}">{count}</a><p></app>';
-        function compare(a,b) {
-            if(a.x < b.x)
-                return -1;
-            if (a.x > b.x)
-                return 1;
-            return 0;
-        }
-        var tempobj = this.globalStoryCount.sort(compare);
-        var newhtml = "<br>";
-        var line;
-        console.log("Building ribbon");
-        for(var i=0; i < 8; i++) {
-            line = linkid.replace("{name}",tempobj[i].x).replace("{title}",tempobj[i].name).replace("{count}",tempobj[i].y);
-            if (tempobj[i].y === 0)
-                line = line.replace("{state}", "healthy");
-            else
-                line = line.replace("{state}", "unhealthy");
-            newhtml =  newhtml.concat(line);
-        }
-        this.down('#ribbon').add({
-            xtype: 'component',
-            layout: {align: 'stretch', pack: 'center', margin: '40px'},
-            itemId: 'ribbondata',
-            html: newhtml
-        });        
-
-    }, //}}}
-
-    _buildPieChart: function() { //{{{
-        var tempobj = _.map(this.globalStoryCount, 
-                            function(value) { return[value.name, value.y]; });
-        this.down('#ribbon').add({
-            xtype: 'rallychart',
-            flex: 1,
-            layout: {
-                //align: 'stretch',
-                //pack: 'center'
-            },
-            scope: this,
-            chartConfig: { 
-                chart: {
-                    plotBackgroundColor: null,
-                    plotBorderWidth: 0,//null,
-                    plotShadow: false//,
-                    //width: 800,
-                    //height: 600
-                },
-                title: {
-                    text: null // 'Grid ** Count'
-                },
-                tooltip: {enabled: false},
-                plotOptions: {
-                    pie: {
-                        allowPointSelect: true,
-                        cursor: 'pointer',
-                        dataLabels: {
-                            enabled: true,
-                            //distance: 25,
-                            format: '<b>{point.name}</b>: {y}',
-                            style: {color: 'black'}
-                        },
-                        startAngle: -90,
-                        endAngle: 90
-                        //center: ['50%','20%']
-                    }
-               }
-            }, 
-            chartData: { 
-                series: [{
-                    type: 'pie',
-                    name: 'Grid Count',
-                    innerSize: '40%',
-                    data: tempobj//this.globalGridCount
-                }]
-            }    
-        });
-    }, //}}}
-
-    // Create all grids in the left/right columns
-    _buildGrids: function(scope) { //{{{
-
-        var grids = [ //{{{
-        {
-            title: 'Blocked Stories',
-            model: 'User Story',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'Blocked', 'BlockedReason'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                return Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'blocked', operator: '=', value: 'true' });
-            },
-            chartnum: 'C1'
-        },
-        {   
-            title: 'Unsized Stories with Features',
-            model: 'User Story',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'Feature','PlanEstimate'],
-            side: 'Right',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Feature', operator: '!=', value: 'null' });
-                var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '=', value: 'null' });
-                return featureFilter.and(noPlanEstimateFilter);
-            },
-            chartnum: 'C2'
-        },
-        {
-            title: 'Unsized Stories with Release',
-            model: 'User Story',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'PlanEstimate'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Release', operator: '!=', value: 'null' });
-                var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '=', value: 'null' });
-                return releaseFilter.and(noPlanEstimateFilter);
-            },
-            chartnum: 'C3'
-        },
-        {
-            title: 'Features with no stories',
-            model: 'PortfolioItem/Feature',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'PlannedEndDate'],
-            side: 'Right',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var userstoryFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'UserStories.ObjectID', operator: 'contains', value: 'null'  });
-                var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlannedEndDate', operator: '<', value: 'NextWeek' });
-                return userstoryFilter.and(noPlanEstimateFilter);
-            },
-            chartnum: 'C4'
-        },
-        {
-            title: 'Stories attached to Feature without Iteration',
-            model: 'UserStory',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', 'Feature','Iteration'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Feature', operator: '!=', value: 'null' });
-                var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Iteration', operator: '=', value: 'null' });
-                return featureFilter.and(noPlanEstimateFilter);
-            },
-            chartnum: 'C5'
-        },
-        {
-            title: 'Features with unaccepted stories in past sprints',
-            model: 'UserStory',
-            listeners: { scope: this },
-            columns: [    
-                {text: 'Feature', dataIndex: 'Feature', flex: 3, 
-                    renderer: function(value) { return value.FormattedID.link("https://rally1.rallydev.com/#/"+value.Project.ObjectID+"d/detail/portfolioitem/feature/"+value.ObjectID);}},
-                'FormattedID', 'Name',{text:'Teams', dataIndex:'Project'}, 'ScheduleState'
-            ],
-            side: 'Right',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var featureFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Feature', operator: '!=', value: 'null' });
-                var enddateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Iteration.EndDate', operator: '<', value: 'Today' });
-                var unacceptedFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'ScheduleState', operator: '<', value: 'Accepted' });
-                return featureFilter.and(unacceptedFilter).and(enddateFilter);
-            },
-            chartnum: 'C6'
-        },
-        {
-            title: 'Improperly Sized Stories',
-            model: 'User Story',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', {text: 'Teams', dataIndex: 'Project'}, 'PlanEstimate'],
-            side: 'Left',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var noPlanEstimateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: 'null' });
-                var planSizeOne = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: '1' });
-                var planSizeTwo = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: '2' });
-                var planSizeFour = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: '4' });
-                var planSizeEight = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: '8' });
-                var planSizeSixteen = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'PlanEstimate', operator: '!=', value: '16' });
-                return noPlanEstimateFilter.and(planSizeOne).and(planSizeTwo).
-                    and(planSizeFour).and(planSizeEight).and(planSizeSixteen);
-            },
-            chartnum: 'C7'
-        },
-        {
-            title: 'Stories with Iteration in Release but no Release scoped',
-            model: 'User Story',
-            listeners: { scope: this },
-            columns: ['FormattedID', 'Name', {text:'Teams', dataIndex: 'Project'}, 'Release'],
-            side: 'Right',    // TODO: ensure camelcase format to match itemId names
-            pageSize: 3,
-            filters: function() {
-                var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Release', operator: '!=', value: 'null' });
-                var releaseDateFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Release.ReleaseDate', operator: '>', value: 'today' });
-                var iterationFilter = Ext.create('Rally.data.wsapi.Filter', {
-                    property: 'Iteration', operator: '=', value: 'null' });
-                return releaseFilter.and(releaseDateFilter).and(iterationFilter);
-            },
-            chartnum: 'C8'
-        }
-
-    ]; //}}}
-
-    var allPromises = [];
-
-    //var appscope = this.getContext().getGlobalContext();
-    console.log('App scope ', scope);
-    _.each(grids, function(grid) {
-        promise = this._addGrid(grid.title, grid.model, grid.columns, grid.filters, grid.side, grid.chartnum,scope);
-        promise.then({
-            success: function(count, key) {
-                this.globalGridCount.push(count[0]);
-                this.globalGridMap[count[1]]=count[0];
-                this.globalStoryCount.push(count[2]);
-            },
-            error: function(error) { console.log('single: error', error); },
-            scope: this
-        }).always(function() { });
-        allPromises.push(promise);
-    }, this);
-    Deft.promise.Promise.all(allPromises).then({
-        success: function() {
-            console.log('All grids have loaded');//this.globalGridCount);
-            this._gridsLoaded = true;
-            this.down('#ribbon').show();
-            this._buildCharts();
-            window.newscope=false;
-            //this._refreshGrids();
-        },
-        failure: function(error) { console.log('all error!', error); },
-        scope: this
-    });
-
-    }, //}}}
-
-    // Utility function to generically build a grid and add to a container with given specs
-    _addGrid: function(myTitle, myModel, myColumns, myFilters, gridSide,cnum,scope) { //{{{
-        var linkid = '<a id={name}>{title}</a>';
-        var deferred = Ext.create('Deft.Deferred');
-        // lookup left or right side
-        var gridContainer = this.down('#grids' + gridSide);
-        var grid = Ext.create('Rally.ui.grid.Grid', {
-            xtype: 'rallygrid',
-            itemId: cnum,
-            title: linkid.replace('{name}',cnum).replace('{title}',myTitle),
-            columnCfgs: myColumns,
-            showPagingToolbar: true,
-            emptyText: 'This search is healthy',
-            enableBulkEdit: true,
-            pagingToolbarCfg: {
-                pageSizes: [15, 25, 100],
-                autoRender: true,
-                resizable: true
-            },
-            storeConfig: { //{{{
-                model: myModel,
-                autoLoad:{start: 0, limit: 15},
-                pageSize: 15,
-                pagingToolbarCfg: {
-                    pageSizes: [15,25,100],
-                    autoRender: true,
-                    resizable: true
-                },
-                filters: [this.getContext().getTimeboxScope().getQueryFilter(),myFilters()],
-                listeners: {
-                    load: function(store) {
-                        var tempcount=store.getTotalCount();
-                        var elem = {
-                            name : myTitle,
-                            x: cnum.charAt(1),
-                            y: tempcount
-                        };
-                        if (tempcount === 0) {
-                            this.shouldiaddgrid=true;
-                        } else
-                            gridContainer.add(grid);
-                        if(window.newscope) {
-                            deferred.resolve([store.getTotalCount(),String(cnum),elem]);
-                        } 
-                        console.log("Loaded grid",cnum);
-                    }   
-                },
-                scope: this
-            }, //}}}
-            style: {
-                borderColor: '#AAA',
-                borderStyle: 'dotted',
-                borderWidth: '2px'
-            },
-            padding: 10,
-            syncRowHeight: false,
-            scope: this
-        });
-        // show me the grid!
-        if (this.shouldiaddgrid)
-        { 
-            grid.setBodyStyle("backgroundColor","#00ff00"); 
-            grid.setBodyStyle("textDecoration","overline"); 
-        }
-        //gridContainer.add(grid);
-        if (!this._gridsLoaded) 
-            { return deferred.promise; }
-        this._refreshGrids();
-        return true;
-    } //}}}
-
-
+		return Q.all(_.map(gridConfigs, function(gridConfig){
+			if(me.CurrentTeam && !gridConfig.showIfLeafProject) return Q();
+			else return me._addGrid(gridConfig);
+		}))
+		.then(function(grids){
+			_.each(grids, function(grid){ if(grid) grid.gridContainer.add(grid); });
+			console.log('All grids have loaded');
+		})
+		.fail(function(reason){ 
+			me._alert('ERROR:', reason);
+		});
+	}
 });
-

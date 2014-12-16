@@ -1,19 +1,63 @@
 .app {
-    margin: 0;
-    padding: 0;
-    overflow-x: scroll;    
-    overflow-y: hidden;
-}
-.app .jump{
-     font-family: Helvetica, Arial;
-     font-weight: bold;
-     font-size: 16px;
-}
+	margin: 0;
+	padding: 0;
+	width:100%;
+	overflow-x:hidden !important; }
 
-/*.app .healthy{
-    color: green;
-}
+.ribbon {
+	margin:10px 0 0 0;
+	padding:0;
+	width: 98%; 
+	height:350px;
+	border: 1px solid #AAA; }
 
-.app .unhealthy{
-     color: red;
-}*/
+.grids-container {
+	margin:10px 0 0 0;
+	padding:0;
+	position:relative !important;
+	width: 98%; }
+	
+	.grids-container .grids-left{
+		margin-right:5px;
+		position:absolute !important;
+		left:0;}
+		
+	.grids-container .grids-right {
+		margin-left:5px; 
+		position:absolute !important;
+		right:0;}
+		
+.sanity-grid {
+	border:2px solid #AAA;
+	padding: 0;
+	margin:0 0 5px 0;}
+	
+	.grid-healthy.sanity-grid .x-panel-header {
+		font-weight:bold;
+		background-color:rgba(0, 255, 0, 0.4) !important; }
+		 
+	.grid-unhealthy.sanity-grid .x-panel-header {
+		font-weight:bold;
+		background-color:rgba(255, 0, 0, 0.4) !important; }
+		 
+	.sanity-grid .grid-pager {
+		margin:3px !important; }
+	
+/*	.sanity-grid .page-size-links {
+		visibility:hidden !important; } */
+		
+	.sanity-grid .editor-cell,
+	.sanity-grid .editor-cell *{
+		cursor:pointer !important; }
+		
+	.sanity-grid.rally-grid .x-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
+		background-image:none; }
+
+.highcharts-container { overflow: visible !important; }
+
+.my-heatmap-tooltip {
+	z-index:10000;
+	border-radius:2px;
+	padding:5px;
+	border:1px solid gray;
+	background:lightgray }

@@ -1,20 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SanityDashboard</title>
+    <title>Sanity Dashboard</title>
 
 
     <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.js"></script>
+    <script type="text/javascript" src="https://d-minus.com/cdn/highcharts-v4.0.4-modified.js"></script>
+    <script type="text/javascript" src="https://code.highcharts.com/modules/heatmap.src.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
     <script type="text/javascript">
         // I am keeping the extra , in there to simplify my code. If someone is actually using an old version of IE to make an app let me know.
         Rally.loadScripts(
                 [
+                      "../lib/intel-rally-app.js",
+                      "../lib/data/intel-models.js",
+                      "../lib/mixins/window-listener.js",
+                      "../lib/mixins/iframe-resize.js",
+                      "../lib/mixins/pretty-alert.js",
+                      "../lib/mixins/intel-workweek.js",
+                      "../lib/mixins/release-query.js",
+                      "../lib/components/intel-combobox.js",
+                      "../lib/components/intel-fixed-combobox.js",
+                      "../lib/components/intel-release-picker.js",
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('CustomApp', {
-                name:"SanityDashboard"
+            Rally.launchApp('SanityDashboard', {
+                name:"Sanity Dashboard"
             });
         }, true);
     </script>
