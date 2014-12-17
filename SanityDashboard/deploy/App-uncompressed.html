@@ -1129,11 +1129,11 @@ Ext.define('SanityDashboard', {
 		layout: 'column',
 		items: [{
 			xtype: 'container',
-			columnWidth:0.45,
+			width:445,
 			id: 'pie'
 		},{
 			xtype: 'container',
-			columnWidth:0.545,
+			columnWidth:0.999,
 			id: 'heatmap'
 		}]
 	},{
@@ -1154,7 +1154,18 @@ Ext.define('SanityDashboard', {
 		}]
 	}],
 	_prefName: 'sanity-dashboard-pref',
-
+	_colors: [
+		'#5DA5DA', //(blue)
+		'#FAA43A', //(orange)
+		'#60BD68', //(green)
+		'#F17CB0', //(pink)
+		'#B2912F', //(brown)
+		'#B276B2', //(purple)
+		'#DECF3F', //(yellow)
+		'#F15854', //(red)
+		'#4D4D4D' //(gray)
+	],
+	
 	/******************************************************* Reloading ********************************************************/	
 	_removeAllItems: function(){
 		var me = this;
@@ -1359,7 +1370,7 @@ Ext.define('SanityDashboard', {
 		var me=this,
 			userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
 				return grid.originalConfig.model == 'UserStory'; 
-			}),
+			}).reverse(),
 			chartData = [],
 			promises = [];
 		_.each(userStoryGrids, function(grid, gindex) {
@@ -1375,18 +1386,19 @@ Ext.define('SanityDashboard', {
 			else me.CurrentTeam = team;
 			me._reloadEverything();
 		};
+		window._selectId = function(gridId){
+			location.href = '#' + gridId;
+		};
 		return Q.all(promises).then(function(){
 			return {       
 				chart: {
 					type: 'heatmap',
 					height:340,
 					marginTop: 10,
-					marginLeft: 30,
+					marginLeft: 130,
 					marginBottom: 80
 				},
-				title: {
-					text: null
-				},
+				title: { text: null },
 				xAxis: {
 					categories: _.sortBy(_.map(me.LeafProjects, 
 						function(project){ return project.data.Name.split('-')[0].trim(); }),
@@ -1406,31 +1418,44 @@ Ext.define('SanityDashboard', {
 				yAxis: {
 					categories: _.map(userStoryGrids, function(grid){ return grid.originalConfig.title; }),
 					title: null,
-					labels: { enabled: false }
+					labels: {
+						formatter: function(){
+							var text = this.value,
+								index = _.indexOf(this.axis.categories, text),
+								gridID = userStoryGrids[index].originalConfig.id,
+								styleAttr='style="background-color:' + me._colors[userStoryGrids.length - index - 1] + '"';
+							return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="_selectId(\'' + gridID +  '\')">' + text + '</div>';
+						},
+						useHTML:true
+					}
 				},
 				colorAxis: {
 					min: 0,
 					minColor: '#FFFFFF',
-					maxColor: Highcharts.getOptions().colors[0]
+					maxColor: '#ec5b5b'
+				},
+				plotOptions: {
+					series: {
+						point: {
+							events: {
+								click: function(e){
+									var point = this,
+										team = _.sortBy(me.LeafProjects, function(p){ return p.data.Name; })[point.x],
+										grid = userStoryGrids[point.y];
+									if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID != team.data.ObjectID){
+										me.CurrentTeam = team;
+										setTimeout(function(){
+											me._reloadEverything().then(function(){ location.href = '#' + grid.originalConfig.id; }).done();
+										}, 0);
+									}
+									else location.href = '#' + grid.originalConfig.id;
+								}
+							}
+						}
+					}
 				},
 				legend: { enabled:false },
-				tooltip: {
-					hideDelay:200,
-					formatter: function () {
-						return '<div class="my-heatmap-tooltip">' + 
-								'<b>' + this.series.yAxis.categories[this.point.y] + '</b><br>' + 
-								'<b>' + this.series.xAxis.categories[this.point.x] + '</b>: ' + this.point.value + ' Stories' + 
-							'</div>';
-					},
-					positioner:function(boxWidth, boxHeight, point){
-						return {x:point.plotX - boxWidth + 20,y:point.plotY+30}; 
-					},
-					borderRadius: 0,
-					borderWidth: 0,
-					shadow: false,
-					backgroundColor: 'none',
-					useHTML:true
-				},
+				tooltip: { enabled:false },
 				series: [{
 					name: 'Errors per Violation per Team',
 					borderWidth: 1,
@@ -1457,7 +1482,8 @@ Ext.define('SanityDashboard', {
 			});
 		return {
 			chart: {
-				height:340,
+				height:345,
+				marginLeft: -15,
 				plotBackgroundColor: null,
 				plotBorderWidth: 0,
 				plotShadow: false
@@ -1468,26 +1494,25 @@ Ext.define('SanityDashboard', {
 				pie: {
 					dataLabels: {
 						enabled: true,
+						distance:25,
 						crop:false,
 						overflow:'none',
 						format:'<b>{point.name}</b>: {y}',
 						style: { 
 							cursor:'pointer',
-							width:100,
 							color: 'black'
 						}
 					},
-					startAngle: -90,
-					endAngle: 90,
-					center: ['50%', '80%']
-					//showInLegend:true
+					startAngle: 10,
+					endAngle: 170,
+					center: ['0%', '50%']
 				}
 			},
 			series: [{
 				type: 'pie',
 				name: 'Grid Count',
 				innerSize: '25%',
-				size:'80%',
+				size:260,
 				point: {
 					events: {
 						click: function(e) {
@@ -1502,6 +1527,7 @@ Ext.define('SanityDashboard', {
 	},	
 	_buildRibbon: function() {
 		var me=this;
+		Highcharts.setOptions({ colors: me._colors });
 		$('#pie').highcharts(me._getPieChartConfig());
 		return me._getHeatMapConfig()
 			.then(function(chartConfig){
@@ -1848,6 +1874,21 @@ Ext.define('SanityDashboard', {
 .heatmap-xlabel .curteam {
   font-weight: bolder;
   font-size: 1.1em;
+}
+.heatmap-ylabel {
+  white-space: normal;
+  width: 124px;
+  height: 35px;
+  text-align: center;
+  display: flex;
+  border-bottom-left-radius: 5px;
+  border-top-left-radius: 5px;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.65rem;
+  cursor: pointer;
+  padding: 0 2px 0 2px;
+  margin: 0;
 }
 
     </style>

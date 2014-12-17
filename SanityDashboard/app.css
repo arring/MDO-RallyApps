@@ -72,3 +72,18 @@
 	.heatmap-xlabel .curteam {
 		font-weight:bolder;
 		font-size:1.1em; }
+		
+.heatmap-ylabel {
+	white-space:normal;
+	width:124px; 
+	height:35px;
+	text-align:center;
+	display:flex;
+	border-bottom-left-radius:5px;
+	border-top-left-radius:5px;
+	justify-content:center;
+	align-items:center;
+	font-size:0.65rem;
+	cursor:pointer;
+	padding:0 2px 0 2px; 
+	margin:0; }
