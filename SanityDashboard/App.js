@@ -264,6 +264,12 @@ Ext.define('SanityDashboard', {
 				}));
 			});
 		});
+		window._selectTeam = function(value){
+			var team = _.find(me.LeafProjects, function(p){ return p.data.Name.indexOf(value) === 0; });
+			if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID) me.CurrentTeam = null;
+			else me.CurrentTeam = team;
+			me._reloadEverything();
+		};
 		return Q.all(promises).then(function(){
 			return {       
 				chart: {
@@ -282,6 +288,13 @@ Ext.define('SanityDashboard', {
 						function(p){ return p; }),
 					labels: {
 						style: { width:100 },
+						formatter: function(){
+							var text = this.value;
+							if(me.CurrentTeam && me.CurrentTeam.data.Name.indexOf(this.value) === 0) 
+								text = '<span class="curteam">' + this.value + '</span>';
+							return '<a class="heatmap-xlabel" onclick="_selectTeam(\'' + this.value +  '\');">' + text + '</a>';
+						},
+						useHTML:true,
 						rotation: -45
 					}
 				},
@@ -299,9 +312,10 @@ Ext.define('SanityDashboard', {
 				tooltip: {
 					hideDelay:200,
 					formatter: function () {
-						return '<div class="my-heatmap-tooltip"><b>' + 
-							'<b>' + this.series.yAxis.categories[this.point.y] + '</b><br>' + 
-							this.series.xAxis.categories[this.point.x] + '</b>: ' + this.point.value + ' Stories';
+						return '<div class="my-heatmap-tooltip">' + 
+								'<b>' + this.series.yAxis.categories[this.point.y] + '</b><br>' + 
+								'<b>' + this.series.xAxis.categories[this.point.x] + '</b>: ' + this.point.value + ' Stories' + 
+							'</div>';
 					},
 					positioner:function(boxWidth, boxHeight, point){
 						return {x:point.plotX - boxWidth + 20,y:point.plotY+30}; 
@@ -397,7 +411,8 @@ Ext.define('SanityDashboard', {
 	/******************************************************* Render GRIDS ********************************************************/
 	_addGrid: function(gridConfig){
 		var me=this,
-			gridTitleLink = '<a id="' + gridConfig.id + '">' + gridConfig.title + '</a>',
+			gridTitleLink = '<a id="' + gridConfig.id + '">' + gridConfig.title + '</a>' +
+			'<span style="float:right;font-weight:bold;font-size:0.8rem;"><a href="#controlsContainer">Top</a></span>',
 			deferred = Q.defer(),
 			grid = Ext.create('Rally.ui.grid.Grid', {
 				title: gridTitleLink,

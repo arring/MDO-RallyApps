@@ -60,4 +60,15 @@
 	border-radius:2px;
 	padding:5px;
 	border:1px solid gray;
-	background:lightgray }
+	background:lightgray; }
+	
+.heatmap-xlabel {
+	white-space:nowrap;
+	z-index:100;
+	cursor:pointer; }
+	.heatmap-xlabel:hover {
+		color:blue; }
+
+	.heatmap-xlabel .curteam {
+		font-weight:bolder;
+		font-size:1.1em; }
