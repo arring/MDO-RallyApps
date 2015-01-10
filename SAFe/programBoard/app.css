@@ -29,20 +29,29 @@
 .x-grid-row .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
 .x-grid-row-selected .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
 
+.hidden { display:none !important; }
 
+.rally-grid .x-grid-header-ct .x-box-inner .x-box-inner { border-bottom: none !important; }
 
-
-
-/* 
-
-.x-column-header-over, .x-column-header-sort-ASC, .x-column-header-sort-DESC {
-	background-color: rgba(0,0,0,0) !important;
-	background-image: none !important;
-}
-.x-grid-row-selected:not(.x-grid-row-over) > .x-grid-td { 
-	background-color: transparent !important;
-}
-
-.x-grid-row-selected.x-grid-row-over > .x-grid-td, .x-grid-row-over > .x-grid-td {
-	background-color: #ecf8fb;
-} */
+.grid-header-text {
+	font-size: 13px !important; }
+	
+.sanity-list-item {
+	white-space:nowrap;
+	margin:5px 0 0 0;
+	overflow:hidden;}
+.sanity-name-cell { 
+	border-left:1px solid black;
+	border-top:1px solid black;
+	border-bottom:1px solid black;
+	border-bottom-left-radius:5px;
+	border-top-left-radius:5px; }
+.orange-bg-cell { background-color:#FAA43A !important; }
+.green-bg-cell { background-color:#60BD68 !important; }
+.pink-bg-cell { background-color:#F17CB0 !important; }
+.brown-bg-cell { background-color:#B2912F !important; }
+.yellow-bg-cell { background-color:#DECF3F !important; }
+.sanity-num-cell { 
+	text-align:center;
+	border:1px solid black; }
+.sanity-header { font-size:13px; }

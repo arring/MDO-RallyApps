@@ -23,6 +23,7 @@
       "App.js"
    ],
    "css": [
+      "../lib/css/background-colors.css",
       "app.css"
    ]
 }

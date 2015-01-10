@@ -21,6 +21,7 @@
       "../../lib/overrides/fast-component-column.js",
       "../../lib/overrides/fast-session-proxy.js",
       "../../lib/overrides/fast-store.js",
+      "../../lib/overrides/fast-cell-editing.js",
       "../../lib/overrides/scroll-steady-tableview.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"

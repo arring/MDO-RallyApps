@@ -56,7 +56,7 @@ Ext.define('CommitMatrix', {
 			FName = fRecord.data.Name,
 			storyStore = Ext.create('Rally.data.wsapi.Store',{
 				model:'HierarchicalRequirement',
-				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID', 'PlanEstimate'],
+				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'Children', 'FormattedID', 'PlanEstimate'],
 				limit:Infinity,
 				context:{
 					workspace: me.getContext().getWorkspace()._ref,
@@ -81,8 +81,7 @@ Ext.define('CommitMatrix', {
 					me.MatrixProjectMap[PName] = sr.data.Project.ObjectID;
 				}
 			});
-	},	
-		
+	},		
 	_loadFeatures: function(){
 		var me=this, 
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
@@ -120,8 +119,7 @@ Ext.define('CommitMatrix', {
 			});
 	},	
 	
-	/****************************************************** PROJECTS ************************************/
-		
+	/****************************************************** PROJECTS ************************************/		
 	_getProjectsInScope:function(){
 		var projects = "__PROJECT_OIDS_IN_SCOPE__";
 		projects = projects.match(/^\d+/) ? projects.split(',') : [this.context.getProject().ObjectID];
@@ -131,7 +129,6 @@ Ext.define('CommitMatrix', {
 		});
 		return projectsInScope;
 	},
-
 	_addDefaultProjectsToStructures: function(msub, mpm, feats, projects){
 		var me=this;
 		_.each(projects, function(p){ 
@@ -143,8 +140,7 @@ Ext.define('CommitMatrix', {
 				});
 			}
 		});
-	},
-			
+	},			
 	_loadDefaultProjects:function(){
 		var me=this,
 			inScope = me._getProjectsInScope(),
@@ -178,22 +174,20 @@ Ext.define('CommitMatrix', {
 			tcString = featureRecord.data.c_TeamCommits;
 		try{ return JSON.parse(atob(tcString)) || {}; }
 		catch(e){ return {}; }
-	},
-	
+	},	
 	_getTeamCommit: function(featureRecord, ProjectName){	
 		var me=this,
 			projectID = me.MatrixProjectMap[ProjectName],
 			featureTC = me._getTeamCommitFromFeature(featureRecord);
 		return featureTC[projectID] || {};
-	},
-	
-	_setExpected: function(featureRecord, ProjectName, value){
+	},	
+	_setTeamCommitsField: function(featureRecord, ProjectName, field, value){
 		var me=this,
 			projectID = me.MatrixProjectMap[ProjectName],
 			featureTC = me._getTeamCommitFromFeature(featureRecord),
 			deferred = Q.defer();	
 		if(!featureTC[projectID]) featureTC[projectID] = {};
-		featureTC[projectID].Expected = value;		
+		featureTC[projectID][field] = value;		
 		var str = btoa(JSON.stringify(featureTC, null, '\t'));
 		if(str.length >= 32768) deferred.reject('TeamCommits field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
@@ -208,8 +202,7 @@ Ext.define('CommitMatrix', {
 		return deferred.promise;
 	},
 
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
 			uid = me.getContext().getUser().ObjectID,
@@ -228,7 +221,6 @@ Ext.define('CommitMatrix', {
 		});
 		return deferred.promise;
 	},
-
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
 			uid = me.getContext().getUser().ObjectID,
@@ -244,15 +236,14 @@ Ext.define('CommitMatrix', {
 		});
 		return deferred.promise;
 	},
+	
 	/************************************************** Event Handler  *********************************************************/
-
 	_getGridHeight: function(){
 		var me = this, 
 			loc = window.location,
 			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]'));
 		return iframe.getHeight() - me.down('#navbox').getHeight();
 	},
-
 	_getGridWidth: function(columnCfgs){
 		var me = this; 
 		if(!me.MatrixGrid) return;
@@ -260,14 +251,12 @@ Ext.define('CommitMatrix', {
 			_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 			window.parent.innerWidth - 20
 		);
-	},
-	
+	},	
 	_changeGridSize: function(){
 		var me=this;
 		if(!me.MatrixGrid) return;
 		else me.MatrixGrid.setSize(me._getGridWidth(me.MatrixGrid.config.columnCfgs), me._getGridHeight());
-	},
-	
+	},	
 	_initGridResize: function(){
 		var me=this;
 		if(me._addWindowEventListener){
@@ -276,7 +265,6 @@ Ext.define('CommitMatrix', {
 	},	
 
 	/******************************************************* Utility FUnctions ******************************************************/
-
 	_clearToolTip: function(){
 		var me = this;
 		if(me.tooltip){
@@ -286,27 +274,43 @@ Ext.define('CommitMatrix', {
 			me.tooltip.triangle.destroy();
 			me.tooltip = null;
 		}
-	},
-	
-	_setCellColor:function(td, commitment, expected, usCount){
-		var currentColors = td.className.match(/intel-team-commits-(.*)$/)[1].split('-'),
-			colors = ['WHITE', 'GREY', 'GREEN', 'RED'],
-			newColors = [];
+	},	
+	_setCellColor:function(td, commitment, expected, managerComment, usCount){
+		var classList = td.classList,
+			colorClassBase = 'intel-team-commits-',
+			expectedClass = 'manager-expected-cell-small',
+			commentClass = 'manager-comment-cell-small',
+			expectedCommentClass = 'manager-expected-comment-cell-small',
+			oldExpected = classList.contains(expectedClass),
+			oldComment = classList.contains(commentClass),
+			oldExpectedComment = classList.contains(expectedCommentClass),
+			oldColorClass = _.find(classList, function(c){ return c.indexOf(colorClassBase) > -1; }),
+			newColorClass;
+
 		switch(commitment){
-			case 'Undecided': newColors[0] = 'WHITE'; break;
-			case 'N/A': newColors[0] = 'GREY'; break;
-			case 'Committed': newColors[0] = 'GREEN'; break;
-			case 'Not Committed': newColors[0] = 'RED'; break;
-			default: newColors[0] = 'WHITE'; break;
+			case 'Undecided': newColorClass = colorClassBase + 'WHITE'; break;
+			case 'N/A': newColorClass = colorClassBase + 'GREY'; break;
+			case 'Committed': newColorClass = colorClassBase + 'GREEN'; break;
+			case 'Not Committed': newColorClass = colorClassBase + 'RED'; break;
+			default: newColorClass = colorClassBase + 'WHITE'; break;
 		}
-		if(expected) newColors[1] = 'YELLOW';
-		if(newColors[0] != currentColors[0] || newColors[1] != currentColors[1] || td.innerText*1 !== usCount*1){
-			td.classList.remove('intel-team-commits-' + currentColors.join('-'));
-			td.classList.add('intel-team-commits-' + newColors.join('-'));
-			td.childNodes[0].innerText = usCount;
-		}
-	},
 		
+		if(expected !== oldExpected || managerComment != oldComment || 
+				oldExpectedComment != expected || oldExpectedComment != managerComment ||
+				oldColorClass != newColorClass || td.innerText*1 !== usCount*1){
+			td.childNodes[0].innerText = usCount;
+			td.classList.remove(oldColorClass);
+			td.classList.add(newColorClass);
+			if(expected && managerComment) td.classList.add(expectedCommentClass);
+			else {
+				td.classList.remove(expectedCommentClass);
+				if(expected) td.classList.add(expectedClass);
+				else td.classList.remove(expectedClass);
+				if(managerComment) td.classList.add(commentClass);
+				else td.classList.remove(commentClass);
+			}
+		}
+	},		
 	_getDistanceFromBottomOfScreen: function(innerY){
 		var me = this, 
 			loc = window.location,
@@ -318,20 +322,17 @@ Ext.define('CommitMatrix', {
 		return ph - actualY;
 	},
 	
-	/************************************************************ UPDATE *************************************************************/
-	
+	/************************************************************ UPDATE *************************************************************/	
 	_showGrids: function(){
 		var me=this;
 		me._loadMatrixGrid();
-	},
-	
+	},	
 	_updateGrids: function(){
 		var me=this;
 		if(me.FeatureStore){
 			if(me.CustomMatrixStore) me.CustomMatrixStore.intelUpdate();
 		}
 	},
-
 	_reloadStores: function(){
 		var me = this, promises = [];
 		if(me.FeatureStore) promises.push(me._reloadStore(me.FeatureStore));
@@ -346,7 +347,6 @@ Ext.define('CommitMatrix', {
 		}
 		return Q.all(promises);
 	},
-
 	_reloadEverything: function(){
 		var me=this;
 
@@ -395,8 +395,7 @@ Ext.define('CommitMatrix', {
 		});
 	},
 	
-	/******************************************************* AUTOREFRESHING ********************************************************/
-	
+	/******************************************************* AUTOREFRESHING ********************************************************/	
 	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
 		var me=this;
 		me._enqueue(function(unlockFunc){
@@ -412,15 +411,13 @@ Ext.define('CommitMatrix', {
 				})
 				.done();
 		});
-	},
-	
+	},	
 	_setRefreshInterval: function(){
 		var me=this;
 		me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 10000);
 	},
 		
-	/******************************************************* LAUNCH ********************************************************/
-	
+	/******************************************************* LAUNCH ********************************************************/	
 	launch: function(){
 		var me = this;
 		me.Mode = 'Details';
@@ -458,7 +455,8 @@ Ext.define('CommitMatrix', {
 				.then(function(productStore){
 					me.ProductNames = _.map(productStore.data.items, function(product){ return {ProductName: product.data.Name}; });
 					me.ProductNames = [{ProductName: 'All Products'}].concat(me.ProductNames);
-					return me._loadReleasesInTheFuture(me.TrainRecord);
+					var threeWeeksAgo = new Date()*1 - 3*7*24*60*60*1000;
+					return me._loadReleasesAfterGivenDate(me.ProjectRecord, threeWeeksAgo);
 				})
 				.then(function(releaseStore){		
 					me.ReleaseStore = releaseStore;
@@ -480,8 +478,7 @@ Ext.define('CommitMatrix', {
 		}
 	},
 	
-	/******************************************************* RENDER NAVBAR ********************************************************/
-		
+	/******************************************************* RENDER NAVBAR ********************************************************/		
 	_releasePickerSelected: function(combo, records){
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -498,8 +495,7 @@ Ext.define('CommitMatrix', {
 				me.setLoading(false);
 			})
 			.done();
-	},
-	
+	},	
 	_loadReleasePicker: function(){
 		var me=this;
 		me.ReleasePicker = me.down('#navbox_left_vert').add({
@@ -514,14 +510,12 @@ Ext.define('CommitMatrix', {
 			}
 		});
 	},
-
 	_modePickerSelected: function(combo, records){
 		var me=this, value = records[0].data.Mode;
 		if(value === me.Mode) return;
 		else me.Mode = value;
 		me._clearToolTip();
-	},
-				
+	},				
 	_loadModePicker: function(){
 		var me=this;
 		me.ModePicker = me.down('#navbox_left_vert').add({
@@ -532,8 +526,9 @@ Ext.define('CommitMatrix', {
 			store: Ext.create('Ext.data.Store', {
 				fields:['Mode'],
 				data: [
-					{'Mode':'Flag'},
-					{'Mode':'Details'}
+					{Mode:'Flag'},
+					{Mode:'Comment'},
+					{Mode:'Details'}
 				]
 			}),
 			displayField: 'Mode',
@@ -542,8 +537,7 @@ Ext.define('CommitMatrix', {
 				select: me._modePickerSelected.bind(me)
 			}
 		});
-	},
-	
+	},	
 	_productPickerSelected: function(combo, records){
 		var me=this,
 			value = records[0].data.ProductName;
@@ -556,8 +550,7 @@ Ext.define('CommitMatrix', {
 			}));
 		}
 		me._clearToolTip();
-	},
-				
+	},				
 	_loadProductPicker: function(){
 		var me=this;
 		me.ProductPicker = me.down('#navbox_left_vert').add({
@@ -575,8 +568,7 @@ Ext.define('CommitMatrix', {
 				select: me._productPickerSelected.bind(me)
 			}
 		});
-	},
-		
+	},		
 	_loadMatrixLegend: function(){
 		var me=this;
 		me.MatrixLegend = me.down('#navbox_right').add({
@@ -589,13 +581,14 @@ Ext.define('CommitMatrix', {
 			},
 			border:true,
 			frame:false,
-			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected'], function(name){
+			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected', 'CE Comment'], function(name){
 				var color;
 				if(name === 'Undecided') color='white';
 				if(name === 'N/A') color='rgba(224, 224, 224, 0.50)'; //grey
 				if(name === 'Committed') color='rgba(0, 255, 0, 0.50)';//grenn
 				if(name === 'Not Committed') color='rgba(255, 0, 0, 0.50)';//red
 				if(name === 'Expected') color='rgba(251, 255, 0, 0.50)'; //yellow
+				if(name === 'CE Comment') color='rgba(76, 76, 255, 0.50)'; //blue
 				return {
 					xtype: 'container',
 					width:120,
@@ -609,7 +602,6 @@ Ext.define('CommitMatrix', {
 	},
 
 	/************************************************************* RENDER ********************************************************************/
-
 	_loadMatrixGrid: function(){
 		var me = this,
 			sortedFeatures = _.sortBy(me.FeatureStore.data.items, function(f){ return f.data.DragAndDropRank; }),
@@ -645,10 +637,11 @@ Ext.define('CommitMatrix', {
 						var projectName = projectNames[j],
 							usCount = (me.MatrixUserStoryBreakdown[projectName][featureRecord.data.Name] || []).length,
 							td = tr.childNodes[j], //ignore fixed columns on left
-							tcae = me._getTeamCommit(featureRecord, projectName),
-							expected = tcae.Expected || false,
-							commitment = tcae.Commitment || 'Undecided'; 
-						me._setCellColor(td, commitment, expected, usCount);
+							teamCommit = me._getTeamCommit(featureRecord, projectName),
+							expected = teamCommit.Expected || false,
+							managerComment = !!(teamCommit.ManagerComment || false),
+							commitment = teamCommit.Commitment || 'Undecided'; 
+						me._setCellColor(td, commitment, expected, managerComment, usCount);
 					}
 				}
 			}
@@ -748,14 +741,20 @@ Ext.define('CommitMatrix', {
 					if(!featureRecord) return;
 					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [],
 						count = array.length,
-						tcae = me._getTeamCommit(featureRecord, ProjectName),
-						expected = tcae.Expected || false,
-						commitment = tcae.Commitment || 'Undecided'; 
+						teamCommit = me._getTeamCommit(featureRecord, ProjectName),
+						expected = teamCommit.Expected || false,
+						managerComment = teamCommit.ManagerComment || false,
+						commitment = teamCommit.Commitment || 'Undecided'; 
 					if(commitment === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
 					else if(commitment === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
 					else if(commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
 					else if(commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
-					if(expected) metaData.tdCls += '-YELLOW';
+					
+					if(expected && managerComment) metaData.tdCls += ' manager-expected-comment-cell-small';
+					else {
+						if(expected) metaData.tdCls += ' manager-expected-cell-small';
+						if(managerComment) metaData.tdCls += ' manager-comment-cell-small';
+					}
 					return count;
 				}
 			});
@@ -775,9 +774,7 @@ Ext.define('CommitMatrix', {
 				preserveScrollOnRefresh:true
 			},
 			listeners: {
-				sortchange: function(){ 
-					me._clearToolTip(); 
-				},
+				sortchange: function(){ me._clearToolTip(); },
 				beforeedit: function(editor, e){
 					var projectName = e.column.text,
 						matrixRecord = e.record;
@@ -788,7 +785,7 @@ Ext.define('CommitMatrix', {
 							me._loadFeature(matrixRecord.data.ObjectID)
 								.then(function(featureRecord){
 									var tcae = me._getTeamCommit(featureRecord, projectName);
-									return me._setExpected(featureRecord, projectName, !tcae.Expected);
+									return me._setTeamCommitsField(featureRecord, projectName, 'Expected', !tcae.Expected);
 								})
 								.then(function(featureRecord){
 									me.MatrixGrid.setLoading(false);
@@ -814,79 +811,171 @@ Ext.define('CommitMatrix', {
 					
 					grid.mon(view, {
 						uievent: function (type, view, cell, row, col, e) {
-							if(me.Mode === 'Details' && type === 'mousedown') {
+							if((me.Mode === 'Details' || me.Mode === 'Comment') && type === 'mousedown') {
 								var matrixRecord = me.CustomMatrixStore.getAt(row),
 									ProjectName = view.getGridColumns()[col].text,
 									featureRecord = me.FeatureStore.findRecord('ObjectID', matrixRecord.data.ObjectID),
-									tcae = me._getTeamCommit(featureRecord, ProjectName),
+									teamCommit = me._getTeamCommit(featureRecord, ProjectName),
+									oldTooltip = me.tooltip,
 									pos = cell.getBoundingClientRect(),
-									t = me.tooltip;
-								if(t){
-									me._clearToolTip();
-									if(t.row == row && t.col == col) return;
+									dbs = me._getDistanceFromBottomOfScreen(pos.top),
+									panelWidth = 400;
+								if(oldTooltip) me._clearToolTip();
+								if(oldTooltip && (oldTooltip.row == row && oldTooltip.col == col)) return;
+								
+								if(me.Mode === 'Details'){
+									var panelHTML = [
+										'<p><b>CE Comment:</b> ' + (teamCommit.ManagerComment || '') + '</p>',
+										'<p><b>Objective:</b> ' + (teamCommit.Objective || '') + '</p>',
+										'<p><b>PlanEstimate: </b>',
+											_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
+												return sum + (sr.data.Children.Count === 0 ? (sr.data.PlanEstimate || 0) : 0); 
+											}, 0),
+										'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>'].join('');
+									(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
+										panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
+											'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
+											'<span title="' + sr.data.Name + '">' + 
+											sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
+									});
+									panelHTML += '</ol></div>';
+								
+									me.tooltip = {
+										row:row,
+										col:col,
+										panel: Ext.widget('container', {
+											floating:true,
+											width: panelWidth,
+											autoScroll:false,
+											id:'MatrixTooltipPanel',
+											cls: 'intel-tooltip',
+											focusOnToFront:false,
+											shadow:false,
+											renderTo:Ext.getBody(),
+											html:panelHTML,
+											listeners:{
+												afterrender: function(panel){
+													var upsideDown = (dbs < panel.getHeight() + 80);
+													panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
+												}
+											}
+										})	
+									};
 								}
-								
-								var panelWidth = 400;
-								var theHTML = 
-									'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
-									'<p><b>PlanEstimate: </b>' + 
-									_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
-										return sum + (sr.data.PlanEstimate || 0); }, 0) +
-									'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
-								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
-									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
-										'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
-										'<span title="' + sr.data.Name + '">' + 
-										sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
-								});
-								theHTML += '</ol></div>';
-								
-								var dbs = me._getDistanceFromBottomOfScreen(pos.top);
-								
-								me.tooltip = {
-									row:row,
-									col:col,
-									panel: Ext.widget('container', {
-										floating:true,
-										width: panelWidth,
-										autoScroll:false,
-										id:'MatrixTooltipPanel',
-										cls: 'intel-tooltip',
-										focusOnToFront:false,
-										shadow:false,
-										renderTo:Ext.getBody(),
-										html:theHTML,
-										listeners:{
-											afterrender: function(panel){
-												var upsideDown = (dbs < panel.getHeight() + 80);
-												panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
-											}
-										}
-									}),
-									triangle: Ext.widget('container', {
-										floating:true,
-										width:0, height:0,
-										focusOnToFront:false,
-										shadow:false,
-										renderTo:Ext.getBody(),
-										listeners:{
-											afterrender: function(panel){
-												setTimeout(function(){
-													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
-													if(upsideDown) {
-														panel.removeCls('intel-tooltip-triangle');
-														panel.addCls('intel-tooltip-triangle-up');
-														panel.setPosition(pos.left -10, pos.bottom -10);
-													} else {
-														panel.removeCls('intel-tooltip-triangle-up');
-														panel.addCls('intel-tooltip-triangle');
-														panel.setPosition(pos.left -10, pos.top);
+								else {
+									me.tooltip = {
+										row:row,
+										col:col,
+										panel: Ext.widget('container', {
+											floating:true,
+											width: panelWidth,
+											autoScroll:false,
+											id:'MatrixTooltipPanel',
+											cls: 'intel-tooltip',
+											focusOnToFront:false,
+											shadow:false,
+											renderTo:Ext.getBody(),
+											items: [{
+												xtype:'container',
+												layout:'hbox',
+												items:[{
+													xtype:'text',
+													flex:1,
+													text: 'Comment:',
+													style:'font-weight:bold;'
+												},{
+													xtype:'checkbox',
+													width:140,
+													boxLabel:'CE Expected',
+													checked:teamCommit.Expected,
+													handler:function(checkbox, checked){
+														me.tooltip.panel.setLoading(true);
+														me._enqueue(function(unlockFunc){
+															me._loadFeature(matrixRecord.data.ObjectID)
+																.then(function(featureRecord){
+																	var tcae = me._getTeamCommit(featureRecord, ProjectName);
+																	return me._setTeamCommitsField(featureRecord, ProjectName, 'Expected', !tcae.Expected);
+																})
+																.then(function(featureRecord){
+																	me.tooltip.panel.setLoading(false);
+																	var storeRecord = me.FeatureStore.findExactRecord('ObjectID', matrixRecord.data.ObjectID);
+																	storeRecord.data.c_TeamCommits = featureRecord.data.c_TeamCommits;
+																	me.MatrixGrid.view.refreshNode(me.CustomMatrixStore.indexOf(matrixRecord));
+																	unlockFunc();
+																})
+																.fail(function(reason){
+																	me.tooltip.panel.setLoading(false);
+																	me._alert('ERROR', reason || '');
+																	unlockFunc();
+																})
+																.done();
+														});
 													}
-												}, 10);
+												}]
+											},{
+												xtype:'textarea',
+												value: teamCommit.ManagerComment || '',
+												width:'95%',
+												id: 'MatrixTooltipPanelTextarea'
+											},{
+												xtype:'button',
+												margin:'0 10 0 0',
+												text:'Close',
+												listeners:{ click: function(){ me._clearToolTip(); } }
+											},{
+												xtype:'button',
+												text:'Save',
+												listeners:{
+													click: function(){
+														me.MatrixGrid.setLoading(true);
+														var val = Ext.getCmp('MatrixTooltipPanelTextarea').getValue();
+														me._loadFeature(featureRecord.data.ObjectID)
+															.then(function(featureRecord){ 
+																return me._setTeamCommitsField(featureRecord, ProjectName, 'ManagerComment', val);
+															})
+															.then(function(featureRecord){
+																var storeRecord = me.FeatureStore.findExactRecord('ObjectID', featureRecord.data.ObjectID);
+																storeRecord.data.c_TeamCommits = featureRecord.data.c_TeamCommits;
+																me.MatrixGrid.view.refreshNode(row);
+															})
+															.fail(function(reason){ me._alert('Error:', reason); })
+															.then(function(){	me.MatrixGrid.setLoading(false); })
+															.done();
+													}
+												}
+											}],
+											listeners:{
+												afterrender: function(panel){
+													var upsideDown = (dbs < panel.getHeight() + 80);
+													panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
+												}
 											}
+										})
+									};
+								}
+								me.tooltip.triangle = Ext.widget('container', {
+									floating:true,
+									width:0, height:0,
+									focusOnToFront:false,
+									shadow:false,
+									renderTo:Ext.getBody(),
+									listeners:{
+										afterrender: function(panel){
+											setTimeout(function(){
+												var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
+												if(upsideDown) {
+													panel.removeCls('intel-tooltip-triangle');
+													panel.addCls('intel-tooltip-triangle-up');
+													panel.setPosition(pos.left -10, pos.bottom -10);
+												} else {
+													panel.removeCls('intel-tooltip-triangle-up');
+													panel.addCls('intel-tooltip-triangle');
+													panel.setPosition(pos.left -10, pos.top);
+												}
+											}, 10);
 										}
-									})	
-								};
+									}
+								});	
 							}
 						}
 					});

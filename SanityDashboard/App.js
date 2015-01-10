@@ -141,13 +141,17 @@ Ext.define('SanityDashboard', {
 				return me._projectInWhichTrain(me.ProjectRecord);
 			})
 			.then(function(trainRecord){
-				if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) return Q.reject('Not Scoped To a Train!');
-				return me._loadAllLeafProjects(me.ProjectRecord);
+				if(!trainRecord) return Q.reject('Not Scoped in a train!');
+				if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
+				else me._isScopedToTrain = true;
+				me.TrainRecord = trainRecord;
+				return me._loadAllLeafProjects(me.TrainRecord);
 			})
 			.then(function(leafProjects){
 				me.LeafProjects = leafProjects;
-				me.CurrentTeam = null;
-				return me._loadProducts(me.ProjectRecord);
+				if(me._isScopedToTrain) me.CurrentTeam = null;
+				else me.CurrentTeam = me.ProjectRecord;
+				return me._loadProducts(me.TrainRecord);
 			})
 			.then(function(productStore){
 				me.Products = productStore.getRange();
@@ -490,7 +494,7 @@ Ext.define('SanityDashboard', {
 			releaseName = me.ReleaseRecord.data.Name,
 			releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 			releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
-			trainName = me.ProjectRecord.data.Name.split(' ART')[0],
+			trainName = me.TrainRecord.data.Name.split(' ART')[0],
 			defaultUserStoryColumns = [{
 					text:'FormattedID',
 					dataIndex:'FormattedID', 
@@ -517,9 +521,8 @@ Ext.define('SanityDashboard', {
 					dataIndex:'PlannedEndDate', 
 					editor:false
 				}],
-			releaseNameFilter = 
-				Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
-				Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })),
+			releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
+				//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //i guess we dont want this :(
 			userStoryProjectFilter = me.CurrentTeam ? 
 				Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: me.CurrentTeam.data._ref }) : 
 				Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName}),
@@ -572,7 +575,8 @@ Ext.define('SanityDashboard', {
 				}]),
 				side: 'Left',
 				filters: [
-					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: null }).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Children.ObjectID', value: null }).and( //parent stories roll up so ignore
+					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: null })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '1' })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '2' })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '4' })).and(
@@ -597,8 +601,8 @@ Ext.define('SanityDashboard', {
 				]
 			},{
 				showIfLeafProject:true,
-				title: 'Stories in Release not attached to Release',
-				id: 'grid-stories-in-release-not-attached-to-release',
+				title: 'Stories in Iteration not attached to Release',
+				id: 'grid-stories-in-iteration-not-attached-to-release',
 				model: 'UserStory',
 				columns: defaultUserStoryColumns.concat([{
 					text:'Iteration',

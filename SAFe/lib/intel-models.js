@@ -12,10 +12,12 @@ Ext.define('IntelVelocity', {
 Ext.define('IntelTeamCommits', {
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'Rank', type: 'number'},
 		{name: 'Name', type: 'string'},
 		{name: 'ObjectID', type: 'string'},
 		{name: 'FormattedID', type:'string'},
 		{name: 'Commitment', type: 'string'},
+		{name: 'Expected', type: 'boolean'},
 		{name: 'Objective', type:'string'},
 		{name: 'Product', type:'string'},
 		{name: 'PlannedEnd', type:'number'}
@@ -26,7 +28,7 @@ Ext.define('IntelRisk', {
 	extend: 'Ext.data.Model',
 	fields: [
 		{name: 'RiskID', type:'string'},
-		{name: 'ObjectID', type:'number'},
+		{name: 'ObjectID', type:'number'}, //what feature OID the risk is saved to in Rally (not necessarily the FormattedID/FeatureName)
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
 		{name: 'Description', type: 'string'},
@@ -45,7 +47,7 @@ Ext.define('IntelDepTeam', {
 	fields: [
 		{name: 'TID',  type: 'string'},  //teamDep ID
 		{name: 'PID',  type: 'string'},  //pred team id
-		{name: 'Sup', type: 'string'}, 
+		{name: 'Sup', type: 'string'},  //Yes, No, Undefined
 		{name: 'USID', type: 'string'}, //pred formatted id
 		{name: 'USName', type: 'string'},
 		{name: 'A', type: 'boolean'} //yes/no
@@ -55,7 +57,7 @@ Ext.define('IntelDepTeam', {
 Ext.define('IntelPredDep', { //predecessor dependencies
 	extend: 'Ext.data.Model',
 	fields: [
-		{name: 'ObjectID', type: 'number'},
+		{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
 		{name: 'DependencyID', type:'string'},
 		{name: 'FormattedID',  type: 'string'}, 
 		{name: 'UserStoryName',  type: 'string'},
@@ -70,7 +72,7 @@ Ext.define('IntelPredDep', { //predecessor dependencies
 Ext.define('IntelSuccDep', { //predecessor dependency
 	extend: 'Ext.data.Model',
 	fields: [
-		{name: 'ObjectID', type: 'number'},
+		{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
 		{name: 'DependencyID', type:'string'}, //same id as the pred id that references it
 		{name: 'SuccUserStoryName', type: 'string' },
 		{name: 'SuccFormattedID',  type: 'string'}, 
@@ -81,7 +83,7 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 		{name: 'ReleaseDate',  type: 'number'}, 
 		{name: 'Description', type: 'string'}, 
 		{name: 'Checkpoint', type: 'number'},
-		{name: 'Supported', type: 'string'}, //Yes, No
+		{name: 'Supported', type: 'string'}, //Yes, No, Undefined
 		{name: 'Assigned', type: 'boolean'}, //yes/no
 		{name: 'Edited', type: 'boolean'}
 	]
@@ -113,10 +115,10 @@ Ext.define('IntelRiskWithProject', {
 Ext.define('IntelPredDepWithProject', { //predecessor dependencies
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'DependencyID', type:'string'},
 		{name: 'ProjectName', type:'string'},
 		{name: 'ProjectID', type:'number'},
 		{name: 'Product', type:'string'},
-		{name: 'DependencyID', type:'string'},
 		{name: 'ObjectID', type: 'number'},
 		{name: 'FormattedID',  type: 'string'}, 
 		{name: 'UserStoryName',  type: 'string'},

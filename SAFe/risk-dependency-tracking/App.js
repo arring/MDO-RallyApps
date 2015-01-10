@@ -115,8 +115,7 @@ Ext.define('RisksDepsApp', {
 		
 	/****************************************************** DATA STORE METHODS ********************************************************/
 
-	/** __________________________________ LOADING STUFF___________________________________	 **/
-		
+	/** __________________________________ LOADING STUFF___________________________________	 **/		
 	_loadFeatures: function(){ 
 		var me=this, 
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
@@ -158,46 +157,87 @@ Ext.define('RisksDepsApp', {
 				});
 				return Q.all(promises);
 			});
-	},
-	
-	_loadUserStoryFilter: function(trainRecord, releaseRecord){
-		var trainName = trainRecord.data.Name.split(' ART')[0],
-			coreFilter = Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+	},	
+	_loadUserStoryFilterForUSWithFeature: function(trainRecord, releaseRecord){
+		var me=this,
+			trainName = trainRecord.data.Name.split(' ART')[0];
+		return Ext.create('Rally.data.wsapi.Filter', {
+			property:'c_Dependencies',
+			operator: '!=',
+			value: ''
+		}).and(
+			Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.Name',
+				value: me.ReleaseRecord.data.Name
+			}).or(Ext.create('Rally.data.wsapi.Filter', { 
 				property:'Feature.Release.Name',
-				value: releaseRecord.data.Name
-			}).and(Ext.create('Rally.data.wsapi.Filter', {
-				property:'c_Dependencies',
-				operator: '!=',
-				value: ''
-			})),
-			featureParentFilter = Ext.create('Rally.data.wsapi.Filter', {
+				value: me.ReleaseRecord.data.Name
+			}))
+		).and(
+			Ext.create('Rally.data.wsapi.Filter', {
 				property:'Feature.Project.Name',
 				value: trainName + ' POWG Portfolios'
 			}).or(Ext.create('Rally.data.wsapi.Filter', {
 				property:'Feature.Project.Parent.Name',
 				value: trainName + ' POWG Portfolios'
-			}));
-		return coreFilter.and(featureParentFilter);
+			}))
+		);
 	},
-	
+	_loadUserStoryFilterForUSWithoutFeature: function(releaseRecord){
+		var me=this;	
+		return Ext.create('Rally.data.wsapi.Filter', { 
+			property:'c_Dependencies',
+			operator: '!=',
+			value: ''
+		}).and(Ext.create('Rally.data.wsapi.Filter', {
+			property:'Release.Name',
+			value: me.ReleaseRecord.data.Name
+		})).and(Ext.create('Rally.data.wsapi.Filter', { 
+			property:'Feature.Name',
+			value:null
+		}));
+	},	
 	_loadUserStories: function(){	
+	/** need 2 stankin QUERIES to get all 3 classes of UserStories (Sierra and Q115 used for example): 
+			1) US in project outside Sierra Train in Q115 and attached to Feature in Sierra Portfolio
+			2) US in project in Sierra Train in Q115 and not attached to any Feature
+			3) US in project in Sierra Train in Q115 contributing to Feature in Sierra Portfolio  **/
 		var me=this, 
-			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
+			userStoryStoreForUSWithFeature = Ext.create('Rally.data.wsapi.Store',{
 				model: 'HierarchicalRequirement',
 				limit:Infinity,
 				remoteSort:false,
 				fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
 					'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
+				context:{ 
+					workspace: me.getContext().getWorkspace()._ref, 
+					project: null 
 				},
-				filters:[me._loadUserStoryFilter(me.TrainRecord, me.ReleaseRecord)]
+				filters:[me._loadUserStoryFilterForUSWithFeature(me.TrainRecord, me.ReleaseRecord)]
+			}),
+			userStoryStoreForUSWithoutFeature = Ext.create('Rally.data.wsapi.Store',{
+				model: 'HierarchicalRequirement',
+				limit:Infinity,
+				remoteSort:false,
+				fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
+					'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+				context:{ 
+					project: me.TrainRecord.data._ref,
+					projectScopeDown:true,
+					projectScopeUp:false
+				},
+				filters:[me._loadUserStoryFilterForUSWithoutFeature(me.ReleaseRecord)]
 			});
-		return me._reloadStore(userStoryStore)
-			.then(function(userStoryStore){ 
-				console.log('userStories loaded:', userStoryStore.data.items);
-				me.UserStoryStore = userStoryStore; 
+		return Q.all([
+				me._reloadStore(userStoryStoreForUSWithFeature),
+				me._reloadStore(userStoryStoreForUSWithoutFeature)
+			])
+			.then(function(userStoryStores){
+				me.UserStoryStore = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					data: userStoryStores[0].getRange().concat(userStoryStores[1].getRange())
+				});
+				console.log('userStories loaded:', me.UserStoryStore.data.items);
 			});
 	},
 	
@@ -233,7 +273,7 @@ Ext.define('RisksDepsApp', {
 						Description: risk.Desc,
 						Impact: risk.Imp,
 						MitigationPlan: risk.Mit,
-						Urgency: risk.Urg,
+						Urgency: risk.Urg || 'Undefined',
 						Status: risk.Sta,
 						Contact: risk.Cont,
 						Checkpoint: risk.CP,
@@ -310,7 +350,9 @@ Ext.define('RisksDepsApp', {
 		
 	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/
 	_isInRelease: function(usr){
-		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name;
+		var me=this;
+		return (usr.data.Release && usr.data.Release.Name === me.ReleaseRecord.data.Name) || 
+			(usr.data.Feature && usr.data.Feature.Release && usr.data.Feature.Release.Name === me.ReleaseRecord.data.Name);
 	},	
 	_getDependencies: function(userStoryRecord){
 		var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
@@ -322,20 +364,21 @@ Ext.define('RisksDepsApp', {
 		return dependencies;
 	},	
 	_parseDependenciesFromUserStory: function(userStoryRecord){
-		var deps = this._getDependencies(userStoryRecord),
-			project = this.ValidProjects[userStoryRecord.data.Project.ObjectID],
+		var me = this,
+			deps = me._getDependencies(userStoryRecord),
+			project = me.ValidProjects[userStoryRecord.data.Project.ObjectID],
 			predDepsList = [];
 		if(project){
 			var projectData = project.data,
 				preds = deps.Preds,
-				startDate =	new Date(this.ReleaseRecord.data.ReleaseStartDate),
-				endDate =	new Date(this.ReleaseRecord.data.ReleaseDate),
+				startDate =	new Date(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	new Date(me.ReleaseRecord.data.ReleaseDate),
 				ObjectID = userStoryRecord.data.ObjectID,
-				Product = (userStoryRecord.data.Feature ? this.FeatureProductHash[userStoryRecord.data.Feature.ObjectID] : null),
+				Product = (userStoryRecord.data.Feature ? me.FeatureProductHash[userStoryRecord.data.Feature.ObjectID] : null),
 				FormattedID = userStoryRecord.data.FormattedID,
 				UserStoryName = userStoryRecord.data.Name;
 				
-			if(this._isInRelease(userStoryRecord)){
+			if(me._isInRelease(userStoryRecord)){
 				for(var predDepID in preds){
 					var predDep = preds[predDepID];
 					predDepsList.push({
@@ -348,7 +391,7 @@ Ext.define('RisksDepsApp', {
 						UserStoryName: UserStoryName,
 						Description: predDep.Desc,
 						Checkpoint: predDep.CP,
-						Status: predDep.Sta,
+						Status: predDep.Sta || 'Not Done',
 						Predecessors: predDep.Preds || [], //TID: ProjectID, ProjectName, Supported, Assigned, UserStoryName, US-FormattedID
 						Edited: false //not in pending edit mode
 					});
@@ -373,7 +416,7 @@ Ext.define('RisksDepsApp', {
 		}
 		me.DependenciesParsedData = {Predecessors:predDepsList };
 	},
-	_removeDepFromList: function(dependencyID, dependencyList){ 
+	_spliceDepFromList: function(dependencyID, dependencyList){ 
 		for(var i = 0; i<dependencyList.length; ++i){
 			if(dependencyList[i].DependencyID == dependencyID) {
 				return dependencyList.splice(i, 1)[0];
@@ -401,8 +444,7 @@ Ext.define('RisksDepsApp', {
 			});
 		}
 		return deferred.promise;
-	},
-	
+	},	
 	_addPredDep: function(userStoryRecord, predDepData){ 
 		var me=this, dependencies = me._getDependencies(userStoryRecord),
 			cachePreds = me.DependenciesParsedData.Predecessors, dpdp,
@@ -430,7 +472,6 @@ Ext.define('RisksDepsApp', {
 
 		return me._collectionSynced(userStoryRecord, 'added predDep', predDepData, dependencies);
 	},
-	
 	_getOldAndNewUSRecords: function(depData){
 		var me = this,
 			tmpNewUSRecord = me.UserStoryStore.findExactRecord('FormattedID', depData.FormattedID),
@@ -454,8 +495,7 @@ Ext.define('RisksDepsApp', {
 		return deferred.promise;
 	},
 	
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
 			uid = me.getContext().getUser().ObjectID,
@@ -473,7 +513,6 @@ Ext.define('RisksDepsApp', {
 		});
 		return deferred.promise;
 	},
-
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
 			uid = me.getContext().getUser().ObjectID,
@@ -482,7 +521,7 @@ Ext.define('RisksDepsApp', {
     s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
-			appID: this.getAppId(),
+			appID: me.getAppId(),
 			settings: s,
 			success: deferred.resolve,
 			failure: deferred.reject
@@ -490,8 +529,7 @@ Ext.define('RisksDepsApp', {
 		return deferred.promise;
 	},
 	
-	/************************************************** MISC HELPERS ***************************************************/
-			
+	/************************************************** MISC HELPERS ***************************************************/			
 	_htmlEscape: function(str) {
     return String(str)
 			//.replace(/&/g, '&amp;')
@@ -500,27 +538,23 @@ Ext.define('RisksDepsApp', {
 			.replace(/</g, '&lt;')
 			.replace(/>/g, '&gt;');
 	},
-	
 	_getDirtyType: function(localRecord, realData){ //if risk or dep record is new/edited/deleted/unchanged
 		var localData = localRecord.data;
 		if(!realData)	return localData.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
 		else return localData.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
 	},
 
-  /************************************************ LOADING AND RELOADING ***********************************/
-	
+  /************************************************ LOADING AND RELOADING ***********************************/	
 	_showGrids: function(){
 		var me=this;
 		me._loadRisksGrid();
 		me._loadDependenciesGrids();
-	},
-	
+	},	
 	_updateGrids: function(){
 		var me=this;
 		me._parseRisksData();
 		me._parseDependenciesData();
 	},
-
 	_reloadStores: function(){
 		var me = this, promises = [];
 		if(me.FeatureStore) promises.push(me._reloadStore(me.FeatureStore));
@@ -529,7 +563,6 @@ Ext.define('RisksDepsApp', {
 		else promises.push(me._loadUserStories());
 		return Q.all(promises);
 	},
-
 	_reloadEverything:function(){
 		var me = this;
 		
@@ -575,7 +608,6 @@ Ext.define('RisksDepsApp', {
 	},
 
 	/******************************************************* LAUNCH ********************************************************/
-
 	launch: function(){
 		var me=this;
 		me.setLoading(true);
@@ -612,7 +644,8 @@ Ext.define('RisksDepsApp', {
 						me.TrainRecord = trainRecord;
 						me.ProjectRecord = trainRecord;
 						console.log('train loaded:', trainRecord);
-						return me._loadReleasesInTheFuture(me.TrainRecord);
+					var threeWeeksAgo = new Date()*1 - 3*7*24*60*60*1000;
+					return me._loadReleasesAfterGivenDate(me.ProjectRecord, threeWeeksAgo);
 					} 
 					else return Q.reject('You are not scoped to a train.');
 				})
@@ -635,8 +668,7 @@ Ext.define('RisksDepsApp', {
 		}
 	},
 
-	/******************************************************* RENDER TOP BAR ITEMS********************************************************/	
-	
+	/******************************************************* RENDER TOP BAR ITEMS********************************************************/		
 	_releasePickerSelected: function(combo, records){
 		var me=this, pid = me.ProjectRecord.data.ObjectID;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -652,8 +684,7 @@ Ext.define('RisksDepsApp', {
 				me.setLoading(false);
 			})
 			.done();
-	},
-				
+	},				
 	_loadReleasePicker: function(){
 		var me=this;
 		me.ReleasePicker = me.down('#navbox_left').add({
@@ -666,8 +697,7 @@ Ext.define('RisksDepsApp', {
 				select: me._releasePickerSelected.bind(me)
 			}
 		});
-	},
-		
+	},		
 	_loadManualRefreshButton: function(){
 		var me=this;
 		me.down('#navbox_right').add({
@@ -681,7 +711,6 @@ Ext.define('RisksDepsApp', {
 	},
 	
 	/******************************************************* RENDER GRIDS ********************************************************/	
-
 	_loadRisksGrid: function(){
 		var me = this;
 
@@ -701,9 +730,14 @@ Ext.define('RisksDepsApp', {
 		});
 		
 		var defaultRenderer = function(val){ return val || '-'; };	
-		
-		var filterFID = null, filterName = null, filterProduct = null, filterTeam = null,
-				filterStatus = null, filterUrgency = null, filterCP = null;
+
+		var filterFID = null, 
+			filterName = null,
+			filterProduct = null, 
+			filterTeam = null,
+			filterStatus = null,
+			filterUrgency = null,
+			filterCP = null;
 		function riskGridFilter(r){
 			if(filterFID && r.data.FormattedID != filterFID) return false;
 			if(filterName && r.data.FeatureName != filterName) return false;
@@ -724,6 +758,58 @@ Ext.define('RisksDepsApp', {
 				else me.RisksGrid.view.addRowCls(index, 'hidden');
 			});
 		}
+		function removeFilters(){
+			filterFID = null;
+			filterName = null;
+			filterProduct = null;
+			filterTeam = null;
+			filterStatus = null;
+			filterUrgency = null;
+			filterCP = null; 
+			filterRisksRowsByFn(function(){ return true; });
+			Ext.getCmp('risk-f-fid').setValue('All');
+			Ext.getCmp('risk-f-name').setValue('All');
+			Ext.getCmp('risk-f-product').setValue('All');
+			Ext.getCmp('risk-f-team').setValue('All');
+			Ext.getCmp('risk-f-status').setValue('All');
+			Ext.getCmp('risk-f-urgency').setValue('All');
+			Ext.getCmp('risk-f-cp').setValue('All');
+		}
+		
+		function getFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
+				function(r){ return r.data.FormattedID; })), 
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
+				function(r){ return r.data.FeatureName; })), 
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function getProductFilterOptions(){
+			return [{Product:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.FeatureProductHash)), 
+				function(p){ return p; }), 
+				function(p){ return {Product:p}; }));
+		}
+		function getTeamFilterOptions(){
+			return [{Team: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
+				function(r){ return r.data.ProjectName; })), 
+				function(t){ return t; }), 
+				function(t){ return {Team: t}; }));
+		}
+		function getCPFilterOptions(){
+			return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(),
+				function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
+				function(date){ return date; }),
+				function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
+		}
+		function updateFilterOptions(){
+			var cpStore = Ext.getCmp('risk-f-cp').getStore();
+			cpStore.removeAll();
+			cpStore.add(getCPFilterOptions());
+		}
 		
 		var columnCfgs = [
 			{
@@ -732,6 +818,7 @@ Ext.define('RisksDepsApp', {
 				width:80,
 				editor:false,	
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:function(FID){ 
 					var feature = me.FeatureStore.findExactRecord('FormattedID', FID);
@@ -749,10 +836,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['FormattedID'],
-						data: [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
-							function(r){ return r.data.FormattedID; })), 
-							function(f){ return f; }), 
-							function(f){ return {FormattedID:f}; }))
+						data: getFIDfilterOptions()
 					}),
 					displayField: 'FormattedID',
 					value:'All',
@@ -771,6 +855,7 @@ Ext.define('RisksDepsApp', {
 				minWidth:100,
 				editor:false,	
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:defaultRenderer,
 				layout:'hbox',
@@ -780,10 +865,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Name'],
-						data: [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
-							function(r){ return r.data.FeatureName; })), 
-							function(f){ return f; }), 
-							function(n){ return {Name:n}; }))
+						data: getNameFilterOptions()
 					}),
 					displayField: 'Name',
 					value:'All',
@@ -800,6 +882,7 @@ Ext.define('RisksDepsApp', {
 				dataIndex:'Product',
 				width:90,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:true,
 				renderer: defaultRenderer,
@@ -810,9 +893,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Product'],
-						data: [{Product:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.FeatureProductHash)), 
-							function(p){ return p; }), 
-							function(p){ return {Product:p}; }))
+						data: getProductFilterOptions()
 					}),
 					displayField: 'Product',
 					value:'All',
@@ -832,6 +913,7 @@ Ext.define('RisksDepsApp', {
 				minWidth:100,
 				editor:false,	
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:defaultRenderer,
 				layout:'hbox',
@@ -841,10 +923,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Team'],
-						data: [{Team: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
-							function(r){ return r.data.ProjectName; })), 
-							function(t){ return t; }), 
-							function(t){ return {Team: t}; }))
+						data: getTeamFilterOptions()
 					}),
 					displayField: 'Team',
 					value:'All',
@@ -864,6 +943,7 @@ Ext.define('RisksDepsApp', {
 				minWidth:80,
 				editor: 'inteltextarea',
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				renderer:defaultRenderer
 			},{
@@ -873,6 +953,7 @@ Ext.define('RisksDepsApp', {
 				flex:1,
 				minWidth:80,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				editor: 'inteltextarea',
 				renderer:defaultRenderer
@@ -883,6 +964,7 @@ Ext.define('RisksDepsApp', {
 				flex:1,
 				minWidth:80,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				editor: 'inteltextarea',
 				renderer:defaultRenderer
@@ -905,6 +987,7 @@ Ext.define('RisksDepsApp', {
 					displayField:'Urgency'
 				},
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:function(val, meta){
 					meta.tdCls += (val==='Hot' ? ' red-cell' : '');
@@ -958,6 +1041,7 @@ Ext.define('RisksDepsApp', {
 					displayField:'Status'
 				},
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:function(val, meta){
 					meta.tdCls += (val==='Undefined' ? ' red-cell' : '');
@@ -999,13 +1083,15 @@ Ext.define('RisksDepsApp', {
 				editor: 'inteltextarea',
 				sortable:false,
 				resizable:false,
+				draggable:false,
 				renderer:defaultRenderer	
 			},{
 				text:'Checkpoint',	
 				dataIndex:'Checkpoint',
 				tdCls: 'intel-editor-cell',	
 				width:80,
-				resizable:false,				
+				resizable:false,
+				draggable:false,				
 				editor:{
 					xtype:'intelfixedcombo',
 					width:80,
@@ -1025,7 +1111,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						model:'WorkweekDropdown',
-						data: [{DateVal:0, Workweek:'All'}].concat(me._workweekData)
+						data: getCPFilterOptions()
 					}),
 					displayField: 'Workweek',
 					valueField: 'DateVal',
@@ -1045,9 +1131,10 @@ Ext.define('RisksDepsApp', {
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
-					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType !== 'Edited') return;
 					meta.tdAttr = 'title="Undo"';
 					return {
@@ -1060,9 +1147,9 @@ Ext.define('RisksDepsApp', {
 								fn: function(){
 									var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
 									riskRecord.beginEdit();
-									for(var key in realRiskData)
-										riskRecord.set(key, realRiskData[key]);	
+									for(var key in realRiskData) riskRecord.set(key, realRiskData[key]);	
 									riskRecord.endEdit();
+									updateFilterOptions();
 								}
 							}
 						}
@@ -1074,9 +1161,10 @@ Ext.define('RisksDepsApp', {
 				tdCls: 'iconCell',
 				width:30,
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, riskRecord){
-					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0));
-					var dirtyType = me._getDirtyType(riskRecord, realRiskData);
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData);
 					if(dirtyType === 'New') dirtyType = 'Save'; //setEditing only if save or resave is true
 					else if(dirtyType === 'Edited') dirtyType = 'Save';
 					else return;
@@ -1090,17 +1178,17 @@ Ext.define('RisksDepsApp', {
 								element: 'el',
 								fn: function(){//DONT NEED ObjectID. that only is to reference previous parent!
 									if(!riskRecord.data.Checkpoint){
-										me._alert('Error', 'You must set the Checkpoint date for this risk'); return; }
+										me._alert('Error', 'You must set the Checkpoint for this risk'); return; }
 									else if(!riskRecord.data.Description){
-										me._alert('Error', 'You must set the Description date for this risk'); return; }
+										me._alert('Error', 'You must set the Description for this risk'); return; }
 									else if(!riskRecord.data.Impact){
-										me._alert('Error', 'You must set the Impact date for this risk'); return; }
+										me._alert('Error', 'You must set the Impact for this risk'); return; }
 									if(!riskRecord.data.Urgency){
-										me._alert('Error', 'You must set the Urgency date for this risk'); return; }
+										me._alert('Error', 'You must set the Urgency for this risk'); return; }
 									else if(!riskRecord.data.Status){
-										me._alert('Error', 'You must set the Status date for this risk'); return; }
+										me._alert('Error', 'You must set the Status for this risk'); return; }
 									else if(!riskRecord.data.Contact){
-										me._alert('Error', 'You must set the Contact date for this risk'); return; }
+										me._alert('Error', 'You must set the Contact for this risk'); return; }
 									me.RisksGrid.setLoading(true);
 									me._enqueue(function(unlockFunc){
 										var riskRecordData = riskRecord.data,
@@ -1134,13 +1222,10 @@ Ext.define('RisksDepsApp', {
 												});
 											});
 										})
+										.fail(function(reason){ me._alert('ERROR:', reason); })
 										.then(function(){
 											me.RisksGrid.setLoading(false);
-											unlockFunc();
-										})
-										.fail(function(reason){
-											me._alert('ERROR:', reason);
-											me.RisksGrid.setLoading(false);
+											updateFilterOptions();
 											unlockFunc();
 										})
 										.done();
@@ -1153,44 +1238,32 @@ Ext.define('RisksDepsApp', {
 			}
 		];
 
-		me.add({
-			xtype:'container',
-			layout:{
-				type:'hbox',
-				align:'center',
-				pack:'start'
-			},
-			items:[{
-				xtype:'button',
-				text:'Clear Risk Filters',
-				width:115,
-				listeners:{
-					click: function(){
-						filterFID = null;
-						filterName = null;
-						filterTeam = null;
-						filterStatus = null;
-						filterUrgency = null;
-						filterCP = null; 
-						filterRisksRowsByFn(function(){ return true; });
-						Ext.getCmp('risk-f-fid').setValue('All');
-						Ext.getCmp('risk-f-name').setValue('All');
-						Ext.getCmp('risk-f-product').setValue('All');
-						Ext.getCmp('risk-f-team').setValue('All');
-						Ext.getCmp('risk-f-status').setValue('All');
-						Ext.getCmp('risk-f-urgency').setValue('All');
-						Ext.getCmp('risk-f-cp').setValue('All');
-					}
-				}
-			}]
-		});	
-
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
-      title: 'Risks',
-			minHeight:150,
-			maxHeight:400,
-			style:'margin:10px 10px 0 10px',
+			header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:200,
+					text:"RISKS"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{ click: removeFilters }
+					}]
+				}]
+			},
+			height:400,
+			margin:'0 10 0 10',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			disableSelection: true,
@@ -1199,9 +1272,10 @@ Ext.define('RisksDepsApp', {
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-35px';}
+				getRowClass: function(item){ return 'intel-row-35px' + (riskGridFilter(item) ? '' : ' hidden'); }
 			},
 			listeners: {
+				sortchange: function(){ filterRisksRowsByFn(riskGridFilter); },
 				edit: function(editor, e){			
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/
@@ -1220,7 +1294,7 @@ Ext.define('RisksDepsApp', {
 					var previousEdit = risksRecord.data.Edited;
 					risksRecord.set('Edited', true);
 					
-					filterRisksRowsByFn(riskGridFilter);
+					updateFilterOptions();
 				}
 			},
 			showRowActionsColumn:false,
@@ -1228,8 +1302,7 @@ Ext.define('RisksDepsApp', {
 			enableEditing:false,
 			store: me.CustomRisksStore
 		});	
-	},
-	
+	},	
 	_loadDependenciesGrids: function(){
 		var me = this;
 
@@ -1253,19 +1326,20 @@ Ext.define('RisksDepsApp', {
 		});
 		
 		var defaultRenderer = function(val){ return val || '-'; };	
-				
-		var filterFID = null, filterName = null, filterProduct = null, filterOwningTeam = null,
-				filterNeededBy = null, filterDependedTeam = null, filterSupported = null, filterDisposition=null;
+
+		var filterFID = null, 
+			filterName = null, 
+			filterProduct = null, 
+			filterOwningTeam = null,
+			filterNeededBy = null, 
+			filterDisposition=null;
 		function dependencyGridFilter(r){
 			if(filterFID && r.data.FormattedID != filterFID) return false;
 			if(filterName && r.data.UserStoryName != filterName) return false;
 			if(filterOwningTeam && r.data.ProjectName != filterOwningTeam) return false;
 			if(filterProduct &&  r.data.Product != filterProduct) return false;
 			if(filterNeededBy && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterNeededBy) return false;
-			if(filterDisposition){
-				if(filterDisposition == 'Done' && r.data.Status != filterDisposition) return false;
-				else if(r.data.Status && r.data.Status != filterDisposition) return false; //could be undefined or 'Not Done'
-			}
+			if(filterDisposition && r.data.Status != filterDisposition) return false;
 			return true;
 		}
 		function filterPredecessorRowsByFn(fn){
@@ -1274,6 +1348,54 @@ Ext.define('RisksDepsApp', {
 				else me.PredDepGrid.view.addRowCls(index, 'hidden');
 			});
 		}
+		function removeFilters(){
+			filterFID = null; 
+			filterName = null; 
+			filterOwningTeam = null; 
+			filterProduct = null; 
+			filterNeededBy = null; 
+			filterDisposition = null;
+			filterPredecessorRowsByFn(function(){ return true; });
+			Ext.getCmp('dep-f-fid').setValue('All');
+			Ext.getCmp('dep-f-name').setValue('All');
+			Ext.getCmp('dep-f-own-team').setValue('All');
+			Ext.getCmp('dep-f-product').setValue('All');
+			Ext.getCmp('dep-f-needed-by').setValue('All');
+			Ext.getCmp('dep-f-status').setValue('All'); //disposition
+		}
+		
+		function getFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
+				function(r){ return r.data.FormattedID; })), 
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
+				function(r){ return r.data.UserStoryName; })), 
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function getProductFilterOptions(){
+			return [{Product:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.FeatureProductHash)), 
+				function(f){ return f; }), 
+				function(productName){ return {Product:productName}; }));
+		}
+		function getTeamFilterOptions(){
+			return [{Team: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
+				function(p){ return p.data.ProjectName; })), 
+				function(f){ return f; }), 
+				function(t){ return {Team:t}; }));
+		}
+		function getNeededByFilterOptions(){
+			return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(),
+				function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
+				function(date){ return date; }),
+				function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
+		}
+		function updateFilterOptions(){
+			//nothing is editable that has variable options in the header combobox (e.g. neededBy or US#)
+		}
 		
 		var predDepColumnCfgs = [ //1030 min pixels wide
 			{
@@ -1281,6 +1403,7 @@ Ext.define('RisksDepsApp', {
 				dataIndex:'FormattedID',
 				width:90,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:true,
 				renderer:function(USID){ 
@@ -1299,10 +1422,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['FormattedID'],
-						data: [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
-							function(p){ return p.data.FormattedID; })), 
-							function(f){ return f; }), 
-							function(f){ return {FormattedID:f}; }))
+						data: getFIDfilterOptions()
 					}),
 					displayField: 'FormattedID',
 					value:'All',
@@ -1320,6 +1440,7 @@ Ext.define('RisksDepsApp', {
 				flex:3,
 				minWidth:100,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:true,
 				renderer: defaultRenderer,
@@ -1330,10 +1451,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Name'],
-						data: [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
-							function(p){ return p.data.UserStoryName; })), 
-							function(f){ return f; }), 
-							function(n){ return {Name: n}; }))
+						data: getNameFilterOptions()
 					}),
 					displayField: 'Name',
 					value:'All',
@@ -1350,6 +1468,7 @@ Ext.define('RisksDepsApp', {
 				dataIndex:'Product',
 				width:90,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:true,
 				renderer: defaultRenderer,
@@ -1360,9 +1479,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Product'],
-						data: [{Product:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.FeatureProductHash)), 
-							function(f){ return f; }), 
-							function(productName){ return {Product:productName}; }))
+						data: getProductFilterOptions()
 					}),
 					displayField: 'Product',
 					value:'All',
@@ -1381,6 +1498,7 @@ Ext.define('RisksDepsApp', {
 				flex:2,
 				minWidth:100,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:true,
 				renderer: defaultRenderer,
@@ -1391,10 +1509,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						fields:['Team'],
-						data: [{Team: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
-							function(p){ return p.data.ProjectName; })), 
-							function(f){ return f; }), 
-							function(t){ return {Team:t}; }))
+						data: getTeamFilterOptions()
 					}),
 					displayField: 'Team',
 					value:'All',
@@ -1412,13 +1527,15 @@ Ext.define('RisksDepsApp', {
 				flex:3,
 				minWidth:100,
 				resizable:false,
+				draggable:false,
 				editor:false,
 				sortable:false,
 				renderer: defaultRenderer			
 			},{
 				dataIndex:'Checkpoint',
-				width:70,
+				width:80,
 				resizable:false,
+				draggable:false,
 				text:'Needed By',
 				editor:false,
 				sortable:true,
@@ -1430,7 +1547,7 @@ Ext.define('RisksDepsApp', {
 					flex:1,
 					store: Ext.create('Ext.data.Store', {
 						model:'WorkweekDropdown',
-						data: [{DateVal:0, Workweek:'All'}].concat(me._workweekData)
+						data: getNeededByFilterOptions()
 					}),
 					displayField: 'Workweek',
 					valueField: 'DateVal',
@@ -1446,13 +1563,14 @@ Ext.define('RisksDepsApp', {
 				}, {xtype:'container', width:5}]
 			},{
 				text:'Teams Depended On',
-				html:'<div class="pred-dep-header" style="width:140px !important;">Team Name</div>' +
-						'<div class="pred-dep-header" style="width:65px  !important;">Supported</div>' +
+				html:'<div class="pred-dep-header" style="width:110px !important;">Team Name</div>' +
+						'<div class="pred-dep-header" style="width:95px  !important;">Supported</div>' +
 						'<div class="pred-dep-header" style="width:70px  !important;">US#</div>' +
 						'<div class="pred-dep-header" style="width:130px !important;">User Story</div>',
 				dataIndex:'DependencyID',
 				width:420,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				editor:false,
 				xtype:'fastgridcolumn',
@@ -1485,7 +1603,7 @@ Ext.define('RisksDepsApp', {
 					var teamColumnCfgs = [
 						{
 							dataIndex:'PID',
-							width:145,
+							width:115,
 							resizable:false,
 							renderer: function(val, meta, depTeamRecord){
 								var projectRecord = me.ValidProjects[val];
@@ -1494,12 +1612,12 @@ Ext.define('RisksDepsApp', {
 							}
 						},{
 							dataIndex:'Sup',
-							width:50,
+							width:80,
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta, depTeamRecord){
 								if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
-								else meta.tdCls = 'intel-supported-cell';
+								if(val == 'Yes') meta.tdCls = 'intel-supported-cell';
 								return val;
 							}
 						},{
@@ -1570,6 +1688,7 @@ Ext.define('RisksDepsApp', {
 				dataIndex:'Status',
 				width:90,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				tdCls: 'intel-editor-cell',
 				text:'Disposition',					
@@ -1615,41 +1734,33 @@ Ext.define('RisksDepsApp', {
 				}, {xtype:'container', width:5}]
 			}
 		];
-		
-		me.add({
-			xtype:'container',
-			layout:{
-				type:'hbox',
-				align:'center',
-				pack:'start'
-			},
-			margin:'40px 0 0 0',
-			items:[{
-				xtype:'button',
-				text:'Clear Dependency Filters',
-				width:155,
-				listeners:{
-					click: function(){
-						filterFID = null; filterName = null; filterOwningTeam = null; filterDependedTeam = null; 
-						filterProduct = null; filterNeededBy = null; filterSupported = null; filterDisposition = null;
-						filterPredecessorRowsByFn(function(){ return true; });
-						Ext.getCmp('dep-f-fid').setValue('All');
-						Ext.getCmp('dep-f-name').setValue('All');
-						Ext.getCmp('dep-f-own-team').setValue('All');
-						Ext.getCmp('dep-f-product').setValue('All');
-						Ext.getCmp('dep-f-needed-by').setValue('All');
-						Ext.getCmp('dep-f-status').setValue('All');
-					}
-				}
-			}]
-		});	
 
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
-      title: "Dependencies",
-			minHeight:150,
-			maxHeight:450,
-			style:'margin:10px 10px 0 10px',
+      header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:200,
+					text:"DEPENDENCIES"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{ click: removeFilters }
+					}]
+				}]
+			},
+			height:450,
+			margin:'10 10 0 10',
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
 			disableSelection: true,
@@ -1658,12 +1769,10 @@ Ext.define('RisksDepsApp', {
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(predDepRecord){ 
-					//var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
-					//return cls;
-				}
+				getRowClass: function(depRecord){ if(!dependencyGridFilter(depRecord)) return 'hidden'; }
 			},
 			listeners: {
+				sortchange: function(){ filterPredecessorRowsByFn(predDepGridFilter); },
 				edit: function(editor, e){		
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/			
@@ -1685,8 +1794,8 @@ Ext.define('RisksDepsApp', {
 							me._alert('ERROR:', reason);
 						})
 						.then(function(){
-							filterPredecessorRowsByFn(dependencyGridFilter);
 							me.PredDepGrid.setLoading(false);
+							updateFilterOptions();
 							unlockFunc();
 						})
 						.done();

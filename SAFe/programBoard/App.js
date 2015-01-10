@@ -120,8 +120,16 @@ Ext.define('ProgramBoard', {
 			align:'stretch',
 			pack:'start'
 		},
-		height:350,
-		itemId:'tc_vel_box'
+		itemId:'tc_vel_box',
+		items: [{
+			xtype:'container',
+			flex:2,
+			itemId: 'tc_vel_box_left'
+		},{
+			xtype:'container',
+			flex:1,
+			itemId: 'tc_vel_box_right'
+		}]
 	}],
 	minWidth:910, //thats when rally adds a horizontal scrollbar for a pagewide app
 	
@@ -132,7 +140,7 @@ Ext.define('ProgramBoard', {
 				model: 'PortfolioItem/Feature',
 				limit:Infinity,
 				remoteSort:false,
-				fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
+				fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'DragAndDropRank'],
 				context:{
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
@@ -158,19 +166,19 @@ Ext.define('ProgramBoard', {
 				});
 				return Q.all(promises);
 			});
-	},
-	
+	},	
 	_loadIterations: function(){
 		var me=this,
-			startDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.data.ReleaseStartDate),
-			endDate =	Rally.util.DateTime.toIsoString(this.ReleaseRecord.data.ReleaseDate);
+			startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+			endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
 			iterationStore = Ext.create("Rally.data.WsapiDataStore", {
 				model: "Iteration",
 				remoteSort: false,
 				limit:Infinity,
 				fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project"],
 				context:{
-					project: this.getContext().getProject()._ref
+					project: me.getContext().getProject()._ref,
+					projectScopeUp:false
 				},
 				filters: [
 					{
@@ -190,31 +198,24 @@ Ext.define('ProgramBoard', {
 				me.IterationStore = iterationStore; 
 			});
 	},
-	
 	_loadUserStoryFilter: function(){
-		var me=this,
-			coreFilter = Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project',
-				value: me.ProjectRecord.data._ref
-			}).and(
-				Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-					property:'Release.Name',
-					value: me.ReleaseRecord.data.Name
-				}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-					property:'Feature.Release.Name',
-					value: me.ReleaseRecord.data.Name
-				}))),
-			depFilter = Ext.create('Rally.data.wsapi.Filter', { //to get successors (could be any random user story)
-				property:'Project',
-				value: me.ProjectRecord.data._ref
-			}).and(Ext.create('Rally.data.wsapi.Filter', {
-				property:'c_Dependencies',
-				operator:'!=',
-				value:''
-			}));
-		return coreFilter.or(depFilter);
-	},
-	
+		/** NOTE WE ARE ONLY PULLING USER STORIES FROM THIS RELEASE!
+			the implications are this: if on team has no user stories for a release yet. than no other team can depend on them 
+			for that release! So each predecessor and successor team must have at least one user story in the release before a dependency
+			can be established. Before, the predecessor team just needed to have 1 user story total from all time */
+		var me=this;
+		return Ext.create('Rally.data.wsapi.Filter', {
+			property:'Project',
+			value: me.ProjectRecord.data._ref
+		}).and(
+			Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+				property:'Release.Name',
+				value: me.ReleaseRecord.data.Name
+			}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
+				property:'Feature.Release.Name',
+				value: me.ReleaseRecord.data.Name
+			})));
+	},	
 	_loadUserStories: function(){	
 		var me=this, 
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
@@ -236,16 +237,14 @@ Ext.define('ProgramBoard', {
 			});
 	},
 	
-	/**___________________________________TEAM COMMITS STUFF___________________________________**/
-			
+	/**___________________________________TEAM COMMITS STUFF___________________________________**/		
 	_getTeamCommit: function(featureRecord){	
 		var tcs = featureRecord.data.c_TeamCommits,
 			projectID = this.ProjectRecord.data.ObjectID;
 		try{ tcs = JSON.parse(atob(tcs))[projectID] || {}; } 
 		catch(e){ tcs = {}; }
 		return tcs;
-	},
-		
+	},		
 	_setTeamCommit: function(featureRecord, tc){
 		var tcs = featureRecord.data.c_TeamCommits,
 			projectID = this.ProjectRecord.data.ObjectID,
@@ -296,6 +295,82 @@ Ext.define('ProgramBoard', {
 		}
 		this._TeamCommitsEstimateHash[FID] = estimate;
 		return estimate;
+	},
+
+	/** ________________________________________ SANITY STUFF __________________________________**/
+	_getSanityStoreConfigs: function() { 
+		var me = this,
+			releaseName = me.ReleaseRecord.data.Name,
+			releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+			releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+			trainName = me.TrainRecord.data.Name.split(' ART')[0],
+			releaseNameFilter = 
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })),
+			userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: me.ProjectRecord.data._ref });
+		return [{
+			title: 'Unsized Stories',
+			filters: [
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '=', value: null })
+				.and(releaseNameFilter).and(userStoryProjectFilter)
+			]
+		},{
+			title: 'Improperly Sized Stories',
+			filters: [
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Children.ObjectID', value: null }).and( //parent stories roll up so ignore
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: null })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '1' })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '2' })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '4' })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '8' })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'PlanEstimate', operator: '!=', value: '16' }))
+				.and(releaseNameFilter).and(userStoryProjectFilter)
+			]
+		},{
+			title: 'Stories in Release without Iteration',
+			filters: [
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration', value: null })
+				.and(releaseNameFilter).and(userStoryProjectFilter)
+			]
+		},{
+			title: 'Stories in Iteration not attached to Release',
+			filters: [
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: null }))
+				.and(userStoryProjectFilter)
+			]
+		},{
+			title: 'Stories with End Date past Feature End Date',
+			filters: [
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '>', value: releaseDate})
+				.and(releaseNameFilter).and(userStoryProjectFilter)
+			]
+		}];
+	},
+	_loadSanityStores: function(){
+		var me=this;
+		me.SanityStores = [];
+		return Q.all(_.map(me._getSanityStoreConfigs(), function(storeConfig){
+			var userStoryStore = Ext.create('Rally.data.wsapi.Store',{
+				model: 'HierarchicalRequirement',
+				limit:Infinity,
+				remoteSort:false,
+				fetch: ['Name', 'FormattedID', 'ObjectID', 'Project'],
+				context:{
+					workspace: me.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters: storeConfig.filters
+			});
+			return me._reloadStore(userStoryStore).then(function(userStoryStore){ 
+				me.SanityStores.push({
+					title: storeConfig.title,
+					userStories: userStoryStore.getRange()
+				});
+			});
+		}));
 	},
 
 	/**___________________________________ RISKS STUFF___________________________________**/
@@ -445,8 +520,7 @@ Ext.define('ProgramBoard', {
 		return deferred.promise;
 	},
 		
-	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/
-	
+	/**_____________________________________ DEPENDENCIES STUFF ___________________________________	**/	
 	_updateUSColumnStores: function(){ //updates the dropdown stores with the most recent user stories in the release (in case some were added
 		var me = this,
 			uses = me.DependenciesReleaseUserStories, 
@@ -463,13 +537,11 @@ Ext.define('ProgramBoard', {
 				me.UserStoryNameStore.add({'Name': uses[i].data.Name});
 			}
 		}
-	},
-	
+	},	
 	_isInRelease: function(usr){ //some user stories are not themselves in releases
 		return usr.data.Release && usr.data.Release.Name === this.ReleaseRecord.data.Name ||
 			usr.data.Feature && usr.data.Feature.Release && usr.data.Feature.Release.Name === this.ReleaseRecord.data.Name;
-	},
-	
+	},	
 	_getDependencies: function(userStoryRecord){
 		var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
 		if(dependencyString === '') dependencies = { Preds:{}, Succs:[] };
@@ -478,8 +550,7 @@ Ext.define('ProgramBoard', {
 			catch(e) { dependencies = { Preds:{}, Succs:[] }; }
 		}		
 		return dependencies;
-	},
-	
+	},	
 	_parseDependenciesFromUserStory: function(userStoryRecord){
 		var deps = this._getDependencies(userStoryRecord), 
 			preds = deps.Preds, succs = deps.Succs,
@@ -537,7 +608,6 @@ Ext.define('ProgramBoard', {
 		}
 		return {Predecessors:predDepsList, Successors:succDepsList};
 	},
-	
 	_parseDependenciesData: function(){	
 		var me=this, 
 			predDepsList = [], succDepsList = [], 
@@ -554,20 +624,18 @@ Ext.define('ProgramBoard', {
 			succDepsList = succDepsList.concat(usrData.Successors);
 		}
 		me.DependenciesParsedData = {Predecessors:predDepsList, Successors:succDepsList};
-	},
-		
+	},		
 	_newTeamDep: function(){
 		return {
 			TID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 			PID: '',
-			Sup:'No',
+			Sup:'Undefined',
 			USID:'',
 			USName:'',
 			A:false
 		};
 	},
-
-	_removeDepFromList: function(dependencyID, dependencyList){ 
+	_spliceDepFromList: function(dependencyID, dependencyList){ 
 		for(var i = 0; i<dependencyList.length; ++i){
 			if(dependencyList[i].DependencyID == dependencyID) {
 				return dependencyList.splice(i, 1)[0];
@@ -859,7 +927,7 @@ Ext.define('ProgramBoard', {
 		var me = this, realDepsData;
 		if(oldUSRecord) realDepsData = me._parseDependenciesFromUserStory(oldUSRecord)[type];
 		else realDepsData = [];
-		return me._removeDepFromList(depData.DependencyID, realDepsData);		
+		return me._spliceDepFromList(depData.DependencyID, realDepsData);		
 	},
 	_getTeamDepArrays: function(predDepData, realDepData){ //returns arrays of the team deps from the dependency grouped on their status
 		var me=this, 
@@ -898,8 +966,8 @@ Ext.define('ProgramBoard', {
 			if(!permissions.isProjectEditor(project)) 
 				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
 			else {
-				promises.push(me._loadRandomUserStory(project.data._ref).then(function(us){
-					if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories, cannot continue');
+				promises.push(me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+					if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 					else {
 						return Q(function(){ 
 							teamDepData.USID = us.data.FormattedID;
@@ -913,7 +981,7 @@ Ext.define('ProgramBoard', {
 								FormattedID: '',  //not assigned yet
 								Description: predDepData.Description,
 								Checkpoint: predDepData.Checkpoint,
-								Supported: 'No',
+								Supported: teamDepData.Sup,
 								Assigned: false,
 								ReleaseStartDate: new Date(me.ReleaseRecord.data.ReleaseStartDate)*1,
 								ReleaseDate: new Date(me.ReleaseRecord.data.ReleaseDate)*1,
@@ -950,8 +1018,8 @@ Ext.define('ProgramBoard', {
 						Edited: false
 					};
 					if(!us){
-						return me._loadRandomUserStory(project.data._ref).then(function(us){
-							if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories, cannot continue');
+						return me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+							if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 							else {
 								return Q(function(){ // got deleted from user story
 									teamDepData.USID = us.data.FormattedID;
@@ -1017,8 +1085,8 @@ Ext.define('ProgramBoard', {
 			return me._loadUserStoryByFID(succDepData.SuccFormattedID, project.data._ref).then(function(us){	
 				if(!us) return Q.reject(['Successor UserStory has been deleted.']);
 				else {
-					var deps = me._getDependencies(us);
-					var rppData = deps.Preds[succDepData.DependencyID];
+					var deps = me._getDependencies(us),
+						rppData = deps.Preds[succDepData.DependencyID];
 					if(rppData){
 						var predDepData = {
 							DependencyID: succDepData.DependencyID,
@@ -1112,7 +1180,8 @@ Ext.define('ProgramBoard', {
 	_showGrids: function(){
 		var me=this;
 		me._loadTeamCommitsGrid();
-		me._loadVelocityGrid(); 
+		me._loadVelocityGrid();
+		me._loadSanityGrid();
 		me._loadRisksGrid();
 		me._loadDependenciesGrids();
 	},	
@@ -1141,6 +1210,7 @@ Ext.define('ProgramBoard', {
 			isEditingRisks = me._isEditing(me.CustomRisksStore),
 			isEditingDeps = me._isEditing(me.CustomPredDepStore) || me._isEditing(me.CustomSuccDepStore),
 			promises = [];
+		if(!me.SanityStores) promises.push(me._loadSanityStores());
 		if(!me._isEditingVelocity){
 			if(me.IterationStore) promises.push(me._reloadStore(me.IterationStore));
 			else promises.push(me._loadIterations());
@@ -1163,6 +1233,7 @@ Ext.define('ProgramBoard', {
 		me.UserStoryStore = undefined;
 		me.FeatureStore = undefined;
 		me.IterationStore = undefined;
+		me.SanityStores = undefined;
 		
 		me.PredDepGrid = undefined;
 		me.SuccDepGrid = undefined;
@@ -1184,7 +1255,8 @@ Ext.define('ProgramBoard', {
 			toRemove.up().remove(toRemove);
 			toRemove = tmp;
 		}
-		me.down('#tc_vel_box').removeAll(); //delete vel & team commits
+		me.down('#tc_vel_box_left').removeAll();
+		me.down('#tc_vel_box_right').removeAll();
 
 		if(!me.ReleasePicker){ //draw these once, never removve them
 			me._loadReleasePicker();
@@ -1323,7 +1395,8 @@ Ext.define('ProgramBoard', {
 						else me.TrainRecord = me.AllTrainRecordsStore.first();
 					}
 					console.log('train loaded:', trainRecord);
-					return me._loadReleasesInTheFuture(me.ProjectRecord);
+					var threeWeeksAgo = new Date()*1 - 3*7*24*60*60*1000;
+					return me._loadReleasesAfterGivenDate(me.ProjectRecord, threeWeeksAgo);
 				})
 				.then(function(releaseStore){		
 					me.ReleaseStore = releaseStore;
@@ -1464,19 +1537,23 @@ Ext.define('ProgramBoard', {
 		me._TeamCommitsCountHash = {};
 		me._TeamCommitsEstimateHash = {};
 		
-		var customTeamCommitsRecords = _.map(me.FeatureStore.getRecords(), function(featureRecord){
-			var tc = me._getTeamCommit(featureRecord);
-			return {
-				Commitment: tc.Commitment || 'Undecided',
-				Objective: tc.Objective || '',
-				Name: featureRecord.data.Name,
-				FormattedID: featureRecord.data.FormattedID,
-				ObjectID: featureRecord.data.ObjectID,
-				Product: me.FeatureProductHash[featureRecord.data.ObjectID],
-				PlannedEnd: new Date(featureRecord.data.PlannedEndDate)*1
-			};
-		});		
-		
+		var customTeamCommitsRecords = _.map(_.sortBy(me.FeatureStore.getRecords(), 
+			function(featureRecord){ return featureRecord.data.DragAndDropRank; }),
+			function(featureRecord, index){
+				var tc = me._getTeamCommit(featureRecord);
+				return {
+					Rank: index + 1,
+					Name: featureRecord.data.Name,
+					Commitment: tc.Commitment || 'Undecided',
+					Objective: tc.Objective || '',
+					Expected: tc.Expected || false,
+					FormattedID: featureRecord.data.FormattedID,
+					ObjectID: featureRecord.data.ObjectID,
+					Product: me.FeatureProductHash[featureRecord.data.ObjectID],
+					PlannedEnd: new Date(featureRecord.data.PlannedEndDate)*1
+				};
+			});
+			
 		me.CustomTeamCommitsStore = Ext.create('Intel.data.FastStore', {
 			data: customTeamCommitsRecords,
 			model:'IntelTeamCommits',
@@ -1499,22 +1576,51 @@ Ext.define('ProgramBoard', {
 							tcRecord.set('Commitment', newVal.Commitment || 'Undecided');
 						if(tcRecord.data.Objective != (newVal.Objective || ''))
 							tcRecord.set('Objective', newVal.Objective || '');
+						if(tcRecord.data.Expected != newVal.Expected)
+							tcRecord.set('Expected', newVal.Expected);
 					}
 				});
 				tcStore.resumeEvents();
 			}
 		});
+				
+		var filterProduct = null, filterStatus = null, filterEnd = null;
+		function teamCommitsFilter(r){
+			if(filterProduct &&  r.data.Product != filterProduct) return false;
+			if(filterStatus && r.data.Commitment != filterStatus) return false;
+			//used bad workweek algorithm at first, must round down.
+			if(filterEnd && me._roundDateDownToWeekStart(r.data.PlannedEnd)*1 != filterEnd) return false;
+			return true;
+		}		
+		function filterTeamCommitsRowsByFn(fn){
+			_.each(me.CustomTeamCommitsStore.getRange(), function(item, index){
+				if(fn(item)) me.TeamCommitsGrid.view.removeRowCls(index, 'hidden');
+				else me.TeamCommitsGrid.view.addRowCls(index, 'hidden');
+			});
+		}
 		
 		var columnCfgs = [
 			{
+				text:'#',
+				dataIndex:'Rank',
+				width:30,
+				editor:false,
+				sortable:true,
+				draggable:false,
+				resizable:false,
+				tooltip:'Feature Rank',
+				tooltipType:'title'
+			},{
 				text:'F#', 
 				dataIndex:'FormattedID',
 				width:60,
 				editor:false,
 				sortable:true,
+				draggable:false,
 				resizable:false,
-				renderer:function(FID){
+				renderer:function(FID, meta, record){
 					var feature = me.FeatureStore.findExactRecord('FormattedID', FID);
+					if(record.data.Expected) meta.tdCls += ' manager-expected-cell';
 					if(feature.data.Project) {
 						return '<a href="https://rally1.rallydev.com/#/' + feature.data.Project.ObjectID + 'd/detail/portfolioitem/feature/' + 
 								feature.data.ObjectID + '" target="_blank">' + FID + '</a>';
@@ -1526,18 +1632,43 @@ Ext.define('ProgramBoard', {
 				dataIndex:'Name',
 				flex:1,
 				editor:false,
+				draggable:false,
 				resizable:false
 			},{
 				text:'Product', 
 				dataIndex:'Product',
-				width:70,
+				width:90,
 				editor:false,
-				resizable:false
+				draggable:false,
+				resizable:false,
+				layout:'hbox',
+				items:[{
+					id:'team-commits-f-product',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Product'],
+						data: [{Product:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.FeatureProductHash)), 
+							function(p){ return p; }), 
+							function(p){ return {Product:p}; }))
+					}),
+					displayField: 'Product',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.Product == 'All') filterProduct = null; 
+							else filterProduct = selected[0].data.Product;
+							filterTeamCommitsRowsByFn(teamCommitsFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Stories', 
 				dataIndex:'ObjectID',
 				sortable:true, 
 				editor:false,
+				draggable:false,
 				resizable:false,
 				doSort: function(direction){
 					var ds = this.up('grid').getStore();
@@ -1559,6 +1690,7 @@ Ext.define('ProgramBoard', {
 				dataIndex:'ObjectID',
 				sortable:true, 
 				editor:false,
+				draggable:false,
 				resizable:false,
 				doSort: function(direction){
 					var ds = this.up('grid').getStore();
@@ -1572,25 +1704,47 @@ Ext.define('ProgramBoard', {
 					});
 				},
 				width:70,
-				renderer:function(oid){
-					return me._getStoriesEstimate(oid);
-				}
+				renderer:function(oid){ return me._getStoriesEstimate(oid); }
 			},{
 				text:'Planned End',
 				dataIndex:'PlannedEnd',
 				sortable:true, 
 				editor:false,
+				draggable:false,
 				resizable:false,
-				width:70,
-				renderer: function(ed){
-					return (ed ? 'ww' + me._getWorkweek(new Date(ed)) : '-');
-				}
+				width:100,
+				renderer: function(ed){ return (ed ? 'ww' + me._getWorkweek(new Date(ed)) : '-'); },
+				layout:'hbox',
+				items: [{	
+					id:'team-commits-f-end',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						model:'WorkweekDropdown',
+						data: [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.FeatureStore.getRange(),
+							function(feature){ return me._roundDateDownToWeekStart(feature.data.PlannedEndDate)*1; })),
+							function(date){ return date; }),
+							function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }))
+					}),
+					displayField: 'Workweek',
+					valueField: 'DateVal',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.DateVal === 0) filterEnd = null; 
+							else filterEnd = selected[0].data.DateVal;
+							filterTeamCommitsRowsByFn(teamCommitsFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				dataIndex:'Commitment',
 				text:'Status',	
 				width:100,
 				tdCls: 'intel-editor-cell',	
 				sortable:true, 
+				draggable:false,
 				resizable:false,
 				editor:{
 					xtype:'intelfixedcombo',
@@ -1604,23 +1758,81 @@ Ext.define('ProgramBoard', {
 						]
 					}),
 					displayField: 'Status'
-				}
+				},	
+				layout:'hbox',
+				items: [{	
+					id:'team-commits-f-status',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Status'],
+						data: [
+							{Status: 'All'},
+							{Status:'Undecided'},
+							{Status:'N/A'},
+							{Status:'Committed'},
+							{Status:'Not Committed'}
+						]
+					}),
+					displayField: 'Status',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.Status == 'All') filterStatus = null; 
+							else filterStatus = selected[0].data.Status;
+							filterTeamCommitsRowsByFn(teamCommitsFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]	
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
 				flex:1,
 				tdCls: 'intel-editor-cell',	
 				editor: 'inteltextarea',
+				draggable:false,
 				resizable:false,
 				sortable:false,
 				renderer: function(val){ return val || '-'; }
 			}
 		];
-		
-		me.TeamCommitsGrid = me.down('#tc_vel_box').add({
+
+		me.TeamCommitsGrid = me.down('#tc_vel_box_left').add({
 			xtype: 'rallygrid',
-      title: "Team Commits",
-			height:300,
+			header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:200,
+					text:"TEAM COMMITS"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{
+							click: function(){
+								filterProduct = null;
+								filterStatus = null;
+								filterEnd = null; 
+								filterTeamCommitsRowsByFn(function(){ return true; });
+								Ext.getCmp('team-commits-f-product').setValue('All');
+								Ext.getCmp('team-commits-f-status').setValue('All');
+								Ext.getCmp('team-commits-f-end').setValue('All');
+							}
+						}
+					}]
+				}]
+			},
+			height:350,
 			flex:2,
 			padding:'0 20px 0 0',
 			scroll:'vertical',
@@ -1632,19 +1844,18 @@ Ext.define('ProgramBoard', {
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
 				getRowClass: function(tcRecord, index, rowParams, store){
-					var val = tcRecord.data.Commitment || 'Undecided';					
-					if(val == 'N/A') return 'grey-row';
-					if(val == 'Committed') return 'green-row';
-					if(val == 'Not Committed') return 'red-row';
+					var val = tcRecord.data.Commitment || 'Undecided',
+						base = teamCommitsFilter(tcRecord) ? '' : 'hidden ';
+					if(val == 'N/A') return base + 'grey-row';
+					else if(val == 'Committed') return base + 'green-row';
+					else if(val == 'Not Committed') return base + 'red-row';
+					else return base;
 				}
 			},
 			listeners: {
-				beforeedit: function(){
-					me._isEditingTeamCommits = true;				
-				},
-				canceledit: function(){
-					me._isEditingTeamCommits = false;
-				},
+				sortchange: function(){ filterTeamCommitsRowsByFn(teamCommitsFilter); },
+				beforeedit: function(){ me._isEditingTeamCommits = true; },
+				canceledit: function(){ me._isEditingTeamCommits = false; },
 				edit: function(editor, e){
 					var grid = e.grid, tcRecord = e.record,
 						field = e.field, value = e.value, originalValue = e.originalValue;						
@@ -1671,14 +1882,11 @@ Ext.define('ProgramBoard', {
 							if(!realFeature) console.log('ERROR: realFeature not found, ObjectID: ' + oid);
 							else return me._setTeamCommit(realFeature, tc);
 						})
-						.then(function(){ 
-							me.TeamCommitsGrid.setLoading(false);
-							me._isEditingTeamCommits = false;
-							unlockFunc();
-						})
 						.fail(function(reason){ 
 							me._alert('ERROR', reason);
-							me.TeamCommitsGrid.setLoading(false); 
+						})
+						.then(function(){ 
+							me.TeamCommitsGrid.setLoading(false);
 							me._isEditingTeamCommits = false;
 							unlockFunc();
 						})
@@ -1694,22 +1902,21 @@ Ext.define('ProgramBoard', {
 		});	
 	},		
 	_loadVelocityGrid: function() {
-		var me = this;	
-		var iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
-			return us.data.Iteration ? us.data.Iteration.Name : '__DELETE__' ; });
+		var me = this,
+			iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
+				return us.data.Iteration ? us.data.Iteration.Name : '__DELETE__' ; 
+			});
 		delete iterationGroups.__DELETE__; //ignore those not in an iteration
-        
+		
     var iterationGroupTotals = _.sortBy(_.map(me.IterationStore.getRecords(), function(iteration) {
 			var iName = iteration.data.Name;
 			return {    
 				Name:iName, 
 				PlannedVelocity: iteration.data.PlannedVelocity || 0,
-				RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) {
-						return sum + us.data.PlanEstimate;
-				}, 0)
+				RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) { return sum + us.data.PlanEstimate; }, 0)
 			};
 		}), 'Name');
-
+		
 		me.CustomVelocityStore = Ext.create('Intel.data.FastStore', {
 			data: iterationGroupTotals,
 			model:'IntelVelocity',
@@ -1725,9 +1932,9 @@ Ext.define('ProgramBoard', {
 				velStore.suspendEvents(true);
 				console.log('syncing velocity with current iterations', velRecords, me.IterationStore.getRecords());
 				velRecords.forEach(function(velRecord){
-					var iterationName = velRecord.data.Name;
-					var iteration = me.IterationStore.findExactRecord('Name', iterationName);
-					var newVal = iteration.data.PlannedVelocity || 0;
+					var iterationName = velRecord.data.Name,
+						iteration = me.IterationStore.findExactRecord('Name', iterationName),
+						newVal = iteration.data.PlannedVelocity || 0;
 					if(newVal != velRecord.data.PlannedVelocity){
 						velRecord.set('PlannedVelocity', iteration.data.PlannedVelocity || 0);
 						console.log('velocity record update', velRecord);
@@ -1741,8 +1948,9 @@ Ext.define('ProgramBoard', {
 			{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
-				flex: 2,
+				flex: 1,
 				editor:false,
+				draggable:false,
 				resizable:false,
 				sortable:true,
 				renderer:function(name, meta, velocityRecord){
@@ -1757,39 +1965,72 @@ Ext.define('ProgramBoard', {
 			},{
 				text: 'Target Capacity',
 				dataIndex: 'PlannedVelocity',
-				flex:1,
+				width:80,
 				tdCls: 'intel-editor-cell',
 				editor:'textfield',
+				draggable:false,
 				resizable:false,
 				sortable:true,
 				tooltip:'(Planned Velocity)',
 				tooltipType:'title',
-				renderer:function(n, m){
-					m.tdCls += (n*1===0 ? ' red-cell' : '');
-					return n;
+				renderer:function(val, meta, record){
+					meta.tdCls += (val*1===0 ? ' red-cell' : '');
+					return val;
 				}
 			},{
 				text: 'Actual Load',
 				dataIndex: 'RealVelocity',
-				flex:1,
+				width:80,
 				editor:false,
+				draggable:false,
 				resizable:false,
-				sortable:false,
+				sortable:true,
 				tooltip:'(Plan Estimate)',
 				tooltipType:'title',
-				renderer:function(realVel, m, r){
-					m.tdCls += ((realVel*1 < r.data.PlannedVelocity*0.9) ? ' yellow-cell' : '');
-					m.tdCls += ((realVel*1 === 0 || realVel*1 > r.data.PlannedVelocity*1) ? ' red-cell' : '');
+				renderer:function(realVel, meta, record){
+					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.9) ? ' yellow-cell' : '');
+					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*1) ? ' red-cell' : '');
 					return realVel;
 				}
 			}
+		];		
+		var totalsColumnCfgs = [
+			{	
+				flex: 1,
+				editor:false,
+				draggable:false,
+				resizable:false,
+				renderer:function(name, meta, velocityRecord){ return '<b>TOTAL</b>'; }
+			},{
+				width:80,
+				editor:false,
+				draggable:false,
+				resizable:false,
+				renderer:function(val, meta, record){
+					return _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0);
+				}
+			},{
+				width:80,
+				editor:false,
+				draggable:false,
+				resizable:false,
+				renderer:function(val, meta, record){
+					var planned = _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0),
+						real = _.reduce(me.IterationStore.getRecords(), function(bigSum, iteration){
+							return bigSum + _.reduce((iterationGroups[iteration.data.Name] || []), function(sum, us) {
+								return sum + us.data.PlanEstimate;
+							}, 0);
+						}, 0);
+					meta.tdCls += ((real < planned*0.9) ? ' yellow-cell' : '');
+					meta.tdCls += ((real*1 === 0 || real*1 > planned) ? ' red-cell' : '');
+					return real;
+				}
+			}
 		];
-		me.VelocityGrid = me.down('#tc_vel_box').add({
+		
+		me.VelocityGrid = me.down('#tc_vel_box_right').add({
 			xtype: 'rallygrid',
 			title: "Velocity",
-			scroll:'vertical',
-			height:300,
-			flex:1,
 			showPagingToolbar: false,
 			showRowActionsColumn:false,
 			disableSelection: true,
@@ -1802,9 +2043,7 @@ Ext.define('ProgramBoard', {
 					me._isEditingVelocity = true;
 					return true;
 				},
-				canceledit: function(){
-					me._isEditingVelocity = false;
-				},
+				canceledit: function(){ me._isEditingVelocity = false; },
 				edit: function(editor, e){
 					var grid = e.grid,
 						velocityRecord = e.record,
@@ -1831,6 +2070,7 @@ Ext.define('ProgramBoard', {
 							}
 							me._isEditingVelocity = false;
 							me.VelocityGrid.setLoading(false);
+							me.VelocityTotalsGrid.view.refreshNode(0);
 						} 
 					});
 				}
@@ -1843,6 +2083,87 @@ Ext.define('ProgramBoard', {
 			enableEditing:false,
 			columnCfgs: columnCfgs,
 			store: me.CustomVelocityStore
+		});
+		me.VelocityTotalsGrid = me.down('#tc_vel_box_right').add({
+			xtype: 'rallygrid',
+			showPagingToolbar: false,
+			showRowActionsColumn:false,
+			hideHeaders:true,
+			disableSelection: true,
+			viewConfig: {
+				stripeRows: false,
+				preserveScrollOnRefresh:true
+			},
+			enableEditing:false,
+			columnCfgs:totalsColumnCfgs,
+			store: Ext.create('Ext.data.Store', {
+				model:'IntelVelocity',
+				data: [{Name:'', PlannedVelocity:0, RealVelocity:0}]
+			})
+		});
+	},
+	_loadSanityGrid: function(){
+		var me=this,
+			columnCfgs = [{
+				dataIndex:'title',
+				flex:1,
+				renderer:function(val, meta){ 
+					meta.tdCls += ' sanity-name-cell';
+					if(val == 'Unsized Stories') meta.tdCls += ' orange-bg-cell';
+					if(val == 'Improperly Sized Stories') meta.tdCls += ' green-bg-cell';
+					if(val == 'Stories in Release without Iteration') meta.tdCls += ' pink-bg-cell';
+					if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' brown-bg-cell';
+					if(val == 'Stories with End Date past Feature End Date') meta.tdCls += ' yellow-bg-cell';
+					return val; 
+				}
+			},{
+				dataIndex:'userStories',
+				width:30,
+				renderer:function(val, meta){ 
+					meta.tdCls += 'sanity-num-cell';
+					return val.length; 
+				}
+			}];
+		
+		me.SanityGrid = me.down('#tc_vel_box_right').add({
+			xtype: 'rallygrid',
+			header: {
+				items: [{
+					xtype:'container',
+					html:'<a class="sanity-header" href="https://rally1.rallydev.com/#/' + me.ProjectRecord.data.ObjectID + 
+						'ud/custom/22859089715" target="_blank">DATA INTEGRITY</a>'
+				}]
+			},
+			width:'100%',
+			showPagingToolbar: false,
+			showRowActionsColumn:false,
+			hideHeaders:true,
+			disableSelection: true,
+			margin:'30 0 0 0',
+			viewConfig: {
+				stripeRows: false,
+				preserveScrollOnRefresh:true
+			},
+			/** plugins:[{
+				ptype:'rowexpander',
+				rowBodyTpl:[
+					'<tpl for="userStories">',
+						'<p class="sanity-list-item">',
+							'<a href="https://rally1.rallydev.com/#/{data.Project.ObjectID}d/detail/userstory/{data.ObjectID}" ',
+								'target="_blank">{data.FormattedID}</a> - {data.Name}',
+						'</p>',
+					'</tpl>'
+				]
+			}], **/
+			enableEditing:false,
+			columnCfgs:columnCfgs,
+			store: Ext.create('Ext.data.Store', {
+				fields:[
+					{name: 'title', type: 'string'},
+					{name: 'userStories', type: 'auto'}
+				],
+				data: me.SanityStores
+			})
 		});
 	},
 	_loadRisksGrid: function(){
@@ -1877,29 +2198,26 @@ Ext.define('ProgramBoard', {
 				var riskStore = me.CustomRisksStore, 
 					riskRecords = riskStore.getRange(),
 					realRisksDatas = me.RisksParsedData.slice(0), //'real' risks list
-					remoteChanged = false, //if someone else updated this while it was idle on our screen	
-					key;
+					remoteChanged = false; //if someone else updated this while it was idle on our screen	
 				console.log('syncing risks with current features', riskRecords, realRisksDatas);
 				riskStore.suspendEvents(true); //batch
-				for(var i = 0;i<riskRecords.length;++i){
-					var riskRecord =  riskRecords[i],
-						realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, realRisksDatas),
-						dirtyType = me._getDirtyType(riskRecord, realRiskData);
-					if(dirtyType === 'New' || dirtyType === 'Edited') continue; //we don't want to remove any pending changes on a record							
+				_.each(riskRecords, function(riskRecord){
+					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, realRisksDatas),
+						dirtyType = me._getDirtyType(riskRecord, realRiskData),
+						key;
+					if(dirtyType === 'New' || dirtyType === 'Edited'){} //we don't want to remove any pending changes on a record							
 					else if(dirtyType == 'Deleted') // the riskRecord was deleted by someone else, and we arent editing it
 						riskStore.remove(riskRecord);
 					else { //we are not editing it and it still exists and it was edited somewhere else, so update current copy
-						for(key in realRiskData){
+						for(key in realRiskData)
 							if(!_.isEqual(riskRecord.get(key), realRiskData[key])){ remoteChanged = true; break; }
-						}
 						if(remoteChanged){
 							riskRecord.beginEdit();
-							for(key in realRiskData)
-								riskRecord.set(key, realRiskData[key]);
+							for(key in realRiskData) riskRecord.set(key, realRiskData[key]);
 							riskRecord.endEdit();
 						}
 					}
-				}
+				});
 				realRisksDatas.forEach(function(realRiskData){ //add all the new risks that other people have added since first load
 					console.log('adding real risk', realRiskData);
 					riskStore.add(Ext.create('IntelRisk', Ext.clone(realRiskData)));
@@ -1908,7 +2226,68 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		
-		var defaultRenderer = function(val){ return val || '-'; };
+		var defaultRenderer = function(val){ return val || '-'; };		
+		
+		var filterFID = null, 
+			filterName = null, 
+			filterStatus = null, 
+			filterCP = null;
+		function riskGridFilter(r){
+			if(filterFID && r.data.FormattedID != filterFID) return false;
+			if(filterName && r.data.FeatureName != filterName) return false;
+			if(filterStatus && r.data.Status != filterStatus) return false;
+			//used bad workweek algorithm at first, must round down.
+			if(filterCP && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterCP) return false;
+			return true;
+		}		
+		function filterRisksRowsByFn(fn){
+			_.each(me.CustomRisksStore.getRange(), function(item, index){
+				if(fn(item)) me.RisksGrid.view.removeRowCls(index, 'hidden');
+				else me.RisksGrid.view.addRowCls(index, 'hidden');
+			});
+		}
+		function removeFilters(){
+			filterFID = null;
+			filterName = null;
+			filterStatus = null;
+			filterCP = null; 
+			filterRisksRowsByFn(function(){ return true; });
+			Ext.getCmp('risk-f-fid').setValue('All');
+			Ext.getCmp('risk-f-name').setValue('All');
+			Ext.getCmp('risk-f-status').setValue('All');
+			Ext.getCmp('risk-f-cp').setValue('All');
+		}
+		
+		function getFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
+				function(r){ return r.data.FormattedID; })), 
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
+				function(r){ return r.data.FeatureName; })), 
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function getCPFilterOptions(){
+			return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(),
+				function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
+				function(date){ return date; }),
+				function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
+		}
+		function updateFilterOptions(){
+			var fidStore = Ext.getCmp('risk-f-fid').getStore(),
+				nameStore = Ext.getCmp('risk-f-name').getStore(),
+				cpStore = Ext.getCmp('risk-f-cp').getStore();
+			fidStore.removeAll();
+			fidStore.add(getFIDfilterOptions());
+			nameStore.removeAll();
+			nameStore.add(getNameFilterOptions());
+			cpStore.removeAll();
+			cpStore.add(getCPFilterOptions());
+		}
+		
 		var columnCfgs = [
 			{
 				text:'F#',
@@ -1922,8 +2301,28 @@ Ext.define('ProgramBoard', {
 					displayField: 'FormattedID'
 				},			
 				resizable:false,
+				draggable:false,
 				sortable:true,
-				renderer:defaultRenderer
+				renderer:defaultRenderer,
+				layout:'hbox',
+				items:[{	
+					id:'risk-f-fid',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['FormattedID'],
+						data: getFIDfilterOptions()
+					}),
+					displayField: 'FormattedID',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.FormattedID == 'All') filterFID = null; 
+							else filterFID = selected[0].data.FormattedID;
+							filterRisksRowsByFn(riskGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Feature', 
 				dataIndex:'FeatureName',
@@ -1935,23 +2334,45 @@ Ext.define('ProgramBoard', {
 					displayField: 'Name'
 				},
 				resizable:false,
+				draggable:false,
 				sortable:true,
-				renderer:defaultRenderer		
+				renderer:defaultRenderer,
+				layout:'hbox',
+				items:[{	
+					id:'risk-f-name',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Name'],
+						data: getNameFilterOptions()
+					}),
+					displayField: 'Name',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.Name == 'All') filterName = null; 
+							else filterName = selected[0].data.Name;
+							filterRisksRowsByFn(riskGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]		
 			},{
-				text:'Risk Description(If This...)', 
+				text:'Risk Description (If This...)', 
 				dataIndex:'Description',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				editor: 'inteltextarea',
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				renderer:defaultRenderer	
 			},{
-				text:'Impact(Then this...)', 
+				text:'Impact (Then this...)', 
 				dataIndex:'Impact',
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				editor: 'inteltextarea',
 				renderer:defaultRenderer
@@ -1961,6 +2382,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'intel-editor-cell',	
 				flex:1,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				editor: 'inteltextarea',
 				renderer:defaultRenderer
@@ -1986,11 +2408,39 @@ Ext.define('ProgramBoard', {
 					displayField:'Status'
 				},
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				renderer:function(val, meta){
 					meta.tdCls += (val==='Undefined' ? ' red-cell' : '');
 					return val || '-';
-				}		
+				},	
+				layout:'hbox',
+				items: [{	
+					id:'risk-f-status',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Status'],
+						data: [
+							{Status: 'All'},
+							{Status:'Undefined'},
+							{Status:'Resolved'},
+							{Status:'Owned'},
+							{Status:'Accepted'},
+							{Status:'Mitigated'}
+						]
+					}),
+					displayField: 'Status',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.Status == 'All') filterStatus = null; 
+							else filterStatus = selected[0].data.Status;
+							filterRisksRowsByFn(riskGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]		
 			},{
 				text:'Contact', 
 				dataIndex:'Contact',
@@ -1999,13 +2449,15 @@ Ext.define('ProgramBoard', {
 				editor: 'inteltextarea',
 				sortable:false,
 				resizable:false,
+				draggable:false,
 				renderer:defaultRenderer		
 			},{
 				text:'Checkpoint',	
 				dataIndex:'Checkpoint',
 				tdCls: 'intel-editor-cell',	
-				width:80,
-				resizable:false,				
+				width:90,
+				resizable:false,	
+				draggable:false,			
 				editor:{
 					xtype:'intelfixedcombo',
 					width:80,
@@ -2017,13 +2469,35 @@ Ext.define('ProgramBoard', {
 					valueField: 'DateVal'
 				},
 				sortable:true,
-				renderer:function(date){ return date ? 'ww' + me._getWorkweek(date) : '-'; }		
+				renderer:function(date){ return date ? 'ww' + me._getWorkweek(date) : '-'; },	
+				layout:'hbox',
+				items: [{	
+					id:'risk-f-cp',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						model:'WorkweekDropdown',
+						data: getCPFilterOptions()
+					}),
+					displayField: 'Workweek',
+					valueField: 'DateVal',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.DateVal === 0) filterCP = null; 
+							else filterCP = selected[0].data.DateVal;
+							filterRisksRowsByFn(riskGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]		
 			},{
 				text:'',
 				width:30,
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, riskRecord){
 					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
 						dirtyType = me._getDirtyType(riskRecord, realRiskData);
@@ -2042,6 +2516,7 @@ Ext.define('ProgramBoard', {
 									for(var key in realRiskData)
 										riskRecord.set(key, realRiskData[key]);	
 									riskRecord.endEdit();
+									updateFilterOptions();
 								}
 							}
 						}
@@ -2053,6 +2528,7 @@ Ext.define('ProgramBoard', {
 				tdCls: 'iconCell',
 				width:30,
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, riskRecord){
 					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice(0)),
 						dirtyType = me._getDirtyType(riskRecord, realRiskData);
@@ -2069,15 +2545,15 @@ Ext.define('ProgramBoard', {
 									if(!riskRecord.data.FormattedID || !riskRecord.data.FeatureName){
 										me._alert('ERROR', 'You must set the Feature affected by this risk'); return; } 
 									else if(!riskRecord.data.Checkpoint){
-										me._alert('ERROR', 'You must set the Checkpoint date for this risk'); return; }
+										me._alert('ERROR', 'You must set the Checkpoint for this risk'); return; }
 									else if(!riskRecord.data.Description){
-										me._alert('ERROR', 'You must set the Description date for this risk'); return; }
+										me._alert('ERROR', 'You must set the Description for this risk'); return; }
 									else if(!riskRecord.data.Impact){
-										me._alert('ERROR', 'You must set the Impact date for this risk'); return; }
+										me._alert('ERROR', 'You must set the Impact for this risk'); return; }
 									else if(!riskRecord.data.Status){
-										me._alert('ERROR', 'You must set the Status date for this risk'); return; }
+										me._alert('ERROR', 'You must set the Status for this risk'); return; }
 									else if(!riskRecord.data.Contact){
-										me._alert('ERROR', 'You must set the Contact date for this risk'); return; }
+										me._alert('ERROR', 'You must set the Contact for this risk'); return; }
 									me.RisksGrid.setLoading(true);
 									me._enqueue(function(unlockFunc){
 										var riskRecordData = riskRecord.data,
@@ -2113,6 +2589,7 @@ Ext.define('ProgramBoard', {
 										})
 										.then(function(){ 
 											me.RisksGrid.setLoading(false);
+											updateFilterOptions();
 											unlockFunc();
 										})
 										.done();
@@ -2128,6 +2605,7 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, riskRecord){
 					meta.tdAttr = 'title="Delete Risk"';
 					return {
@@ -2159,6 +2637,7 @@ Ext.define('ProgramBoard', {
 											.then(function(){
 												me.CustomRisksStore.remove(riskRecord);
 												me.RisksGrid.setLoading(false);
+												updateFilterOptions();
 												unlockFunc();
 											})
 											.done();
@@ -2172,51 +2651,62 @@ Ext.define('ProgramBoard', {
 			}
 		];
 
-		me.add({
-			xtype:'container',
-			layout:{
-				type:'hbox',
-				align:'stretch',
-				pack:'start'
-			},
-			padding:'20px 0 0 0',
-			items:[{
-				xtype:'button',
-				text:'+ Add Risk',
-				width:80,
-				listeners:{
-					click: function(){
-						if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
-						else if(me.CustomRisksStore) {
-							var model = Ext.create('IntelRisk', {
-								RiskID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
-								ObjectID: '',
-								FormattedID: '',
-								FeatureName: '',
-								Description: '',
-								Impact: '',
-								MitigationPlan: '',
-								Urgency: '',
-								Status: '',
-								Contact: '',
-								Checkpoint: '',
-								Edited:true
-							});
-							me.CustomRisksStore.insert(0, [model]);
-							me.RisksGrid.view.getEl().setScrollTop(0);
-							me.RisksGrid.getSelectionModel().select(model);
-						}
-					}
-				}
-			}]
-		});
-		
 		me.RisksGrid = me.add({
 			xtype: 'rallygrid',
-      title: 'Risks',
-			minHeight:150,
-			maxHeight:400,
-			style:'margin:10px 10px 0 10px',
+			header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:200,
+					text:"RISKS"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'+ Add Risk',
+						width:80,
+						margin:'0 10 0 0',
+						listeners:{
+							click: function(){
+								if(!me.FeatureStore.first()) me._alert('ERROR', 'No Features for this Release!');
+								else if(me.CustomRisksStore) {
+									removeFilters();
+									var model = Ext.create('IntelRisk', {
+										RiskID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
+										ObjectID: '',
+										FormattedID: '',
+										FeatureName: '',
+										Description: '',
+										Impact: '',
+										MitigationPlan: '',
+										Urgency: '',
+										Status: '',
+										Contact: '',
+										Checkpoint: '',
+										Edited:true
+									});
+									me.CustomRisksStore.insert(0, [model]);
+									me.RisksGrid.view.getEl().setScrollTop(0);
+									me.RisksGrid.getSelectionModel().select(model);
+								}
+							}
+						}
+					},{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{ click: removeFilters }
+					}]
+				}]
+			},
+			height:360,
+			margin:'40 10 0 10',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
 			disableSelection: true,
@@ -2225,9 +2715,10 @@ Ext.define('ProgramBoard', {
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-35px';}
+				getRowClass: function(item){ return 'intel-row-35px' + (riskGridFilter(item) ? '' : ' hidden'); }
 			},
 			listeners: {
+				sortchange: function(){ filterRisksRowsByFn(riskGridFilter); },
 				edit: function(editor, e){			
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/
@@ -2261,6 +2752,7 @@ Ext.define('ProgramBoard', {
 							risksRecord.set('Edited', previousEdit); 
 						} else risksRecord.set('FeatureName', featureRecord.data.Name);
 					} 
+					updateFilterOptions();
 				}
 			},
 			showRowActionsColumn:false,
@@ -2304,17 +2796,16 @@ Ext.define('ProgramBoard', {
 			intelUpdate: function(){ 
 				var predDepStore = me.CustomPredDepStore, 
 					predDepRecs = predDepStore.getRange(),
-					realPredDepsData = me.DependenciesParsedData.Predecessors.slice(), //shallow copy of it	
-					key;
+					realPredDepsData = me.DependenciesParsedData.Predecessors.slice(); //shallow copy of it	
 				console.log('syncing predDeps with current userStories', predDepRecs, realPredDepsData);
 				predDepStore.suspendEvents(true);
-				for(var i = 0;i<predDepRecs.length;++i){
-					var depRec =  predDepRecs[i], //predecessor dependency record to be updated
-						depID = depRec.data.DependencyID,
-						realDep = me._removeDepFromList(depID, realPredDepsData),	
+				_.each(predDepRecs, function(depRec){ //predecessor dependency record to be updated
+					var depID = depRec.data.DependencyID,
+						realDep = me._spliceDepFromList(depID, realPredDepsData),	
 						dirtyType = me._getDirtyType(depRec, realDep),
 						teamStore = me.PredDepTeamStores[depID],
-						teamCont = me.PredDepContainers[depID];				
+						teamCont = me.PredDepContainers[depID],
+						key;
 					if(dirtyType === 'New' || dirtyType === 'Edited'){}//we don't want to remove any pending changes			
 					else if(dirtyType == 'Deleted'){ // the depRec was deleted by someone else, and we arent editing it
 						predDepStore.remove(depRec);
@@ -2345,7 +2836,7 @@ Ext.define('ProgramBoard', {
 						depRec.set('Predecessors', [me._newTeamDep()]); 
 						if(teamStore) teamStore.intelUpdate();
 					}
-				}
+				});
 				
 				realPredDepsData.forEach(function(realDep){ 
 					//add all the new risks that other people have added since the last load
@@ -2360,12 +2851,69 @@ Ext.define('ProgramBoard', {
 		});
 		
 		var defaultRenderer = function(val){ return val || '-'; };
+
+		var filterFIDPred = null, 
+			filterNamePred = null, 
+			filterNeededByPred = null;
+		function predDepGridFilter(r){
+			if(filterFIDPred && r.data.FormattedID != filterFIDPred) return false;
+			if(filterNamePred && r.data.UserStoryName != filterNamePred) return false;
+			if(filterNeededByPred && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterNeededByPred) return false;
+			return true;
+		}
+		function filterPredDepRowsByFn(fn){
+			_.each(me.CustomPredDepStore.getRange(), function(item, index){
+				if(fn(item)) me.PredDepGrid.view.removeRowCls(index, 'hidden');
+				else me.PredDepGrid.view.addRowCls(index, 'hidden');
+			});
+		}
+		function removePredFilters(){
+			filterFIDPred = null;
+			filterNamePred = null;
+			filterNeededByPred = null; 
+			filterPredDepRowsByFn(function(){ return true; });
+			Ext.getCmp('pred-dep-f-fid').setValue('All');
+			Ext.getCmp('pred-dep-f-name').setValue('All');
+			Ext.getCmp('pred-dep-f-needed-by').setValue('All');
+		}
+		
+		function getPredFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
+				function(r){ return r.data.FormattedID; })), 
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getPredNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(), 
+				function(r){ return r.data.UserStoryName; })), 
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function getPredNeededByFilterOptions(){
+			return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredDepStore.getRange(),
+				function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
+				function(date){ return date; }),
+				function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
+		}
+		function updatePredFilterOptions(){
+			var fidStore = Ext.getCmp('pred-dep-f-fid').getStore(),
+				nameStore = Ext.getCmp('pred-dep-f-name').getStore(),
+				cpStore = Ext.getCmp('pred-dep-f-needed-by').getStore();
+			fidStore.removeAll();
+			fidStore.add(getPredFIDfilterOptions());
+			nameStore.removeAll();
+			nameStore.add(getPredNameFilterOptions());
+			cpStore.removeAll();
+			cpStore.add(getPredNeededByFilterOptions());
+		}
+		
 		var predDepColumnCfgs = [
 			{
 				text:'US#', 
 				dataIndex:'FormattedID',
-				width:80,
-				resizable:false,				
+				width:90,
+				resizable:false,
+				draggable:false,
 				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
@@ -2374,12 +2922,32 @@ Ext.define('ProgramBoard', {
 					store: me.UserStoryFIDStore,
 					displayField: 'FormattedID'
 				},
-				renderer: defaultRenderer	
+				renderer: defaultRenderer,
+				layout:'hbox',
+				items:[{
+					id:'pred-dep-f-fid',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['FormattedID'],
+						data: getPredFIDfilterOptions()
+					}),
+					displayField: 'FormattedID',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.FormattedID == 'All') filterFIDPred = null; 
+							else filterFIDPred = selected[0].data.FormattedID;
+							filterPredDepRowsByFn(predDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
 				flex:1,
-				resizable:false,			
+				resizable:false,
+				draggable:false,			
 				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
@@ -2387,12 +2955,32 @@ Ext.define('ProgramBoard', {
 					store: me.UserStoryNameStore,
 					displayField: 'Name'
 				},
-				renderer: defaultRenderer	
+				renderer: defaultRenderer,
+				layout:'hbox',
+				items:[{
+					id:'pred-dep-f-name',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Name'],
+						data: getPredNameFilterOptions()
+					}),
+					displayField: 'Name',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.Name == 'All') filterNamePred = null; 
+							else filterNamePred = selected[0].data.Name;
+							filterPredDepRowsByFn(predDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]	
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
 				flex:1,
-				resizable:false,			
+				resizable:false,	
+				draggable:false,		
 				sortable:false,
 				tdCls: 'intel-editor-cell',
 				editor: 'inteltextarea',
@@ -2400,8 +2988,9 @@ Ext.define('ProgramBoard', {
 			},{
 				text:'Needed By',			
 				dataIndex:'Checkpoint',
-				width:80,
+				width:90,
 				resizable:false,
+				draggable:false,
 				sortable:true,
 				tdCls: 'intel-editor-cell',		
 				editor:{
@@ -2414,18 +3003,40 @@ Ext.define('ProgramBoard', {
 					displayField: 'Workweek',
 					valueField: 'DateVal'
 				},
-				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');},
+				layout:'hbox',
+				items:[{
+					id:'pred-dep-f-needed-by',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						model:'WorkweekDropdown',
+						data: getPredNeededByFilterOptions()
+					}),
+					displayField: 'Workweek',
+					valueField: 'DateVal',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.DateVal === 0) filterNeededByPred = null; 
+							else filterNeededByPred = selected[0].data.DateVal;
+							filterPredDepRowsByFn(predDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Teams Depended On',
 				dataIndex:'DependencyID',
 				xtype:'fastgridcolumn',
-				html:	'<div class="pred-dep-header" style="width:30px !important;"></div>' +
-						'<div class="pred-dep-header" style="width:140px !important;">Team Name</div>' +
-						'<div class="pred-dep-header" style="width:65px  !important;">Supported</div>' +
+				html:	'<div class="pred-dep-header" style="width:40px !important;"></div>' +
+						'<div class="pred-dep-header" style="width:110px !important;">Team Name</div>' +
+						'<div class="pred-dep-header" style="width:95px  !important;">Supported</div>' +
 						'<div class="pred-dep-header" style="width:70px  !important;">US#</div>' +
 						'<div class="pred-dep-header" style="width:130px !important;">User Story</div>',
 				width:480,
 				resizable:false,
+				draggable:false,
 				sortable:false,
 				renderer: function (depID){
 					var predDepStore = me.CustomPredDepStore,
@@ -2493,7 +3104,7 @@ Ext.define('ProgramBoard', {
 					var teamColumnCfgs = [
 						{
 							dataIndex:'PID',
-							width:145,
+							width:115,
 							resizable:false,
 							renderer: function(val, meta){
 								var projectRecord = me.ValidProjects[val];
@@ -2514,12 +3125,12 @@ Ext.define('ProgramBoard', {
 							}
 						},{
 							dataIndex:'Sup',
-							width:50,
+							width:80,
 							resizable:false,
 							editor: false,
 							renderer: function(val, meta){
 								if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
-								else meta.tdCls = 'intel-supported-cell';
+								else if(val == 'Yes') meta.tdCls = 'intel-supported-cell';
 								return val;
 							}
 						},{
@@ -2698,15 +3309,16 @@ Ext.define('ProgramBoard', {
 							contextmenu: defaultHandler,
 							render: function(){ me.PredDepContainers[depID] = this; },
 							resize: function(d, w, h, oldw, oldh){ 
-								var viewHeight = me.PredDepGrid.view.el.clientHeight,
-									viewScrollHeight = me.PredDepGrid.view.el.dom.scrollHeight,
-									maxHeight = me.PredDepGrid.maxHeight - 
-										(me.PredDepGrid.view.headerCt.el.dom.clientHeight + me.PredDepGrid.header.el.dom.clientHeight) + 2;
-									changeHeight = h - oldh;
-								if(viewScrollHeight < maxHeight || 
-									((viewScrollHeight - changeHeight <=  maxHeight) != (viewScrollHeight <= maxHeight))){
-									me.PredDepGrid.view.updateLayout(); 
-								}
+								/*** disabled the min/maxHeight for the grids and set to fixed height for now. so this listener is obsolete ***/
+								// var viewHeight = me.PredDepGrid.view.el.clientHeight,
+									// viewScrollHeight = me.PredDepGrid.view.el.dom.scrollHeight,
+									// maxHeight = me.PredDepGrid.maxHeight - 
+										// (me.PredDepGrid.view.headerCt.el.dom.clientHeight + me.PredDepGrid.header.el.dom.clientHeight) + 2;
+									// changeHeight = h - oldh;
+								// if(viewScrollHeight < maxHeight || 
+									// ((viewScrollHeight - changeHeight <=  maxHeight) != (viewScrollHeight <= maxHeight))){
+									// me.PredDepGrid.view.updateLayout(); 
+								// }
 							}
 						}
 					};
@@ -2717,10 +3329,11 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				width:30,
 				resizable:false,
+				draggable:false,
 				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){	
-					var realDepData = me._removeDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0));
-					var dirtyType = me._getDirtyType(predDepRecord, realDepData);
+					var realDepData = me._spliceDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0)),
+						dirtyType = me._getDirtyType(predDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Undo"';
 					return {
@@ -2731,8 +3344,8 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var depID = predDepRecord.data.DependencyID;
-									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));
+									var depID = predDepRecord.data.DependencyID,
+										realDep = me._spliceDepFromList(depID, me.DependenciesParsedData.Predecessors.slice(0));
 									predDepRecord.beginEdit();
 									for(var key in realDep){
 										if(key === 'Predecessors') predDepRecord.set(key, Ext.clone(realDep[key]) || [me._newTeamDep()]);
@@ -2740,6 +3353,7 @@ Ext.define('ProgramBoard', {
 									}	
 									predDepRecord.endEdit();
 									me.PredDepTeamStores[depID].intelUpdate();
+									updatePredFilterOptions();
 								}
 							}
 						}
@@ -2751,10 +3365,11 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				width:30,
 				resizable:false,
+				draggable:false,
 				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){				
-					var realDepData = me._removeDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0));
-					var dirtyType = me._getDirtyType(predDepRecord, realDepData);
+					var realDepData = me._spliceDepFromList(predDepRecord.data.DependencyID, me.DependenciesParsedData.Predecessors.slice(0)),
+						dirtyType = me._getDirtyType(predDepRecord, realDepData);
 					if(dirtyType === 'New') dirtyType = 'Save';
 					else if(dirtyType === 'Edited') dirtyType = 'Save';
 					else return ''; //don't render it!
@@ -2819,19 +3434,25 @@ Ext.define('ProgramBoard', {
 															.then(function(){							
 																predDepRecord.set('Edited', false);
 																predDepRecord.endEdit();
+															})
+															.fail(function(reason){
+																predDepRecord.set('Edited', false);
+																predDepRecord.endEdit();
+																return Q.reject(reason);
 															});
 													});
 												});
 											});
-										}).then(function(){
-											me.PredDepGrid.setLoading(false);
-											unlockFunc();
 										})
 										.fail(function(reason){
 											me._alert('ERROR:', reason);
+										})
+										.then(function(){
+											updatePredFilterOptions();
 											me.PredDepGrid.setLoading(false);
 											unlockFunc();
-										}).done();
+										})
+										.done();
 									});
 								}
 							}
@@ -2843,6 +3464,7 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				width:30,
 				resizable:false,
+				draggable:false,
 				tdCls: 'iconCell',
 				renderer: function(value, meta, predDepRecord){		
 					meta.tdAttr = 'title="Delete Dependency"';
@@ -2873,18 +3495,12 @@ Ext.define('ProgramBoard', {
 															return me._removePredDep(oldUSRecord, realDepData);
 														});
 													}
-													return promise
-														.then(function(){	
-															me.CustomPredDepStore.remove(predDepRecord);
-														});
+													return promise.then(function(){	me.CustomPredDepStore.remove(predDepRecord); });
 												});
 											})
+											.fail(function(reason){ me._alert('ERROR', reason); })
 											.then(function(){
-												me.PredDepGrid.setLoading(false);
-												unlockFunc();
-											})
-											.fail(function(reason){
-												me._alert('ERROR', reason);
+												updatePredFilterOptions();
 												me.PredDepGrid.setLoading(false);
 												unlockFunc();
 											})
@@ -2899,41 +3515,57 @@ Ext.define('ProgramBoard', {
 			}
 		];
 
-		me.AddPredDepButton = me.add({
-			xtype:'container',
-			padding:'20px 0 0 0',
-			items:[{
-				xtype:'button',
-				text:'+ Add Dependency',
-				listeners:{
-					click: function(){
-						if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
-						else if(me.CustomPredDepStore) {
-							var model = Ext.create('IntelPredDep', {
-								DependencyID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
-								ObjectID:'',
-								FormattedID: '',
-								UserStoryName: '',
-								Description: '',
-								Checkpoint: '',
-								Predecessors:[me._newTeamDep()],
-								Edited:true
-							});
-							me.CustomPredDepStore.insert(0, [model]);	
-							me.PredDepGrid.view.getEl().setScrollTop(0);
-							//me.PredDepGrid.getSelectionModel().select(model);
-						}
-					}
-				}
-			}]
-		});
-		
 		me.PredDepGrid = me.add({
 			xtype: 'rallygrid',
-      title: "Dependencies We Have on Other Teams",
-			minHeight:150,
-			maxHeight:450,
-			style:'margin:10px 10px 0 10px',
+			header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:400,
+					text:"DEPENDENCIES WE HAVE ON OTHER TEAMS"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'+ Add Dependency',
+						margin:'0 10 0 0',
+						listeners:{
+							click: function(){
+								if(!me.DependenciesReleaseUserStories.length) me._alert('ERROR', 'No User Stories for this Release!');
+								else if(me.CustomPredDepStore) {
+									removePredFilters();
+									var model = Ext.create('IntelPredDep', {
+										DependencyID: (new Date() * 1) + '' + (Math.random() * 100 >> 0),
+										ObjectID:'',
+										FormattedID: '',
+										UserStoryName: '',
+										Description: '',
+										Checkpoint: '',
+										Predecessors:[me._newTeamDep()],
+										Edited:true
+									});
+									me.CustomPredDepStore.insert(0, [model]);	
+									me.PredDepGrid.view.getEl().setScrollTop(0);
+									//me.PredDepGrid.getSelectionModel().select(model);
+								}
+							}
+						}
+					},{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{ click: removePredFilters }
+					}]
+				}]
+			},
+			height:400,
+			margin:'40 10 0 10',
 			scroll:'vertical',
 			columnCfgs: predDepColumnCfgs,
 			disableSelection: true,
@@ -2942,12 +3574,10 @@ Ext.define('ProgramBoard', {
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(predDepRecord){ 
-					//var cls = 'intel-row-' + (10 + (35*predDepRecord.data.Predecessors.length || 35)) + 'px';
-					//return cls;
-				}
+				getRowClass: function(predDepRecord){ if(!predDepGridFilter(predDepRecord)) return 'hidden'; }
 			},
 			listeners: {
+				sortchange: function(){ filterPredDepRowsByFn(predDepGridFilter); },
 				edit: function(editor, e){		
 					/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 						to improve performance.**/			
@@ -2980,6 +3610,7 @@ Ext.define('ProgramBoard', {
 							predDepRecord.set('Edited', previousEdit);
 						} else predDepRecord.set('UserStoryName', userStoryRecord.data.Name);
 					}
+					updatePredFilterOptions();
 				}
 			},
 			showRowActionsColumn:false,
@@ -2988,7 +3619,7 @@ Ext.define('ProgramBoard', {
 			store: me.CustomPredDepStore
 		});	
 	
-		/****************************** SUCCESSORS    STUFF           ***********************************************/	
+	/**************************************************** SUCCESSORS STUFF *******************************************************************/	
 		me.CustomSuccDepStore = Ext.create('Intel.data.FastStore', { 
 			data: Ext.clone(me.DependenciesParsedData.Successors.slice(0)),
 			autoSync:true,
@@ -3008,24 +3639,18 @@ Ext.define('ProgramBoard', {
 				console.log('syncing succDeps with current userStories', customSuccDepRecs, realSuccDepsData);
 				succDepStore.suspendEvents(true);
 				for(var i = 0;i<customSuccDepRecs.length;++i){
-					var depRec =  customSuccDepRecs[i]; //predecessor dependency record to be updated
-					
-					var depID = depRec.data.DependencyID;
-					var realDep = me._removeDepFromList(depID, realSuccDepsData);	
-						
-					var dirtyType = me._getDirtyType(depRec, realDep);
-					if(dirtyType === 'Edited') //we don't want to remove any pending changes
-						continue;						
-					else if(dirtyType === 'Deleted' || dirtyType === 'New'){ // the depRec was deleted by someone else, and we arent editing it
-						succDepStore.remove(depRec);
-					} else {
-						for(key in realDep){
+					var depRec =  customSuccDepRecs[i], //predecessor dependency record to be updated
+						depID = depRec.data.DependencyID,
+						realDep = me._spliceDepFromList(depID, realSuccDepsData),
+						dirtyType = me._getDirtyType(depRec, realDep);
+					if(dirtyType === 'Edited') continue; //we don't want to remove any pending changes								
+					else if(dirtyType === 'Deleted' || dirtyType === 'New') succDepStore.remove(depRec); // the depRec was deleted by someone else
+					else {
+						for(key in realDep)
 							if(!_.isEqual(depRec.get(key), realDep[key])){ remoteChanged = true; break; }
-						}
 						if(remoteChanged){
 							depRec.beginEdit();
-							for(key in realDep)
-								depRec.set(key, realDep[key]);
+							for(key in realDep) depRec.set(key, realDep[key]);
 							depRec.endEdit();
 						}
 					}
@@ -3038,34 +3663,192 @@ Ext.define('ProgramBoard', {
 			}
 		});
 		
+		var filterReqTeamSucc = null, 
+			filterReqFIDSucc = null, 
+			filterReqNameSucc = null, 
+			filterNeededBySucc = null,
+			filterSupSucc = null, 
+			filterFIDSucc = null, 
+			filterNameSucc = null;
+		function succDepGridFilter(r){
+			if(filterReqTeamSucc && me.ValidProjects[r.data.SuccProjectID].data.Name != filterReqTeamSucc) return false;
+			if(filterReqFIDSucc && r.data.SuccFormattedID != filterReqFIDSucc) return false;
+			if(filterReqNameSucc && r.data.SuccUserStoryName != filterReqNameSucc) return false;
+			if(filterNeededBySucc && me._roundDateDownToWeekStart(r.data.Checkpoint)*1 != filterNeededBySucc) return false;
+			if(filterSupSucc && r.data.Supported != filterSupSucc) return false;
+			if(filterFIDSucc && (!r.data.Supported || r.data.FormattedID != filterFIDSucc)) return false;
+			if(filterNameSucc && (!r.data.Supported || r.data.UserStoryName != filterNameSucc)) return false;
+			return true;
+		}
+		function filterSuccDepRowsByFn(fn){
+			_.each(me.CustomSuccDepStore.getRange(), function(item, index){
+				if(fn(item)) me.SuccDepGrid.view.removeRowCls(index, 'hidden');
+				else me.SuccDepGrid.view.addRowCls(index, 'hidden');
+			});
+		}
+		function removeSuccFilters(){
+			filterReqTeamSucc = null;
+			filterReqFIDSucc = null;
+			filterReqNameSucc = null;
+			filterNeededBySucc = null; 
+			filterSupSucc = null;
+			filterFIDSucc = null;
+			filterNameSucc = null;
+			filterSuccDepRowsByFn(function(){ return true; });
+			Ext.getCmp('succ-dep-f-team').setValue('All');
+			Ext.getCmp('succ-dep-f-req-fid').setValue('All');
+			Ext.getCmp('succ-dep-f-req-name').setValue('All');
+			Ext.getCmp('succ-dep-f-needed-by').setValue('All');
+			Ext.getCmp('succ-dep-f-sup').setValue('All');
+			Ext.getCmp('succ-dep-f-fid').setValue('All');
+			Ext.getCmp('succ-dep-f-name').setValue('All');
+		}
+		
+		function getSuccReqTeamOptions(){
+			return [{TeamName: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccDepStore.getRange(), 
+				function(r){ return me.ValidProjects[r.data.SuccProjectID].data.Name; })),
+				function(teamName){ return teamName; }), 
+				function(teamName){ return {TeamName:teamName}; }));
+		}		
+		function getSuccReqFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccDepStore.getRange(), 
+				function(r){ return r.data.SuccFormattedID; })), 
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getSuccReqNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccDepStore.getRange(), 
+				function(r){ return r.data.SuccUserStoryName; })), 
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function getSuccNeededByFilterOptions(){
+			return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccDepStore.getRange(),
+				function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
+				function(date){ return date; }),
+				function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
+		}
+		function getSuccFIDfilterOptions(){
+			return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.filter(_.union(_.map(me.CustomSuccDepStore.getRange(), 
+				function(r){ return r.data.Supported == 'Yes' ? r.data.FormattedID : ''; })), 
+				function(f){ return f !== ''; }),
+				function(f){ return f; }), 
+				function(f){ return {FormattedID:f}; }));
+		}
+		function getSuccNameFilterOptions(){
+			return [{Name: 'All'}].concat(_.map(_.sortBy(_.filter(_.union(_.map(me.CustomSuccDepStore.getRange(), 
+				function(r){ return r.data.Supported == 'Yes' ? r.data.UserStoryName : ''; })), 
+				function(f){ return f !== ''; }),
+				function(f){ return f; }), 
+				function(n){ return {Name:n}; }));
+		}
+		function updateSuccFilterOptions(){
+			var teamStore = Ext.getCmp('succ-dep-f-team').getStore(),
+				reqFidStore = Ext.getCmp('succ-dep-f-req-fid').getStore(),
+				reqNameStore = Ext.getCmp('succ-dep-f-req-name').getStore(),
+				cpStore = Ext.getCmp('succ-dep-f-needed-by').getStore(),
+				fidStore = Ext.getCmp('succ-dep-f-fid').getStore(),
+				nameStore = Ext.getCmp('succ-dep-f-name').getStore();
+			teamStore.removeAll();
+			teamStore.add(getSuccReqTeamOptions());
+			reqFidStore.removeAll();
+			reqFidStore.add(getSuccReqFIDfilterOptions());
+			reqNameStore.removeAll();
+			reqNameStore.add(getSuccReqNameFilterOptions());
+			cpStore.removeAll();
+			cpStore.add(getSuccNeededByFilterOptions());
+			fidStore.removeAll();
+			fidStore.add(getSuccFIDfilterOptions());
+			nameStore.removeAll();
+			nameStore.add(getSuccNameFilterOptions());
+		}
+		
 		var succDepColumnCfgs = [
 			{
 				text:'Requested By', //'Predecesor Project',
 				dataIndex:'SuccProjectID',
 				width:160,
 				resizable:false,
+				draggable:false,
 				sortable:true,
-				renderer: function(pid){
-					var project = me.ValidProjects[pid];
-					return project ? project.data.Name : pid;
-				}
+				renderer: function(pid){ return me.ValidProjects[pid].data.Name; },
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-team',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['TeamName'],
+						data: getSuccReqTeamOptions()
+					}),
+					displayField: 'TeamName',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.TeamName == 'All') filterReqTeamSucc = null; 
+							else filterReqTeamSucc = selected[0].data.TeamName;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Req Team US#',
 				dataIndex:'SuccFormattedID',
-				width:85,
+				width:90,
 				resizable:false,
-				sortable:true
+				draggable:false,
+				sortable:true,
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-req-fid',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['FormattedID'],
+						data: getSuccReqFIDfilterOptions()
+					}),
+					displayField: 'FormattedID',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.FormattedID == 'All') filterReqFIDSucc = null; 
+							else filterReqFIDSucc = selected[0].data.FormattedID;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Req Team UserStory',
 				dataIndex:'SuccUserStoryName',
 				flex:1,
 				resizable:false,
-				sortable:true		
+				draggable:false,
+				sortable:true,
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-req-name',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Name'],
+						data: getSuccReqNameFilterOptions()
+					}),
+					displayField: 'Name',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.Name == 'All') filterReqNameSucc = null; 
+							else filterReqNameSucc = selected[0].data.Name;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]	
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
 				flex:1,
 				resizable:false,
+				draggable:false,
 				editor: false,
 				sortable:false					
 			},{
@@ -3073,14 +3856,37 @@ Ext.define('ProgramBoard', {
 				dataIndex:'Checkpoint',
 				width:80,
 				resizable:false,
+				draggable:false,
 				editor: false,
 				sortable:true,
-				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}				
+				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');},
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-needed-by',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						model:'WorkweekDropdown',
+						data: getSuccNeededByFilterOptions()
+					}),
+					displayField: 'Workweek',
+					valueField: 'DateVal',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.DateVal === 0) filterNeededBySucc = null; 
+							else filterNeededBySucc = selected[0].data.DateVal;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]			
 			},{
 				text:'Supported',					
 				dataIndex:'Supported',
-				width:80,
+				width:90,
 				resizable:false,
+				draggable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
 					xtype:'intelfixedcombo',
@@ -3088,6 +3894,7 @@ Ext.define('ProgramBoard', {
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Sup'],
 						data: [
+							{Sup:'Undefined'},
 							{Sup:'Yes'},
 							{Sup:'No'}
 						]
@@ -3096,16 +3903,42 @@ Ext.define('ProgramBoard', {
 				},
 				renderer: function(val, meta){
 					if(val == 'No') meta.tdCls = 'intel-not-supported-cell';
-					else meta.tdCls = 'intel-supported-cell';
+					else if(val == 'Yes') meta.tdCls = 'intel-supported-cell';
 					return val;
 				},
-				sortable:true
+				sortable:true,
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-sup',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Sup'],
+						data: [
+							{Sup: 'All'},
+							{Sup: 'Yes'}, 
+							{Sup: 'No'}, 
+							{Sup: 'Undefined'}
+						]
+					}),
+					displayField: 'Sup',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.Sup === 'All') filterSupSucc = null; 
+							else filterSupSucc = selected[0].data.Sup;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Sup US#', 
 				dataIndex:'FormattedID',
 				tdCls: 'intel-editor-cell',
-				width:80,
+				width:90,
 				resizable:false,
+				draggable:false,
 				editor:{
 					xtype:'intelcombobox',
 					width:120,
@@ -3113,12 +3946,32 @@ Ext.define('ProgramBoard', {
 					displayField: 'FormattedID'
 				},
 				sortable:true,
-				renderer:function(val){ return val || '-'; }	
+				renderer:function(val){ return val || '-'; },
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-fid',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['FormattedID'],
+						data: getSuccFIDfilterOptions()
+					}),
+					displayField: 'FormattedID',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.FormattedID == 'All') filterFIDSucc = null; 
+							else filterFIDSucc = selected[0].data.FormattedID;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]
 			},{
 				text:'Sup UserStory', 
 				dataIndex:'UserStoryName',
 				flex:1,
 				resizable:false,
+				draggable:false,
 				tdCls: 'intel-editor-cell',
 				editor:{
 					xtype:'intelcombobox',
@@ -3126,7 +3979,26 @@ Ext.define('ProgramBoard', {
 					displayField: 'Name'
 				},
 				sortable: true,
-				renderer:function(val){ return val || '-'; }	
+				renderer:function(val){ return val || '-'; },	
+				layout:'hbox',
+				items:[{
+					id:'succ-dep-f-name',
+					xtype:'intelcombobox',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['Name'],
+						data: getSuccNameFilterOptions()
+					}),
+					displayField: 'Name',
+					value:'All',
+					listeners:{
+						select: function(combo, selected){
+							if(selected[0].data.Name == 'All') filterNameSucc = null; 
+							else filterNameSucc = selected[0].data.Name;
+							filterSuccDepRowsByFn(succDepGridFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]	
 			},{
 				text:'',
 				dataIndex:'Edited',
@@ -3134,6 +4006,7 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, succDepRecord){			
 					if(!succDepRecord.data.FormattedID) return '';
 					meta.tdAttr = 'title="' + 'Remove User Story' + '"';
@@ -3149,6 +4022,7 @@ Ext.define('ProgramBoard', {
 									succDepRecord.set('Assigned', false);
 									succDepRecord.set('FormattedID', '');
 									succDepRecord.set('UserStoryName', '');
+									updateSuccFilterOptions();
 								}
 							}
 						}
@@ -3161,9 +4035,10 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, succDepRecord){		
-					var realDepData = me._removeDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0));
-					var dirtyType = me._getDirtyType(succDepRecord, realDepData);
+					var realDepData = me._spliceDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0)),
+						dirtyType = me._getDirtyType(succDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Undo"';
 					return {
@@ -3174,12 +4049,12 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									var depID = succDepRecord.data.DependencyID;
-									var realDep = me._removeDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
+									var depID = succDepRecord.data.DependencyID,
+										realDep = me._spliceDepFromList(depID, me.DependenciesParsedData.Successors.slice(0));	
 									succDepRecord.beginEdit(true);
-									for(var key in realDep)
-										succDepRecord.set(key, realDep[key]);
+									for(var key in realDep) succDepRecord.set(key, realDep[key]);
 									succDepRecord.endEdit();
+									updateSuccFilterOptions();
 								}
 							}
 						}
@@ -3191,9 +4066,10 @@ Ext.define('ProgramBoard', {
 				xtype:'fastgridcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
+				draggable:false,
 				renderer: function(value, meta, succDepRecord){	
-					var realDepData = me._removeDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0));
-					var dirtyType = me._getDirtyType(succDepRecord, realDepData);
+					var realDepData = me._spliceDepFromList(succDepRecord.data.DependencyID, me.DependenciesParsedData.Successors.slice(0)),
+						dirtyType = me._getDirtyType(succDepRecord, realDepData);
 					if(dirtyType !== 'Edited') return ''; //don't render it!
 					meta.tdAttr = 'title="Save Dependency"';
 					return {
@@ -3204,12 +4080,12 @@ Ext.define('ProgramBoard', {
 							click: {
 								element: 'el',
 								fn: function(){
-									//no field validation needed
 									if(!succDepRecord.data.Supported){
 										me._alert('ERROR', 'You must set the Supported field.'); return; }
 									me.SuccDepGrid.setLoading(true);
 									me._enqueue(function(unlockFunc){
-										var succDepData = succDepRecord.data, oldUSRecord, newUSRecord;
+										var succDepData = succDepRecord.data, 
+											oldUSRecord, newUSRecord;
 										me._getOldAndNewUSRecords(succDepData).then(function(records){
 											oldUSRecord = records[0];
 											newUSRecord = records[1];
@@ -3226,16 +4102,8 @@ Ext.define('ProgramBoard', {
 													if(oldUSRecord.data.ObjectID !== newUSRecord.data.ObjectID)
 														return me._removeSuccDep(oldUSRecord, realDepData);
 												})
-												.then(function(){
-													return me._addSuccDep(newUSRecord, succDepData);
-												})
-												.then(function(){
-													succDepRecord.set('Edited', false);
-												});
-										})
-										.then(function(){
-											me.SuccDepGrid.setLoading(false);
-											unlockFunc();
+												.then(function(){ return me._addSuccDep(newUSRecord, succDepData); })
+												.then(function(){ succDepRecord.set('Edited', false); });
 										})
 										.fail(function(reason){ //hacky way to tell if we should delete this successor dependency
 											if(reason instanceof Array){
@@ -3243,27 +4111,20 @@ Ext.define('ProgramBoard', {
 												if(realDepData){
 													me._removeSuccDep(oldUSRecord, realDepData).then(function(){
 														me.CustomSuccDepStore.remove(succDepRecord);
-														me.SuccDepGrid.setLoading(false);
-														unlockFunc();
 													})
 													.fail(function(reason){
 														me._alert('ERROR', reason);
-														me.SuccDepGrid.setLoading(false);
-														unlockFunc();
 													})
 													.done();
 												}
-												else {
-													me.CustomSuccDepStore.remove(succDepRecord);
-													me.SuccDepGrid.setLoading(false);
-													unlockFunc();
-												}
+												else me.CustomSuccDepStore.remove(succDepRecord);
 											}
-											else {
-												me._alert('ERROR', reason);
-												me.SuccDepGrid.setLoading(false);
-												unlockFunc();
-											}
+											else me._alert('ERROR', reason);
+										})
+										.then(function(){
+											updateSuccFilterOptions();
+											me.SuccDepGrid.setLoading(false);
+											unlockFunc();
 										})
 										.done();
 									});
@@ -3277,10 +4138,30 @@ Ext.define('ProgramBoard', {
 		
 		me.SuccDepGrid = me.add({
 			xtype: 'rallygrid',
-      title: "Dependencies Other Teams Have on Us",
-			minHeight:150,
-			maxHeight:450,
-			style:'margin:40px 10px 0 10px',
+			header: {
+				layout: 'hbox',
+				items: [{
+					xtype:'text',
+					cls:'grid-header-text',
+					width:400,
+					text:"DEPENDENCIES OTHER TEAMS HAVE ON US"
+				},{
+					xtype:'container',
+					flex:1000,
+					layout:{
+						type:'hbox',
+						pack:'end'
+					},
+					items:[{
+						xtype:'button',
+						text:'Remove Filters',
+						width:110,
+						listeners:{ click: removeSuccFilters }
+					}]
+				}]
+			},
+			height:400,
+			margin:'40 10 0 10',
 			scroll:'vertical',
 			columnCfgs: succDepColumnCfgs,
 			disableSelection: true,
@@ -3289,12 +4170,15 @@ Ext.define('ProgramBoard', {
 				xtype:'scrolltableview',
 				stripeRows:true,
 				preserveScrollOnRefresh:true,
-				getRowClass: function(){ return 'intel-row-35px'; }
+				getRowClass: function(succDepRecord){ if(!succDepGridFilter(succDepRecord)) return 'hidden'; }
 			},
 			listeners: {
+				sortchange: function(){
+					filterSuccDepRowsByFn(succDepGridFilter);
+				},
 				beforeedit: function(editor, e){
 					var succDepRecord = e.record;
-					if(succDepRecord.data.Supported == 'No' && e.field != 'Supported') 
+					if(succDepRecord.data.Supported != 'Yes' && e.field != 'Supported') 
 						return false; //don't user story stuff if not supported
 				},
 				edit: function(editor, e){					
@@ -3330,18 +4214,18 @@ Ext.define('ProgramBoard', {
 						}
 					}
 					else if(field === 'Supported'){ //cant be non-supported with a user story!
-						if(value == 'No'){
+						if(value != 'Yes'){
 							succDepRecord.set('Assigned', false);
 							succDepRecord.set('FormattedID', '');
 							succDepRecord.set('UserStoryName', '');
 						}
 					}
+					updateSuccFilterOptions();
 				}
 			},
 			showRowActionsColumn:false,
 			showPagingToolbar:false,
 			enableEditing:false,
-			context: this.getContext(),
 			store: me.CustomSuccDepStore
 		});	
 	}	

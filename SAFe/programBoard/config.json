@@ -27,6 +27,7 @@
       "App.js"
    ],
    "css": [
+      "../lib/css/background-colors.css",
       "../lib/css/grid-icons.css",
       "../lib/css/team-dep-grid.css",
       "app.css"

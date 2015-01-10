@@ -22,10 +22,12 @@ Ext.define('IntelVelocity', {
 Ext.define('IntelTeamCommits', {
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'Rank', type: 'number'},
 		{name: 'Name', type: 'string'},
 		{name: 'ObjectID', type: 'string'},
 		{name: 'FormattedID', type:'string'},
 		{name: 'Commitment', type: 'string'},
+		{name: 'Expected', type: 'boolean'},
 		{name: 'Objective', type:'string'},
 		{name: 'Product', type:'string'},
 		{name: 'PlannedEnd', type:'number'}
@@ -36,11 +38,13 @@ Ext.define('IntelRisk', {
 	extend: 'Ext.data.Model',
 	fields: [
 		{name: 'RiskID', type:'string'},
-		{name: 'ObjectID', type:'number'},
+		{name: 'ObjectID', type:'number'}, //what feature OID the risk is saved to in Rally (not necessarily the FormattedID/FeatureName)
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
 		{name: 'Description', type: 'string'},
-		{name: 'Impact', type: 'string'},			
+		{name: 'Impact', type: 'string'},	
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Status', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
@@ -53,7 +57,7 @@ Ext.define('IntelDepTeam', {
 	fields: [
 		{name: 'TID',  type: 'string'},  //teamDep ID
 		{name: 'PID',  type: 'string'},  //pred team id
-		{name: 'Sup', type: 'string'}, 
+		{name: 'Sup', type: 'string'},  //Yes, No, Undefined
 		{name: 'USID', type: 'string'}, //pred formatted id
 		{name: 'USName', type: 'string'},
 		{name: 'A', type: 'boolean'} //yes/no
@@ -63,7 +67,7 @@ Ext.define('IntelDepTeam', {
 Ext.define('IntelPredDep', { //predecessor dependencies
 	extend: 'Ext.data.Model',
 	fields: [
-		{name: 'ObjectID', type: 'number'},
+		{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
 		{name: 'DependencyID', type:'string'},
 		{name: 'FormattedID',  type: 'string'}, 
 		{name: 'UserStoryName',  type: 'string'},
@@ -78,7 +82,7 @@ Ext.define('IntelPredDep', { //predecessor dependencies
 Ext.define('IntelSuccDep', { //predecessor dependency
 	extend: 'Ext.data.Model',
 	fields: [
-		{name: 'ObjectID', type: 'number'},
+		{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
 		{name: 'DependencyID', type:'string'}, //same id as the pred id that references it
 		{name: 'SuccUserStoryName', type: 'string' },
 		{name: 'SuccFormattedID',  type: 'string'}, 
@@ -89,7 +93,7 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 		{name: 'ReleaseDate',  type: 'number'}, 
 		{name: 'Description', type: 'string'}, 
 		{name: 'Checkpoint', type: 'number'},
-		{name: 'Supported', type: 'string'}, //Yes, No
+		{name: 'Supported', type: 'string'}, //Yes, No, Undefined
 		{name: 'Assigned', type: 'boolean'}, //yes/no
 		{name: 'Edited', type: 'boolean'}
 	]
@@ -100,15 +104,18 @@ Ext.define('IntelSuccDep', { //predecessor dependency
 Ext.define('IntelRiskWithProject', {
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'RiskID', type:'string'},
 		{name: 'ProjectName', type:'string'},
 		{name: 'ProjectID', type:'number'},
-		{name: 'RiskID', type:'string'},
+		{name: 'Product', type:'string'},
 		{name: 'ObjectID', type:'number'},
 		{name: 'FormattedID',  type: 'string'},
 		{name: 'FeatureName', type:'string'},
 		{name: 'Description', type: 'string'},
 		{name: 'Impact', type: 'string'},			
 		{name: 'Status', type: 'string'},
+		{name: 'MitigationPlan', type: 'string'},					
+		{name: 'Urgency', type: 'string'},
 		{name: 'Contact', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
 		{name: 'Edited', type: 'boolean'}
@@ -118,15 +125,16 @@ Ext.define('IntelRiskWithProject', {
 Ext.define('IntelPredDepWithProject', { //predecessor dependencies
 	extend: 'Ext.data.Model',
 	fields: [
+		{name: 'DependencyID', type:'string'},
 		{name: 'ProjectName', type:'string'},
 		{name: 'ProjectID', type:'number'},
-		{name: 'DependencyID', type:'string'},
+		{name: 'Product', type:'string'},
 		{name: 'ObjectID', type: 'number'},
 		{name: 'FormattedID',  type: 'string'}, 
 		{name: 'UserStoryName',  type: 'string'},
 		{name: 'Description', type: 'string'},
 		{name: 'Checkpoint', type: 'number'},
-		{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
+		{name: 'Status', type:'string'}, 
 		{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
 		{name: 'Edited', type: 'boolean'}
 	]
@@ -182,8 +190,7 @@ Ext.define('CFEditorModel', {
 			promises.push(deferred.promise);
 		});
 		return Q.all(promises);
-	},
-	
+	},	
 	_loadProject: function(oid){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -203,8 +210,7 @@ Ext.define('CFEditorModel', {
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadFeature: function(oid, projectRef){ //projectRef is optional
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -224,8 +230,7 @@ Ext.define('CFEditorModel', {
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadUserStory: function(oid, projectRef){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -246,8 +251,7 @@ Ext.define('CFEditorModel', {
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadMilestone: function(oid, projectRef){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -281,8 +285,7 @@ Ext.define('CFEditorModel', {
 				return me._loadRootProject(parentRecord);
 			});
 		}
-	},
-	
+	},	
 	_loadTopProject: function(projectRecord){
 		if(!projectRecord) return Q.reject('Invalid arguments: LTP');
 		var me=this, 
@@ -293,8 +296,7 @@ Ext.define('CFEditorModel', {
 				return me._loadTopProject(parentRecord);
 			});
 		}
-	},
-	
+	},	
 	_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
 		else {
@@ -310,8 +312,7 @@ Ext.define('CFEditorModel', {
 				}
 			}
 		}
-	},
-	
+	},	
 	_loadAllTrains: function(rootProjectRecord){
 		if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
 		var me=this,
@@ -339,8 +340,7 @@ Ext.define('CFEditorModel', {
 			console.log('AllTrainRecords loaded', store.data.items);
 			return Q(store);
 		});
-	},
-			
+	},			
 	_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
 		if(!projectRef) return Q.reject('Invalid arguments: LRUS');
 		var me=this,
@@ -368,7 +368,35 @@ Ext.define('CFEditorModel', {
 			else return Q(undefined);
 		});
 	},
-	
+	_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
+		if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
+		var me=this,
+			store = Ext.create('Rally.data.wsapi.Store',{
+				model: 'HierarchicalRequirement',
+				limit:5,
+				pageSize:5,
+				fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+				context:{
+					workspace: me.getContext().getWorkspace()._ref,
+					project: undefined
+				},
+				sorters: [{
+					property: 'CreationDate', 
+					direction:'DESC'
+				}],
+				filters:[
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
+					)
+				]
+			});
+		return me._reloadStore(store).then(function(store){
+			var records = store.data.items;
+			if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+			else return Q(undefined);
+		});
+	},
 	_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
 		if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
 		var me=this,
@@ -392,8 +420,7 @@ Ext.define('CFEditorModel', {
 		return me._reloadStore(store).then(function(store){
 			return Q(store.data.items.pop());
 		});
-	},
-	
+	},	
 	_loadProjectByName: function(name){
 		if(!name) return Q.reject('Invalid arguments: LPBN');
 		var me=this,
@@ -572,6 +599,50 @@ Ext.define('CFEditorModel', {
 				}
 			}
 			me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+			console.log('childrenProjects', childrenProjects);
+			return Q(childrenProjects);
+		});	
+	},
+	
+	_allLeafProjectsToList: function(projTree, hash){
+		var me=this, 
+			curProj = projTree.ProjectRecord;
+		if(curProj.data.Children.Count === 0) 
+			hash[curProj.data.ObjectID] = curProj;
+		for(var childProjRef in projTree){
+			if(childProjRef !== 'ProjectRecord')
+				me._allLeafProjectsToList(projTree[childProjRef], hash);
+		}
+	},
+	
+	_loadAllLeafProjects: function(rootProjectRecord){
+		if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
+		var me=this,
+			childrenProjects = {}, 
+			projTree = {};
+		var store = Ext.create('Rally.data.wsapi.Store', {
+			model: "Project",
+			fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
+			limit:Infinity,
+			context: {
+				workspace: me.getContext().getWorkspace()._ref,
+				project:null
+			}
+		});
+		return me._reloadStore(store).then(function(store){
+			var projects = store.data.items;
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
 			console.log('childrenProjects', childrenProjects);
 			return Q(childrenProjects);
 		});	
@@ -803,65 +874,89 @@ Ext.define('PrettyAlert', {
 		}, 20);
 	}
 });
-                Ext.define('IntelWorkweek', {
-	
-	/** calculates intel workweek, returns integer */
-	_getWorkweek: function(_date){ 
-		var date = new Date(_date),
-			oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
-	},
-	
-	/** returns the number of intel workweeks in the year the date is in */
-	_getWeekCount: function(_date){ 
-		var date = new Date(_date),
-			leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay();
-		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
-	},
-	
-	_roundDateDownToWeekStart: function(_date){ //returns number
-		var date = new Date(_date),
-			dayLength = 1000*60*60*24,
-			day = date.getDay(),
-			monthDate = date.getDate(),
-			month = date.getMonth(),
-			year = date.getFullYear();
-		return new Date(year, month, monthDate)*1 - (day * dayLength);
-	},
-	
-	/**  gets list of date numbers for each week start between start and end date*/
-	_getWorkweekDates: function(startDate, endDate){ 
-		var oneWeek = 1000 * 60 * 60 * 24 * 7,
-			startWeekDate = this._roundDateDownToWeekStart(startDate),
-			endWeekDate = this._roundDateDownToWeekStart(endDate),
-			totalWeeks = Math.floor((endWeekDate - startWeekDate) / oneWeek) + 1,
-			weeks = new Array(totalWeeks);
-		for(var i=0; i<totalWeeks; ++i) 
-			weeks[i] = startWeekDate + oneWeek*i;
-		return weeks;
-	},
-	
-	_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
-		var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
-			data = new Array(workweeks.length);
-		for(var i=0, len=workweeks.length; i<len; ++i){
-			data[i] = { 
-				Workweek: 'ww' + this._getWorkweek(workweeks[i]),
-				DateVal: workweeks[i]
-			};
-		}
-		return data;
-	}
-});
+                (function(){
+	var intel_ww = {},
+		SECOND = 1000,
+		MINUTE = 60*SECOND,
+		HOUR = 60*MINUTE,
+		DAY = 24*HOUR,
+		WEEK = 7*DAY;
+		
+	Ext.define('IntelWorkweek', {
+		/** 
+			intel workweek utility module. you can pass in Date objects, strings, or numbers.
+			do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
+		**/
+		
+		/** calculates intel workweek, returns integer */
+		_getWorkweek: function(_date){  //ww1 always contains jan 1st
+			var date = new Date(_date),
+				yearStart = new Date(date.getFullYear(), 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01Start = new Date(yearStart - dayIndex*DAY),
+				utcDateMillis = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+				ww01Millis = Date.UTC(ww01Start.getFullYear(), ww01Start.getMonth(), ww01Start.getDate()),
+				timeDiff = utcDateMillis - ww01Millis,
+				ww = Math.floor(timeDiff/WEEK) + 1,
+				leap = (date.getFullYear() % 4 === 0),
+				weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+			return weekCount < ww ? 1 : ww;
+		},
+		
+		/** returns the number of intel workweeks in the year the date is in */
+		_getWeekCount: function(_date){  // # of intel workweeks in the year the date is in
+			var date = new Date(_date),
+				leap = (date.getFullYear() % 4 === 0),
+				day = new Date(date.getFullYear(), 0, 1).getDay();
+			return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+		},
+		
+		_roundDateDownToWeekStart: function(_date){
+			var date = new Date(_date),
+				day = date.getDay(),
+				monthDate = date.getDate(),
+				month = date.getMonth(),
+				year = date.getFullYear(),
+				sundayMidday = new Date(new Date(year, month, monthDate)*1 - (day*DAY - 0.5*DAY)); //daylight savings ._.
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		/**  gets list of date numbers for each week start between start and end date*/
+		_getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
+			var startWeekDate = this._roundDateDownToWeekStart(startDate),
+				endWeekDate = this._roundDateDownToWeekStart(endDate),
+				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
+				endMillis = Date.UTC(endWeekDate.getFullYear(), endWeekDate.getMonth(), endWeekDate.getDate()),
+				totalWeeks = Math.floor((endMillis - startMillis) / WEEK)+1,
+				weeks = new Array(totalWeeks);
+			for(var i=0; i<totalWeeks; ++i) {
+				var sundayMidday = new Date(startWeekDate*1 + (WEEK*i + HOUR*12));
+				weeks[i] = new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+			}
+			return weeks;
+		},
+		
+		_workweekToDate: function(ww, year){ //gets the Date() object of this ww and year
+			var yearStart = new Date(year, 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01StartMidday = new Date(yearStart - (dayIndex*DAY - 0.5*DAY)),
+				sundayMidday = new Date(ww01StartMidday*1 + (ww-1)*WEEK);
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
+			var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
+				data = new Array(workweeks.length);
+			for(var i=0, len=workweeks.length; i<len; ++i){
+				data[i] = { 
+					Workweek: 'ww' + this._getWorkweek(workweeks[i]),
+					DateVal: workweeks[i]*1
+				};
+			}
+			return data;
+		}	
+	});
+}());
                 /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
 	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
 	most functions return promises that resolve to stores
@@ -934,11 +1029,11 @@ Ext.define('ReleaseQuery', {
 		return deferred.promise;
 	},
 	
-	/** loads this release for each scrum under this train. returns promise with the release Store 
+	/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
 		the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
 		in the results.
 	**/
-	_loadReleasesWithName: function(releaseName, trainName){ 
+	_loadReleasesWithName: function(releaseName, nameContains){ 
 		var deferred = Q.defer();
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'Release',
@@ -954,11 +1049,11 @@ Ext.define('ReleaseQuery', {
 					property:'Name', //match the release
 					value: releaseName
 				},{
-					property:'Project.Name', //is a child of the train
+					property:'Project.Name', 
 					operator:'contains',
-					value:trainName
+					value:nameContains
 				},{
-					property:'Project.Children.Name', //has teamMembers 
+					property:'Project.Children.Name', //has children 
 					operator:'=',
 					value:''
 				},{
@@ -972,6 +1067,66 @@ Ext.define('ReleaseQuery', {
 					fn: function(store, records){
 						console.log('releasesWithName loaded:', records);
 						deferred.resolve(store);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	_loadReleaseByNameForProject: function(releaseName, projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[{
+				property:'Name',
+				value: releaseName
+			},{
+				property:'Project', 
+				value:projectRecord.data._ref
+			}],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						deferred.resolve(records.pop());
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[{
+				property:'Name',
+				operator:'contains',
+				value: releaseName
+			},{
+				property:'Project', 
+				value:projectRecord.data._ref
+			}],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						deferred.resolve(records);
 					},
 					single:true
 				}
@@ -1075,6 +1230,7 @@ Ext.define('AsyncQueue', {
 		options = Ext.merge({
 			editable: false,	
 			allowBlank:false,
+			queryMode:'local',
 			listeners: {
 				focus: function(combo) {
 					combo.setValue('');
@@ -1484,7 +1640,7 @@ Ext.define('CommitMatrix', {
 			FName = fRecord.data.Name,
 			storyStore = Ext.create('Rally.data.wsapi.Store',{
 				model:'HierarchicalRequirement',
-				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'FormattedID', 'PlanEstimate'],
+				fetch: ['ObjectID', 'Project', 'Name', 'Feature', 'Children', 'FormattedID', 'PlanEstimate'],
 				limit:Infinity,
 				context:{
 					workspace: me.getContext().getWorkspace()._ref,
@@ -1509,8 +1665,7 @@ Ext.define('CommitMatrix', {
 					me.MatrixProjectMap[PName] = sr.data.Project.ObjectID;
 				}
 			});
-	},	
-		
+	},		
 	_loadFeatures: function(){
 		var me=this, 
 			featureStore = Ext.create('Rally.data.wsapi.Store',{
@@ -1548,8 +1703,7 @@ Ext.define('CommitMatrix', {
 			});
 	},	
 	
-	/****************************************************** PROJECTS ************************************/
-		
+	/****************************************************** PROJECTS ************************************/		
 	_getProjectsInScope:function(){
 		var projects = "__PROJECT_OIDS_IN_SCOPE__";
 		projects = projects.match(/^\d+/) ? projects.split(',') : [this.context.getProject().ObjectID];
@@ -1559,7 +1713,6 @@ Ext.define('CommitMatrix', {
 		});
 		return projectsInScope;
 	},
-
 	_addDefaultProjectsToStructures: function(msub, mpm, feats, projects){
 		var me=this;
 		_.each(projects, function(p){ 
@@ -1571,8 +1724,7 @@ Ext.define('CommitMatrix', {
 				});
 			}
 		});
-	},
-			
+	},			
 	_loadDefaultProjects:function(){
 		var me=this,
 			inScope = me._getProjectsInScope(),
@@ -1606,22 +1758,20 @@ Ext.define('CommitMatrix', {
 			tcString = featureRecord.data.c_TeamCommits;
 		try{ return JSON.parse(atob(tcString)) || {}; }
 		catch(e){ return {}; }
-	},
-	
+	},	
 	_getTeamCommit: function(featureRecord, ProjectName){	
 		var me=this,
 			projectID = me.MatrixProjectMap[ProjectName],
 			featureTC = me._getTeamCommitFromFeature(featureRecord);
 		return featureTC[projectID] || {};
-	},
-	
-	_setExpected: function(featureRecord, ProjectName, value){
+	},	
+	_setTeamCommitsField: function(featureRecord, ProjectName, field, value){
 		var me=this,
 			projectID = me.MatrixProjectMap[ProjectName],
 			featureTC = me._getTeamCommitFromFeature(featureRecord),
 			deferred = Q.defer();	
 		if(!featureTC[projectID]) featureTC[projectID] = {};
-		featureTC[projectID].Expected = value;		
+		featureTC[projectID][field] = value;		
 		var str = btoa(JSON.stringify(featureTC, null, '\t'));
 		if(str.length >= 32768) deferred.reject('TeamCommits field for ' + featureRecord.data.FormattedID + ' ran out of space! Cannot save');
 		else {
@@ -1636,8 +1786,7 @@ Ext.define('CommitMatrix', {
 		return deferred.promise;
 	},
 
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
 			uid = me.getContext().getUser().ObjectID,
@@ -1656,7 +1805,6 @@ Ext.define('CommitMatrix', {
 		});
 		return deferred.promise;
 	},
-
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
 			uid = me.getContext().getUser().ObjectID,
@@ -1672,15 +1820,14 @@ Ext.define('CommitMatrix', {
 		});
 		return deferred.promise;
 	},
+	
 	/************************************************** Event Handler  *********************************************************/
-
 	_getGridHeight: function(){
 		var me = this, 
 			loc = window.location,
 			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]'));
 		return iframe.getHeight() - me.down('#navbox').getHeight();
 	},
-
 	_getGridWidth: function(columnCfgs){
 		var me = this; 
 		if(!me.MatrixGrid) return;
@@ -1688,14 +1835,12 @@ Ext.define('CommitMatrix', {
 			_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 			window.parent.innerWidth - 20
 		);
-	},
-	
+	},	
 	_changeGridSize: function(){
 		var me=this;
 		if(!me.MatrixGrid) return;
 		else me.MatrixGrid.setSize(me._getGridWidth(me.MatrixGrid.config.columnCfgs), me._getGridHeight());
-	},
-	
+	},	
 	_initGridResize: function(){
 		var me=this;
 		if(me._addWindowEventListener){
@@ -1704,7 +1849,6 @@ Ext.define('CommitMatrix', {
 	},	
 
 	/******************************************************* Utility FUnctions ******************************************************/
-
 	_clearToolTip: function(){
 		var me = this;
 		if(me.tooltip){
@@ -1714,27 +1858,43 @@ Ext.define('CommitMatrix', {
 			me.tooltip.triangle.destroy();
 			me.tooltip = null;
 		}
-	},
-	
-	_setCellColor:function(td, commitment, expected, usCount){
-		var currentColors = td.className.match(/intel-team-commits-(.*)$/)[1].split('-'),
-			colors = ['WHITE', 'GREY', 'GREEN', 'RED'],
-			newColors = [];
+	},	
+	_setCellColor:function(td, commitment, expected, managerComment, usCount){
+		var classList = td.classList,
+			colorClassBase = 'intel-team-commits-',
+			expectedClass = 'manager-expected-cell-small',
+			commentClass = 'manager-comment-cell-small',
+			expectedCommentClass = 'manager-expected-comment-cell-small',
+			oldExpected = classList.contains(expectedClass),
+			oldComment = classList.contains(commentClass),
+			oldExpectedComment = classList.contains(expectedCommentClass),
+			oldColorClass = _.find(classList, function(c){ return c.indexOf(colorClassBase) > -1; }),
+			newColorClass;
+
 		switch(commitment){
-			case 'Undecided': newColors[0] = 'WHITE'; break;
-			case 'N/A': newColors[0] = 'GREY'; break;
-			case 'Committed': newColors[0] = 'GREEN'; break;
-			case 'Not Committed': newColors[0] = 'RED'; break;
-			default: newColors[0] = 'WHITE'; break;
+			case 'Undecided': newColorClass = colorClassBase + 'WHITE'; break;
+			case 'N/A': newColorClass = colorClassBase + 'GREY'; break;
+			case 'Committed': newColorClass = colorClassBase + 'GREEN'; break;
+			case 'Not Committed': newColorClass = colorClassBase + 'RED'; break;
+			default: newColorClass = colorClassBase + 'WHITE'; break;
 		}
-		if(expected) newColors[1] = 'YELLOW';
-		if(newColors[0] != currentColors[0] || newColors[1] != currentColors[1] || td.innerText*1 !== usCount*1){
-			td.classList.remove('intel-team-commits-' + currentColors.join('-'));
-			td.classList.add('intel-team-commits-' + newColors.join('-'));
-			td.childNodes[0].innerText = usCount;
-		}
-	},
 		
+		if(expected !== oldExpected || managerComment != oldComment || 
+				oldExpectedComment != expected || oldExpectedComment != managerComment ||
+				oldColorClass != newColorClass || td.innerText*1 !== usCount*1){
+			td.childNodes[0].innerText = usCount;
+			td.classList.remove(oldColorClass);
+			td.classList.add(newColorClass);
+			if(expected && managerComment) td.classList.add(expectedCommentClass);
+			else {
+				td.classList.remove(expectedCommentClass);
+				if(expected) td.classList.add(expectedClass);
+				else td.classList.remove(expectedClass);
+				if(managerComment) td.classList.add(commentClass);
+				else td.classList.remove(commentClass);
+			}
+		}
+	},		
 	_getDistanceFromBottomOfScreen: function(innerY){
 		var me = this, 
 			loc = window.location,
@@ -1746,20 +1906,17 @@ Ext.define('CommitMatrix', {
 		return ph - actualY;
 	},
 	
-	/************************************************************ UPDATE *************************************************************/
-	
+	/************************************************************ UPDATE *************************************************************/	
 	_showGrids: function(){
 		var me=this;
 		me._loadMatrixGrid();
-	},
-	
+	},	
 	_updateGrids: function(){
 		var me=this;
 		if(me.FeatureStore){
 			if(me.CustomMatrixStore) me.CustomMatrixStore.intelUpdate();
 		}
 	},
-
 	_reloadStores: function(){
 		var me = this, promises = [];
 		if(me.FeatureStore) promises.push(me._reloadStore(me.FeatureStore));
@@ -1774,7 +1931,6 @@ Ext.define('CommitMatrix', {
 		}
 		return Q.all(promises);
 	},
-
 	_reloadEverything: function(){
 		var me=this;
 
@@ -1823,8 +1979,7 @@ Ext.define('CommitMatrix', {
 		});
 	},
 	
-	/******************************************************* AUTOREFRESHING ********************************************************/
-	
+	/******************************************************* AUTOREFRESHING ********************************************************/	
 	_refreshDataFunc: function(){ //also performes a window resize after data is loaded
 		var me=this;
 		me._enqueue(function(unlockFunc){
@@ -1840,15 +1995,13 @@ Ext.define('CommitMatrix', {
 				})
 				.done();
 		});
-	},
-	
+	},	
 	_setRefreshInterval: function(){
 		var me=this;
 		me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 10000);
 	},
 		
-	/******************************************************* LAUNCH ********************************************************/
-	
+	/******************************************************* LAUNCH ********************************************************/	
 	launch: function(){
 		var me = this;
 		me.Mode = 'Details';
@@ -1886,7 +2039,8 @@ Ext.define('CommitMatrix', {
 				.then(function(productStore){
 					me.ProductNames = _.map(productStore.data.items, function(product){ return {ProductName: product.data.Name}; });
 					me.ProductNames = [{ProductName: 'All Products'}].concat(me.ProductNames);
-					return me._loadReleasesInTheFuture(me.TrainRecord);
+					var threeWeeksAgo = new Date()*1 - 3*7*24*60*60*1000;
+					return me._loadReleasesAfterGivenDate(me.ProjectRecord, threeWeeksAgo);
 				})
 				.then(function(releaseStore){		
 					me.ReleaseStore = releaseStore;
@@ -1908,8 +2062,7 @@ Ext.define('CommitMatrix', {
 		}
 	},
 	
-	/******************************************************* RENDER NAVBAR ********************************************************/
-		
+	/******************************************************* RENDER NAVBAR ********************************************************/		
 	_releasePickerSelected: function(combo, records){
 		var me=this;
 		if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -1926,8 +2079,7 @@ Ext.define('CommitMatrix', {
 				me.setLoading(false);
 			})
 			.done();
-	},
-	
+	},	
 	_loadReleasePicker: function(){
 		var me=this;
 		me.ReleasePicker = me.down('#navbox_left_vert').add({
@@ -1942,14 +2094,12 @@ Ext.define('CommitMatrix', {
 			}
 		});
 	},
-
 	_modePickerSelected: function(combo, records){
 		var me=this, value = records[0].data.Mode;
 		if(value === me.Mode) return;
 		else me.Mode = value;
 		me._clearToolTip();
-	},
-				
+	},				
 	_loadModePicker: function(){
 		var me=this;
 		me.ModePicker = me.down('#navbox_left_vert').add({
@@ -1960,8 +2110,9 @@ Ext.define('CommitMatrix', {
 			store: Ext.create('Ext.data.Store', {
 				fields:['Mode'],
 				data: [
-					{'Mode':'Flag'},
-					{'Mode':'Details'}
+					{Mode:'Flag'},
+					{Mode:'Comment'},
+					{Mode:'Details'}
 				]
 			}),
 			displayField: 'Mode',
@@ -1970,8 +2121,7 @@ Ext.define('CommitMatrix', {
 				select: me._modePickerSelected.bind(me)
 			}
 		});
-	},
-	
+	},	
 	_productPickerSelected: function(combo, records){
 		var me=this,
 			value = records[0].data.ProductName;
@@ -1984,8 +2134,7 @@ Ext.define('CommitMatrix', {
 			}));
 		}
 		me._clearToolTip();
-	},
-				
+	},				
 	_loadProductPicker: function(){
 		var me=this;
 		me.ProductPicker = me.down('#navbox_left_vert').add({
@@ -2003,8 +2152,7 @@ Ext.define('CommitMatrix', {
 				select: me._productPickerSelected.bind(me)
 			}
 		});
-	},
-		
+	},		
 	_loadMatrixLegend: function(){
 		var me=this;
 		me.MatrixLegend = me.down('#navbox_right').add({
@@ -2017,13 +2165,14 @@ Ext.define('CommitMatrix', {
 			},
 			border:true,
 			frame:false,
-			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected'], function(name){
+			items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected', 'CE Comment'], function(name){
 				var color;
 				if(name === 'Undecided') color='white';
 				if(name === 'N/A') color='rgba(224, 224, 224, 0.50)'; //grey
 				if(name === 'Committed') color='rgba(0, 255, 0, 0.50)';//grenn
 				if(name === 'Not Committed') color='rgba(255, 0, 0, 0.50)';//red
 				if(name === 'Expected') color='rgba(251, 255, 0, 0.50)'; //yellow
+				if(name === 'CE Comment') color='rgba(76, 76, 255, 0.50)'; //blue
 				return {
 					xtype: 'container',
 					width:120,
@@ -2037,7 +2186,6 @@ Ext.define('CommitMatrix', {
 	},
 
 	/************************************************************* RENDER ********************************************************************/
-
 	_loadMatrixGrid: function(){
 		var me = this,
 			sortedFeatures = _.sortBy(me.FeatureStore.data.items, function(f){ return f.data.DragAndDropRank; }),
@@ -2073,10 +2221,11 @@ Ext.define('CommitMatrix', {
 						var projectName = projectNames[j],
 							usCount = (me.MatrixUserStoryBreakdown[projectName][featureRecord.data.Name] || []).length,
 							td = tr.childNodes[j], //ignore fixed columns on left
-							tcae = me._getTeamCommit(featureRecord, projectName),
-							expected = tcae.Expected || false,
-							commitment = tcae.Commitment || 'Undecided'; 
-						me._setCellColor(td, commitment, expected, usCount);
+							teamCommit = me._getTeamCommit(featureRecord, projectName),
+							expected = teamCommit.Expected || false,
+							managerComment = !!(teamCommit.ManagerComment || false),
+							commitment = teamCommit.Commitment || 'Undecided'; 
+						me._setCellColor(td, commitment, expected, managerComment, usCount);
 					}
 				}
 			}
@@ -2176,14 +2325,20 @@ Ext.define('CommitMatrix', {
 					if(!featureRecord) return;
 					var array = me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [],
 						count = array.length,
-						tcae = me._getTeamCommit(featureRecord, ProjectName),
-						expected = tcae.Expected || false,
-						commitment = tcae.Commitment || 'Undecided'; 
+						teamCommit = me._getTeamCommit(featureRecord, ProjectName),
+						expected = teamCommit.Expected || false,
+						managerComment = teamCommit.ManagerComment || false,
+						commitment = teamCommit.Commitment || 'Undecided'; 
 					if(commitment === 'Undecided') metaData.tdCls += ' intel-team-commits-WHITE';
 					else if(commitment === 'N/A') metaData.tdCls += ' intel-team-commits-GREY';
 					else if(commitment === 'Committed') metaData.tdCls += ' intel-team-commits-GREEN';
 					else if(commitment === 'Not Committed') metaData.tdCls += ' intel-team-commits-RED';
-					if(expected) metaData.tdCls += '-YELLOW';
+					
+					if(expected && managerComment) metaData.tdCls += ' manager-expected-comment-cell-small';
+					else {
+						if(expected) metaData.tdCls += ' manager-expected-cell-small';
+						if(managerComment) metaData.tdCls += ' manager-comment-cell-small';
+					}
 					return count;
 				}
 			});
@@ -2203,9 +2358,7 @@ Ext.define('CommitMatrix', {
 				preserveScrollOnRefresh:true
 			},
 			listeners: {
-				sortchange: function(){ 
-					me._clearToolTip(); 
-				},
+				sortchange: function(){ me._clearToolTip(); },
 				beforeedit: function(editor, e){
 					var projectName = e.column.text,
 						matrixRecord = e.record;
@@ -2216,7 +2369,7 @@ Ext.define('CommitMatrix', {
 							me._loadFeature(matrixRecord.data.ObjectID)
 								.then(function(featureRecord){
 									var tcae = me._getTeamCommit(featureRecord, projectName);
-									return me._setExpected(featureRecord, projectName, !tcae.Expected);
+									return me._setTeamCommitsField(featureRecord, projectName, 'Expected', !tcae.Expected);
 								})
 								.then(function(featureRecord){
 									me.MatrixGrid.setLoading(false);
@@ -2242,79 +2395,171 @@ Ext.define('CommitMatrix', {
 					
 					grid.mon(view, {
 						uievent: function (type, view, cell, row, col, e) {
-							if(me.Mode === 'Details' && type === 'mousedown') {
+							if((me.Mode === 'Details' || me.Mode === 'Comment') && type === 'mousedown') {
 								var matrixRecord = me.CustomMatrixStore.getAt(row),
 									ProjectName = view.getGridColumns()[col].text,
 									featureRecord = me.FeatureStore.findRecord('ObjectID', matrixRecord.data.ObjectID),
-									tcae = me._getTeamCommit(featureRecord, ProjectName),
+									teamCommit = me._getTeamCommit(featureRecord, ProjectName),
+									oldTooltip = me.tooltip,
 									pos = cell.getBoundingClientRect(),
-									t = me.tooltip;
-								if(t){
-									me._clearToolTip();
-									if(t.row == row && t.col == col) return;
+									dbs = me._getDistanceFromBottomOfScreen(pos.top),
+									panelWidth = 400;
+								if(oldTooltip) me._clearToolTip();
+								if(oldTooltip && (oldTooltip.row == row && oldTooltip.col == col)) return;
+								
+								if(me.Mode === 'Details'){
+									var panelHTML = [
+										'<p><b>CE Comment:</b> ' + (teamCommit.ManagerComment || '') + '</p>',
+										'<p><b>Objective:</b> ' + (teamCommit.Objective || '') + '</p>',
+										'<p><b>PlanEstimate: </b>',
+											_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
+												return sum + (sr.data.Children.Count === 0 ? (sr.data.PlanEstimate || 0) : 0); 
+											}, 0),
+										'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>'].join('');
+									(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
+										panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
+											'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
+											'<span title="' + sr.data.Name + '">' + 
+											sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
+									});
+									panelHTML += '</ol></div>';
+								
+									me.tooltip = {
+										row:row,
+										col:col,
+										panel: Ext.widget('container', {
+											floating:true,
+											width: panelWidth,
+											autoScroll:false,
+											id:'MatrixTooltipPanel',
+											cls: 'intel-tooltip',
+											focusOnToFront:false,
+											shadow:false,
+											renderTo:Ext.getBody(),
+											html:panelHTML,
+											listeners:{
+												afterrender: function(panel){
+													var upsideDown = (dbs < panel.getHeight() + 80);
+													panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
+												}
+											}
+										})	
+									};
 								}
-								
-								var panelWidth = 400;
-								var theHTML = 
-									'<p><b>' + (tcae.Commitment == 'Committed' ? 'Objective: ' : 'Comment: ') + '</b>' + (tcae.Objective || '') +
-									'<p><b>PlanEstimate: </b>' + 
-									_.reduce(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || [], function(sum, sr){
-										return sum + (sr.data.PlanEstimate || 0); }, 0) +
-									'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>';
-								(me.MatrixUserStoryBreakdown[ProjectName][featureRecord.data.Name] || []).forEach(function(sr){
-									theHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
-										'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
-										'<span title="' + sr.data.Name + '">' + 
-										sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
-								});
-								theHTML += '</ol></div>';
-								
-								var dbs = me._getDistanceFromBottomOfScreen(pos.top);
-								
-								me.tooltip = {
-									row:row,
-									col:col,
-									panel: Ext.widget('container', {
-										floating:true,
-										width: panelWidth,
-										autoScroll:false,
-										id:'MatrixTooltipPanel',
-										cls: 'intel-tooltip',
-										focusOnToFront:false,
-										shadow:false,
-										renderTo:Ext.getBody(),
-										html:theHTML,
-										listeners:{
-											afterrender: function(panel){
-												var upsideDown = (dbs < panel.getHeight() + 80);
-												panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
-											}
-										}
-									}),
-									triangle: Ext.widget('container', {
-										floating:true,
-										width:0, height:0,
-										focusOnToFront:false,
-										shadow:false,
-										renderTo:Ext.getBody(),
-										listeners:{
-											afterrender: function(panel){
-												setTimeout(function(){
-													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
-													if(upsideDown) {
-														panel.removeCls('intel-tooltip-triangle');
-														panel.addCls('intel-tooltip-triangle-up');
-														panel.setPosition(pos.left -10, pos.bottom -10);
-													} else {
-														panel.removeCls('intel-tooltip-triangle-up');
-														panel.addCls('intel-tooltip-triangle');
-														panel.setPosition(pos.left -10, pos.top);
+								else {
+									me.tooltip = {
+										row:row,
+										col:col,
+										panel: Ext.widget('container', {
+											floating:true,
+											width: panelWidth,
+											autoScroll:false,
+											id:'MatrixTooltipPanel',
+											cls: 'intel-tooltip',
+											focusOnToFront:false,
+											shadow:false,
+											renderTo:Ext.getBody(),
+											items: [{
+												xtype:'container',
+												layout:'hbox',
+												items:[{
+													xtype:'text',
+													flex:1,
+													text: 'Comment:',
+													style:'font-weight:bold;'
+												},{
+													xtype:'checkbox',
+													width:140,
+													boxLabel:'CE Expected',
+													checked:teamCommit.Expected,
+													handler:function(checkbox, checked){
+														me.tooltip.panel.setLoading(true);
+														me._enqueue(function(unlockFunc){
+															me._loadFeature(matrixRecord.data.ObjectID)
+																.then(function(featureRecord){
+																	var tcae = me._getTeamCommit(featureRecord, ProjectName);
+																	return me._setTeamCommitsField(featureRecord, ProjectName, 'Expected', !tcae.Expected);
+																})
+																.then(function(featureRecord){
+																	me.tooltip.panel.setLoading(false);
+																	var storeRecord = me.FeatureStore.findExactRecord('ObjectID', matrixRecord.data.ObjectID);
+																	storeRecord.data.c_TeamCommits = featureRecord.data.c_TeamCommits;
+																	me.MatrixGrid.view.refreshNode(me.CustomMatrixStore.indexOf(matrixRecord));
+																	unlockFunc();
+																})
+																.fail(function(reason){
+																	me.tooltip.panel.setLoading(false);
+																	me._alert('ERROR', reason || '');
+																	unlockFunc();
+																})
+																.done();
+														});
 													}
-												}, 10);
+												}]
+											},{
+												xtype:'textarea',
+												value: teamCommit.ManagerComment || '',
+												width:'95%',
+												id: 'MatrixTooltipPanelTextarea'
+											},{
+												xtype:'button',
+												margin:'0 10 0 0',
+												text:'Close',
+												listeners:{ click: function(){ me._clearToolTip(); } }
+											},{
+												xtype:'button',
+												text:'Save',
+												listeners:{
+													click: function(){
+														me.MatrixGrid.setLoading(true);
+														var val = Ext.getCmp('MatrixTooltipPanelTextarea').getValue();
+														me._loadFeature(featureRecord.data.ObjectID)
+															.then(function(featureRecord){ 
+																return me._setTeamCommitsField(featureRecord, ProjectName, 'ManagerComment', val);
+															})
+															.then(function(featureRecord){
+																var storeRecord = me.FeatureStore.findExactRecord('ObjectID', featureRecord.data.ObjectID);
+																storeRecord.data.c_TeamCommits = featureRecord.data.c_TeamCommits;
+																me.MatrixGrid.view.refreshNode(row);
+															})
+															.fail(function(reason){ me._alert('Error:', reason); })
+															.then(function(){	me.MatrixGrid.setLoading(false); })
+															.done();
+													}
+												}
+											}],
+											listeners:{
+												afterrender: function(panel){
+													var upsideDown = (dbs < panel.getHeight() + 80);
+													panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
+												}
 											}
+										})
+									};
+								}
+								me.tooltip.triangle = Ext.widget('container', {
+									floating:true,
+									width:0, height:0,
+									focusOnToFront:false,
+									shadow:false,
+									renderTo:Ext.getBody(),
+									listeners:{
+										afterrender: function(panel){
+											setTimeout(function(){
+												var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
+												if(upsideDown) {
+													panel.removeCls('intel-tooltip-triangle');
+													panel.addCls('intel-tooltip-triangle-up');
+													panel.setPosition(pos.left -10, pos.bottom -10);
+												} else {
+													panel.removeCls('intel-tooltip-triangle-up');
+													panel.addCls('intel-tooltip-triangle');
+													panel.setPosition(pos.left -10, pos.top);
+												}
+											}, 10);
 										}
-									})	
-								};
+									}
+								});	
 							}
 						}
 					});
@@ -2336,11 +2581,41 @@ Ext.define('CommitMatrix', {
 
 
     <style type="text/css">
-        .x-grid-row .intel-editor-cell {
-  cursor: pointer !important;
+        .x-grid-cell.manager-expected-cell {
+  background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 30px;
+  background-repeat: no-repeat;
 }
-.x-grid-row .intel-editor-cell * {
-  cursor: pointer !important;
+.x-grid-cell.manager-expected-cell-small {
+  background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-comment-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-expected-comment-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
 }
 .x-grid-cell.intel-team-commits-RED {
   background-color: rgba(255, 0, 0, 0.5) !important;
@@ -2357,43 +2632,20 @@ Ext.define('CommitMatrix', {
   background-color: rgba(0, 255, 0, 0.7) !important;
 }
 .x-grid-cell.intel-team-commits-GREY {
-  background-color: rgba(224, 224, 224, 0.5) !important;
+  background-color: rgba(183, 183, 183, 0.5) !important;
 }
 .x-grid-row-selected .x-grid-cell.intel-team-commits-GREY,
 .x-grid-row-over .x-grid-cell.intel-team-commits-GREY {
-  background-color: rgba(224, 224, 224, 0.7) !important;
+  background-color: rgba(183, 183, 183, 0.7) !important;
 }
-.x-grid-cell.intel-team-commits-WHITE-YELLOW {
-  background-image: -webkit-gradient(linear, right top, left bottom, color-stop(0.5, rgba(251, 255, 0, 0.5)), color-stop(0.5, rgba(0, 0, 0, 0))) !important;
-  background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
+
+    </style>
+    <style type="text/css">
+        .x-grid-row .intel-editor-cell {
+  cursor: pointer !important;
 }
-.x-grid-cell.intel-team-commits-RED-YELLOW {
-  background-image: -webkit-gradient(linear, right top, left bottom, color-stop(0.5, rgba(251, 255, 0, 0.5)), color-stop(0.5, rgba(255, 0, 0, 0.5))) !important;
-  background-image: -o-linear-gradient(right top, rgba(255, 0, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(255, 0, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(255, 0, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(255, 0, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: linear-gradient(to right top, rgba(255, 0, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-}
-.x-grid-cell.intel-team-commits-GREEN-YELLOW {
-  background-image: -webkit-gradient(linear, right top, left bottom, color-stop(0.5, rgba(251, 255, 0, 0.5)), color-stop(0.5, rgba(0, 255, 0, 0.5))) !important;
-  background-image: -o-linear-gradient(right top, rgba(0, 255, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(0, 255, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(0, 255, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(0, 255, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: linear-gradient(to right top, rgba(0, 255, 0, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-}
-.x-grid-cell.intel-team-commits-GREY-YELLOW {
-  background-image: -webkit-gradient(linear, right top, left bottom, color-stop(0.5, rgba(251, 255, 0, 0.5)), color-stop(0.5, rgba(224, 224, 224, 0.5))) !important;
-  background-image: -o-linear-gradient(right top, rgba(224, 224, 224, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(224, 224, 224, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(224, 224, 224, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(224, 224, 224, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
-  background-image: linear-gradient(to right top, rgba(224, 224, 224, 0.5) 75%, rgba(251, 255, 0, 0.5) 75%) !important;
+.x-grid-row .intel-editor-cell * {
+  cursor: pointer !important;
 }
 .intel-legend-dot {
   width: 12px;
@@ -2412,6 +2664,13 @@ Ext.define('CommitMatrix', {
   background-color: #C0D9FA;
   border-radius: 8px;
   z-index: 500;
+}
+.intel-tooltip p {
+  margin: 2px 0 2px 0;
+}
+.intel-tooltip ol {
+  margin: 2px 0 2px 0;
+  padding-left: 20px;
 }
 .intel-tooltip-triangle {
   border-left: 10px solid transparent;
