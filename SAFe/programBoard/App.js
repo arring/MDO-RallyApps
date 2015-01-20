@@ -304,9 +304,7 @@ Ext.define('ProgramBoard', {
 			releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 			releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
 			trainName = me.TrainRecord.data.Name.split(' ART')[0],
-			releaseNameFilter = 
-				Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
-				Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })),
+			releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 			userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: me.ProjectRecord.data._ref });
 		return [{
 			title: 'Unsized Stories',
@@ -357,7 +355,7 @@ Ext.define('ProgramBoard', {
 				model: 'HierarchicalRequirement',
 				limit:Infinity,
 				remoteSort:false,
-				fetch: ['Name', 'FormattedID', 'ObjectID', 'Project'],
+				fetch: ['Name', 'FormattedID', 'ObjectID', 'Project', 'Iteration', 'Release'],
 				context:{
 					workspace: me.getContext().getWorkspace()._ref,
 					project: null
@@ -1832,8 +1830,7 @@ Ext.define('ProgramBoard', {
 					}]
 				}]
 			},
-			height:350,
-			flex:2,
+			height:410,
 			padding:'0 20px 0 0',
 			scroll:'vertical',
 			columnCfgs: columnCfgs,
@@ -2121,6 +2118,8 @@ Ext.define('ProgramBoard', {
 				width:30,
 				renderer:function(val, meta){ 
 					meta.tdCls += 'sanity-num-cell';
+					if(val.length === 0) meta.tdCls += ' green-cell';
+					else meta.tdCls += ' red-cell';
 					return val.length; 
 				}
 			}];
@@ -2134,12 +2133,11 @@ Ext.define('ProgramBoard', {
 						'ud/custom/22859089715" target="_blank">DATA INTEGRITY</a>'
 				}]
 			},
-			width:'100%',
+			margin:'30px 0 0 0',
 			showPagingToolbar: false,
 			showRowActionsColumn:false,
 			hideHeaders:true,
 			disableSelection: true,
-			margin:'30 0 0 0',
 			viewConfig: {
 				stripeRows: false,
 				preserveScrollOnRefresh:true

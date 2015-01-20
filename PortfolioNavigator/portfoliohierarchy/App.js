@@ -1,4 +1,4 @@
-console = { log: function(){} }; // DEBUG!!!!		
+//var console = { log: function(){} }; // DEBUG!!!!		
 
 Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 	extend: 'IntelRallyApp',
@@ -47,7 +47,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			
 	getSettingsFields: function() {
 		var str = (__PROJECT_OID__ + '-' + __USER_OID__);
-    return [{
+		return [{
 			name: 'Type' + str,
 			xtype:'combo',
 			editable:false,
@@ -85,15 +85,14 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 		}];
 	},
 
-	/************************************************** Preferences FUNCTIONS ***************************************************/
-	
+	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
 			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
 			appID: me.getAppId(),
-      filterByName: me._prefName + uid,
+			filterByName: me._prefName + uid,
 			success: function(prefs) {
 				var appPrefs = prefs[me._prefName + uid];
 				try{ appPrefs = JSON.parse(appPrefs); }
@@ -105,14 +104,13 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 		});
 		return deferred.promise;
 	},
-
 	_savePreferences: function(prefs){ 
 		var me=this, s = {}, 
 			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs};
-    s[me._prefName + uid] = JSON.stringify(prefs); 
-    console.log('saving prefs', prefs);
+		s[me._prefName + uid] = JSON.stringify(prefs); 
+		console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
 			appID: this.getAppId(),
 			settings: s,
@@ -121,15 +119,13 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 		});
 		return deferred.promise;
 	},
-		
+	
 	/************************************************** Refreshing Data ***************************************************/
-		
 	_refreshTree: function() {
 		var me=this;
 		me.down('#bodyContainer').removeAll();
 		me._loadPortfolioTree();
-	},
-	
+	},	
 	_reloadEverything: function(){
 		var me=this;
 		me.setLoading(false);
@@ -140,8 +136,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 		me._loadPortfolioTree();
 	},
 	
-	/************************************************** Launch ***************************************************/
-	
+	/************************************************** Launch ***************************************************/	
 	launch: function() {
 		var me=this;
 		me.setLoading(true);
@@ -200,6 +195,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 						return p.data[field] === me.PortfolioLocation;
 					});
 				}
+				if(!me.PortfolioLocation) return Q.reject('Could not find Portfolio Location'); //if portfolios and trians dont share same root project
 				return me._loadAllReleases(me.ProjectRecord);
 			})
 			.then(function(releaseStore){		
@@ -219,8 +215,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			.done();
 	},
 
-	/******************************************************** HEADER ITEMS *********************************************/
-	
+	/******************************************************** HEADER ITEMS *********************************************/	
 	_onPreferenceChanged: function(field, newValue){
 		var me=this,
 			pid = me.ProjectRecord.data.ObjectID;
@@ -230,15 +225,13 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 		me.AppPrefs.projs[pid][field] = newValue;
 		return me._savePreferences(me.AppPrefs);
 	},
-
 	_onReleaseSelected: function(combo, records) {
 		var me=this;
 		me._onPreferenceChanged('FilterReleaseName', records[0].data.Name)
 			.then(function(){ if(me.FilterOnRelease) me._refreshTree(); })
 			.fail(function(reason){ me._alert('ERROR:', reason); })
 			.done();
-	},
-				
+	},				
 	_loadReleaseSelector: function(){
 		var me=this;
 		me.down('#header_release').add({
@@ -255,8 +248,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 				select: me._onReleaseSelected.bind(me)
 			}
 		});
-	},
-		
+	},		
 	_onFilterOnReleaseChanged: function(checkBox) {
 		var me=this,
 			value = checkBox.getValue(),
@@ -267,7 +259,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			.fail(function(reason){ me._alert('ERROR:', reason); })
 			.done();
 	},
-
 	_loadFilterOnRelease: function(){
 		var me=this;
 		me.down('#header_release').add({
@@ -279,8 +270,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 				change: me._onFilterOnReleaseChanged.bind(me)
 			}
 		});
-	},	
-	
+	},		
 	_onFilterOnProjectChanged: function(checkBox) {
 		var me=this;
 		me._onPreferenceChanged('FilterOnProject', checkBox.getValue())
@@ -288,7 +278,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			.fail(function(reason){ me._alert('ERROR:', reason); })
 			.done();
 	},
-
 	_loadFilterOnProject: function(){
 		var me=this;
 		me.down('#header_project').add({
@@ -301,8 +290,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 				change: me._onFilterOnProjectChanged.bind(me)
 			}
 		});
-	},	
-		
+	},			
 	_onFilterOnCompleteChanged: function(checkBox) {
 		var me=this;
 		me._onPreferenceChanged('FilterOnComplete', checkBox.getValue())
@@ -310,7 +298,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			.fail(function(reason){ me._alert('ERROR:', reason); })
 			.done();
 	},
-
 	_loadFilterOnComplete: function(){
 		var me=this;
 		me.down('#header_complete').add({
@@ -325,13 +312,11 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 	},
 
 	/******************************************************** GRID ITEMS *********************************************/
-
 	_onTreeItemSelected: function(treeItem) {
 		if(treeItem.xtype === 'fittedportfolioitemtreeitem'){
 			this.publish('portfoliotreeitemselected', treeItem);
 		}
-	},
-	
+	},	
 	_getFilterOnCompleteFilter: function(ordinal){
 		return Ext.create('Rally.data.wsapi.Filter', {
 			property:'State.OrderIndex',
@@ -342,7 +327,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			value: null
 		}));
 	},
-	
 	_getFilterOnReleaseFilter: function(){
 		var me=this;
 		return Ext.create('Rally.data.wsapi.Filter', {
@@ -350,7 +334,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			value: me.FilterReleaseName 
 		});
 	},
-	
 	_getFilterOnQueryFilter: function(){
 		var me=this;
 		try { return Rally.data.QueryFilter.fromQueryString(me.QueryFilter); }
@@ -361,15 +344,13 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 				value: 0
 			});
 		}
-	},
-	
+	},	
 	_getParentRecordFilter: function(parentRecord, ordinal){
 		return Ext.create('Rally.data.wsapi.Filter', {
 			property: (ordinal === 0 ? 'Feature' : 'Parent') + '.ObjectID', //only uses right under feature have issue
 			value: parentRecord.data.ObjectID
 		});
-	},
-	
+	},	
 	_getTopLevelStoreConfig: function(ordinal){ 
 		var me=this, 
 			filters = [];
@@ -386,7 +367,6 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			}
 		};
 	},
-
 	_getChildLevelStoreConfig: function(tree, parentRecord, isPI, ordinal){ //ordinal/isPI of PARENT item
 		var me=this,
 			context= {
@@ -414,8 +394,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 			context: context,
 			filters:filters
 		};
-	},
-	
+	},	
 	_loadPortfolioTree: function(){
 		var me = this,
 			modelName ='portfolioitem/' + me.PIType,
@@ -436,7 +415,7 @@ Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
 					ordinal = parentRecord.self.ordinal;
 				return me._getChildLevelStoreConfig(tree, parentRecord, isPI, ordinal);
 			},
-			treeItemConfigForRecordFn: function (record) {
+			treeItemConfigForRecordFn: function(record){
 				var tree = this,
 					config = Rally.ui.tree.PortfolioTree.prototype.treeItemConfigForRecordFn.call(tree, record);
 				if(tree._isPortfolioItem(record)) config.xtype = 'fittedportfolioitemtreeitem'; 

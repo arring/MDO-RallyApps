@@ -139,7 +139,9 @@ Ext.define('TrainCfdCharts', {
 			trainName = me.TrainRecord.data.Name.split(' ART')[0];			
 		return me._loadReleasesWithName(releaseName, trainName)
 			.then(function(releaseStore){
-				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ return r.data.Project.TeamMembers.Count > 0; });
+				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ 
+					return r.data.Project && r.data.Project.TeamMembers.Count > 0; 
+				});
 			});
 	},
 	
@@ -356,7 +358,10 @@ Ext.define('TrainCfdCharts', {
 		});	
 		
 		/************************************** Scrum CHARTS STUFF *********************************************/	
-		for(var projectName in me.TeamStores){
+		var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
+			return projName.split('-')[1].trim().split(' ')[0].trim() + projName; 
+		});
+		_.each(sortedProjectNames, function(projectName){
 			me.panel.add({
 				xtype:'rallychart',
 				columnWidth:0.32,
@@ -387,6 +392,6 @@ Ext.define('TrainCfdCharts', {
 					afterrender: me._resizeWhenRendered.bind(me)
 				}
 			});
-		}
+		});
 	}
 });

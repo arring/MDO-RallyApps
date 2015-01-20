@@ -34,8 +34,7 @@
 			promises.push(deferred.promise);
 		});
 		return Q.all(promises);
-	},
-	
+	},	
 	_loadProject: function(oid){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -55,8 +54,7 @@
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadFeature: function(oid, projectRef){ //projectRef is optional
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -76,8 +74,7 @@
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadUserStory: function(oid, projectRef){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -98,8 +95,7 @@
 			});
 			return deferred.promise;
 		}
-	},
-	
+	},	
 	_loadMilestone: function(oid, projectRef){ 
 		var me = this, deferred = Q.defer();
 		if(!oid) return Q.resolve();
@@ -127,14 +123,13 @@
 		var me=this, 
 			n = projectRecord.data.Name;
 		if(n === 'All Scrums' || n === 'All Scrums Sandbox') return Q(projectRecord);
-		else if(!projectRecord.data.Parent) return Q.reject('Please Scope to a valid team for Release Planning');
+		else if(!projectRecord.data.Parent) return Q.reject('You do not have viewer access to "All Scrums"!');
 		else {
 			return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
 				return me._loadRootProject(parentRecord);
 			});
 		}
-	},
-	
+	},	
 	_loadTopProject: function(projectRecord){
 		if(!projectRecord) return Q.reject('Invalid arguments: LTP');
 		var me=this, 
@@ -145,8 +140,7 @@
 				return me._loadTopProject(parentRecord);
 			});
 		}
-	},
-	
+	},	
 	_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
 		if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
 		else {
@@ -162,8 +156,7 @@
 				}
 			}
 		}
-	},
-	
+	},	
 	_loadAllTrains: function(rootProjectRecord){
 		if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
 		var me=this,
@@ -191,8 +184,7 @@
 			console.log('AllTrainRecords loaded', store.data.items);
 			return Q(store);
 		});
-	},
-			
+	},			
 	_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
 		if(!projectRef) return Q.reject('Invalid arguments: LRUS');
 		var me=this,
@@ -220,7 +212,35 @@
 			else return Q(undefined);
 		});
 	},
-	
+	_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
+		if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
+		var me=this,
+			store = Ext.create('Rally.data.wsapi.Store',{
+				model: 'HierarchicalRequirement',
+				limit:5,
+				pageSize:5,
+				fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+				context:{
+					workspace: me.getContext().getWorkspace()._ref,
+					project: undefined
+				},
+				sorters: [{
+					property: 'CreationDate', 
+					direction:'DESC'
+				}],
+				filters:[
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
+					)
+				]
+			});
+		return me._reloadStore(store).then(function(store){
+			var records = store.data.items;
+			if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+			else return Q(undefined);
+		});
+	},
 	_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
 		if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
 		var me=this,
@@ -244,8 +264,7 @@
 		return me._reloadStore(store).then(function(store){
 			return Q(store.data.items.pop());
 		});
-	},
-	
+	},	
 	_loadProjectByName: function(name){
 		if(!name) return Q.reject('Invalid arguments: LPBN');
 		var me=this,
@@ -318,8 +337,7 @@
 				value: trainName + ' POWG Portfolios'
 			}));
 		}
-	},
-	
+	},	
 	_loadProducts: function(trainRecord){
 		if(!trainRecord) return Q.reject('Invalid arguments: LPROD');
 		var me=this,
@@ -340,8 +358,7 @@
 		});
 	},
 	
-	/********************************************** Load Valid Projects ********************************************/
-	
+	/********************************************** Load Valid Projects ********************************************/	
 	_addValidProjectsToList: function(projTree, hash){
 		var me=this, 
 			curProj = projTree.ProjectRecord;
@@ -351,8 +368,7 @@
 			if(childProjRef !== 'ProjectRecord')
 				me._addValidProjectsToList(projTree[childProjRef], hash);
 		}
-	},
-	
+	},	
 	_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
 		if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
 		var me=this,
@@ -384,8 +400,7 @@
 			console.log('valid projects', validProjects);
 			return Q(validProjects);
 		});	
-	},
-	
+	},	
 	_allChildProjectToList: function(projTree, hash){
 		var me=this, 
 			curProj = projTree.ProjectRecord;
@@ -395,7 +410,6 @@
 				me._allChildProjectToList(projTree[childProjRef], hash);
 		}
 	},
-	
 	_loadAllChildrenProjects: function(rootProjectRecord){
 		if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
 		var me=this,
@@ -424,6 +438,48 @@
 				}
 			}
 			me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+			console.log('childrenProjects', childrenProjects);
+			return Q(childrenProjects);
+		});	
+	},	
+	_allLeafProjectsToList: function(projTree, hash){
+		var me=this, 
+			curProj = projTree.ProjectRecord;
+		if(curProj.data.Children.Count === 0) 
+			hash[curProj.data.ObjectID] = curProj;
+		for(var childProjRef in projTree){
+			if(childProjRef !== 'ProjectRecord')
+				me._allLeafProjectsToList(projTree[childProjRef], hash);
+		}
+	},	
+	_loadAllLeafProjects: function(rootProjectRecord){
+		if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
+		var me=this,
+			childrenProjects = {}, 
+			projTree = {};
+		var store = Ext.create('Rally.data.wsapi.Store', {
+			model: "Project",
+			fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
+			limit:Infinity,
+			context: {
+				workspace: me.getContext().getWorkspace()._ref,
+				project:null
+			}
+		});
+		return me._reloadStore(store).then(function(store){
+			var projects = store.data.items;
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
 			console.log('childrenProjects', childrenProjects);
 			return Q(childrenProjects);
 		});	
@@ -655,65 +711,89 @@ Ext.define('PrettyAlert', {
 		}, 20);
 	}
 });
-                Ext.define('IntelWorkweek', {
-	
-	/** calculates intel workweek, returns integer */
-	_getWorkweek: function(_date){ 
-		var date = new Date(_date),
-			oneDay = 1000 * 60 * 60 * 24,
-			yearStart = new Date(date.getFullYear(), 0, 1),
-			dayIndex = yearStart.getDay(),
-			ww01Start = yearStart - dayIndex*oneDay,
-			timeDiff = date - ww01Start,
-			dayDiff = timeDiff / oneDay,
-			ww = Math.floor(dayDiff/7) + 1,
-			leap = (date.getFullYear() % 4 === 0),
-			weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
-		return weekCount < ww ? 1 : ww;
-	},
-	
-	/** returns the number of intel workweeks in the year the date is in */
-	_getWeekCount: function(_date){ 
-		var date = new Date(_date),
-			leap = (date.getFullYear() % 4 === 0),
-			day = new Date(date.getFullYear(), 0, 1).getDay();
-		return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
-	},
-	
-	_roundDateDownToWeekStart: function(_date){ //returns number
-		var date = new Date(_date),
-			dayLength = 1000*60*60*24,
-			day = date.getDay(),
-			monthDate = date.getDate(),
-			month = date.getMonth(),
-			year = date.getFullYear();
-		return new Date(year, month, monthDate)*1 - (day * dayLength);
-	},
-	
-	/**  gets list of date numbers for each week start between start and end date*/
-	_getWorkweekDates: function(startDate, endDate){ 
-		var oneWeek = 1000 * 60 * 60 * 24 * 7,
-			startWeekDate = this._roundDateDownToWeekStart(startDate),
-			endWeekDate = this._roundDateDownToWeekStart(endDate),
-			totalWeeks = Math.floor((endWeekDate - startWeekDate) / oneWeek) + 1,
-			weeks = new Array(totalWeeks);
-		for(var i=0; i<totalWeeks; ++i) 
-			weeks[i] = startWeekDate + oneWeek*i;
-		return weeks;
-	},
-	
-	_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
-		var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
-			data = new Array(workweeks.length);
-		for(var i=0, len=workweeks.length; i<len; ++i){
-			data[i] = { 
-				Workweek: 'ww' + this._getWorkweek(workweeks[i]),
-				DateVal: workweeks[i]
-			};
-		}
-		return data;
-	}
-});
+                (function(){
+	var intel_ww = {},
+		SECOND = 1000,
+		MINUTE = 60*SECOND,
+		HOUR = 60*MINUTE,
+		DAY = 24*HOUR,
+		WEEK = 7*DAY;
+		
+	Ext.define('IntelWorkweek', {
+		/** 
+			intel workweek utility module. you can pass in Date objects, strings, or numbers.
+			do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
+		**/
+		
+		/** calculates intel workweek, returns integer */
+		_getWorkweek: function(_date){  //ww1 always contains jan 1st
+			var date = new Date(_date),
+				yearStart = new Date(date.getFullYear(), 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01Start = new Date(yearStart - dayIndex*DAY),
+				utcDateMillis = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+				ww01Millis = Date.UTC(ww01Start.getFullYear(), ww01Start.getMonth(), ww01Start.getDate()),
+				timeDiff = utcDateMillis - ww01Millis,
+				ww = Math.floor(timeDiff/WEEK) + 1,
+				leap = (date.getFullYear() % 4 === 0),
+				weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+			return weekCount < ww ? 1 : ww;
+		},
+		
+		/** returns the number of intel workweeks in the year the date is in */
+		_getWeekCount: function(_date){  // # of intel workweeks in the year the date is in
+			var date = new Date(_date),
+				leap = (date.getFullYear() % 4 === 0),
+				day = new Date(date.getFullYear(), 0, 1).getDay();
+			return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+		},
+		
+		_roundDateDownToWeekStart: function(_date){
+			var date = new Date(_date),
+				day = date.getDay(),
+				monthDate = date.getDate(),
+				month = date.getMonth(),
+				year = date.getFullYear(),
+				sundayMidday = new Date(new Date(year, month, monthDate)*1 - (day*DAY - 0.5*DAY)); //daylight savings ._.
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		/**  gets list of date numbers for each week start between start and end date*/
+		_getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
+			var startWeekDate = this._roundDateDownToWeekStart(startDate),
+				endWeekDate = this._roundDateDownToWeekStart(endDate),
+				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
+				endMillis = Date.UTC(endWeekDate.getFullYear(), endWeekDate.getMonth(), endWeekDate.getDate()),
+				totalWeeks = Math.floor((endMillis - startMillis) / WEEK)+1,
+				weeks = new Array(totalWeeks);
+			for(var i=0; i<totalWeeks; ++i) {
+				var sundayMidday = new Date(startWeekDate*1 + (WEEK*i + HOUR*12));
+				weeks[i] = new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+			}
+			return weeks;
+		},
+		
+		_workweekToDate: function(ww, year){ //gets the Date() object of this ww and year
+			var yearStart = new Date(year, 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01StartMidday = new Date(yearStart - (dayIndex*DAY - 0.5*DAY)),
+				sundayMidday = new Date(ww01StartMidday*1 + (ww-1)*WEEK);
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
+			var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
+				data = new Array(workweeks.length);
+			for(var i=0, len=workweeks.length; i<len; ++i){
+				data[i] = { 
+					Workweek: 'ww' + this._getWorkweek(workweeks[i]),
+					DateVal: workweeks[i]*1
+				};
+			}
+			return data;
+		}	
+	});
+}());
                 /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
 	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
 	most functions return promises that resolve to stores
@@ -786,11 +866,11 @@ Ext.define('ReleaseQuery', {
 		return deferred.promise;
 	},
 	
-	/** loads this release for each scrum under this train. returns promise with the release Store 
+	/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
 		the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
 		in the results.
 	**/
-	_loadReleasesWithName: function(releaseName, trainName){ 
+	_loadReleasesWithName: function(releaseName, nameContains){ 
 		var deferred = Q.defer();
 		Ext.create('Rally.data.wsapi.Store',{
 			model: 'Release',
@@ -806,11 +886,11 @@ Ext.define('ReleaseQuery', {
 					property:'Name', //match the release
 					value: releaseName
 				},{
-					property:'Project.Name', //is a child of the train
+					property:'Project.Name', 
 					operator:'contains',
-					value:trainName
+					value:nameContains
 				},{
-					property:'Project.Children.Name', //has teamMembers 
+					property:'Project.Children.Name', //has children 
 					operator:'=',
 					value:''
 				},{
@@ -824,6 +904,66 @@ Ext.define('ReleaseQuery', {
 					fn: function(store, records){
 						console.log('releasesWithName loaded:', records);
 						deferred.resolve(store);
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	
+	_loadReleaseByNameForProject: function(releaseName, projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[{
+				property:'Name',
+				value: releaseName
+			},{
+				property:'Project', 
+				value:projectRecord.data._ref
+			}],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						deferred.resolve(records.pop());
+					},
+					single:true
+				}
+			}
+		});
+		return deferred.promise;
+	},
+	_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+		var deferred = Q.defer();
+		Ext.create('Rally.data.wsapi.Store',{
+			model: 'Release',
+			limit:Infinity,
+			autoLoad:true,
+			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+			context:{
+				workspace: this.getContext().getWorkspace()._ref,
+				project: null
+			},
+			filters:[{
+				property:'Name',
+				operator:'contains',
+				value: releaseName
+			},{
+				property:'Project', 
+				value:projectRecord.data._ref
+			}],
+			listeners: {
+				load: {
+					fn: function(store, records){
+						deferred.resolve(records);
 					},
 					single:true
 				}
@@ -900,6 +1040,7 @@ Ext.define('ReleaseQuery', {
 		options = Ext.merge({
 			editable: false,	
 			allowBlank:false,
+			queryMode:'local',
 			listeners: {
 				focus: function(combo) {
 					combo.setValue('');
@@ -1254,7 +1395,9 @@ Ext.define('TrainCfdCharts', {
 			trainName = me.TrainRecord.data.Name.split(' ART')[0];			
 		return me._loadReleasesWithName(releaseName, trainName)
 			.then(function(releaseStore){
-				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ return r.data.Project.TeamMembers.Count > 0; });
+				me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ 
+					return r.data.Project && r.data.Project.TeamMembers.Count > 0; 
+				});
 			});
 	},
 	
@@ -1471,7 +1614,10 @@ Ext.define('TrainCfdCharts', {
 		});	
 		
 		/************************************** Scrum CHARTS STUFF *********************************************/	
-		for(var projectName in me.TeamStores){
+		var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
+			return projName.split('-')[1].trim().split(' ')[0].trim() + projName; 
+		});
+		_.each(sortedProjectNames, function(projectName){
 			me.panel.add({
 				xtype:'rallychart',
 				columnWidth:0.32,
@@ -1502,7 +1648,7 @@ Ext.define('TrainCfdCharts', {
 					afterrender: me._resizeWhenRendered.bind(me)
 				}
 			});
-		}
+		});
 	}
 });
 

@@ -1,35 +1,28 @@
 .portfolio-hierarchy-app {
-    width: 100% !important;
-}
+	width: 100% !important; }
 
 .portfolio-hierarchy-app .rallytree {
-    padding-top: 5px;
-    padding-bottom: 20px;
-}
+	padding-top: 5px;
+	padding-bottom: 20px; }
 
 .portfolio-hierarchy-app .header {
-    border-bottom: 1px dotted #c6c6c6;
-}
+	border-bottom: 1px dotted #c6c6c6; }
 
 .portfolio-hierarchy-app .filterInfo {
-    float: right;
-    padding-right: 1px;
-    border-right: 1px solid #CCC;
-    margin-right: 5px;
-    margin-top: 2px;
-    margin-bottom: 2px;
-}
+	float: right;
+	padding-right: 1px;
+	border-right: 1px solid #CCC;
+	margin-right: 5px;
+	margin-top: 2px;
+	margin-bottom: 2px; }
 
 .portfolio-hierarchy-app .rally-help-icon {
-    float: right;
-}
+	float: right; }
 
 .portfolio-hierarchy-app .current-project-only-float {
-    float: left;
-}
+	float: left; }
 
 .portfolio-hierarchy-app .filter-on-release-float {
-    float: left;
-    margin-left: 10px;
-    margin-right: 8px;
-}
+	float: left;
+	margin-left: 10px;
+	margin-right: 8px; }

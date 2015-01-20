@@ -140,22 +140,31 @@ Ext.define('SanityDashboard', {
 				me.ProjectRecord = scopeProjectRecord;
 				return me._projectInWhichTrain(me.ProjectRecord);
 			})
+			.fail(function(reason){
+				if(reason != 'Project not in a train') return Q(reason); //its ok if its not in the train
+			})
 			.then(function(trainRecord){
-				if(!trainRecord) return Q.reject('Not Scoped in a train!');
-				if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
-				else me._isScopedToTrain = true;
-				me.TrainRecord = trainRecord;
-				return me._loadAllLeafProjects(me.TrainRecord);
-			})
-			.then(function(leafProjects){
-				me.LeafProjects = leafProjects;
-				if(me._isScopedToTrain) me.CurrentTeam = null;
-				else me.CurrentTeam = me.ProjectRecord;
-				return me._loadProducts(me.TrainRecord);
-			})
-			.then(function(productStore){
-				me.Products = productStore.getRange();
-				return me._loadPreferences();
+				if(trainRecord){
+					if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
+					else me._isScopedToTrain = true;
+					me.TrainRecord = trainRecord;
+					return me._loadAllLeafProjects(me.TrainRecord)
+						.then(function(leafProjects){
+							me.LeafProjects = leafProjects;
+							if(me._isScopedToTrain) me.CurrentTeam = null;
+							else me.CurrentTeam = me.ProjectRecord;
+							return me._loadProducts(me.TrainRecord);
+						})
+						.then(function(productStore){
+							me.Products = productStore.getRange();
+							return me._loadPreferences();
+						});
+				}
+				else {
+					me.CurrentTeam = me.ProjectRecord;
+					me._isScopedToTrain = false;
+					return me._loadPreferences();
+				}
 			})
 			.then(function(appPrefs){
 				me.AppPrefs = appPrefs;
@@ -220,6 +229,7 @@ Ext.define('SanityDashboard', {
 	},
 	_loadTeamPicker: function(){
 		var me=this;
+		if(!me.TrainRecord) return; //don't show for non-train teams
 		Ext.getCmp('controlsContainer').add({
 			xtype:'intelcombobox',
 			width: 200,
@@ -244,7 +254,7 @@ Ext.define('SanityDashboard', {
 	_hideHighchartsLinks: function(){
 		$('.highcharts-container > svg > text:last-child').hide();
 	},
-	_getCountForTeamAndGrid: function(project, grid){ //genius!
+	_getCountForTeamAndGrid: function(project, grid){
 		var me=this,
 			store = Ext.create('Rally.data.wsapi.Store',{
 				model: 'UserStory',
@@ -267,6 +277,7 @@ Ext.define('SanityDashboard', {
 	},
 	_getHeatMapConfig: function() { 
 		var me=this,
+			highestNum = 0,
 			userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
 				return grid.originalConfig.model == 'UserStory'; 
 			}).reverse(),
@@ -275,12 +286,13 @@ Ext.define('SanityDashboard', {
 		_.each(userStoryGrids, function(grid, gindex) {
 			_.each(_.sortBy(me.LeafProjects, function(p){ return p.data.Name; }), function(project, pindex){
 				promises.push(me._getCountForTeamAndGrid(project, grid).then(function(gridCount){
+					highestNum = Math.max(gridCount, highestNum);
 					return chartData.push([pindex, gindex, gridCount]);
 				}));
 			});
 		});
 		window._selectTeam = function(value){
-			var team = _.find(me.LeafProjects, function(p){ return p.data.Name.indexOf(value) === 0; });
+			var team = _.find(me.LeafProjects, function(p){ return p.data.Name.split('-')[0].trim() === value; });
 			if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID) me.CurrentTeam = null;
 			else me.CurrentTeam = team;
 			me._reloadEverything();
@@ -331,7 +343,7 @@ Ext.define('SanityDashboard', {
 				colorAxis: {
 					min: 0,
 					minColor: '#FFFFFF',
-					maxColor: '#ec5b5b'
+					maxColor: highestNum ? '#ec5b5b' : '#FFFFFF' //if they are all 0 make white
 				},
 				plotOptions: {
 					series: {
@@ -375,10 +387,17 @@ Ext.define('SanityDashboard', {
 			chartData = _.map(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid) { 
 				return {
 					name: grid.originalConfig.title,
-					y: grid.store.totalCount,
+					y: grid.store.totalCount || 0,
 					href: '#' + grid.originalConfig.id
 				};
 			});
+		if(_.every(chartData, function(item){ return item.y === 0; })){
+			chartData = [{
+				name: 'Everything is correct!',
+				y:1,
+				color:'#60BD68'
+			}];
+		}
 		return {
 			chart: {
 				height:345,
@@ -415,7 +434,7 @@ Ext.define('SanityDashboard', {
 				point: {
 					events: {
 						click: function(e) {
-							location.href = e.point.href;
+							if(e.point.href) location.href = e.point.href;
 							e.preventDefault();
 						}
 					}
@@ -428,7 +447,8 @@ Ext.define('SanityDashboard', {
 		var me=this;
 		Highcharts.setOptions({ colors: me._colors });
 		$('#pie').highcharts(me._getPieChartConfig());
-		return me._getHeatMapConfig()
+		if(!me.TrainRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-train teams
+		else return me._getHeatMapConfig()
 			.then(function(chartConfig){
 				$('#heatmap').highcharts(chartConfig);
 				me._hideHighchartsLinks();
@@ -494,7 +514,7 @@ Ext.define('SanityDashboard', {
 			releaseName = me.ReleaseRecord.data.Name,
 			releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 			releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
-			trainName = me.TrainRecord.data.Name.split(' ART')[0],
+			trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
 			defaultUserStoryColumns = [{
 					text:'FormattedID',
 					dataIndex:'FormattedID', 
@@ -524,7 +544,7 @@ Ext.define('SanityDashboard', {
 			releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //i guess we dont want this :(
 			userStoryProjectFilter = me.CurrentTeam ? 
-				Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: me.CurrentTeam.data._ref }) : 
+				Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID }) : 
 				Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName}),
 			featureProductFilter = _.reduce(me.Products, function(filter, product){
 				var thisFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.Parent.Name',  value:product.data.Name });
@@ -657,7 +677,8 @@ Ext.define('SanityDashboard', {
 				}]),
 				side: 'Right',
 				filters: [
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '>', value: releaseDate})
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Name', operator: '!=', value: null }).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '>', value: releaseDate}))
 					.and(releaseNameFilter).and(userStoryProjectFilter)
 				]
 			},{
@@ -667,10 +688,10 @@ Ext.define('SanityDashboard', {
 				model: 'PortfolioItem/Feature',
 				columns: defaultFeatureColumns,
 				side: 'Right',
-				filters: [
+				filters: [featureProductFilter ?
 					Ext.create('Rally.data.wsapi.Filter', { property: 'UserStories.ObjectID', value: null  }).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }))
-					.and(featureProductFilter)
+					.and(featureProductFilter) : null
 				]
 			}];
 
