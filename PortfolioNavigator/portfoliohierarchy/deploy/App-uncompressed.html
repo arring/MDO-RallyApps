@@ -1,58 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-		<title>Portfolio Hierarchy</title>
-		<script id="deiframer">
-			var APP_ID = 'this-is-my-app-1324621361',
-				STILL_IN_IFRAME = true,
-				scriptURLs = [
-					"https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"
-				];
-		
-			function addScript(doc, head, src, text){
-				var s = doc.createElement('script');
-				if(src) s.src = src;
-				else {
-					s.text = text;
-					s.setAttribute('type', 'text/javascript');
-				}
-				head.appendChild(s);
-			}
-			function moveFromIframe(){
-				var iframe = frameElement,
-					parentDoc = parent.document,
-					parentHead = parentDoc.head,
-					parentNode = window.frameElement.parentNode,
-					links = document.getElementsByTagName('link'),
-					styles = document.getElementsByTagName('style'),
-					scripts = document.getElementsByTagName('script'),
-					newDiv = parentDoc.createElement('div'), i;
-				newDiv.style.width = '100%';
-				newDiv.style.height = iframe.style.height;
-				newDiv.id = APP_ID;
-				parentNode.appendChild(newDiv);
-				for(i=0; i<links.length; ++i) parentHead.appendChild(links[i]);
-				for(i=0; i<styles.length; ++i) parentHead.appendChild(styles[i]);
-				for(i=0; i<scripts.length; ++i) {
-					if(scripts[i].id == 'script-hook-1'){ for(j=0; j<scriptURLs.length;++j) addScript(parentDoc, parentHead, scriptURLs[j]); }
-					addScript(parentDoc, parentHead, scripts[i].src, scripts[i].text);
-				}
-			}
-			if(frameElement) window.addEventListener('load', moveFromIframe);
-			else STILL_IN_IFRAME = false;
-		</script>
-		
-		<script type="text/javascript" id="script-hook-1">
-			if(!STILL_IN_IFRAME){
+    <title>Portfolio Hierarchy</title>
 
+    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
-			}
-		</script>
-		<script type="text/javascript">
-			if(!STILL_IN_IFRAME){
-(function(){
-		var Ext = window.Ext4 || window.Ext;
-		
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
 	Ext.define('IntelRallyApp', {
 		alias: 'widget.intelrallyapp',
 		extend: 'Rally.app.App',
@@ -257,6 +215,43 @@
 				else return Q(undefined);
 			});
 		},
+		
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ //only pull look at Feature Release if US relese == null
+			/************************* NOTE ***********************************************
+				for Q215 we need to uncomment the below lines for a better user story filter!
+				
+				from: (US.Release == X || (US.Feature.Release ==X))
+				to: (US.Release ==X || (US.Release ==null && US .Feature.Release==X))
+			******************************************************************************/
+			var me=this,
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				// Ext.create('Rally.data.wsapi.Filter', {
+					// property:'Release.ObjectID',
+					// value: null
+				// }).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property:'Feature.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property:'Feature.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				// )
+			);
+		},
 		_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
 			if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
@@ -278,6 +273,36 @@
 							Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
 							Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
 						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){ //get the most recent 5 in the project!!
+			/**this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
+				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
+				Then 1 of the 5 user stories is randomly selected and returned */
+			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
 			return me._reloadStore(store).then(function(store){
@@ -543,7 +568,11 @@
 			return deferred.promise;
 		}
 	});
-									/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+		/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
 	Ext.define('WorkweekDropdown', {
 		extend: 'Ext.data.Model',
 		fields: [
@@ -551,177 +580,22 @@
 			{name: 'DateVal', type:'number'}
 		]
 	});
-									/** this is used if you want to listen to events in the parent window (e.g. useful for rally apps that resize with browser screen
-			vertically or things that need to know browser scroll position) 
-		You also can artificially fire the events and have the listeners run
-	*/
-	Ext.define('WindowListener', {
-
-		__initWindowEventListener: function(eventName){
-			var me=this;
-			if(!me._windowListeners) me._windowListeners = {};
-			me._windowListeners[eventName] = [];
-			
-			window.parent['on' + eventName] = function(event){ 
-				var listeners = me._windowListeners[eventName];
-				for(var i=0, len=listeners.length; i<len; ++i)
-					listeners[i](event);
-			};
-		},
-		
-		_addWindowEventListener: function(eventName, fn){
-			var me=this;
-			if(!me._windowListeners || !me._windowListeners[eventName]) 
-				me.__initWindowEventListener(eventName);
-			me._windowListeners[eventName].push(fn);
-		},
-		
-		_fireParentWindowEvent: function(eventName){ //eg: resize or scroll
-			var me=this;
-			if(!me._windowListeners || !me._windowListeners[eventName]) return;
-			var listeners = me._windowListeners[eventName];
-			for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
-		}
-	});
-									/** 
-		resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar 
-	**/
-
-	Ext.define('IframeResize', {
-		requires: ['WindowListener'],
-		
-		/** resizes the iframe to be the height of all the items in it */
-		_applyIframeResizeToContents: function(){ 
-			var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-				iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
-				ip1 = iframe.parentNode,
-				ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
-				height = 0, next = this.down();
-			while(next){
-				height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
-				next = next.next();
-			}
-			height += 150;
-			ip1.style.height = height + 'px';
-			ip2.style.height = height + 'px';
-			iframe.style.height = height + 'px';
-		},
-		
-		/** 
-			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-			to that of the contents! Call this if you want the scrollbar to be on the outsize of the app (the window scrollbar)
-		*/
-		_initIframeResizeToContents: function(){
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToContents(); });
-			}
-		},
-			
-		/** 
-			resizes the iframe to be the height of the window. its like rally autoheight app but better 
-		*/
-		_applyIframeResizeToWindow: function(){ 
-			var loc = window.location,
-				iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-				i = iframe.dom,
-				portlet = iframe.up('.x-portlet'),
-				portalColumn = portlet.up('.x-portal-column'),
-				dashboard = portlet.up('#mydash_portlet');
-			height = window.parent.innerHeight - 70;
-			height -= 200; //~120 on top and 60 on bottom and
-			iframe.style.height = height + 'px';
-			ip1.style.height = height + 'px';
-			height += 30;
-			ip2.style.height = height + 'px';
-		},
-		
-			/** 
-			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-			to that of the window! Call this if you want the scrollbar to be on the inside of the app (NOT the window scrollbar)
-		*/
-		_initIframeResizeToWindow: function(){
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToWindow(); });
-			}
-			me._applyIframeResizeToWindow();
-		},
-		
-		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/
-		
-		_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
-			var me=this,
-				loc = window.location,
-				iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-				portlet = iframe.up('.x-portlet'), 
-				portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
-				dashboard = portlet.up('#mydash_portlet'), //has huge padding values
-				i = iframe.dom,
-				innerHeight = window.parent.innerHeight;
-			//adjust widths
-			while(true){
-				i.style.width = (window.parent.innerWidth - 4) + 'px';
-				i.style.padding = '0';
-				i.style.margin = '0';
-				if(i.id === 'mydash_portlet') break;
-				i = i.parentNode;
-			}
-			
-			//adjust heights
-			dashboard.dom.style.height = (innerHeight - 65) + 'px';
-			portlet.dom.style.height = (innerHeight - 105) + 'px';
-			iframe.dom.parentNode.style.height = (innerHeight - 135) + 'px';
-			iframe.dom.style.height = (innerHeight - 135) + 'px';
-			
-			//final touches
-			dashboard.dom.style.padding = "0 2px 0 2px";
-		},
-		
-		_initFixRallyDashboard: function(){ 
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
-			}
-			me._fixRallyDashboard();
-		},
-
-		_disableResizeHandle: function(){ //hides the draggable resize handle from under the app
-			var me=this;
-			var loc = window.location,
-				iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-				portlet = iframe.up('.x-portlet'),
-				handle = portlet.down('.x-resizable-handle');
-			if(handle){
-				handle.hide();
-				handle.dom.onshow = function(){
-					if(handle) handle.hide();
-				};
-			}
-		},
-			
-		_initDisableResizeHandle: function(){
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
-			}
-			me._disableResizeHandle();
-		}
-		
-	});
-									/**  
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/**  
 		THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
 		gives a window-centered alert or confirm dialog box that isn't ugly. 
 	*/
 	Ext.define('PrettyAlert', {
 
 		__getMessageBoxY: function(){ 
-			var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-				iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
-			
-			var ph = p.getWindowHeight(), 
-				ps = p.getScrollY(), 
-				ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.parent.getWindowHeight(), 
+				ps = window.parent.getScrollY(), 
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
 				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
 			return iyOffset<0 ? 0 : iyOffset;
 		},
@@ -756,7 +630,11 @@
 			}, 20);
 		}
 	});
-									/** Mixin functions related to queries, you need to require Q as a dependency in your rally app
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+		/** Mixin functions related to queries, you need to require Q as a dependency in your rally app
 		Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
 		most functions return promises that resolve to stores
 	*/
@@ -993,7 +871,11 @@
 				}, null);
 		}
 	});
-									//given named queues, only allows one function at a time in each queue to execute. 
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//given named queues, only allows one function at a time in each queue to execute. 
 	Ext.define('AsyncQueue', {
 		
 		QueueOfFuncs: {},
@@ -1020,7 +902,11 @@
 			else me.QueueOfFuncs[queueName].push(callback);
 		}
 	});
-									/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
 	Ext.define('Intel.form.field.ComboBox', {
@@ -1053,7 +939,11 @@
 			this.callParent([options]);
 		}
 	});
-									Ext.define('Intel.form.field.FixedComboBox', {
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.form.field.FixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		
@@ -1073,7 +963,11 @@
 			this.callParent([options]);
 		}	
 	});
-									Ext.define('Intel.form.field.PiProjectComboBox', {
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.form.field.PiProjectComboBox', {
 		extend:'Intel.form.field.ComboBox',
 		alias: ['widget.intelPIprojectcombo'],
 		requires:[
@@ -1082,7 +976,6 @@
 		constructor: function(options) {
 			var me = this,
 				app= Rally.getApp();
-			
 			options = options || {};	
 			options = Ext.merge({
 				displayField:'Name',
@@ -1134,7 +1027,11 @@
 				.done();
 		}
 	});
-									Ext.define('Rally.apps.portfoliohierarchy.FittedUserStoryTreeItem', {
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Rally.apps.portfoliohierarchy.FittedUserStoryTreeItem', {
 		extend: 'Rally.ui.tree.UserStoryTreeItem',
 		alias: 'widget.fitteduserstorytreeitem',
 
@@ -1173,7 +1070,11 @@
 			});
 		}
 	});
-									Ext.define('Rally.apps.portfoliohierarchy.FittedPortfolioItemTreeItem', {
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Rally.apps.portfoliohierarchy.FittedPortfolioItemTreeItem', {
 		extend: 'Rally.ui.tree.PortfolioItemTreeItem',
 		alias: 'widget.fittedportfolioitemtreeitem',
 
@@ -1227,11 +1128,14 @@
 			);
 		}
 	});
-									//var console = { log: function(){} }; // DEBUG!!!!		
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//var console = { log: function(){} }; // DEBUG!!!!		
 
-	Ext.define('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
+	Ext.define('Intel.portfolioHierarchy', {
 		extend: 'IntelRallyApp',
-		appName: 'Portfolio Hierarchy',
 		mixins: [
 			'Rally.Messageable',
 			'PrettyAlert',
@@ -1316,14 +1220,12 @@
 
 		/************************************************** Preferences FUNCTIONS ***************************************************/	
 		_loadPreferences: function(){ //parse all settings too
-			var me=this,
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
+			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
-				appID: me.getAppId(),
-				filterByName: me._prefName + uid,
+				filterByUser:true,
+				filterByName: me._prefName,
 				success: function(prefs) {
-					var appPrefs = prefs[me._prefName + uid];
+					var appPrefs = prefs[me._prefName];
 					try{ appPrefs = JSON.parse(appPrefs); }
 					catch(e){ appPrefs = { projs:{}};}
 					console.log('loaded prefs', appPrefs);
@@ -1334,14 +1236,12 @@
 			return deferred.promise;
 		},
 		_savePreferences: function(prefs){ 
-			var me=this, s = {}, 
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
+			var me=this, s = {}, deferred = Q.defer();
 			prefs = {projs: prefs.projs};
-			s[me._prefName + uid] = JSON.stringify(prefs); 
+			s[me._prefName] = JSON.stringify(prefs); 
 			console.log('saving prefs', prefs);
 			Rally.data.PreferenceManager.update({
-				appID: this.getAppId(),
+				filterByUser:true,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
@@ -1367,7 +1267,6 @@
 		
 		/************************************************** Launch ***************************************************/	
 		launch: function() {
-			debugger;
 			var me=this;
 			me.setLoading(true);
 			me._loadModels()
@@ -1655,49 +1554,50 @@
 			});
 		}
 	});
+	
 }());
 
-	Rally.launchApp('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
-			name:"Portfolio Hierarchy",
-		parentRepos:""
-	});
+            Rally.launchApp('Intel.portfolioHierarchy', {
+                name:"Portfolio Hierarchy",
+	            parentRepos:""
+            });
 
-			}
-		</script>
+        });
+    </script>
 
 
-		<style type="text/css">
-				.portfolio-hierarchy-app {
-	width: 100% !important;
+    <style type="text/css">
+        .portfolio-hierarchy-app {
+  width: 100% !important;
 }
 .portfolio-hierarchy-app .rallytree {
-	padding-top: 5px;
-	padding-bottom: 20px;
+  padding-top: 5px;
+  padding-bottom: 20px;
 }
 .portfolio-hierarchy-app .header {
-	border-bottom: 1px dotted #c6c6c6;
+  border-bottom: 1px dotted #c6c6c6;
 }
 .portfolio-hierarchy-app .filterInfo {
-	float: right;
-	padding-right: 1px;
-	border-right: 1px solid #CCC;
-	margin-right: 5px;
-	margin-top: 2px;
-	margin-bottom: 2px;
+  float: right;
+  padding-right: 1px;
+  border-right: 1px solid #CCC;
+  margin-right: 5px;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 .portfolio-hierarchy-app .rally-help-icon {
-	float: right;
+  float: right;
 }
 .portfolio-hierarchy-app .current-project-only-float {
-	float: left;
+  float: left;
 }
 .portfolio-hierarchy-app .filter-on-release-float {
-	float: left;
-	margin-left: 10px;
-	margin-right: 8px;
+  float: left;
+  margin-left: 10px;
+  margin-right: 8px;
 }
 
-		</style>
+    </style>
 </head>
 <body>
 </body>

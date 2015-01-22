@@ -32,11 +32,13 @@
 	padding: 0;
 	margin:0 0 5px 0;}
 	
-	.grid-healthy.sanity-grid .x-panel-header {
+	.grid-healthy.sanity-grid .x-panel-header,
+	.grid-healthy.sanity-grid .x4-panel-header {
 		font-weight:bold;
 		background-color:rgba(0, 255, 0, 0.4) !important; }
 		 
-	.grid-unhealthy.sanity-grid .x-panel-header {
+	.grid-unhealthy.sanity-grid .x-panel-header,
+	.grid-unhealthy.sanity-grid .x4-panel-header {
 		font-weight:bold;
 		background-color:rgba(255, 0, 0, 0.4) !important; }
 		 
@@ -50,7 +52,8 @@
 	.sanity-grid .editor-cell *{
 		cursor:pointer !important; }
 		
-	.sanity-grid.rally-grid .x-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
+	.sanity-grid.rally-grid .x-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover,
+	.sanity-grid.rally-grid .x4-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
 		background-image:none; }
 
 .highcharts-container { overflow: visible !important; }

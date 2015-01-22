@@ -1,13 +1,11 @@
 {
    "name": "Portfolio Hierarchy",
-   "className": "Rally.apps.portfoliohierarchy.PortfolioHierarchyApp",
+   "className": "Intel.portfolioHierarchy",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
       "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",
-      "../../lib/mixins/window-listener.js",
-      "../../lib/mixins/iframe-resize.js",
       "../../lib/mixins/pretty-alert.js",
       "../../lib/mixins/release-query.js",
       "../../lib/mixins/async-queue.js",

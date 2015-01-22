@@ -1,0 +1,3116 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Portfolio Hierarchy</title>
+		
+		<script>
+			(function(){
+	var smAppID = "Portfolio_Hierarchy456974";
+	window[smAppID] = {stillInIframe: true};
+	
+	function addScriptSync(doc, node, src, text, callback){
+		var s = doc.createElement('script');
+		s.classList.add('app-' + smAppID);
+		if(src){
+			s.src = src;
+			s.onreadystatechange = s.onload = function(){
+				var state = s.readyState;
+				if(!callback.done && (!state || /loaded|complete/.test(state))){
+					callback.done = true;
+					callback();
+				}
+			};
+			node.appendChild(s);
+		}
+		else {
+			s.text = text;
+			s.setAttribute('type', 'text/javascript');
+			node.appendChild(s);
+			callback();
+		}
+	}
+
+	function addScripts(doc, node, scripts, callback){
+		var subCallback = addScripts.bind(null, doc, node, scripts, callback);
+		if(scripts.length){
+			var script = scripts.shift();
+			addScriptSync(doc, node, script.getAttribute('data-url'), script.text, subCallback);
+		}
+		else callback();
+	}
+	
+	function nodeListToArray(nodeList){
+		var array = [];
+		for(var i=0; i<nodeList.length; ++i) array.push(nodeList[i]);
+		return array;
+	}
+	
+	if(frameElement){
+		window.addEventListener('load', function(){
+			var iframe = frameElement,
+				iframeQueryString = iframe.src.split('?')[1],
+				jsIframQueryText = "window['" + smAppID + "'].iframeQueryString = '" + iframeQueryString + "';",
+				undefineDefineFunc = 'window.__tmpDefine = window.define; delete window.define;',
+				readdDefineFunc = 'window.define = window.__tmpDefine; delete window.__tmpDefine;',
+				parentDoc = parent.document,
+				parentHead = parentDoc.head,
+				parentNode = window.frameElement.parentNode,
+				iframeScripts = nodeListToArray(document.head.querySelectorAll('script')),
+				oldParentItemsToRemove = nodeListToArray(parentHead.querySelectorAll('.app-' + smAppID)),
+				iframeStylesAndLinks = nodeListToArray(document.head.querySelectorAll('link, style')),
+				oldDiv = parentDoc.getElementById(smAppID),
+				oldDivs = nodeListToArray(parentNode.childNodes),
+				newDiv = parentDoc.createElement('div'),
+				scriptForQueryString = document.createElement('script'),
+				scriptForUndefineDefine = document.createElement('script'),
+				scriptForRedefineDefine = document.createElement('script'),
+				i;
+			
+			//put this right after the first script to get app context in parent window
+			scriptForQueryString.text = '(function(){\n' + jsIframQueryText + '\n}());';
+			iframeScripts.splice(1, 0, scriptForQueryString);
+			
+			//put these in there because many 3rd party modules look for define.amd, and that messes up loading them
+			scriptForUndefineDefine.text = '(function(){\n' + undefineDefineFunc + '\n}());';
+			iframeScripts.splice(2, 0, scriptForUndefineDefine);
+			scriptForRedefineDefine.text = '(function(){\n' + readdDefineFunc + '\n}());';
+			iframeScripts.push(scriptForRedefineDefine);
+			
+			//remove current app from parent and iframe (keep the sdk-mod alive though)
+			if(oldDiv) oldDiv.parentNode.removeChild(oldDiv);
+			for(i=0; i<oldDivs.length; ++i){
+				if(oldDivs[i].parentNode && oldDivs[i].tagName != 'IFRAME') parentNode.removeChild(oldDivs[i]);
+			}
+			for(i=0; i<oldParentItemsToRemove.length; ++i){
+				if(!oldParentItemsToRemove[i].classList.contains('sdk-mod'))
+					oldParentItemsToRemove[i].parentNode.removeChild(oldParentItemsToRemove[i]);
+			}
+			
+			//add new div where iframe is and hide iframe
+			newDiv.style.width = '100%';
+			newDiv.style.height = iframe.style.height;
+			newDiv.id = smAppID;
+			parentNode.appendChild(newDiv);
+			iframe.style.display = 'none';
+			
+			//listen to published events to hide and show the div
+			window.parent.Rally.environment.getMessageBus().subscribe(window.parent.Rally.clientmetrics.Message.action, function(data){
+				var domNode = parentDoc.getElementById(smAppID);
+				if(data.description == "User invoked 'Edit Settings'" && domNode) domNode.style.display = 'none';
+			});
+			window.parent.Rally.environment.getMessageBus().subscribe(window.parent.Rally.alm.Message.panelViewShowing, function(){
+				var domNode = parentDoc.getElementById(smAppID);
+				if(domNode) domNode.style.display = 'block';
+			});
+			
+			//for the iframe toolbar, which queries into the iframe
+			window.Rally = {};
+			window.Rally.getApp = function(){ return window.parent.Rally.getApp(smAppID); };
+			window.Rally.getSdkInfo = function(){ return window.parent.Rally.getSdkInfo(smAppID); };
+			
+			//add new scripts, links and styles to parent window
+			addScripts(parentDoc, parentHead, iframeScripts, function(){ 
+				for(i=0; i<iframeStylesAndLinks.length; ++i){
+					iframeStylesAndLinks[i].classList.add('.app-' + smAppID);
+					parentHead.appendChild(iframeStylesAndLinks[i]);
+				}
+			});
+		});
+	} 
+	else window[smAppID].stillInIframe = false;
+}());		</script>	
+		
+		
+			
+				<script data-url="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+			
+			
+		
+		<script type="text/javascript" class="sdk-mod">
+			(function(){
+					var smAppID = "Portfolio_Hierarchy456974";	
+				if(!window[smAppID].stillInIframe){	
+					(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	if(Ext.ClassManager.get('Rally.sdk')) return; //installed sdk already
+	
+  Ext.define("Rally.app.App", {  //app settings placed in parent div
+		alias: "widget.rallyapp",
+		extend: 
+		Ext.Container,
+		mixins: [Rally.Messageable, Rally.clientmetrics.ClientMetricsRecordable],
+		plugins: [],
+		autoScroll: true,
+		config: {
+			context: undefined,
+			settings: {},
+			defaultSettings: {}
+		},
+		appName: undefined,
+		settingsScope: "app",
+		constructor: function(b){
+			this.mergeConfig(b);
+			if (Rally.realtime.Realtime.enabled) this.plugins.push({ptype: "rallyrealtime"});
+			this.callParent([this.config]);
+		},
+		initEvents: function(){
+			this.callParent(arguments);
+			this.addEvents("beforelaunch", "contentupdated", "preferencesaved", "ready");
+		},
+		initComponent: function(){
+			this.callParent(arguments);
+			if(this.getAppId()){
+				if(this.stateful && !this.stateId) this.stateId = this.getContext().getScopedStateId(this.getAppId());
+				this._loadSettings().then({success: this._applyDefaultSettingsAndLaunch,scope: this});
+			}
+			else this._applyDefaultSettingsAndLaunch({});
+			this.addCls("rally-app");
+			this.subscribe(this, Rally.app.Message.timeboxScopeChange, this.onTimeboxScopeChange, this);
+		},
+		_loadSettings: function(){
+			return Rally.app.settings.Loader.load({
+				requester: this,
+				appSettings: this.settings,
+				context: this.getContext(),
+				scope: this,
+				settingsScope: this.settingsScope,
+				appScopedSettings: this.appScopedSettings,
+				workspaceScopedSettings: this.workspaceScopedSettings,
+				projectScopedSettings: this.projectScopedSettings,
+				userScopedSettings: this.userScopedSettings
+			}).then({
+				success: this._onSettingsLoaded,
+				scope: this
+			});
+		},
+		_areDifferentProjects: function(c, b){
+			return Rally.util.Ref.getOidFromRef(c) !== Rally.util.Ref.getOidFromRef(b);
+		},
+		_getSettingsScopedProjectRef: function(c, b){
+			var d = b.getProject(), e = c.project;
+			if(this._hasAppProjectSettings(e, d)) return e;
+			if(this._hasDashboardProjectSettings(d)) return "/project/" + d;
+		},
+		_hasAppProjectSettings: function(c, b){
+			return c && this._areDifferentProjects(c, b._ref);
+		},
+		_hasDashboardProjectSettings: function(b){
+			return Ext.isNumber(b);
+		},
+		_onSettingsLoaded: function(c){
+			var b = this._getSettingsScopedProjectRef(c, this.getContext());
+			if(b){
+				return this._loadProject(b).then({
+					success: function(d){
+						return this._setSettingsScopedProject(c, d);
+					},
+					failure: function(d){
+						this.add({xtype: "panel",cls: "no-data",html: "<p>" + d + "</p>"});
+					},
+					scope: this
+				});
+			}
+			return Deft.Promise.when(c);
+		},
+		_setSettingsScopedProject: function(c, d){
+			var b = this.getContext();
+			if(this._hasDashboardProjectSettings(b.getProject())) this.projectScopedSettings = null;
+			b.setProject(d);
+			b.setWorkspace(d.get("Workspace"));
+			if(!_.isUndefined(c.projectScopeDown)) b.put("projectScopeDown", c.projectScopeDown);
+			if(!_.isUndefined(c.projectScopeUp)) b.put("projectScopeUp", c.projectScopeUp);
+			return c;
+		},
+		_loadProject: function(d){
+			var b = new Deft.Deferred(), c = Rally.util.Ref.getOidFromRef(d), e = this;
+			Rally.data.ModelFactory.getModel({type: "Project"}).then(function(f){
+				e.recordLoadBegin({description: "loading the project"});
+				f.load(c, {
+					requester: e,
+					fetch: [
+						"ObjectID", "Name", "Workspace", "SchemaVersion", "WorkspaceConfiguration", 
+						"DateFormat", "DateTimeFormat", "DragDropRankingEnabled", "BuildandChangesetEnabled", "TimeZone", "WorkDays"
+					],
+					success: function(g){
+						e.recordLoadEnd();
+						b.resolve(g);
+					},
+					failure: function(g, h){
+						e.recordLoadEnd();
+						b.reject(h.getError().errors[0]);
+					}
+				});
+			});
+			return b.promise;
+		},
+		_applyDefaultSettingsAndLaunch: function(b) {
+			Ext.apply(this.settings, b);
+			Ext.applyIf(this.settings, this.defaultSettings);
+			this.initState();
+			if(this.fireEvent("beforelaunch", this) !== false) this.launch();
+			this.fireEvent("ready", this);
+		},
+		getSetting: function(b) {
+			var c = this.getSettings()[b];
+			if(c === "true") return true;
+			else if(c === "false") return false;
+			else if(!isNaN(c) && !isNaN(parseFloat(c))) return parseFloat(c);
+			return c;
+		},
+		updateSettingsValues: function(b) {
+			Rally.data.PreferenceManager.update(Ext.apply(this._getAppSettingsLoadOptions(), {
+				requester: this,
+				settings: b.settings,
+				success: function(c){
+					Ext.apply(this.settings, c);
+					if(b.success) b.success.call(b.scope);
+				},
+				scope: this
+			}));
+		},
+		removeSetting: function(b) {
+			Rally.data.PreferenceManager.remove(Ext.apply(this._getAppSettingsLoadOptions(), {
+				requester: this,
+				filterByName: b.name,
+				success: function(){
+					delete this.settings[b.name];
+					if(b.success) b.success.call(b.scope)
+				},
+				scope: this
+			}));
+		},
+		_getAppSettingsLoadOptions: function(c) {
+			c = c || this.settingsScope;
+			var b = {appID: this.getAppId()};
+			if(c === "project") b.project = this.getContext().getProject();
+			else if (c === "workspace") b.workspace = this.getContext().getWorkspace();
+			return b;
+		},
+		getAppId: function() {
+			return this.getContext().get("appID")
+		},
+		launch: Ext.emptyFn,
+		getOptions: function() { return []; },
+		getSettingsFields: function() { return []; },
+		getUserSettingsFields: function() { return []; },
+		showSettings: function(b){
+			this._appSettings = Ext.create("Rally.app.AppSettings", Ext.apply({
+				fields: this.getSettingsFields(),
+				userFields: this.getUserSettingsFields(),
+				settings: this.getSettings(),
+				defaultSettings: this.getDefaultSettings(),
+				context: this.getContext(),
+				settingsScope: this.settingsScope
+			}, b));
+			this._appSettings.on("cancel", this._hideSettings, this);
+			this._appSettings.on("save", this._onSettingsSaved, this);
+			this.hide();
+			this._appSettings.render(this.el.up('.x-panel-body'));    //we HAVE to add it to parent of app
+			return this._appSettings;
+		},
+		_onSettingsSaved: function(b) {
+			Ext.apply(this.settings, b);
+			this._hideSettings();
+			this.onSettingsUpdate(b);
+		},
+		_hideSettings: function() {
+			if(this._appSettings){
+				this._appSettings.destroy();
+				delete this._appSettings;
+			}
+			this.show();
+		},
+		onSettingsUpdate: function(b){},
+		onTimeboxScopeChange: function(b) {
+			this.getContext().setTimeboxScope(b);
+		}
+	});
+
+	Ext.define("Rally.data.wsapi.ProxyBase", { //compact===FALSE!!!!
+		alternateClassName: ["Rally.data.Proxy"],
+		statics: {
+			getGlobalWorkspace: function(){
+				return "/workspace/" + Rally.environment.getContext().getWorkspace().ObjectID;
+			},
+			getGlobalProject: function() {
+				return "/project/" + Rally.environment.getContext().getProject().ObjectID;
+			},
+			getGlobalProjectScopeUp: function() {
+				return Rally.environment.getContext().getProjectScopeUp();
+			},
+			getGlobalProjectScopeDown: function() {
+				return Rally.environment.getContext().getProjectScopeDown();
+			},
+			actionMethods: {create: "PUT",read: "GET",update: "POST",destroy: "DELETE"},getMethod: function(b) {
+				return Rally.data.wsapi.ProxyBase.actionMethods[b];
+			},
+			compact: false
+		},
+		setProject: function(b){
+			if(b.self.getField("Project") && !b.get("Project") && b.get("Project") !== null){
+				b.set("Project", this._getProject());
+				if (this._getWorkspace() !== null) b.set("Workspace", this._getWorkspace());
+			}
+		},
+		buildRequest: function(b, c) {
+			if(b.action === "create") _.each(b.records, this.setProject, this);
+			c.enableQueuing = true;
+			c.params = c.params || {};
+			Ext.apply(c.params, b.params || {});
+			var d = b.useShallowFetch ? "shallowFetch" : "fetch";
+			if(b.useShallowFetch){
+				c.params.shallowFetch = b.fetch;
+				delete c.params.fetch;
+			} 
+			else c.params.fetch = c.params.fetch || (typeof b.fetch !== "undefined" ? b.fetch : true);
+			if(b.includeSchema) c.params.includeSchema = b.includeSchema;
+			if(_.isArray(c.params[d])) c.params[d] = c.params[d].join(",");
+			if(b.search !== undefined) c.params.search = b.search;
+			c.params.includePermissions = true;
+			if(b.action === "read"){
+				if(c.params[this.sortParam]){
+					if(c.params[this.directionParam]){
+						c.params[this.sortParam] = c.params[this.sortParam] + " " + c.params[this.directionParam];
+						delete c.params[this.directionParam];
+					}
+				}
+				c.params.start = c.params.start || 0;
+				c.params.start++;
+				if(!Ext.isDefined(c.params.pagesize)) c.params.pagesize = this.defaultPageSize;
+			}
+			this.setRequestContext(c, b.context);
+			return c
+		},
+		setRequestContext: function(c, b) {
+			var d = {};
+			if(Rally.environment.getContext()){
+				d.workspace = this._getWorkspace();
+				d.project = this._getProject();
+				d.projectScopeUp = this._getProjectScopeUp();
+				d.projectScopeDown = this._getProjectScopeDown();
+			}
+			if(b){
+				Ext.apply(d, b);
+				if(!d.project){
+					delete d.project;
+					delete d.projectScopeUp;
+					delete d.projectScopeDown;
+				}
+			}
+			if(d.project && d.workspace !== "null") delete d.workspace;
+			Ext.apply(c.params, d);
+		},
+		_getProject: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.project)) return this.model.context.project;
+			else return Rally.data.wsapi.ProxyBase.getGlobalProject();
+		},
+		_getProjectScopeUp: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.projectScopeUp)) return this.model.context.projectScopeUp;
+			return Rally.data.wsapi.ProxyBase.getGlobalProjectScopeUp();
+		},
+		_getProjectScopeDown: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.projectScopeDown)) return this.model.context.projectScopeDown;
+			return Rally.data.wsapi.ProxyBase.getGlobalProjectScopeDown();
+		},
+		_getWorkspace: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.workspace)) return this.model.context.workspace;
+			return Rally.data.wsapi.ProxyBase.getGlobalWorkspace();
+		},
+		buildUrl: function(c) {
+			var b = c.url || this.url;
+			if (c.action === "create") c.url = b + "/create";
+			else {
+				if(c.action === "read" && b.match(/\/user$/i)) c.url = b + "s";
+			}
+		},
+		processResponse: function(g, c, e, b, i, d) {
+			if(g){
+				var f = this.parseResponse(b);
+				var h = Ext.Object.getValues(f)[0].Errors;
+				if (!_.isEmpty(h)) g = false;
+			}
+			return g;
+		},
+		parseResponse: Ext.emptyFn,setException: function(c, b) {
+			var d = {response: b};
+			try {
+				d.errors = Ext.Object.getValues(this.parseResponse(b))[0].Errors;
+			} catch(f){
+				d.errors = [b.statusText];
+			}
+			c.setException(d)
+		},
+		encodeFilters: function(c) {
+			var d;
+			var b = Ext.Array.clean(Ext.Array.map(c || [], function(e) {
+				return (e instanceof Rally.data.wsapi.Filter) ? e : Rally.data.wsapi.Filter.fromExtFilter(e);
+			}));
+			if(b && b.length){
+				Ext.Array.forEach(b, function(e) {
+					if(e){
+						if(!d) d = e
+						else d = d.and(e)
+					}
+				});
+				return d.toString()
+			} 
+			else return "";
+		},
+		encodeSorters: function(d) {
+			var b = [], c = false;
+			if(d){
+				if(Ext.isObject(d)) d = [d];
+				if(Ext.isArray(d)){
+					Ext.each(d, function(e){
+						if(e.property){
+							if (e.property.indexOf("ObjectID") >= 0) c = true;
+							b.push([e.property, e.direction].join(" "));
+						}
+					});
+				}
+			}
+			if(!c) b.push("ObjectID");
+
+			return b.join(",");
+		}
+	});
+
+	Ext.define("Rally.data.wsapi.Proxy", { //compact===FALSE!!!!
+		extend: Ext.data.proxy.Rest,
+		alias: ["proxy.rally.data.proxy.wsapi", "proxy.rally.data.proxy.rest", "proxy.Rally.data.WsapiRestProxy", "proxy.rallywsapiproxy"],
+		alternateClassName: ["Rally.data.WsapiProxy", "Rally.data.WsapiRestProxy"],
+		mixins: {
+			proxy: Rally.data.wsapi.ProxyBase
+		},
+		defaultPageSize: 200,
+		filterParam: "query",
+		limitParam: "pagesize",
+		groupParam: "order",
+		sortParam: "order",
+		pageParam: undefined,
+		noCache: false,
+		wsapiVersion: undefined,
+		constructor: function(b){
+			b = b || {};
+			this.actionMethods = Rally.data.wsapi.ProxyBase.actionMethods;
+			b.wsapiVersion = b.wsapiVersion || Rally.environment.getServer().getWsapiVersion();
+			if (b.wsapiVersion.indexOf("v2.") !== 0) b.format = "js";
+			this.callParent(arguments);
+		},
+		buildRequest: function(b) {
+			var c = this.callParent(arguments);
+			return this.mixins.proxy.buildRequest.call(this, b, c);
+		},
+		getMethod: function(b) {
+			var c = this.callParent(arguments);
+			if (c === "GET" && this._shouldUsePostGet(b)) {
+				this._changeGetToPost(b);
+				return "POST";
+			}
+			return c;
+		},
+		_shouldUsePostGet: function(b) {
+			return b.operation && b.operation.enablePostGet;
+		},
+		_changeGetToPost: function(b) {
+			if(b.params) b.params._method = "GET";
+		},
+		buildUrl: function(c) {
+			this.mixins.proxy.buildUrl.call(this, c);
+			var b = this.callParent(arguments);
+			return b;
+		},
+		processResponse: function(f, c, e, b, g, d) {
+			f = this.mixins.proxy.processResponse.call(this, f, c, e, b, g, d);
+			this.callParent([f, c, e, b, g, d]);
+		},
+		setException: function(c, b) {
+			this.mixins.proxy.setException.call(this, c, b);
+		},
+		encodeFilters: function(b) {
+			return this.mixins.proxy.encodeFilters.call(this, b);
+		},
+		encodeSorters: function(b) {
+			return this.mixins.proxy.encodeSorters.call(this, b);
+		},
+		parseResponse: function(b) {
+			return Ext.JSON.decode(b.responseText);
+		}
+	});
+	
+	Ext.define('Rally.sdk.env.JsonPIoProvider', {//good
+		extend: Rally.env.IoProvider ,
+		alternateClassName: 'Rally.sdk.env.IoProvider',
+		config:{ callbackKey:'jsonp' },
+
+		doRequest:function (request) {
+			if (request.method) {
+				request.params = request.params || {};
+				request.params._method = request.method;
+			}
+			Ext.data.JsonP.request(Ext.apply(request, this.config));
+		},
+
+		getProxy:function (proxyConfig) {
+			return this.callParent([Ext.apply(proxyConfig, {
+				type: 'rallywsapijsonpproxy'
+			})]);
+		},
+		
+		getLookbackProxy:function (proxyConfig) {
+			return Ext.apply({}, proxyConfig, {
+				type: 'rallylookbackjsonpproxy'
+			});
+		}
+	});
+
+	Ext.define('Rally.sdk.env.CorsIoProvider', {//good
+		extend: Rally.env.IoProvider ,
+
+		constructor: function(config) {
+			this.smAppID = config.smAppID;
+			if(Rally.getSdkInfo(this.smAppID).apiKey) Ext.Ajax.on('beforerequest', this._attachApiKey, this);
+			else Ext.Ajax.on('beforerequest', this._ensureCredentials, this);
+			this.callParent(arguments);
+		},
+
+		_attachApiKey: function(conn, opts) {
+			opts.headers = Ext.apply({
+				zsessionid: Rally.getSdkInfo(this.smAppID).apiKey //who would have thought zsessionid was the api key!
+			}, opts.headers);
+		},
+
+		_ensureCredentials: function(conn, opts) { opts.withCredentials = true; }
+	});
+
+	Ext.define('Rally.sdk.env.Server', { //good
+		extend:  Rally.env.Server ,
+		config: {	contextPath: '/slm' },
+
+		getHashBaseUrl: function() { return this.getBaseUrl() + '/'; }
+	});
+
+	Ext.define('Rally.sdk.data.wsapi.JsonPProxy', {//good
+		extend:  Ext.data.proxy.JsonP ,
+		alternateClassName: ['Rally.sdk.data.WsapiJsonPProxy'],
+		alias: ['proxy.rally.data.proxy.wsapijsonp', 'proxy.rally.data.proxy.jsonp', 'proxy.Rally.sdk.data.WsapiJsonPProxy', 'proxy.rallywsapijsonpproxy'],
+		mixins: { proxy:  Rally.data.wsapi.ProxyBase },
+
+		defaultPageSize: 200,
+		format: 'js',
+
+		filterParam: 'query',
+		limitParam: 'pagesize',
+		//TODO need to convert their groupby syntax to ours
+		groupParam: 'order',
+		sortParam: 'order',
+		pageParam: undefined, /* we don't want a page param, the start param is sufficient */
+		autoAppendParams: false, //Must be false - otherwise, this will drop your params that are sent into the request!
+		callbackKey: 'jsonp',
+
+		recordParam: 'artifact',
+
+		buildRequest: function(operation) {
+			this.noCache = operation.action === 'read';
+
+			operation.params = operation.params || {};
+			operation.params._method = Rally.data.wsapi.ProxyBase.getMethod(operation.action);
+
+			var request = this.callParent(arguments);
+			return this.mixins.proxy.buildRequest.call(this, operation, request);
+		},
+
+		buildUrl: function(request) {
+			this.mixins.proxy.buildUrl.call(this, request);
+
+			if(request.action === 'update' || request.action === 'destroy')
+				request.url = (request.url || this.url) + '/' + request.records[0].get('ObjectID');
+			if(request.action === 'destroy')
+				delete request.records; //prevent encoding artifact={} on end of url
+
+			if(request.operation.id && (request.action !== 'create')) {
+				request.url = (request.url || this.url) + '/' + request.operation.id;
+				delete request.params.id;
+			}
+			var url = this.callParent(arguments);
+
+			// as of Ext 4.1.2, Sencha no longer encodes the records onto requests for us
+			var records = request.records;
+			if(Ext.isArray(records) && records.length > 0)
+				url = Ext.urlAppend(url, Ext.String.format("{0}={1}", this.recordParam, this.encodeRecords(records)));
+
+			return url;
+		},
+
+		/**
+		 * Override to include the correct format for JsonP requests
+		 * @alias Ext.data.proxy.Server#getUrl
+		 */
+		getUrl: function() {
+			var url = this.callParent(arguments),
+				formatRe = new RegExp('\\.' + this.format + '$');
+			return url.match(formatRe) ? url : url + '.' + this.format;
+		},
+
+		/**
+		 * Override to handle the wsapi errors (defined in Ext.data.proxy.Server)
+		 * @alias Ext.data.proxy.Server#processResponse
+		 */
+		processResponse: function(success, operation, request, response, callback, scope) {
+			success = this.mixins.proxy.processResponse.call(this, success, operation, request, response, callback, scope);
+			this.callParent([success, operation, request, response, callback, scope]);
+		},
+
+		/**
+		 * Override to handle the wsapi's special error syntax (defined in Ext.data.proxy.Server)
+		 * @alias Ext.data.proxy.Server#setException
+		 */
+		setException: function(operation, response) {
+			this.mixins.proxy.setException.call(this, operation, response || {
+				Result: { Errors: ['Null response.  Invalid security context?']}
+			});
+		},
+
+		encodeFilters: function(filters) { return this.mixins.proxy.encodeFilters(filters); },
+		encodeSorters: function(sorters) { return this.mixins.proxy.encodeSorters(sorters); },
+		parseResponse: function(response) { return response; },
+
+		/**
+		 * Encode the record into a format that Rally's WSAPI understands.
+		 * Used for creates and updates.
+		 *
+		 * @param records {Rally.data.Model[]} The records to encode.  Currently only works
+		 * with a length of 1 since Rally doesn't currently support batch operations.
+		 */
+		encodeRecords: function(records) {
+			var record = records[0],
+				data = this.writer.getRecordData(record),
+				toEncode = {};
+			toEncode[this.model.typePath] = data;
+			return window.encodeURIComponent(Ext.JSON.encode(toEncode));
+		},
+
+		destroy: function() {
+			// Ext only supports GET for JSONP, so when calling record.destroy() with JSONP,
+			// it attempts to cancel all pending JSONP requests by calling Ext.data.jsonp.Proxy::abort() and not
+			// making a request.
+			// since we support all HTTP verbs with JSONP, we want destroy to do the same thing as the other verbs
+			return this.doRequest.apply(this, arguments);
+		}
+	});
+
+	Ext.define('Rally.sdk.Bootstrapper', {
+		singleton: true,
+		apps: {}, //installed apps to this bootstrapper
+		
+		getIncludes: function(itemType){ //what is this used for ?
+			var nodeLists = [];
+			if(itemType) nodeLists.push(document.getElementsByTagName(itemType));
+			else {
+				nodeLists.push(document.getElementsByTagName("link"));
+				nodeLists.push(document.getElementsByTagName("script"));
+			}
+			var includes = [];
+			for(var i = 0; i < nodeLists.length; i++){
+				for(var j = 0; j < nodeLists[i].length; j++){
+					includes.push(nodeLists[i][j]);
+				}
+			}
+			return includes;
+		},
+
+		getInclude: function(itemType, itemName) { //what is this used for ?
+			var type = itemName ? itemType : null,
+				name = itemName ? itemName : itemType,
+				includes = this.getIncludes(type);
+			for(var i = 0; i < includes.length; i++){
+				var includePath = includes[i].getAttribute("src") || includes[i].getAttribute("href");
+				if(typeof includePath === "string" && includePath.indexOf(name) > -1) return includes[i];
+			}
+			return null;
+		},
+
+		loadStylesheet: function (cssPath, refNode, callback) {
+			var css = document.createElement("link");
+			css.setAttribute("rel", "stylesheet");
+			css.setAttribute("type", "text/css");
+			css.setAttribute("href", cssPath);
+			this._loadResource(css, refNode, callback);
+		},
+
+		_setAttributes: function (element, attributes) {
+			for(var attribute in attributes){
+				if(attributes.hasOwnProperty(attribute)){
+					element.setAttribute(attribute, attributes[attribute]);
+				}
+			}
+		},
+
+		//optionalAttributes - an object that contains the key values for extra attributes
+		loadScript: function (scriptPath, optionalAttributes, callback) {
+			var script = document.createElement("script");
+			script.setAttribute("type", "text/javascript");
+			script.setAttribute("src", scriptPath);
+			if(optionalAttributes) this._setAttributes(script, optionalAttributes);
+			this._loadResource(script, null, callback);
+		},
+
+		_loadResource: function (el, refNode, callback) {
+			if(el.readyState){ //IE
+				el.onreadystatechange = function(){
+					if(!this._calledBack && (this.readyState === 'complete' || this.readyState === 'loaded')) {
+						this._calledBack = true;
+						callback();
+					}
+				};
+			} 
+			else el.onload = callback;
+			
+			if(refNode && refNode.nextSibling) refNode.parentNode.insertBefore(el, refNode.nextSibling);
+			else document.getElementsByTagName('head')[0].appendChild(el);
+		},
+
+		//put these at the beginning of the styles/links so they can be overridden
+		_loadResources: function(smAppID){
+			var me = this,
+				firstStyle = document.head.getElementsByTagName('style, link')[0];
+			me.loadStylesheet(me.getSdkInfo(smAppID).path + '/rui/resources/css/rui-all_02.css', firstStyle, function(){
+				me.loadStylesheet(me.getSdkInfo(smAppID).path + '/rui/resources/css/rui-all_01.css', firstStyle, function(){
+					me.loadStylesheet(me.getSdkInfo(smAppID).path + '/rui/resources/css/rui-fonts.css', firstStyle, function(){
+						me._callOnReadyFns();
+					});
+				});
+			});
+		},
+
+		_callOnReadyFns: function () {
+			Ext.onReady(function(){
+				while(this._onReadyFns.length) this._onReadyFns.shift()();
+				this._ready = true;
+				this._readyInProgress = false;
+			}, this);
+		},
+
+		onReady: function (smAppID, onReady) {
+			if(this._ready) return onReady();
+			else if(this._readyInProgress) this._onReadyFns.push(onReady);
+			else {
+				this._readyInProgress = true;
+				this._onReadyFns = [onReady];
+
+				var context = Rally.environment.getContext(),
+					sdkInfo = this.getSdkInfo(smAppID);
+				if(!context || (sdkInfo.project && sdkInfo.project !== '/project/' + context.getProject().ObjectID)) {
+						 loader = this._getContextLoader();
+					loader.load({
+						project: sdkInfo.project,
+						success: function(rawContext){
+							rawContext.scope.up = Ext.isDefined(sdkInfo.projectScopeUp) ? sdkInfo.projectScopeUp : false;
+							rawContext.scope.down = Ext.isDefined(sdkInfo.projectScopeDown) ? sdkInfo.projectScopeDown : true;
+
+							if(window.sdkConfig && window.sdkConfig.apiBaseUrl) 
+								rawContext.apiBaseUrl = window.sdkConfig.apiBaseUrl;
+							Rally.environment.externalContext = rawContext;
+							this._loadResources(smAppID);
+						},
+						scope: this
+					});
+				} 
+				else this._loadResources(smAppID);
+			}
+		},
+
+		_getContextLoader: function () {
+			return Ext.create('Rally.sdk.env.RemoteContextLoader');
+		},
+
+		_addSdkHeaders: function (headers) {
+			Ext.Object.each(this.appInfo, function (key, value) {
+				headers['X-RallyIntegration' + Ext.String.capitalize(key)] = value;
+			});
+		},
+
+		_wireIoHeaderHandlers: function () {
+			var headers = {};
+			this._addSdkHeaders(headers);
+			Rally.data.wsapi.Proxy.prototype.headers = headers;
+			Rally.sdk.data.wsapi.JsonPProxy.prototype.headers = headers;
+		},
+
+		launchApp: function (className, appInfo) {
+			var me = this,
+				smAppID = appInfo.smAppID;
+			if(!me.appInfos) me.appInfos = {};
+			if(!smAppID) throw 'No smAppID';
+			me.appInfos[smAppID] = appInfo;
+			appInfo.library = 'AppSDK ' + Rally.sdk.Bootstrapper.getSdkInfo(smAppID).sdkVersion;
+			me.onReady(smAppID, function(){
+				me._loadTimeboxScope(smAppID, function(timeboxScope){
+					me._loadAppSettings(smAppID, function(settings){
+						me._launchAppInDiv(className, settings, timeboxScope, smAppID);
+					});
+				});
+			});
+		},
+
+		getApp: function(smAppID){ return this.apps[smAppID] || null; },
+		getApps: function(){
+			var apps = [];
+			for(var smAppID in this.apps) apps.push(this.apps[smAppID]);
+			return apps;
+		},
+
+		_launchAppInDiv: function (className, settings, timeboxScope, smAppID) {
+			var me=this;
+			me._wireIoHeaderHandlers();
+			me.apps[smAppID] = me._createApp(className, settings, timeboxScope, smAppID);
+			Ext.create('Ext.container.Container', {
+				layout: 'fit',
+				renderTo: smAppID,
+				items: [me.apps[smAppID]]
+			});
+		},
+
+		_loadAppSettings: function(smAppID, callback) {
+			var appId = this._findAppID(smAppID);
+			if(appId){
+				Rally.app.settings.Loader.load({
+					appID: appId,
+					callback: callback,
+					context: Rally.environment.getContext()
+				});
+			} 
+			else callback({});
+		},
+
+		_loadTimeboxScope: function (smAppID, callback) {
+			var sdkInfo = this.getSdkInfo(smAppID);
+			if(sdkInfo.timebox){
+				var type = Rally.util.Ref.getTypeFromRef(sdkInfo.timebox);
+				if(Rally.util.Ref.getOidFromRef(sdkInfo.timebox)) {
+					Rally.data.ModelFactory.getModel({
+						context: Rally.environment.getContext().getDataContext(),
+						type: type,
+						success: function (timeboxModel) {
+							timeboxModel.load(Rally.util.Ref.getOidFromRef(sdkInfo.timebox), {
+								success: function(timeboxRecord) {
+									callback(Ext.create('Rally.app.TimeboxScope', {
+										type: type,
+										record: timeboxRecord
+									}));
+								}
+							});
+						}
+					});
+				} else {
+					callback(Ext.create('Rally.app.TimeboxScope', {
+						type: sdkInfo.timebox,
+						record: null
+					}));
+				}
+			} 
+			else callback();
+		},
+
+		_createApp: function (className, settings, timeboxScope, smAppID){
+			return Ext.create(className, {
+				context: this._buildAppContext(smAppID, timeboxScope),
+				settings: settings
+			});
+		},
+
+		_buildAppContext: function (smAppID, timeboxScope) {
+			var context = Rally.environment.getContext(),
+				appID = this._findAppID(smAppID);
+
+			this.appStatePrefix = Rally.state.SessionStorageProvider.APP_PREFIX + appID + '-' + context.getUser().ObjectID + '-';
+			Rally.state.SessionStorage.initialize(this.appStatePrefix);
+			var contextValues = {
+				workspace: context.getWorkspace(),
+				project: context.getProject(),
+				projectScopeUp: context.getProjectScopeUp(), //need to get this another way
+				projectScopeDown: context.getProjectScopeDown(), //need to get this another way
+				appID: appID,
+				user: context.getUser(),
+				subscription: context.getSubscription(),
+				permissions: context.getPermissions()
+			};
+			if(timeboxScope) contextValues.timebox = timeboxScope;
+
+			return Ext.create('Rally.app.Context', { initialValues: contextValues });
+		},
+
+		_findAppID: function(smAppID){ //NOTE: we changed queryParams from widnow.location.search
+			var queryParams = Ext.Object.fromQueryString(window[smAppID].iframeQueryString);
+			return queryParams.panelOid;
+		},
+
+		getSdkPath: function(){ return 'https://rally1.rallydev.com/apps/2.0rc3'; },
+		getSdkInfo: function(smAppID){ //NOTE: we hardcoded path, and changed window.location.search to window[smaAppID].iframeQueryString
+			var info = {
+				wsapiVersion: 'v2.0',
+				lookbackVersion: 'v2.0',
+				sdkVersion: '2.0rc3',
+				path: this.getSdkPath()
+			};
+			
+			function applyQueryStringValues(obj, queryString) {
+				var queryTokens = queryString.split("&");
+				for(var j = 0; j < queryTokens.length; j++){
+					var nameValuePair = queryTokens[j].split("=");
+					if(nameValuePair.length === 2)
+						obj[nameValuePair[0]] = window.decodeURIComponent(nameValuePair[1]);
+				}
+			}
+			applyQueryStringValues(info, window[smAppID].iframeQueryString);
+			return info;
+		}
+	}, function () {	
+		Rally.launchApp = function(app, config){ Rally.sdk.Bootstrapper.launchApp(app, config); };
+		Rally.getApp = function(smAppID){ return Rally.sdk.Bootstrapper.getApp(smAppID); };
+		Rally.getApps = function(){ return Rally.sdk.Bootstrapper.getApps(); };
+		Rally.getSdkInfo = function(smAppID){ return Rally.sdk.Bootstrapper.getSdkInfo(smAppID); };
+
+		Rally.loadScripts = function(scriptPaths, callback, forceNoCache){
+			if(scriptPaths.length > 0){
+				var scriptPath = scriptPaths.splice(0, 1)[0];
+				if(forceNoCache) scriptPath += (scriptPath.indexOf('?') === -1 ? '?' : '&') + '_dc=' + Math.random();
+				Rally.sdk.Bootstrapper.loadScript(scriptPath, null, Ext.Function.bind(Rally.loadScripts, Rally, [scriptPaths, callback]));
+			} 
+			else Ext.callback(callback);
+		};
+	});
+
+	Ext.define('Rally.sdk.data.lookback.JsonPProxy', {//good
+		extend: Ext.data.proxy.JsonP ,	
+		alternateClassName: ['Rally.data.SnapshotJsonPProxy'],
+		alias:['proxy.snapshotjsonp', 'proxy.Rally.data.SnapshotJsonPProxy', 'proxy.rallylookbackjsonpproxy'],
+
+		format:'js',
+		filterParam:'find',
+		limitParam:undefined, /* handled by find config */
+		sortParam:'sort',
+		pageParam:undefined, /* we don't want a page param, the start param is sufficient */
+		startParam:undefined, /* we don't want a start param, handled by find */
+		autoAppendParams:false, //Must be false - otherwise, this will drop your params that are sent into the request!
+		callbackKey:'jsonp',
+		reader:{
+			type:'json',
+			root:'Results',
+			totalProperty:'TotalResultCount'
+		},
+
+		/**
+		 * Specifies the query's find parameter directly in Lookback API syntax (similar to MongoDB).
+		 * If both filters and a find is specified, they are and-ed together.
+		 */
+		find: undefined,
+
+		constructor:function (config) {
+			config.context = config.context || Rally.environment.getContext().getDataContext();
+			this.mergeConfig(config);
+			this.callParent([this.config]);
+			this.url = this._buildRootUrl();
+		},
+
+		_buildRootUrl:function () {
+			return Rally.environment.getServer().getLookbackUrl(this.version) + '/service/rally/workspace/' +
+				Rally.util.Ref.getOidFromRef(this.context.workspace) + '/artifact/snapshot/query';
+		},
+
+		buildRequest:function (operation) {
+			var request = this.callParent(arguments);
+			Ext.apply(request.params, {
+				fields:this._encodeFetch(),
+				hydrate:this._encodeHydrate(),
+				pagesize:operation.limit,
+				start:operation.start,
+				compress: this.compress,
+				find: this.encodeFilters(operation.filters)
+			});
+
+			//Always encode sorters
+			if(!request.params[this.sortParam]) request.params[this.sortParam] = this.encodeSorters(operation.sorters);
+			return request;
+		},
+
+		_encodeFetch:function () { return Ext.JSON.encode(this.fetch); },
+		_encodeHydrate:function () { return Ext.JSON.encode(this.hydrate); },
+		_encodeFilters: function(filters) {
+			var find = this.find, query;
+			if(filters && filters.length){
+				Ext.each(filters, function(filter){
+					if(!query) {
+						query = filter instanceof Rally.data.lookback.QueryFilter ? filter :
+							Rally.data.lookback.QueryFilter.fromExtFilter(filter);
+					}
+					else query = query.and(filter);
+				});
+				query = query.toObject();
+			}
+			if(find){
+				// parse it if necessary
+				if(typeof find === 'string') find = Ext.decode(find);
+
+				if(query) query = {'$and':[query, find] };
+				else query = find;
+			}
+			return query || {};
+		},
+
+		/**
+		 * Encodes the array of {@link Ext.util.Filter} objects into a string to be sent in the request url.
+		 * Translates Ext.data.Filter to Rally.data.lookback.QueryFilter, to support Rally query syntax
+		 * @alias Ext.data.proxy.Server#encodeFilters
+		 */
+		encodeFilters:function (filters) {
+			var implicitFind = this._getImplicitFilters(),
+				find = this._encodeFilters(implicitFind.concat(filters || []));
+			return Ext.JSON.encode(find);
+		},
+
+		_getImplicitFilters:function () {
+			var implicitFilters = [];
+
+			if(this._etlDate){
+				implicitFilters.push({
+					property:'_ValidFrom',
+					operator:'<=',
+					value:this._etlDate
+				});
+			}
+			return implicitFilters;
+		},
+
+		/**
+		 * Encodes the array of {@link Ext.util.Sorter} objects into a string to be sent in the request url. By default,
+		 * this simply JSON-encodes the sorter data
+		 * @alias Ext.data.proxy.Server#encodeSorters
+		 */
+		encodeSorters:function (sorters) {
+			var sortObj = {};
+			if(Ext.isObject(sorters)) sorters = [sorters];
+			if(Ext.isArray(sorters) && sorters.length){
+				Ext.Array.each(sorters, function(sorter){
+					sortObj[sorter.property] = sorter.direction === 'ASC' ? 1 : -1;
+				});
+				return Ext.JSON.encode(sortObj);
+			} 
+			else if(this.sort && _.keys(this.sort).length) return Ext.JSON.encode(this.sort);
+			else return '';
+		},
+
+		/**
+		 * Override to handle the wsapi errors (defined in Ext.data.proxy.Server)
+		 * @alias Ext.data.proxy.Server#processResponse
+		 */
+		processResponse:function (success, operation, request, response, callback, scope) {
+			if(success){
+				//handle error conditions for our special error format
+				var r = response;
+				if(r.Errors && r.Errors.length > 0) success = false;
+				else this._etlDate = r.ETLDate;
+			}
+			this.callParent([success, operation, request, response, callback, scope]);
+		},
+
+		/**
+		 * Override to handle the wsapi's special error syntax (defined in Ext.data.proxy.Server)
+		 * @alias Ext.data.proxy.Server#setException
+		 */
+		setException:function (operation, response) {
+			var error = operation.getError() || {};
+			operation.setException(Ext.apply(error, {
+				errors:response.Errors
+			}));
+		}
+	});
+
+	Ext.define('Rally.sdk.dependencies.DependencyLoader', { //good
+		statics: { resources: [] },
+
+		inheritableStatics: {
+			load: function (callback, scope) {
+				this.loadResources(Ext.clone(this.resources), callback, scope, false);
+			},
+
+			loadResources: function (resources, callback, scope, noPathModification) {
+				var sdkPath = Rally.sdk.Bootstrapper.getSdkPath(),
+					modifyPath = !noPathModification,
+					resourcePath;
+
+				if(resources.length > 0){
+					resource = resources.shift();
+					if(!resource.needsToLoadFn || resource.needsToLoadFn()){
+						if(resource.script){
+							resourcePath = resource.script;
+							if(modifyPath)
+								resourcePath = this._modifyResourcePath(resourcePath, sdkPath);
+							Rally.sdk.Bootstrapper.loadScript(resourcePath, undefined, 
+								Ext.bind(this.loadResources, this, [resources, callback, scope, noPathModification])
+							);
+						} 
+						else if(resource.stylesheet){
+							resourcePath = resource.stylesheet;
+							if(modifyPath) resourcePath = this._modifyResourcePath(resourcePath, sdkPath);
+
+							Rally.sdk.Bootstrapper.loadStylesheet(resourcePath, undefined, 
+								Ext.bind(this.loadResources, this, [resources, callback, scope, noPathModification])
+							);
+						}
+					} 
+					else this.loadResources(resources, callback, scope);
+				} 
+				else if(callback) callback.call(scope);
+			},
+
+			stylesheetExists: function (stylesheetName, stylesheets) {
+				stylesheetName = stylesheetName.split('../')[stylesheetName.split('../').length - 1];
+				stylesheets = stylesheets || Ext.Array.toArray(document.styleSheets);
+
+				return Ext.Array.some(stylesheets, function (stylesheet) {
+					return stylesheet.href && stylesheet.href.indexOf(stylesheetName) !== -1;
+				});
+			},
+
+			_modifyResourcePath: function (resourcePath, sdkPath) {
+				var path = sdkPath + resourcePath;
+				if(Rally.BrowserTest && Rally.BrowserTest.replaceSdkPath) 
+					path = path.replace(sdkPath + '/lib', 'src/main/webapp/js-lib');
+				return path;
+			}
+		}
+	});
+
+	Ext.define('Rally.sdk.dependencies.Analytics', {//good
+		extend:  Rally.sdk.dependencies.DependencyLoader,
+		statics: {
+			resources: [{
+				script: '/lib/analytics/analytics-all.js',
+				needsToLoadFn: function(){
+					return !window.Highcharts;
+				}
+			}]
+		}
+	});
+
+	Ext.define('Rally.sdk.dependencies.GoogleClosure', {//good
+		extend:  Rally.sdk.dependencies.DependencyLoader ,
+		statics: {
+			resources: [{
+				script: '/lib/closure/closure-all.js',
+				needsToLoadFn: function(){
+					return !window.goog;
+				}
+			},{
+				stylesheet: '/lib/closure/closure-20130117-r2446.css',
+				needsToLoadFn: function(){
+					return !Rally.sdk.dependencies.DependencyLoader.stylesheetExists('closure-20130117-r2446.css');
+				}
+			},{
+				stylesheet: '/rui/resources/css/lib-closure.css',
+				needsToLoadFn: function(){
+					return !Rally.sdk.dependencies.DependencyLoader.stylesheetExists('lib-closure.css');
+				}
+			}]
+		}
+	});
+
+	Ext.define('Rally.sdk.env.RemoteContextLoader', {//good
+		constructor: function(config) {
+			Ext.apply(this, config);
+			this.ioProvider = this.ioProvider || Rally.environment.getIoProvider();
+			this.callParent(arguments);
+		},
+
+		_getProjectFetch: function() {
+			return Ext.Array.union([
+				'Name', 'ObjectID', 'Workspace', 'SchemaVersion', 'State'
+			], this._getWorkspaceConfigurationFetch());
+		},
+
+		_getWorkspaceConfigurationFetch: function() {
+			return [
+				'WorkspaceConfiguration', 'WorkDays' , 'DragDropRankingEnabled',
+				'BuildandChangesetEnabled', 'TimeZone', 'DateFormat', 'DateTimeFormat',
+				'IterationEstimateUnitName', 'ReleaseEstimateUnitName', 'TaskUnitName'
+			];
+		},
+
+		_loadProject: function(loadOptions) {
+			this.ioProvider.httpGet({
+				item: loadOptions.project,
+				params: {
+					fetch: this._getProjectFetch()
+				},
+				success: function(project) {
+					loadOptions.context.scope.project = project;
+					loadOptions.context.scope.workspace = project.Workspace;
+					this._onLoadComplete(loadOptions);
+				},
+				scope: this
+			});
+		},
+
+		_loadFirstProject: function(loadOptions) {
+			this.ioProvider.httpGet({
+				type: 'Project',
+				params: {
+					fetch: this._getProjectFetch(),
+					pagesize: 1
+				},
+				success: function(result) {
+					var projects = result.Results;
+					if (projects.length) {
+						loadOptions.context.scope.project = projects[0];
+						loadOptions.context.scope.workspace = projects[0].Workspace;
+						this._onLoadComplete(loadOptions);
+					}
+				},
+				scope: this
+			});
+		},
+
+		_loadUser: function(loadOptions) {
+			this.ioProvider.httpGet({
+				type: 'User',
+				params: {
+					fetch: Ext.Array.union([
+						'UserName', 'ObjectID', 'Name', 'LandingPage', 'SubscriptionAdmin', 'OnPremLdapUsername',
+						'UserPermissions', 'UserProfile',
+						/* UserProfile */ 'DateFormat', 'DateTimeFormat', 'TimeZone', 'DefaultWorkspace', 'DefaultProject',
+						/* UserPermissions */ 'Role'
+					], this._getWorkspaceConfigurationFetch())
+				},
+				success: function(user) {
+					loadOptions.context.user = user;
+
+					if(!loadOptions.project){
+						loadOptions.context.scope.project = user.UserProfile.DefaultProject;
+						loadOptions.context.scope.workspace = user.UserProfile.DefaultWorkspace;
+
+						//No default provided- get first available project instead
+						if(!user.UserProfile.DefaultProject){
+							this._loadFirstProject(loadOptions);
+							return;
+						}
+					}
+					this._onLoadComplete(loadOptions);
+				},
+				scope: this
+			});
+		},
+
+		_loadSubscription: function(loadOptions) {
+			this.ioProvider.httpGet({
+				type: 'Subscription',
+				params: {
+					fetch: [
+						'MaximumProjects', 'SubscriptionType',
+						'ProjectHierarchyEnabled', 'StoryHierarchyEnabled',
+						'Modules', 'ExpirationDate'
+					]
+				},
+				success: function(subscription) {
+					loadOptions.context.subscription = subscription;
+					this._onLoadComplete(loadOptions);
+				},
+				scope: this
+			});
+		},
+
+		_loadPermissions: function(options) {
+			this.ioProvider.httpGet({
+				type: 'user:current/permissions/all',
+				success: function(result) {
+					options.context.permissions = Ext.create('Rally.auth.UserPermissions', result.Results);
+					this._onLoadComplete(options);
+				},
+				failure: function() {
+					options.context.permissions = Ext.create('Rally.auth.UserPermissions', []);
+					this._onLoadComplete(options);
+				},
+				scope: this
+			});
+		},
+
+		_onLoadComplete: function(loadOptions) {
+			if (loadOptions.context.subscription &&
+					loadOptions.context.user &&
+					loadOptions.context.permissions &&
+					loadOptions.context.scope.project) {
+				Ext.callback(loadOptions.success, loadOptions.scope, [loadOptions.context]);
+			}
+		},
+
+		load: function(loadOptions) {
+			var options = Ext.apply({ context: { scope: {} }}, loadOptions);
+
+			this._loadUser(options);
+			this._loadSubscription(options);
+			this._loadPermissions(options);
+			if(loadOptions.project) this._loadProject(options);
+		}
+	});
+
+	Ext.define('Rally.sdk.listener.NavigationRequestListener', { //good					
+		mixins: { messageable:  Rally.Messageable },
+
+		constructor: function() {
+			this.subscribe(Rally.nav.Message.manageIterations, this._showManageIterations, this);
+			this.subscribe(Rally.nav.Message.detail, this._showDetail, this);
+			this.subscribe(Rally.nav.Message.create, this._create, this);
+			this.subscribe(Rally.nav.Message.copy, this._copy, this);
+			this.subscribe(Rally.nav.Message.edit, this._edit, this);
+			this.subscribe(Rally.nav.Message.split, this._split, this);
+			this.subscribe(Rally.nav.Message.goTo, this._goTo, this);
+		},
+		
+		destroy: function() {
+			this.unsubscribe(Rally.nav.Message.manageIterations, this._showManageIterations, this);
+			this.unsubscribe(Rally.nav.Message.detail, this._showDetail, this);
+			this.unsubscribe(Rally.nav.Message.create, this._create, this);
+			this.unsubscribe(Rally.nav.Message.copy, this._copy, this);
+			this.unsubscribe(Rally.nav.Message.edit, this._edit, this);
+			this.unsubscribe(Rally.nav.Message.split, this._split, this);
+			this.unsubscribe(Rally.nav.Message.goTo, this._goTo, this);
+		},
+
+		_showManageIterations: function(args) {
+			this._showUnsupportedMessage('The iteration management dialog is unavailable when running externally.');
+		},
+
+		_goTo: function(token, args) {
+			var hash = token;
+			if(token.indexOf('#') === -1) hash = '/#' + hash;
+			window.open(Rally.environment.getServer().getBaseUrl() + hash);
+		},
+
+		_showDetail: function(item, args) {
+			var token = Rally.nav.Manager.getDetailHash(Rally.util.Ref.getRelativeUri(item), args);
+			this._goTo(token);
+		},
+
+		_create: function(type, args) {
+			this._showUnsupportedMessage('The create dialog is unavailable when running externally.');
+		},
+
+		_copy: function(item) {
+			this._showUnsupportedMessage('The copy dialog is unavailable when running externally.');
+		},
+
+		_edit: function(item, args) {
+			this._showUnsupportedMessage('The edit dialog is unavailable when running externally.');
+		},
+
+		_split: function(record) {
+			this._showUnsupportedMessage('The story split dialog is unavailable when running externally.');
+		},
+
+		_showUnsupportedMessage: function(message) {
+			Rally.ui.notify.Notifier.showError({message: message});
+		}
+	});
+
+})();				}
+			}());
+		</script>		
+		
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('IntelRallyApp', {
+		alias: 'widget.intelrallyapp',
+		extend: 'Rally.app.App',
+		
+		/** these are the necessary models to load for the apps. you should call this */
+		_loadModels: function(){
+			var me=this, 
+				promises = [],
+				models = {
+					Project: 'Project',
+					UserStory: 'HierarchicalRequirement',
+					Feature:'PortfolioItem/Feature',
+					Milestone:'PortfolioItem/Milestone'
+				};
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({ //load project
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},	
+		_loadProject: function(oid){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Project){ 
+				return me._loadModels().then(function(){ 
+					return me._loadProject(oid); 
+				});
+			}
+			else {
+				me.Project.load(oid, {
+					fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadFeature: function(oid, projectRef){ //projectRef is optional
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Feature){ 
+				return me._loadModels().then(function(){ 
+					return me._loadFeature(oid, projectRef); 
+				});
+			}
+			else {
+				me.Feature.load(oid, {
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadUserStory: function(oid, projectRef){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.UserStory){ 
+				return me._loadModels().then(function(){ 
+					return me._loadUserStory(oid, projectRef); 
+				});
+			}
+			else {
+				me.UserStory.load(oid, {
+					fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
+						'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadMilestone: function(oid, projectRef){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Milestone){ 
+				return me._loadModels().then(function(){ 
+					return me._loadMilestone(oid); 
+				});
+			}
+			else {
+				me.Milestone.load(oid, {
+					fetch: ['ObjectID', 'Parent', 'Name'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},
+		
+		/**************************************** SOME UTIL FUNCS ***************************************************/
+		_loadRootProject: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LRP');
+			var me=this, 
+				n = projectRecord.data.Name;
+			if(n === 'All Scrums' || n === 'All Scrums Sandbox') return Q(projectRecord);
+			else if(!projectRecord.data.Parent) return Q.reject('You do not have viewer access to "All Scrums"!');
+			else {
+				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+					return me._loadRootProject(parentRecord);
+				});
+			}
+		},	
+		_loadTopProject: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LTP');
+			var me=this, 
+				n = projectRecord.data.Name;
+			if(!projectRecord.data.Parent) return Q(projectRecord);
+			else {
+				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+					return me._loadTopProject(parentRecord);
+				});
+			}
+		},	
+		_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
+			if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
+			else {
+				var me=this, split = projectRecord.data.Name.split(' ART');
+				if(split.length>1) return Q(projectRecord);
+				else { 
+					var parent = projectRecord.data.Parent;
+					if(!parent) return Q.reject('Project not in a train');
+					else {
+						return me._loadProject(parent.ObjectID).then(function(parentRecord){
+							return me._projectInWhichTrain(parentRecord);
+						});
+					}
+				}
+			}
+		},	
+		_loadAllTrains: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					remoteSort:false,
+					limit:Infinity,
+					fetch: ['Name', 'ObjectID'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+							property:'Name',
+							operator: 'contains',
+							value: ' ART'
+						},{
+							property: 'Name',
+							operator: (rootProjectRecord.data.Name === 'All Scrums Sandbox' ? 'contains' : '!contains'),
+							value: 'Test'
+						}
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				console.log('AllTrainRecords loaded', store.data.items);
+				return Q(store);
+			});
+		},			
+		_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
+			if(!projectRef) return Q.reject('Invalid arguments: LRUS');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[{
+						property:'Project',
+						value: projectRef
+					}]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ //only pull look at Feature Release if US relese == null
+			/************************* NOTE ***********************************************
+				for Q215 we need to uncomment the below lines for a better user story filter!
+				
+				from: (US.Release == X || (US.Feature.Release ==X))
+				to: (US.Release ==X || (US.Release ==null && US .Feature.Release==X))
+			******************************************************************************/
+			var me=this,
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				// Ext.create('Rally.data.wsapi.Filter', {
+					// property:'Release.ObjectID',
+					// value: null
+				// }).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property:'Feature.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property:'Feature.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				// )
+			);
+		},
+		_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
+			if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
+							Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+							Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
+						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){ //get the most recent 5 in the project!!
+			/**this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
+				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
+				Then 1 of the 5 user stories is randomly selected and returned */
+			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
+			if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					filters: [{
+						property:'FormattedID',
+						value:formattedID
+					},{
+						property:'Project',
+						value: projectRef
+					}]
+				});
+			return me._reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},	
+		_loadProjectByName: function(name){
+			if(!name) return Q.reject('Invalid arguments: LPBN');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'ObjectID'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						{
+							property:'Name',
+							value:name
+						}
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},
+		
+		/********************************************** FEATURES  ********************************************/
+		_getFeatureFilter: function(trainRecord, releaseRecord){
+			if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0],
+				relSplit = releaseRecord.data.Name.split(' '),
+				coreFilter = Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.Name',
+					value: releaseRecord.data.Name
+				});
+			trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
+			if(trainRecord.data.Name == 'Test ART (P&E)'){
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: 'Test ART (P&E)'
+				}).and(coreFilter);
+			}
+			else {
+				return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+					property:'Project.Parent.Name',
+					value: trainName + ' POWG Portfolios'
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: trainName + ' POWG Portfolios'
+				})).and(coreFilter);
+			}
+		},
+		
+		/*************************************************** Products ********************************************/
+		_getProductFilter: function(trainRecord){ //products can be in 2 different levels of the portfolio hierarchy
+			if(!trainRecord) throw 'invalid arguments: GPF';
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0];
+			if(trainName === 'Test'){
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: 'Test ART (P&E)'
+				});
+			}
+			else {
+				return Ext.create('Rally.data.wsapi.Filter', {//NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+					property:'Project.Parent.Name',
+					value: trainName + ' POWG Portfolios'
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: trainName + ' POWG Portfolios'
+				}));
+			}
+		},	
+		_loadProducts: function(trainRecord){
+			if(!trainRecord) return Q.reject('Invalid arguments: LPROD');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/Product',
+					limit:Infinity,
+					remoteSort:false,
+					fetch: ['Name'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[me._getProductFilter(trainRecord)]
+				});
+			return me._reloadStore(store).then(function(store){
+				console.log('Products loaded', store.data.items);
+				return Q(store);
+			});
+		},
+		
+		/********************************************** Load Valid Projects ********************************************/	
+		_addValidProjectsToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._addValidProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
+			var me=this,
+				validProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._addValidProjectsToList(projTree[rootProjectRecord.data.ObjectID], validProjects);
+				console.log('valid projects', validProjects);
+				return Q(validProjects);
+			});	
+		},	
+		_allChildProjectToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_loadAllChildrenProjects: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
+			var me=this,
+				childrenProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+				console.log('childrenProjects', childrenProjects);
+				return Q(childrenProjects);
+			});	
+		},	
+		_allLeafProjectsToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadAllLeafProjects: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
+			var me=this,
+				childrenProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+				console.log('childrenProjects', childrenProjects);
+				return Q(childrenProjects);
+			});	
+		},
+		
+		/********************************************** Generic store loading, returns promise ********************************************/
+		
+		_reloadStore: function(store){
+			var deferred = Q.defer();
+			store.load({
+				callback: function(records, operation, success){
+					if(!success) deferred.reject(operation.getError() || 'Could not load data');
+					else deferred.resolve(store);
+				}
+			});
+			return deferred.promise;
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+		/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
+	Ext.define('WorkweekDropdown', {
+		extend: 'Ext.data.Model',
+		fields: [
+			{name: 'Workweek', type:'string'},
+			{name: 'DateVal', type:'number'}
+		]
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/**  
+		THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
+		gives a window-centered alert or confirm dialog box that isn't ugly. 
+	*/
+	Ext.define('PrettyAlert', {
+
+		__getMessageBoxY: function(){ 
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.parent.getWindowHeight(), 
+				ps = window.parent.getScrollY(), 
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			return iyOffset<0 ? 0 : iyOffset;
+		},
+		
+		_alert: function(title, str){		
+			if(arguments.length<1) return;
+			if(arguments.length===1){
+				str = title;
+				title = '';
+			}
+			Ext.MessageBox.alert(title, str).setY(this.__getMessageBoxY());
+			setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
+				var x = Ext.MessageBox.down('button');
+				while(x.isHidden()) x = x.nextSibling();
+				x.focus();
+			}, 20);
+		},
+		
+		_confirm: function(title, str, fn){
+			if(arguments.length<2) return;
+			if(arguments.length===2){
+				fn = str;
+				str = title;
+				title = '';
+			}
+			if(typeof fn !== 'function') fn = function(){};
+			Ext.MessageBox.confirm(title, str, fn).setY(this.__getMessageBoxY());
+			setTimeout(function(){
+				var x = Ext.MessageBox.down('button');
+				while(x.isHidden()) x = x.nextSibling();
+				x.focus();
+			}, 20);
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+		/** Mixin functions related to queries, you need to require Q as a dependency in your rally app
+		Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
+		most functions return promises that resolve to stores
+	*/
+
+	Ext.define('ReleaseQuery', {
+
+		_loadAllReleases: function(projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
+		_loadReleasesInTheFuture: function(projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date().toISOString()
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
+			the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
+			in the results.
+		**/
+		_loadReleasesWithName: function(releaseName, nameContains){ 
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Name', //match the release
+						value: releaseName
+					},{
+						property:'Project.Name', 
+						operator:'contains',
+						value:nameContains
+					},{
+						property:'Project.Children.Name', //has children 
+						operator:'=',
+						value:''
+					},{
+						property:'Project.Name', //but not the train release itsself
+						operator:'!contains',
+						value:' ART'
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							console.log('releasesWithName loaded:', records);
+							deferred.resolve(store);
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		
+		_loadReleaseByNameForProject: function(releaseName, projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[{
+					property:'Name',
+					value: releaseName
+				},{
+					property:'Project', 
+					value:projectRecord.data._ref
+				}],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							deferred.resolve(records.pop());
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[{
+					property:'Name',
+					operator:'contains',
+					value: releaseName
+				},{
+					property:'Project', 
+					value:projectRecord.data._ref
+				}],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							deferred.resolve(records);
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+		_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/** gets the most likely release to scope to base on the following order:
+			1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+							to use preferences for this one)
+			2) if we are in a release
+			3) the closest release planning date to the current date
+		*/
+		_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
+			var me=this,
+				d = new Date(),
+				rs = releaseRecords,
+				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+				_.find(rs, function(r){
+					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+				}) ||
+				_.reduce(rs, function(best, r){
+					if(best===null) return r;
+					else {
+						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+					}
+				}, null);
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//given named queues, only allows one function at a time in each queue to execute. 
+	Ext.define('AsyncQueue', {
+		
+		QueueOfFuncs: {},
+		
+		_dequeue: function(queueName){
+			var me=this;
+			queueName = queueName || 'undefined'; //to be clear
+			if(me.QueueOfFuncs[queueName]){
+				me.QueueOfFuncs[queueName].shift();
+				if(!me.QueueOfFuncs[queueName].length) return;
+				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+			}
+		},
+		
+		//callback(done)...make sure you call done when you are finished
+		_enqueue: function(callback, queueName){
+			var me=this;
+			queueName = queueName || 'undefined'; //to be clear
+			if(typeof callback !== 'function') return console.log('ERR: not a function', callback);
+			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
+				me.QueueOfFuncs[queueName] = [callback];
+				callback.call(me, me._dequeue.bind(me, queueName));
+			}
+			else me.QueueOfFuncs[queueName].push(callback);
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+		(although there is some arrow key scrolling bug) 
+	*/
+	Ext.define('Intel.form.field.ComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelcombo', 'widget.intelcombobox'],
+		
+		constructor: function(options) {
+			options = options || {};
+			options = Ext.merge({
+				enableKeyEvents:true,
+				queryMode:'local',
+				ignoreNoChange:true,
+				allowBlank:false,
+				listeners: {
+					keyup: function(a,b){
+						if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+						var combo = this;
+						combo.store.clearFilter();
+						combo.store.filterBy(function(item){
+							return item.data[combo.displayField].match(new RegExp(combo.getRawValue(), 'i')) !== null;
+						});
+					},
+					focus: function(combo) {
+						combo.store.clearFilter();
+						combo.setValue('');
+						combo.expand();
+					}
+				}
+			}, options);
+			this.callParent([options]);
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.form.field.FixedComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
+		
+		constructor: function(options) {
+			options = options || {};
+			options = Ext.merge({
+				editable: false,	
+				allowBlank:false,
+				queryMode:'local',
+				listeners: {
+					focus: function(combo) {
+						combo.setValue('');
+						combo.expand();
+					}
+				}
+			}, options);
+			this.callParent([options]);
+		}	
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.form.field.PiProjectComboBox', {
+		extend:'Intel.form.field.ComboBox',
+		alias: ['widget.intelPIprojectcombo'],
+		requires:[
+			'IntelRallyApp'
+		],
+		constructor: function(options) {
+			var me = this,
+				app= Rally.getApp("Portfolio_Hierarchy456974");
+			options = options || {};	
+			options = Ext.merge({
+				displayField:'Name',
+				enableKeyEvents:true,
+				queryMode:'local',
+				ignoreNoChange:true,
+				allowBlank:false,
+				validator: function(value){
+					if(me.isHidden()) return true;
+					return !!_.find(me.ChildProjects, function(proj){ return proj.data.Name === value; });
+				},
+				listeners: {
+					keyup: function(a,b){
+						if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+						var combo = this;
+						combo.store.clearFilter();
+						combo.store.filterBy(function(item){
+							return item.data[combo.displayField].match(new RegExp(combo.getRawValue(), 'i')) !== null;
+						});
+					},
+					focus: function(combo) {
+						combo.store.clearFilter();
+						combo.expand();
+					}
+				}
+			}, options);
+			me.callParent([options]);
+			
+			app._loadProjectByName('All Releases')
+				.then(function(rootProject){
+					return app._loadAllChildrenProjects(rootProject);
+				})
+				.then(function(childProjects){
+					var data = [];
+					me.ChildProjects = childProjects;
+					for(var projOID in childProjects)
+						data.push({ Name: childProjects[projOID].data.Name });
+					me.bindStore(Ext.create('Ext.data.Store', {
+						sorters:[function(o1, o2){ return o1.data.Name < o2.data.Name ? -1 : 1; }],
+						fields:['Name'],
+						data:data
+					}));
+					if(typeof me.value === 'number') 
+						me.setValue(me.ChildProjects[me.value].data.Name);
+				})
+				.fail(function(reason){
+					app._alert('ERROR', reason || '');
+				})
+				.done();
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Rally.apps.portfoliohierarchy.FittedUserStoryTreeItem', {
+		extend: 'Rally.ui.tree.UserStoryTreeItem',
+		alias: 'widget.fitteduserstorytreeitem',
+
+		config: {
+			displayedFields: ['Name', 'Project', 'ScheduleState']
+		},
+
+		getContentTpl: function(){
+			var me = this;
+			return Ext.create('Ext.XTemplate',
+				'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
+				'{[this.getActionsGear()]}',
+				'<div class="textContent ellipses" style="max-width:65%;">',
+					'{[this.getFormattedId()]} - ',
+					'<span title="{Name}\nProject: {[this.getProjectName()]}">{Name}</span>',
+				'</div>',
+				'<div class="rightSide">',
+					'{[this.getScheduleState()]}',
+				'</div>',
+			{
+				canDrag: function(){
+					return me.getCanDrag();
+				},
+				getProjectName: function() {
+					return me.getRecord().data.Project.Name;    
+				},
+				getActionsGear: function(){
+					return me._buildActionsGearHtml();
+				},
+				getScheduleState: function(){
+					return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'ScheduleState');
+				},
+				getFormattedId: function(){
+					return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'FormattedID');
+				}
+			});
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Rally.apps.portfoliohierarchy.FittedPortfolioItemTreeItem', {
+		extend: 'Rally.ui.tree.PortfolioItemTreeItem',
+		alias: 'widget.fittedportfolioitemtreeitem',
+
+		config: {
+			displayedFields: ['Name', 'Plan']
+		},
+
+		getContentTpl: function(){
+			var me = this;
+
+			return Ext.create('Ext.XTemplate',
+				'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
+				'{[this.getActionsGear()]}',
+				'<tpl if="this._renderPlanOnLowestLevelPortfolioItem()">',
+					'<div class="textContent ellipses" style="max-width: 65%;">',
+						'{[this.getFormattedId()]} - ',
+						'<span title="{Name}">{Name}</span>',
+						'<div class="textContent ellipses">{[this.getPlanData()]}</div>',
+					'</div>',
+				'<tpl else>',
+					'<div class="textContent ellipses" style="max-width: 65%;">',
+						'{[this.getFormattedId()]} - ',
+						'<span title="{Name}">{Name}</span>',
+					'</div>',
+				'</tpl>',
+				'<div class="rightSide">',
+					'{[this.getPercentDone()]}',
+				'</div>',
+				{
+					canDrag: function(){
+						return me.getCanDrag();
+					},
+					getActionsGear: function(){
+						return me._buildActionsGearHtml();
+					},
+					getPercentDone: function(){
+						return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'PercentDoneByStoryCount');
+					},
+					getFormattedId: function(){
+						return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'FormattedID');
+					},
+					getPlanData: function() {
+						var plan = me.getRecord().data.Plan;
+						var planName = plan && plan.name ? plan.name : "";
+						return planName;
+					},
+					_renderPlanOnLowestLevelPortfolioItem: function() {
+						return me.getRecord().self.isLowestLevelPortfolioItem();
+					}
+				}
+			);
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy456974";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//var console = { log: function(){} }; // DEBUG!!!!		
+
+	Ext.define('Intel.portfolioHierarchy', {
+		extend: 'IntelRallyApp',
+		mixins: [
+			'Rally.Messageable',
+			'PrettyAlert',
+			'ReleaseQuery'
+		],
+		
+		_prefName: 'intel-PortfolioNav',
+		_uid: (__PROJECT_OID__ + '-' + __USER_OID__),
+		
+		layout: {
+			type:'vbox',
+			align:'stretch',
+			pack:'start'
+		},
+		items:[{
+			xtype:'container',
+			itemId:'header_release',
+			layout:'hbox'
+		},{
+			xtype:'container',
+			itemId:'header_project',
+			layout:'hbox'
+		},{
+			xtype:'container',
+			itemId:'header_complete',
+			layout:'hbox'
+		},{
+			xtype:'container',
+			itemId:'bodyContainer'
+		}],
+
+		config: {
+			defaultSettings: (function(){
+				var s = {}, str = (__PROJECT_OID__ + '-' + __USER_OID__);
+				s['Type' + str] = 'product';
+				s['QueryFilter' + str] = '';
+				s['InferPortfolioLocation' + str] = true;
+				s['PortfolioLocation' + str] = __PROJECT_OID__;
+				return s;
+			}())
+		},
+				
+		getSettingsFields: function() {
+			var str = (__PROJECT_OID__ + '-' + __USER_OID__);
+			return [{
+				name: 'Type' + str,
+				xtype:'combo',
+				editable:false,
+				label: 'Type',
+				store: ['product', 'milestone', 'feature'],
+				labelWidth: 120, width:'100%'
+			},{
+				name: 'QueryFilter' + str,
+				xtype: 'textfield',
+				label: 'Query Filter',
+				labelWidth: 120, width:'100%'
+			},{
+				name: 'InferPortfolioLocation' + str,
+				xtype:'rallycheckboxfield',
+				label: 'Infer Portfolio Location',
+				labelWidth: 120, width:'100%',
+				bubbleEvents: ['change'] 
+			},{
+				name: 'PortfolioLocation' + str,
+				xtype:'intelPIprojectcombo',
+				label: 'Portfolio Location',
+				labelWidth: 120, width:'100%',
+				listeners:{
+					added: function(field, form){
+						if(form.down('rallycheckboxfield').value) field.hide();
+						else field.show();
+					}
+				},
+				handlesEvents: {
+					change: function(checkbox, ischecked) {
+						if(ischecked) this.hide();
+						else this.show();
+					}
+				}
+			}];
+		},
+
+		/************************************************** Preferences FUNCTIONS ***************************************************/	
+		_loadPreferences: function(){ //parse all settings too
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				filterByUser:true,
+				filterByName: me._prefName,
+				success: function(prefs) {
+					var appPrefs = prefs[me._prefName];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { projs:{}};}
+					console.log('loaded prefs', appPrefs);
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_savePreferences: function(prefs){ 
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {projs: prefs.projs};
+			s[me._prefName] = JSON.stringify(prefs); 
+			console.log('saving prefs', prefs);
+			Rally.data.PreferenceManager.update({
+				filterByUser:true,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		
+		/************************************************** Refreshing Data ***************************************************/
+		_refreshTree: function() {
+			var me=this;
+			me.down('#bodyContainer').removeAll();
+			me._loadPortfolioTree();
+		},	
+		_reloadEverything: function(){
+			var me=this;
+			me.setLoading(false);
+			me._loadFilterOnRelease();
+			me._loadReleaseSelector();
+			me._loadFilterOnProject();
+			me._loadFilterOnComplete();
+			me._loadPortfolioTree();
+		},
+		
+		/************************************************** Launch ***************************************************/	
+		launch: function() {
+			var me=this;
+			me.setLoading(true);
+			me._loadModels()
+				.then(function(){
+					var scopeProject = me.getContext().getGlobalContext().getProject();
+					return me._loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return me._loadRandomUserStory(scopeProjectRecord.data._ref);
+				})
+				.then(function(userStory){
+					me.HasUserStories = !!userStory;
+					return me._loadTopProject(me.ProjectRecord);
+				})
+				.then(function(rootProject){
+					return me._loadAllChildrenProjects(rootProject);
+				})
+				.then(function(childProjects){
+					me.ChildProjects = childProjects;
+					return me._projectInWhichTrain(me.ProjectRecord);
+				})
+				.fail(function(error){
+					if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
+				})
+				.then(function(trainRecord){
+					me.TrainRecord = trainRecord;
+					return me._loadPreferences();
+				})
+				.then(function(appPrefs){		
+					var pid = me.ProjectRecord.data.ObjectID, 
+						prefs = appPrefs.projs[pid] || {};
+					me.AppPrefs = appPrefs;
+					me.PIType = me.getSetting('Type' + me._uid);
+					me.QueryFilter = me.getSetting('QueryFilter' + me._uid);
+					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + me._uid);
+					me.PortfolioLocation = me.getSetting('PortfolioLocation' + me._uid);
+					me.FilterOnRelease = prefs.FilterOnRelease || false;
+					me.FilterReleaseName = prefs.FilterReleaseName;
+					me.FilterOnProject = prefs.FilterOnProject || false;
+					me.FilterOnComplete = prefs.FilterOnComplete || false;
+					var name = me.ProjectRecord.data.Name,
+						field = (typeof me.PortfolioLocation === 'number') ? 'ObjectID' : 'Name';
+					if(me.InferPortfolioLocation){
+						if(me.TrainRecord) {
+							var piName = me.TrainRecord.data.Name.split(' ART')[0] + ' POWG Portfolios';
+							me.PortfolioLocation = _.find(me.ChildProjects, function(p){
+								return p.data.Name === piName;
+							});	
+						}
+						else me.PortfolioLocation = me.ProjectRecord;
+					}
+					else {
+						me.PortfolioLocation = _.find(me.ChildProjects, function(p){ 
+							return p.data[field] === me.PortfolioLocation;
+						});
+					}
+					if(!me.PortfolioLocation) return Q.reject('Could not find Portfolio Location'); //if portfolios and trians dont share same root project
+					return me._loadAllReleases(me.ProjectRecord);
+				})
+				.then(function(releaseStore){		
+					me.ReleaseStore = releaseStore;
+					me.ReleaseNames = [];
+					var recs = releaseStore.data.items;
+					for(var i=0,len=recs.length; i<len; ++i){
+						me.ReleaseNames.push({ Name: recs[i].data.Name });
+					}
+					me.FilterReleaseName = me.FilterReleaseName || me.ReleaseNames[0].Name;
+					me._reloadEverything();
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason || '');
+				})
+				.done();
+		},
+
+		/******************************************************** HEADER ITEMS *********************************************/	
+		_onPreferenceChanged: function(field, newValue){
+			var me=this,
+				pid = me.ProjectRecord.data.ObjectID;
+			if(me[field] === newValue) return Q();
+			else me[field] = newValue;
+			if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
+			me.AppPrefs.projs[pid][field] = newValue;
+			return me._savePreferences(me.AppPrefs);
+		},
+		_onReleaseSelected: function(combo, records) {
+			var me=this;
+			me._onPreferenceChanged('FilterReleaseName', records[0].data.Name)
+				.then(function(){ if(me.FilterOnRelease) me._refreshTree(); })
+				.fail(function(reason){ me._alert('ERROR:', reason); })
+				.done();
+		},				
+		_loadReleaseSelector: function(){
+			var me=this;
+			me.down('#header_release').add({
+				xtype:'intelfixedcombo',
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name'],
+					sorters: [function(o1, o2){ return o1.data.Name < o2.data.Name ? -1 : 1; }],
+					data: me.ReleaseNames
+				}),
+				hidden: !me.FilterOnRelease,
+				displayField: 'Name',
+				value: me.FilterReleaseName,
+				listeners: {
+					select: me._onReleaseSelected.bind(me)
+				}
+			});
+		},		
+		_onFilterOnReleaseChanged: function(checkBox) {
+			var me=this,
+				value = checkBox.getValue(),
+				box = me.down('#header_release').down('intelfixedcombo');
+			if(value) box.show(); else box.hide();
+			me._onPreferenceChanged('FilterOnRelease', value)
+				.then(function(){ me._refreshTree(); })
+				.fail(function(reason){ me._alert('ERROR:', reason); })
+				.done();
+		},
+		_loadFilterOnRelease: function(){
+			var me=this;
+			me.down('#header_release').add({
+				xtype: 'rallycheckboxfield',
+				boxLabel: 'Filter Features in Release',
+				padding:'0 4px 0 0',
+				value: me.FilterOnRelease,
+				listeners: {
+					change: me._onFilterOnReleaseChanged.bind(me)
+				}
+			});
+		},		
+		_onFilterOnProjectChanged: function(checkBox) {
+			var me=this;
+			me._onPreferenceChanged('FilterOnProject', checkBox.getValue())
+				.then(function(){ me._refreshTree(); })
+				.fail(function(reason){ me._alert('ERROR:', reason); })
+				.done();
+		},
+		_loadFilterOnProject: function(){
+			var me=this;
+			me.down('#header_project').add({
+				xtype: 'rallycheckboxfield',
+				boxLabel: 'Filter User Stories in Current Project',
+				padding:'0 4px 0 0',
+				hidden: !me.HasUserStories,
+				value: me.FilterOnProject,
+				listeners: {
+					change: me._onFilterOnProjectChanged.bind(me)
+				}
+			});
+		},			
+		_onFilterOnCompleteChanged: function(checkBox) {
+			var me=this;
+			me._onPreferenceChanged('FilterOnComplete', checkBox.getValue())
+				.then(function(){ me._refreshTree(); })
+				.fail(function(reason){ me._alert('ERROR:', reason); })
+				.done();
+		},
+		_loadFilterOnComplete: function(){
+			var me=this;
+			me.down('#header_complete').add({
+				xtype: 'rallycheckboxfield',
+				boxLabel: 'Hide Completed Items',
+				labelWidth: 170,
+				value: me.FilterOnComplete,
+				listeners: {
+					change: me._onFilterOnCompleteChanged.bind(me)
+				}
+			});
+		},
+
+		/******************************************************** GRID ITEMS *********************************************/
+		_onTreeItemSelected: function(treeItem) {
+			if(treeItem.xtype === 'fittedportfolioitemtreeitem'){
+				this.publish('portfoliotreeitemselected', treeItem);
+			}
+		},	
+		_getFilterOnCompleteFilter: function(ordinal){
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'State.OrderIndex',
+				operator:'<',
+				value: (ordinal === 0 ? 11 : 4) //finished features are 11-15, milestone/products are 4
+			}).or(Ext.create('Rally.data.wsapi.Filter', {
+				property:'State',
+				value: null
+			}));
+		},
+		_getFilterOnReleaseFilter: function(){
+			var me=this;
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property: 'Release.Name',
+				value: me.FilterReleaseName 
+			});
+		},
+		_getFilterOnQueryFilter: function(){
+			var me=this;
+			try { return Rally.data.QueryFilter.fromQueryString(me.QueryFilter); }
+			catch(e){ 
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property: 'ObjectID',
+					operator: '!=',
+					value: 0
+				});
+			}
+		},	
+		_getParentRecordFilter: function(parentRecord, ordinal){
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property: (ordinal === 0 ? 'Feature' : 'Parent') + '.ObjectID', //only uses right under feature have issue
+				value: parentRecord.data.ObjectID
+			});
+		},	
+		_getTopLevelStoreConfig: function(ordinal){ 
+			var me=this, 
+				filters = [];
+			if(me.FilterOnComplete) filters.push(me._getFilterOnCompleteFilter(ordinal));
+			if(me.FilterOnRelease && ordinal === 0) filters.push(me._getFilterOnReleaseFilter());
+			if(me.QueryFilter) filters.push(me._getFilterOnQueryFilter());
+			return {
+				limit:Infinity,
+				filters: filters,
+				context: {
+					project: me.PortfolioLocation.data._ref,
+					projectScopeDown: true,
+					projectScopeUp: false
+				}
+			};
+		},
+		_getChildLevelStoreConfig: function(tree, parentRecord, isPI, ordinal){ //ordinal/isPI of PARENT item
+			var me=this,
+				context= {
+					project: me.PortfolioLocation.data._ref,
+					projectScopeDown: true,
+					projectScopeUp: false
+				},
+				filters = [ me._getParentRecordFilter(parentRecord, ordinal)];
+			if(me.FilterOnComplete && isPI && ordinal > 0) filters.push(me._getFilterOnCompleteFilter(ordinal));
+			if(!isPI || ordinal === 0) {
+				if(me.FilterOnProject){
+					context.project = me.ProjectRecord.data._ref;
+					context.projectScopeDown = false;
+				}
+				else {
+					context.project = undefined;
+					context.projectScopeDown = undefined;
+				}
+			} 
+			if(me.FilterOnRelease && isPI && ordinal === 1) filters.push(me._getFilterOnReleaseFilter());
+			if(me.QueryFilter) filters.push(me._getFilterOnQueryFilter());
+			return {
+				limit:Infinity,
+				fetch: tree._getDefaultTopLevelFetchFields().concat(['Parent', 'Project', 'State']),
+				context: context,
+				filters:filters
+			};
+		},	
+		_loadPortfolioTree: function(){
+			var me = this,
+				modelName ='portfolioitem/' + me.PIType,
+				ordinal = (me.PIType==='product' ? 2 : (me.PIType==='milestone' ? 1 : 0));
+
+			me.down('#bodyContainer').add({
+				xtype: 'rallyportfoliotree',
+				stateful: true,
+				stateId: me.getAppId() + 'rallyportfoliotree',
+				topLevelModel: modelName,
+				topLevelStoreConfig: me._getTopLevelStoreConfig(ordinal),
+				listeners: {
+					itemselected: me._onTreeItemSelected.bind(me)
+				},
+				childItemsStoreConfigForParentRecordFn: function(parentRecord) {
+					var tree = this,
+						isPI = tree._isPortfolioItem(parentRecord),
+						ordinal = parentRecord.self.ordinal;
+					return me._getChildLevelStoreConfig(tree, parentRecord, isPI, ordinal);
+				},
+				treeItemConfigForRecordFn: function(record){
+					var tree = this,
+						config = Rally.ui.tree.PortfolioTree.prototype.treeItemConfigForRecordFn.call(tree, record);
+					if(tree._isPortfolioItem(record)) config.xtype = 'fittedportfolioitemtreeitem'; 
+					else config.xtype = 'fitteduserstorytreeitem'; 
+					return config;
+				}
+			});
+		}
+	});
+	
+}());						}
+					}());
+				</script>
+			
+			
+		
+		<script type="text/javascript">
+			(function(){
+				var smAppID = "Portfolio_Hierarchy456974";			
+				if(!window[smAppID].stillInIframe){	
+					Rally.launchApp("Intel.portfolioHierarchy", {
+						name: "Portfolio Hierarchy",
+						smAppID: "Portfolio_Hierarchy456974"
+					});
+				}
+			}());
+		</script>
+				
+		
+			
+				<style>
+					.portfolio-hierarchy-app {
+	width: 100% !important; }
+
+.portfolio-hierarchy-app .rallytree {
+	padding-top: 5px;
+	padding-bottom: 20px; }
+
+.portfolio-hierarchy-app .header {
+	border-bottom: 1px dotted #c6c6c6; }
+
+.portfolio-hierarchy-app .filterInfo {
+	float: right;
+	padding-right: 1px;
+	border-right: 1px solid #CCC;
+	margin-right: 5px;
+	margin-top: 2px;
+	margin-bottom: 2px; }
+
+.portfolio-hierarchy-app .rally-help-icon {
+	float: right; }
+
+.portfolio-hierarchy-app .current-project-only-float {
+	float: left; }
+
+.portfolio-hierarchy-app .filter-on-release-float {
+	float: left;
+	margin-left: 10px;
+	margin-right: 8px; }				</style>
+			
+			
+		</script>
+	</head>
+</html>

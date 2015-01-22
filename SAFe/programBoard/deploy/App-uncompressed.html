@@ -164,717 +164,796 @@ Ext.define('CFEditorModel', {
 		{name: 'CustomFieldValue',  type: 'string'}
 	]
 });
-                Ext.define('IntelRallyApp', {
-	alias: 'widget.intelrallyapp',
-  extend: 'Rally.app.App',
-	
-	/** these are the necessary models to load for the apps. you should call this */
-	_loadModels: function(){
-		var me=this, 
-			promises = [],
-			models = {
-				Project: 'Project',
-				UserStory: 'HierarchicalRequirement',
-				Feature:'PortfolioItem/Feature',
-				Milestone:'PortfolioItem/Milestone'
-			};
-		_.each(models, function(modelType, modelName){
-			var deferred = Q.defer();
-			Rally.data.WsapiModelFactory.getModel({ //load project
-				type:modelType, 
-				success: function(loadedModel){ 
-					me[modelName] = loadedModel;
-					deferred.resolve();
-				}
-			});
-			promises.push(deferred.promise);
-		});
-		return Q.all(promises);
-	},	
-	_loadProject: function(oid){ 
-		var me = this, deferred = Q.defer();
-		if(!oid) return Q.resolve();
-		else if(!me.Project){ 
-			return me._loadModels().then(function(){ 
-				return me._loadProject(oid); 
-			});
-		}
-		else {
-			me.Project.load(oid, {
-				fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
-				},
-				callback: deferred.resolve
-			});
-			return deferred.promise;
-		}
-	},	
-	_loadFeature: function(oid, projectRef){ //projectRef is optional
-		var me = this, deferred = Q.defer();
-		if(!oid) return Q.resolve();
-		else if(!me.Feature){ 
-			return me._loadModels().then(function(){ 
-				return me._loadFeature(oid, projectRef); 
-			});
-		}
-		else {
-			me.Feature.load(oid, {
-				fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project: projectRef
-				},
-				callback: deferred.resolve
-			});
-			return deferred.promise;
-		}
-	},	
-	_loadUserStory: function(oid, projectRef){ 
-		var me = this, deferred = Q.defer();
-		if(!oid) return Q.resolve();
-		else if(!me.UserStory){ 
-			return me._loadModels().then(function(){ 
-				return me._loadUserStory(oid, projectRef); 
-			});
-		}
-		else {
-			me.UserStory.load(oid, {
-				fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
-					'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project: projectRef
-				},
-				callback: deferred.resolve
-			});
-			return deferred.promise;
-		}
-	},	
-	_loadMilestone: function(oid, projectRef){ 
-		var me = this, deferred = Q.defer();
-		if(!oid) return Q.resolve();
-		else if(!me.Milestone){ 
-			return me._loadModels().then(function(){ 
-				return me._loadMilestone(oid); 
-			});
-		}
-		else {
-			me.Milestone.load(oid, {
-				fetch: ['ObjectID', 'Parent', 'Name'],
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project: projectRef
-				},
-				callback: deferred.resolve
-			});
-			return deferred.promise;
-		}
-	},
-	
-	/**************************************** SOME UTIL FUNCS ***************************************************/
-	_loadRootProject: function(projectRecord){
-		if(!projectRecord) return Q.reject('Invalid arguments: LRP');
-		var me=this, 
-			n = projectRecord.data.Name;
-		if(n === 'All Scrums' || n === 'All Scrums Sandbox') return Q(projectRecord);
-		else if(!projectRecord.data.Parent) return Q.reject('Please Scope to a valid team for Release Planning');
-		else {
-			return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
-				return me._loadRootProject(parentRecord);
-			});
-		}
-	},	
-	_loadTopProject: function(projectRecord){
-		if(!projectRecord) return Q.reject('Invalid arguments: LTP');
-		var me=this, 
-			n = projectRecord.data.Name;
-		if(!projectRecord.data.Parent) return Q(projectRecord);
-		else {
-			return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
-				return me._loadTopProject(parentRecord);
-			});
-		}
-	},	
-	_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
-		if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
-		else {
-			var me=this, split = projectRecord.data.Name.split(' ART');
-			if(split.length>1) return Q(projectRecord);
-			else { 
-				var parent = projectRecord.data.Parent;
-				if(!parent) return Q.reject('Project not in a train');
-				else {
-					return me._loadProject(parent.ObjectID).then(function(parentRecord){
-						return me._projectInWhichTrain(parentRecord);
-					});
-				}
-			}
-		}
-	},	
-	_loadAllTrains: function(rootProjectRecord){
-		if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'Project',
-				remoteSort:false,
-				limit:Infinity,
-				fetch: ['Name', 'ObjectID'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[{
-						property:'Name',
-						operator: 'contains',
-						value: ' ART'
-					},{
-						property: 'Name',
-						operator: (rootProjectRecord.data.Name === 'All Scrums Sandbox' ? 'contains' : '!contains'),
-						value: 'Test'
-					}
-				]
-			});
-		return me._reloadStore(store).then(function(store){
-			console.log('AllTrainRecords loaded', store.data.items);
-			return Q(store);
-		});
-	},			
-	_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
-		if(!projectRef) return Q.reject('Invalid arguments: LRUS');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'HierarchicalRequirement',
-				limit:5,
-				pageSize:5,
-				fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: undefined
-				},
-				sorters: [{
-					property: 'CreationDate', 
-					direction:'DESC'
-				}],
-				filters:[{
-					property:'Project',
-					value: projectRef
-				}]
-			});
-		return me._reloadStore(store).then(function(store){
-			var records = store.data.items;
-			if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
-			else return Q(undefined);
-		});
-	},
-	_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
-		if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'HierarchicalRequirement',
-				limit:5,
-				pageSize:5,
-				fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: undefined
-				},
-				sorters: [{
-					property: 'CreationDate', 
-					direction:'DESC'
-				}],
-				filters:[
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
-						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
-						Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
-					)
-				]
-			});
-		return me._reloadStore(store).then(function(store){
-			var records = store.data.items;
-			if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
-			else return Q(undefined);
-		});
-	},
-	_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
-		if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'HierarchicalRequirement',
-				limit:1,
-				pageSize:1,
-				fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: undefined
-				},
-				filters: [{
-					property:'FormattedID',
-					value:formattedID
-				},{
-					property:'Project',
-					value: projectRef
-				}]
-			});
-		return me._reloadStore(store).then(function(store){
-			return Q(store.data.items.pop());
-		});
-	},	
-	_loadProjectByName: function(name){
-		if(!name) return Q.reject('Invalid arguments: LPBN');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'Project',
-				limit:1,
-				pageSize:1,
-				fetch: ['Name', 'ObjectID'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters: [
-					{
-						property:'Name',
-						value:name
-					}
-				]
-			});
-		return me._reloadStore(store).then(function(store){
-			return Q(store.data.items.pop());
-		});
-	},
-	
-	/********************************************** FEATURES  ********************************************/
-	_getFeatureFilter: function(trainRecord, releaseRecord){
-		if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
-		var me=this,
-			trainName = trainRecord.data.Name.split(' ART')[0],
-			relSplit = releaseRecord.data.Name.split(' '),
-			coreFilter = Ext.create('Rally.data.wsapi.Filter', {
-				property:'Release.Name',
-				value: releaseRecord.data.Name
-			});
-		trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
-		if(trainRecord.data.Name == 'Test ART (P&E)'){
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.Name',
-				value: 'Test ART (P&E)'
-			}).and(coreFilter);
-		}
-		else {
-			return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
-				property:'Project.Parent.Name',
-				value: trainName + ' POWG Portfolios'
-			}).or(Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.Name',
-				value: trainName + ' POWG Portfolios'
-			})).and(coreFilter);
-		}
-	},
-	
-	/*************************************************** Products ********************************************/
-	_getProductFilter: function(trainRecord){ //products can be in 2 different levels of the portfolio hierarchy
-		if(!trainRecord) throw 'invalid arguments: GPF';
-		var me=this,
-			trainName = trainRecord.data.Name.split(' ART')[0];
-		if(trainName === 'Test'){
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.Name',
-				value: 'Test ART (P&E)'
-			});
-		}
-		else {
-			return Ext.create('Rally.data.wsapi.Filter', {//NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
-				property:'Project.Parent.Name',
-				value: trainName + ' POWG Portfolios'
-			}).or(Ext.create('Rally.data.wsapi.Filter', {
-				property:'Project.Name',
-				value: trainName + ' POWG Portfolios'
-			}));
-		}
-	},
-	
-	_loadProducts: function(trainRecord){
-		if(!trainRecord) return Q.reject('Invalid arguments: LPROD');
-		var me=this,
-			store = Ext.create('Rally.data.wsapi.Store',{
-				model: 'PortfolioItem/Product',
-				limit:Infinity,
-				remoteSort:false,
-				fetch: ['Name'],
-				context:{
-					workspace: me.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[me._getProductFilter(trainRecord)]
-			});
-		return me._reloadStore(store).then(function(store){
-			console.log('Products loaded', store.data.items);
-			return Q(store);
-		});
-	},
-	
-	/********************************************** Load Valid Projects ********************************************/
-	
-	_addValidProjectsToList: function(projTree, hash){
-		var me=this, 
-			curProj = projTree.ProjectRecord;
-		if(curProj.data.TeamMembers.Count >0) 
-			hash[curProj.data.ObjectID] = curProj;
-		for(var childProjRef in projTree){
-			if(childProjRef !== 'ProjectRecord')
-				me._addValidProjectsToList(projTree[childProjRef], hash);
-		}
-	},
-	
-	_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
-		if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
-		var me=this,
-			validProjects = {}, 
-			projTree = {};
-		var store = Ext.create('Rally.data.wsapi.Store', {
-			model: "Project",
-			fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
-			limit:Infinity,
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project:null
-			}
-		});
-		return me._reloadStore(store).then(function(store){
-			var projects = store.data.items;
-			for(var i=0, len=projects.length; i<len; ++i){
-				var project = projects[i],
-					thisRef = project.data.ObjectID, 
-					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-				if(!projTree[thisRef]) projTree[thisRef] = {};
-				projTree[thisRef].ProjectRecord = project;
-				if(parentRef){
-					if(!projTree[parentRef]) projTree[parentRef] = {};
-					projTree[parentRef][thisRef] = projTree[thisRef];
-				}
-			}
-			me._addValidProjectsToList(projTree[rootProjectRecord.data.ObjectID], validProjects);
-			console.log('valid projects', validProjects);
-			return Q(validProjects);
-		});	
-	},
-	
-	_allChildProjectToList: function(projTree, hash){
-		var me=this, 
-			curProj = projTree.ProjectRecord;
-		hash[curProj.data.ObjectID] = curProj;
-		for(var childProjRef in projTree){
-			if(childProjRef !== 'ProjectRecord')
-				me._allChildProjectToList(projTree[childProjRef], hash);
-		}
-	},
-	
-	_loadAllChildrenProjects: function(rootProjectRecord){
-		if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
-		var me=this,
-			childrenProjects = {}, 
-			projTree = {};
-		var store = Ext.create('Rally.data.wsapi.Store', {
-			model: "Project",
-			fetch: ['Name', 'Parent', 'ObjectID'],
-			limit:Infinity,
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project:null
-			}
-		});
-		return me._reloadStore(store).then(function(store){
-			var projects = store.data.items;
-			for(var i=0, len=projects.length; i<len; ++i){
-				var project = projects[i],
-					thisRef = project.data.ObjectID, 
-					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-				if(!projTree[thisRef]) projTree[thisRef] = {};
-				projTree[thisRef].ProjectRecord = project;
-				if(parentRef){
-					if(!projTree[parentRef]) projTree[parentRef] = {};
-					projTree[parentRef][thisRef] = projTree[thisRef];
-				}
-			}
-			me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-			console.log('childrenProjects', childrenProjects);
-			return Q(childrenProjects);
-		});	
-	},
-	
-	_allLeafProjectsToList: function(projTree, hash){
-		var me=this, 
-			curProj = projTree.ProjectRecord;
-		if(curProj.data.Children.Count === 0) 
-			hash[curProj.data.ObjectID] = curProj;
-		for(var childProjRef in projTree){
-			if(childProjRef !== 'ProjectRecord')
-				me._allLeafProjectsToList(projTree[childProjRef], hash);
-		}
-	},
-	
-	_loadAllLeafProjects: function(rootProjectRecord){
-		if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
-		var me=this,
-			childrenProjects = {}, 
-			projTree = {};
-		var store = Ext.create('Rally.data.wsapi.Store', {
-			model: "Project",
-			fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
-			limit:Infinity,
-			context: {
-				workspace: me.getContext().getWorkspace()._ref,
-				project:null
-			}
-		});
-		return me._reloadStore(store).then(function(store){
-			var projects = store.data.items;
-			for(var i=0, len=projects.length; i<len; ++i){
-				var project = projects[i],
-					thisRef = project.data.ObjectID, 
-					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-				if(!projTree[thisRef]) projTree[thisRef] = {};
-				projTree[thisRef].ProjectRecord = project;
-				if(parentRef){
-					if(!projTree[parentRef]) projTree[parentRef] = {};
-					projTree[parentRef][thisRef] = projTree[thisRef];
-				}
-			}
-			me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-			console.log('childrenProjects', childrenProjects);
-			return Q(childrenProjects);
-		});	
-	},
-	
-	/********************************************** Generic store loading, returns promise ********************************************/
-	
-	_reloadStore: function(store){
-		var deferred = Q.defer();
-		store.load({
-			callback: function(records, operation, success){
-				if(!success) deferred.reject(operation.getError() || 'Could not load data');
-				else deferred.resolve(store);
-			}
-		});
-		return deferred.promise;
-	}
-});
-                /************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
-Ext.define('WorkweekDropdown', {
-	extend: 'Ext.data.Model',
-	fields: [
-		{name: 'Workweek', type:'string'},
-		{name: 'DateVal', type:'number'}
-	]
-});
-                /** this is used if you want to listen to events in the parent window (e.g. useful for rally apps that resize with browser screen
-		vertically or things that need to know browser scroll position) 
-	You also can artificially fire the events and have the listeners run
-*/
-Ext.define('WindowListener', {
-
-	__initWindowEventListener: function(eventName){
-		var me=this;
-		if(!me._windowListeners) me._windowListeners = {};
-		me._windowListeners[eventName] = [];
-		
-		window.parent['on' + eventName] = function(event){ 
-			var listeners = me._windowListeners[eventName];
-			for(var i=0, len=listeners.length; i<len; ++i)
-				listeners[i](event);
-		};
-	},
-	
-	_addWindowEventListener: function(eventName, fn){
-		var me=this;
-		if(!me._windowListeners || !me._windowListeners[eventName]) 
-			me.__initWindowEventListener(eventName);
-		me._windowListeners[eventName].push(fn);
-	},
-	
-	_fireParentWindowEvent: function(eventName){ //eg: resize or scroll
-		var me=this;
-		if(!me._windowListeners || !me._windowListeners[eventName]) return;
-		var listeners = me._windowListeners[eventName];
-		for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
-	}
-});
-                /** 
-	resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar 
-**/
-
-Ext.define('IframeResize', {
-	requires: ['WindowListener'],
-	
-	/** resizes the iframe to be the height of all the items in it */
-	_applyIframeResizeToContents: function(){ 
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]'),
-			ip1 = iframe.parentNode,
-			ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
-			height = 0, next = this.down();
-		while(next){
-			height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
-			next = next.next();
-		}
-		height += 150;
-		ip1.style.height = height + 'px';
-		ip2.style.height = height + 'px';
-		iframe.style.height = height + 'px';
-	},
-	
-	/** 
-		This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-		to that of the contents! Call this if you want the scrollbar to be on the outsize of the app (the window scrollbar)
-	*/
-	_initIframeResizeToContents: function(){
-		var me=this;
-		if(me._addWindowEventListener){
-			me._addWindowEventListener('resize', function(){ me._applyIframeResizeToContents(); });
-		}
-	},
-		
-	/** 
-		resizes the iframe to be the height of the window. its like rally autoheight app but better 
-	*/
-	_applyIframeResizeToWindow: function(){ 
-		var loc = window.location,
-			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-			i = iframe.dom,
-			portlet = iframe.up('.x-portlet'),
-			portalColumn = portlet.up('.x-portal-column'),
-			dashboard = portlet.up('#mydash_portlet');
-		height = window.parent.innerHeight - 70;
-		height -= 200; //~120 on top and 60 on bottom and
-		iframe.style.height = height + 'px';
-		ip1.style.height = height + 'px';
-		height += 30;
-		ip2.style.height = height + 'px';
-	},
-	
-		/** 
-		This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-		to that of the window! Call this if you want the scrollbar to be on the inside of the app (NOT the window scrollbar)
-	*/
-	_initIframeResizeToWindow: function(){
-		var me=this;
-		if(me._addWindowEventListener){
-			me._addWindowEventListener('resize', function(){ me._applyIframeResizeToWindow(); });
-		}
-		me._applyIframeResizeToWindow();
-	},
-	
-	/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/
-	
-	_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
-		var me=this,
-			loc = window.location,
-			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-			portlet = iframe.up('.x-portlet'), 
-			portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
-			dashboard = portlet.up('#mydash_portlet'), //has huge padding values
-			i = iframe.dom,
-			innerHeight = window.parent.innerHeight;
-		//adjust widths
-		while(true){
-			i.style.width = (window.parent.innerWidth - 4) + 'px';
-			i.style.padding = '0';
-			i.style.margin = '0';
-			if(i.id === 'mydash_portlet') break;
-			i = i.parentNode;
-		}
-		
-		//adjust heights
-		dashboard.dom.style.height = (innerHeight - 65) + 'px';
-		portlet.dom.style.height = (innerHeight - 105) + 'px';
-		iframe.dom.parentNode.style.height = (innerHeight - 135) + 'px';
-		iframe.dom.style.height = (innerHeight - 135) + 'px';
-		
-		//final touches
-		dashboard.dom.style.padding = "0 2px 0 2px";
-	},
-	
-	_initFixRallyDashboard: function(){ 
-		var me=this;
-		if(me._addWindowEventListener){
-			me._addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
-		}
-		me._fixRallyDashboard();
-	},
-
-	_disableResizeHandle: function(){ //hides the draggable resize handle from under the app
-		var me=this;
-		var loc = window.location,
-			iframe = Ext.get(window.parent.document.querySelector('iframe[src="' + loc.pathname + loc.search + '"]')),
-			portlet = iframe.up('.x-portlet'),
-			handle = portlet.down('.x-resizable-handle');
-		if(handle){
-			handle.hide();
-			handle.dom.onshow = function(){
-				if(handle) handle.hide();
-			};
-		}
-	},
-		
-	_initDisableResizeHandle: function(){
-		var me=this;
-		if(me._addWindowEventListener){
-			me._addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
-		}
-		me._disableResizeHandle();
-	}
-	
-});
-                /**  
-	THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
-	gives a window-centered alert or confirm dialog box that isn't ugly. 
-*/
-Ext.define('PrettyAlert', {
-
-	__getMessageBoxY: function(){ 
-		var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-			iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
-		
-		var ph = p.getWindowHeight(), 
-			ps = p.getScrollY(), 
-			ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
-			iyOffset = Math.floor(ph/2 - ofy + ps - 50);
-		return iyOffset<0 ? 0 : iyOffset;
-	},
-	
-	_alert: function(title, str){		
-		if(arguments.length<1) return;
-		if(arguments.length===1){
-			str = title;
-			title = '';
-		}
-		Ext.MessageBox.alert(title, str).setY(this.__getMessageBoxY());
-		setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
-			var x = Ext.MessageBox.down('button');
-			while(x.isHidden()) x = x.nextSibling();
-			x.focus();
-		}, 20);
-	},
-	
-	_confirm: function(title, str, fn){
-		if(arguments.length<2) return;
-		if(arguments.length===2){
-			fn = str;
-			str = title;
-			title = '';
-		}
-		if(typeof fn !== 'function') fn = function(){};
-		Ext.MessageBox.confirm(title, str, fn).setY(this.__getMessageBoxY());
-		setTimeout(function(){
-			var x = Ext.MessageBox.down('button');
-			while(x.isHidden()) x = x.nextSibling();
-			x.focus();
-		}, 20);
-	}
-});
                 (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('IntelRallyApp', {
+		alias: 'widget.intelrallyapp',
+		extend: 'Rally.app.App',
+		
+		/** these are the necessary models to load for the apps. you should call this */
+		_loadModels: function(){
+			var me=this, 
+				promises = [],
+				models = {
+					Project: 'Project',
+					UserStory: 'HierarchicalRequirement',
+					Feature:'PortfolioItem/Feature',
+					Milestone:'PortfolioItem/Milestone'
+				};
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({ //load project
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},	
+		_loadProject: function(oid){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Project){ 
+				return me._loadModels().then(function(){ 
+					return me._loadProject(oid); 
+				});
+			}
+			else {
+				me.Project.load(oid, {
+					fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadFeature: function(oid, projectRef){ //projectRef is optional
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Feature){ 
+				return me._loadModels().then(function(){ 
+					return me._loadFeature(oid, projectRef); 
+				});
+			}
+			else {
+				me.Feature.load(oid, {
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadUserStory: function(oid, projectRef){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.UserStory){ 
+				return me._loadModels().then(function(){ 
+					return me._loadUserStory(oid, projectRef); 
+				});
+			}
+			else {
+				me.UserStory.load(oid, {
+					fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
+						'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		_loadMilestone: function(oid, projectRef){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.resolve();
+			else if(!me.Milestone){ 
+				return me._loadModels().then(function(){ 
+					return me._loadMilestone(oid); 
+				});
+			}
+			else {
+				me.Milestone.load(oid, {
+					fetch: ['ObjectID', 'Parent', 'Name'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: projectRef
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},
+		
+		/**************************************** SOME UTIL FUNCS ***************************************************/
+		_loadRootProject: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LRP');
+			var me=this, 
+				n = projectRecord.data.Name;
+			if(n === 'All Scrums' || n === 'All Scrums Sandbox') return Q(projectRecord);
+			else if(!projectRecord.data.Parent) return Q.reject('You do not have viewer access to "All Scrums"!');
+			else {
+				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+					return me._loadRootProject(parentRecord);
+				});
+			}
+		},	
+		_loadTopProject: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LTP');
+			var me=this, 
+				n = projectRecord.data.Name;
+			if(!projectRecord.data.Parent) return Q(projectRecord);
+			else {
+				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
+					return me._loadTopProject(parentRecord);
+				});
+			}
+		},	
+		_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
+			if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
+			else {
+				var me=this, split = projectRecord.data.Name.split(' ART');
+				if(split.length>1) return Q(projectRecord);
+				else { 
+					var parent = projectRecord.data.Parent;
+					if(!parent) return Q.reject('Project not in a train');
+					else {
+						return me._loadProject(parent.ObjectID).then(function(parentRecord){
+							return me._projectInWhichTrain(parentRecord);
+						});
+					}
+				}
+			}
+		},	
+		_loadAllTrains: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					remoteSort:false,
+					limit:Infinity,
+					fetch: ['Name', 'ObjectID'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+							property:'Name',
+							operator: 'contains',
+							value: ' ART'
+						},{
+							property: 'Name',
+							operator: (rootProjectRecord.data.Name === 'All Scrums Sandbox' ? 'contains' : '!contains'),
+							value: 'Test'
+						}
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				console.log('AllTrainRecords loaded', store.data.items);
+				return Q(store);
+			});
+		},			
+		_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
+			if(!projectRef) return Q.reject('Invalid arguments: LRUS');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[{
+						property:'Project',
+						value: projectRef
+					}]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ //only pull look at Feature Release if US relese == null
+			/************************* NOTE ***********************************************
+				for Q215 we need to uncomment the below lines for a better user story filter!
+				
+				from: (US.Release == X || (US.Feature.Release ==X))
+				to: (US.Release ==X || (US.Release ==null && US .Feature.Release==X))
+			******************************************************************************/
+			var me=this,
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				// Ext.create('Rally.data.wsapi.Filter', {
+					// property:'Release.ObjectID',
+					// value: null
+				// }).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property:'Feature.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property:'Feature.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				// )
+			);
+		},
+		_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
+			if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
+							Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
+							Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
+						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){ //get the most recent 5 in the project!!
+			/**this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
+				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
+				Then 1 of the 5 user stories is randomly selected and returned */
+			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
+			if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					filters: [{
+						property:'FormattedID',
+						value:formattedID
+					},{
+						property:'Project',
+						value: projectRef
+					}]
+				});
+			return me._reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},	
+		_loadProjectByName: function(name){
+			if(!name) return Q.reject('Invalid arguments: LPBN');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'ObjectID'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						{
+							property:'Name',
+							value:name
+						}
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},
+		
+		/********************************************** FEATURES  ********************************************/
+		_getFeatureFilter: function(trainRecord, releaseRecord){
+			if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0],
+				relSplit = releaseRecord.data.Name.split(' '),
+				coreFilter = Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.Name',
+					value: releaseRecord.data.Name
+				});
+			trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
+			if(trainRecord.data.Name == 'Test ART (P&E)'){
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: 'Test ART (P&E)'
+				}).and(coreFilter);
+			}
+			else {
+				return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+					property:'Project.Parent.Name',
+					value: trainName + ' POWG Portfolios'
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: trainName + ' POWG Portfolios'
+				})).and(coreFilter);
+			}
+		},
+		
+		/*************************************************** Products ********************************************/
+		_getProductFilter: function(trainRecord){ //products can be in 2 different levels of the portfolio hierarchy
+			if(!trainRecord) throw 'invalid arguments: GPF';
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0];
+			if(trainName === 'Test'){
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: 'Test ART (P&E)'
+				});
+			}
+			else {
+				return Ext.create('Rally.data.wsapi.Filter', {//NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+					property:'Project.Parent.Name',
+					value: trainName + ' POWG Portfolios'
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: trainName + ' POWG Portfolios'
+				}));
+			}
+		},	
+		_loadProducts: function(trainRecord){
+			if(!trainRecord) return Q.reject('Invalid arguments: LPROD');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/Product',
+					limit:Infinity,
+					remoteSort:false,
+					fetch: ['Name'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[me._getProductFilter(trainRecord)]
+				});
+			return me._reloadStore(store).then(function(store){
+				console.log('Products loaded', store.data.items);
+				return Q(store);
+			});
+		},
+		
+		/********************************************** Load Valid Projects ********************************************/	
+		_addValidProjectsToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._addValidProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
+			var me=this,
+				validProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._addValidProjectsToList(projTree[rootProjectRecord.data.ObjectID], validProjects);
+				console.log('valid projects', validProjects);
+				return Q(validProjects);
+			});	
+		},	
+		_allChildProjectToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_loadAllChildrenProjects: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
+			var me=this,
+				childrenProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+				console.log('childrenProjects', childrenProjects);
+				return Q(childrenProjects);
+			});	
+		},	
+		_allLeafProjectsToList: function(projTree, hash){
+			var me=this, 
+				curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadAllLeafProjects: function(rootProjectRecord){
+			if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
+			var me=this,
+				childrenProjects = {}, 
+				projTree = {};
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				model: "Project",
+				fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
+				limit:Infinity,
+				context: {
+					workspace: me.getContext().getWorkspace()._ref,
+					project:null
+				}
+			});
+			return me._reloadStore(store).then(function(store){
+				var projects = store.data.items;
+				for(var i=0, len=projects.length; i<len; ++i){
+					var project = projects[i],
+						thisRef = project.data.ObjectID, 
+						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+					if(!projTree[thisRef]) projTree[thisRef] = {};
+					projTree[thisRef].ProjectRecord = project;
+					if(parentRef){
+						if(!projTree[parentRef]) projTree[parentRef] = {};
+						projTree[parentRef][thisRef] = projTree[thisRef];
+					}
+				}
+				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+				console.log('childrenProjects', childrenProjects);
+				return Q(childrenProjects);
+			});	
+		},
+		
+		/********************************************** Generic store loading, returns promise ********************************************/
+		
+		_reloadStore: function(store){
+			var deferred = Q.defer();
+			store.load({
+				callback: function(records, operation, success){
+					if(!success) deferred.reject(operation.getError() || 'Could not load data');
+					else deferred.resolve(store);
+				}
+			});
+			return deferred.promise;
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+		/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
+	Ext.define('WorkweekDropdown', {
+		extend: 'Ext.data.Model',
+		fields: [
+			{name: 'Workweek', type:'string'},
+			{name: 'DateVal', type:'number'}
+		]
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+		/** this is used if you want to listen to events in the parent window (e.g. useful for rally apps that resize with browser screen
+			vertically or things that need to know browser scroll position) 
+		You also can artificially fire the events and have the listeners run
+	*/
+	Ext.define('WindowListener', {
+
+		__initWindowEventListener: function(eventName){
+			var me=this;
+			if(!me._windowListeners) me._windowListeners = {};
+			me._windowListeners[eventName] = [];
+			
+			window.parent['on' + eventName] = function(event){ 
+				var listeners = me._windowListeners[eventName];
+				for(var i=0, len=listeners.length; i<len; ++i)
+					listeners[i](event);
+			};
+		},
+		
+		_addWindowEventListener: function(eventName, fn){
+			var me=this;
+			if(!me._windowListeners || !me._windowListeners[eventName]) 
+				me.__initWindowEventListener(eventName);
+			me._windowListeners[eventName].push(fn);
+		},
+		
+		_fireParentWindowEvent: function(eventName){ //eg: resize or scroll
+			var me=this;
+			if(!me._windowListeners || !me._windowListeners[eventName]) return;
+			var listeners = me._windowListeners[eventName];
+			for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar **/
+
+	Ext.define('IframeResize', {
+		requires: ['WindowListener'],
+		
+		/***************** ************* ********* DONT USE THIS STUFF ********************* ************* *********************/
+		
+		/** resizes the iframe to be the height of all the items in it */
+		_applyIframeResizeToContents: function(){ 
+			var w = window, p = w.parent, pd = w.parent.document, l = w.location,
+				iframe = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ip1 = iframe.parentNode,
+				ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
+				height = 0, next = this.down();
+			while(next){
+				height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
+				next = next.next();
+			}
+			height += 150;
+			ip1.style.height = height + 'px';
+			ip2.style.height = height + 'px';
+			iframe.style.height = height + 'px';
+		},
+		
+		/** 
+			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
+			to that of the contents! Call this if you want the scrollbar to be on the outsize of the app (the window scrollbar)
+		*/
+		_initIframeResizeToContents: function(){
+			var me=this;
+			if(me._addWindowEventListener){
+				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToContents(); });
+			}
+		},
+			
+		/** 
+			resizes the iframe to be the height of the window. its like rally autoheight app but better 
+		*/
+		_applyIframeResizeToWindow: function(){ 
+			var iframe = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				i = iframe.dom,
+				portlet = iframe.up('.x-portlet'),
+				portalColumn = portlet.up('.x-portal-column'),
+				dashboard = portlet.up('#mydash_portlet');
+			height = window.parent.innerHeight - 70;
+			height -= 200; //~120 on top and 60 on bottom and
+			iframe.style.height = height + 'px';
+			ip1.style.height = height + 'px';
+			height += 30;
+			ip2.style.height = height + 'px';
+		},
+		
+			/** 
+			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
+			to that of the window! Call this if you want the scrollbar to be on the inside of the app (NOT the window scrollbar)
+		*/
+		_initIframeResizeToWindow: function(){
+			var me=this;
+			if(me._addWindowEventListener){
+				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToWindow(); });
+			}
+			me._applyIframeResizeToWindow();
+		},
+		
+		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/
+		
+		_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				portlet = bottomEl.up('.x-portlet'), 
+				portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
+				dashboard = portlet.up('#mydash_portlet'), //has huge padding values
+				domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
+				innerHeight = window.parent.innerHeight,
+				innerWidth = window.parent.innerWidth;
+				
+			//adjust widths
+			while(true){
+				domNodeW.style.width = (innerWidth - 4) + 'px';
+				domNodeW.style.padding = '0';
+				domNodeW.style.margin = '0';
+				if(domNodeW.id === 'mydash_portlet') break;
+				domNodeW = domNodeW.parentNode;
+			}
+			
+			//adjust heights
+			while(true){
+				domNodeH.style.height = (innerHeight - 135) + 'px';
+				if(domNodeH.classList.contains('x-portlet')) break;
+				domNodeH = domNodeH.parentNode;
+			}
+			dashboard.dom.style.height = (innerHeight - 65) + 'px';
+			portlet.dom.style.height = (innerHeight - 105) + 'px';
+			
+			//final touches LOL
+			dashboard.dom.style.padding = "0 2px 0 2px";
+		},
+		
+		_initFixRallyDashboard: function(){ 
+			var me=this;
+			if(me._addWindowEventListener){
+				me._addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
+			}
+			me._fixRallyDashboard();
+		},
+
+		_disableResizeHandle: function(){ //hides the draggable resize handle from under the app
+			var me=this, handle;
+			if(window.frameElement) handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
+			else handle = me.el.up('.x-portlet').down('.x-resizable-handle');
+			if(handle){
+				handle.hide();
+				handle.dom.onshow = function(){ if(handle) handle.hide(); };
+			}
+		},
+			
+		_initDisableResizeHandle: function(){
+			var me=this;
+			if(me._addWindowEventListener){
+				me._addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
+			}
+			me._disableResizeHandle();
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/**  
+		THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
+		gives a window-centered alert or confirm dialog box that isn't ugly. 
+	*/
+	Ext.define('PrettyAlert', {
+
+		__getMessageBoxY: function(){ 
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.parent.getWindowHeight(), 
+				ps = window.parent.getScrollY(), 
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			return iyOffset<0 ? 0 : iyOffset;
+		},
+		
+		_alert: function(title, str){		
+			if(arguments.length<1) return;
+			if(arguments.length===1){
+				str = title;
+				title = '';
+			}
+			Ext.MessageBox.alert(title, str).setY(this.__getMessageBoxY());
+			setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
+				var x = Ext.MessageBox.down('button');
+				while(x.isHidden()) x = x.nextSibling();
+				x.focus();
+			}, 20);
+		},
+		
+		_confirm: function(title, str, fn){
+			if(arguments.length<2) return;
+			if(arguments.length===2){
+				fn = str;
+				str = title;
+				title = '';
+			}
+			if(typeof fn !== 'function') fn = function(){};
+			Ext.MessageBox.confirm(title, str, fn).setY(this.__getMessageBoxY());
+			setTimeout(function(){
+				var x = Ext.MessageBox.down('button');
+				while(x.isHidden()) x = x.nextSibling();
+				x.focus();
+			}, 20);
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+
 	var intel_ww = {},
 		SECOND = 1000,
 		MINUTE = 60*SECOND,
@@ -957,1442 +1036,1490 @@ Ext.define('PrettyAlert', {
 		}	
 	});
 }());
-                /** Mixin functions related to queries, you need to require Q as a dependency in your rally app
-	Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
-	most functions return promises that resolve to stores
-*/
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+		/** Mixin functions related to queries, you need to require Q as a dependency in your rally app
+		Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
+		most functions return promises that resolve to stores
+	*/
 
-Ext.define('ReleaseQuery', {
+	Ext.define('ReleaseQuery', {
 
-	_loadAllReleases: function(projectRecord){
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: projectRecord.data.ObjectID
+		_loadAllReleases: function(projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
 				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						deferred.resolve(releaseStore);
-					},
-					single:true
+			});
+			return deferred.promise;
+		},
+		
+		/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
+		_loadReleasesInTheFuture: function(projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date().toISOString()
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
 				}
-			}
-		});
-		return deferred.promise;
-	},
-	
-	/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
-	_loadReleasesInTheFuture: function(projectRecord){
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: projectRecord.data.ObjectID
-				},{
-					property:'ReleaseDate',
-					operator:'>=',
-					value: new Date().toISOString()
+			});
+			return deferred.promise;
+		},
+		
+		/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
+			the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
+			in the results.
+		**/
+		_loadReleasesWithName: function(releaseName, nameContains){ 
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Name', //match the release
+						value: releaseName
+					},{
+						property:'Project.Name', 
+						operator:'contains',
+						value:nameContains
+					},{
+						property:'Project.Children.Name', //has children 
+						operator:'=',
+						value:''
+					},{
+						property:'Project.Name', //but not the train release itsself
+						operator:'!contains',
+						value:' ART'
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							console.log('releasesWithName loaded:', records);
+							deferred.resolve(store);
+						},
+						single:true
+					}
 				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						deferred.resolve(releaseStore);
-					},
-					single:true
-				}
-			}
-		});
-		return deferred.promise;
-	},
-	
-	/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
-		the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
-		in the results.
-	**/
-	_loadReleasesWithName: function(releaseName, nameContains){ 
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Name', //match the release
+			});
+			return deferred.promise;
+		},
+		
+		_loadReleaseByNameForProject: function(releaseName, projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[{
+					property:'Name',
 					value: releaseName
 				},{
-					property:'Project.Name', 
-					operator:'contains',
-					value:nameContains
-				},{
-					property:'Project.Children.Name', //has children 
-					operator:'=',
-					value:''
-				},{
-					property:'Project.Name', //but not the train release itsself
-					operator:'!contains',
-					value:' ART'
+					property:'Project', 
+					value:projectRecord.data._ref
+				}],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							deferred.resolve(records.pop());
+						},
+						single:true
+					}
 				}
-			],
-			listeners: {
-				load: {
-					fn: function(store, records){
-						console.log('releasesWithName loaded:', records);
-						deferred.resolve(store);
-					},
-					single:true
-				}
-			}
-		});
-		return deferred.promise;
-	},
-	
-	_loadReleaseByNameForProject: function(releaseName, projectRecord){
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{
-				property:'Name',
-				value: releaseName
-			},{
-				property:'Project', 
-				value:projectRecord.data._ref
-			}],
-			listeners: {
-				load: {
-					fn: function(store, records){
-						deferred.resolve(records.pop());
-					},
-					single:true
-				}
-			}
-		});
-		return deferred.promise;
-	},
-	_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[{
-				property:'Name',
-				operator:'contains',
-				value: releaseName
-			},{
-				property:'Project', 
-				value:projectRecord.data._ref
-			}],
-			listeners: {
-				load: {
-					fn: function(store, records){
-						deferred.resolve(records);
-					},
-					single:true
-				}
-			}
-		});
-		return deferred.promise;
-	},
-	
-		/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
-	_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
-		var deferred = Q.defer();
-		Ext.create('Rally.data.wsapi.Store',{
-			model: 'Release',
-			limit:Infinity,
-			autoLoad:true,
-			fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-			context:{
-				workspace: this.getContext().getWorkspace()._ref,
-				project: null
-			},
-			filters:[
-				{
-					property:'Project.ObjectID',
-					value: projectRecord.data.ObjectID
-				},{
-					property:'ReleaseDate',
-					operator:'>=',
-					value: new Date(givenDate).toISOString()
-				}
-			],
-			listeners: {
-				load: {
-					fn: function(releaseStore, releaseRecords){
-						console.log('releases loaded:', releaseRecords);
-						deferred.resolve(releaseStore);
-					},
-					single:true
-				}
-			}
-		});
-		return deferred.promise;
-	},
-	
-	/** gets the most likely release to scope to base on the following order:
-		1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
-						to use preferences for this one)
-		2) if we are in a release
-		3) the closest release planning date to the current date
-	*/
-	_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
-		var me=this,
-			d = new Date(),
-			rs = releaseRecords,
-			prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
-		return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
-			_.find(rs, function(r){
-				return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
-			}) ||
-			_.reduce(rs, function(best, r){
-				if(best===null) return r;
-				else {
-					var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
-					return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
-				}
-			}, null);
-	}
-});
-                //given named queues, only allows one function at a time in each queue to execute. 
-Ext.define('AsyncQueue', {
-	
-	QueueOfFuncs: {},
-	
-	_dequeue: function(queueName){
-		var me=this;
-		queueName = queueName || 'undefined'; //to be clear
-		if(me.QueueOfFuncs[queueName]){
-			me.QueueOfFuncs[queueName].shift();
-			if(!me.QueueOfFuncs[queueName].length) return;
-			else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
-		}
-	},
-	
-	//callback(done)...make sure you call done when you are finished
-	_enqueue: function(callback, queueName){
-		var me=this;
-		queueName = queueName || 'undefined'; //to be clear
-		if(typeof callback !== 'function') return console.log('ERR: not a function', callback);
-		if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
-			me.QueueOfFuncs[queueName] = [callback];
-			callback.call(me, me._dequeue.bind(me, queueName));
-		}
-		else me.QueueOfFuncs[queueName].push(callback);
-	}
-});
-                /*!
- * CTemplate
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/ctemplate
- */
-Ext.define('Skirtle.CTemplate', {
-    extend: 'Ext.XTemplate',
-
-    statics: {
-        AUTO_ID: 0
-    },
-
-    // May need to be increased if components are included deeper in the data object
-    copyDepth: 10,
-
-    // Placeholder element template. Should be changed in tandem with getPlaceholderEl()
-    cTpl: '<p id="ctemplate-{0}-{1}"></p>',
-
-    // Flag
-    isCTemplate: true,
-
-    constructor: function() {
-        var me = this;
-
-        me.callParent(arguments);
-
-        me.id = ++me.statics().AUTO_ID;
-
-        me.reset();
-    },
-
-    /* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
-     * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
-     * components.
-     */
-    copyValues: function(values, depth) {
-        var me = this,
-            id,
-            copy = {},
-            copyDepth = depth || me.copyDepth;
-
-        if (copyDepth === 1) {
-            return values;
-        }
-
-        if (Ext.isArray(values)) {
-            return Ext.Array.map(values, function(value) {
-                return me.copyValues(value, copyDepth - 1);
-            });
-        }
-
-        if (!Ext.isObject(values)) {
-            return values;
-        }
-
-        // This is the key sleight-of-hand that makes the whole thing work
-        if (values.isComponent) {
-            id = values.getId();
-            me.ids.push(id);
-            return Ext.String.format(me.cTpl, id, me.id);
-        }
-
-        Ext.Object.each(values, function(key, value) {
-            // $comp is a special value for a renderTpl that references the current component
-            copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
-        });
-
-        return copy;
-    },
-
-    // Override
-    doInsert: function() {
-        var ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    /* We have to resort to polling for component injection as we don't have full control over when the generated HTML
-     * will be added to the DOM
-     */
-    doPolling: function(interval) {
-        var me = this;
-
-        me.pollInterval = interval;
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-        }
-
-        me.pollId = Ext.defer(me.injectComponents, interval, me);
-    },
-
-    getPlaceholderEl: function(id) {
-        return Ext.get('ctemplate-' + id + '-' + this.id);
-    },
-
-    /* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
-     * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
-     * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
-     * call this method directly as soon as the generated HTML is inserted into the DOM.
-     */
-    injectComponents: function() {
-        var me = this,
-            ids = me.ids,
-            index = ids.length - 1,
-            id,
-            cmp,
-            placeholderEl;
-
-        // Iterate backwards because we remove some elements in the loop
-        for ( ; index >= 0 ; --index) {
-            id = ids[index];
-            cmp = Ext.getCmp(id);
-            placeholderEl = me.getPlaceholderEl(id);
-
-            if (me.renderComponent(cmp, placeholderEl) || !cmp) {
-                // Either we've successfully done the switch or the component has been destroyed
-                Ext.Array.splice(ids, index, 1);
-
-                if (placeholderEl) {
-                    placeholderEl.remove();
-                }
-            }
-        }
-
-        if (ids.length) {
-            // Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
-            me.doPolling(me.pollInterval * 1.5);
-        }
-    },
-
-    // Override
-    overwrite: function(el) {
-        var dom,
-            firstChild,
-            ret;
-
-        /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-         * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
-         * but we can guard against the case where all updates come through this template.
-         */
-        if (Ext.isIE) {
-            dom = Ext.getDom(el);
-            while (dom.firstChild) {
-                dom.removeChild(dom.firstChild);
-            }
-        }
-
-        ret = this.callParent(arguments);
-
-        // There's no guarantee this will succeed so we still need polling as well
-        this.injectComponents();
-
-        return ret;
-    },
-
-    renderComponent: function(cmp, placeholderEl) {
-        if (cmp && placeholderEl) {
-            var parent = placeholderEl.parent();
-
-            if (cmp.rendered) {
-                // Move a component that has been rendered previously
-                cmp.getEl().replace(placeholderEl);
-            }
-            else {
-                cmp.render(parent, placeholderEl);
-            }
-
-            if (Ext.isIE6) {
-                // Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
-                parent.repaint();
-            }
-
-            return true;
-        }
-
-        return false;
-    },
-
-    reset: function() {
-        var me = this;
-
-        // The ids of injected components that haven't yet been rendered
-        me.ids = [];
-
-        if (me.pollId) {
-            clearTimeout(me.pollId);
-            me.pollId = null;
-        }
-    }
-}, function(ctemplate) {
-    var apply = function() {
-        var me = this,
-            args = Ext.Array.slice(arguments);
-
-        args[0] = me.copyValues(args[0]);
-
-        // As we're returning an HTML string/array we can't actually complete the injection here
-        me.doPolling(10);
-
-        return me.callParent(args);
-    };
-
-    // The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
-    if (ctemplate.prototype.applyOut) {
-        // 4.1+
-        ctemplate.override({
-            applyOut: apply
-        });
-    }
-    else {
-        // 4.0
-        ctemplate.override({
-            applyTemplate: apply
-        });
-
-        ctemplate.createAlias('apply', 'applyTemplate');
-    }
-});
-
-/*!
- * Component Column
- * Version 1.1
- * Copyright(c) 2011-2013 Skirtle's Den
- * License: http://skirtlesden.com/ux/component-column
- */
-Ext.define('Skirtle.grid.column.Component', {
-    alias: 'widget.componentcolumn',
-    extend: 'Ext.grid.column.Column',
-    requires: ['Skirtle.CTemplate'],
-
-    // Whether or not to automatically resize the components when the column resizes
-    autoWidthComponents: true,
-
-    // Whether or not to destroy components when they are removed from the DOM
-    componentGC: true,
-
-    // Override the superclass - this must always be true or odd things happen, especially in IE
-    hasCustomRenderer: true,
-
-    // The estimated size of the cell frame. This is updated once there is a cell where it can be measured
-    lastFrameWidth: 12,
-
-    /* Defer durations for updating the component width when a column resizes. Required when a component has an animated
-     * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
-     *
-     * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
-     */
-    widthUpdateDelay: [10, 400],
-
-    constructor: function(cfg) {
-        var me = this;
-
-        me.callParent(arguments);
-
-        // Array of component ids for both component queries and GC
-        me.compIds = [];
-
-        // We need a dataIndex, even if it doesn't correspond to a real field
-        me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
-
-        me.tpl = me.createTemplate(me.tpl);
-        me.renderer = me.createRenderer(me.renderer);
-
-        me.registerColumnListeners();
-    },
-
-    addRefOwner: function(child) {
-        var me = this,
-            fn = me.refOwnerFn || (me.refOwnerFn = function() {
-                return me;
-            });
-
-        if (me.extVersion < 40200) {
-            // Component queries for ancestors use getBubbleTarget in 4.1 ...
-            child.getBubbleTarget = fn;
-        }
-        else {
-            // ... and getRefOwner in 4.2+
-            child.getRefOwner = fn;
-        }
-    },
-
-    applyTemplate: function(data, value) {
-        if (Ext.isDefined(value)) {
-            data[this.dataIndex] = value;
-        }
-
-        return this.tpl.apply(data);
-    },
-
-    /* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
-     * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
-     * from the DOM just before the grid view is refreshed.
-     */
-    beforeViewRefresh: function() {
-        if (Ext.isIE) {
-            var ids = this.compIds,
-                index = 0,
-                len = ids.length,
-                item,
-                el,
-                parentEl;
-
-            for ( ; index < len ; index++) {
-                if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
-                    parentEl.removeChild(el);
-                }
-            }
-        }
-    },
-
-    calculateFrameWidth: function(component) {
-        var el = component.getEl(),
-            parentDiv = el && el.parent(),
-            // By default the TD has no padding but it is quite common to add some via a tdCls
-            parentTd = parentDiv && parentDiv.parent();
-
-        if (parentTd) {
-            // Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-            return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
-        }
-    },
-
-    createRenderer: function(renderer) {
-        var me = this;
-
-        return function(value, p, record) {
-            var data = Ext.apply({}, record.data, record.getAssociatedData());
-
-            if (renderer) {
-                // Scope must be this, not me
-                value = renderer.apply(this, arguments);
-            }
-
-            // Process the value even with no renderer defined as the record may contain a component config
-            value = me.processValue(value);
-
-            return me.applyTemplate(data, value);
-        };
-    },
-
-    createTemplate: function(tpl) {
-        return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
-    },
-
-    destroyChild: function(child) {
-        child.destroy();
-    },
-
-    getRefItems: function(deep) {
-        var items = this.callParent([deep]),
-            ids = this.compIds,
-            index = 0,
-            len = ids.length,
-            item;
-
-        for ( ; index < len ; index++) {
-			item = Ext.getCmp(ids[index]);
-            if (item) {
-                items.push(item);
-
-                if (deep && item.getRefItems) {
-                    items.push.apply(items, item.getRefItems(true));
-                }
-            }
-        }
-
-        return items;
-    },
-
-    onChildAfterRender: function(child) {
-        this.resizeChild(child);
-    },
-
-    onChildBoxReady: function(child) {
-        // Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
-        this.resizeChild(child, false);
-    },
-
-    onChildDestroy: function(child) {
-        Ext.Array.remove(this.compIds, child.getId());
-    },
-
-    onChildResize: function() {
-        this.redoScrollbars();
-    },
-
-    onColumnResize: function(column) {
-        column.resizeAll();
-    },
-
-    onColumnShow: function(column) {
-        column.resizeAll();
-    },
-
-    // This is called in IE 6/7 as the components can still be seen even when a column is hidden
-    onColumnVisibilityChange: function(column) {
-        var items = column.getRefItems(),
-            index = 0,
-            length = items.length,
-            visible = !column.isHidden();
-
-        // In practice this probably won't help but it shouldn't hurt either
-        if(Ext.suspendLayouts) Ext.suspendLayouts();
-
-        for ( ; index < length ; ++index) {
-            items[index].setVisible(visible);
-        }
-
-       if(Ext.resumeLayouts) Ext.resumeLayouts(true);
-    },
-
-    onDestroy: function() {
-        Ext.destroy(this.getRefItems());
-
-        this.callParent();
-    },
-
-    // Override
-    onRender: function() {
-        this.registerViewListeners();
-        this.callParent(arguments);
-    },
-
-    // View has changed, may be a full refresh or just a single row
-    onViewChange: function() {
-        var me = this,
-            tpl = me.tpl;
-
-        // Batch the resizing of child components until after they've all been injected
-        me.suspendResizing();
-
-        if (tpl.isCTemplate) {
-            // No need to wait for the polling, the sooner we inject the less painful it is
-            tpl.injectComponents();
-
-            // If the template picked up other components in the data we can just ignore them, they're not for us
-            tpl.reset();
-        }
-
-        // A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
-        me.redoScrollbars();
-
-        me.resumeResizing();
-        
-        me.performGC();
-    },
-
-    // Component GC, try to stop components leaking
-    performGC: function() {
-        var compIds = this.compIds,
-            index = compIds.length - 1,
-            comp,
-            el;
-
-        for ( ; index >= 0 ; --index) {
-            // Could just assume that the component id is the el id but that seems risky
-            comp = Ext.getCmp(compIds[index]);
-            el = comp && comp.getEl();
-
-            if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
-                // The component is no longer in the DOM
-                if (comp && !comp.isDestroyed) {
-                    comp.destroy();
-                }
-            }
-        }
-    },
-
-    processValue: function(value) {
-        var me = this,
-            compIds = me.compIds,
-            id, initialWidth, dom, parent;
-
-        if (Ext.isObject(value) && !value.isComponent && value.xtype) {
-            // Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
-            value = Ext.widget(value.xtype, value);
-        }
-
-        if (value && value.isComponent) {
-            id = value.getId();
-
-            // When the view is refreshed the renderer could return a component that's already in the list
-            if (!Ext.Array.contains(compIds, id)) {
-                compIds.push(id);
-            }
-
-            me.addRefOwner(value);
-            me.registerListeners(value);
-
-            if (value.rendered) {
-                /* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
-                 * The problem occurs when a record value is changed and the components in that same row are being
-                 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
-                 * one row. Unfortunately this nukes the existing components so we need to remove them first.
-                 */
-                if (Ext.isIE) {
-                    // TODO: Should this be promoted to CTemplate?
-                    dom = value.el.dom;
-                    parent = dom.parentNode;
-
-                    if (parent) {
-                        if (me.extVersion === 40101) {
-                            // Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
-                            Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
-                        }
-
-                        // TODO: Removing the element like this could fall foul of Element GC
-                        parent.removeChild(dom);
-                    }
-                }
-            }
-            else if (me.autoWidthComponents) {
-                /* Set the width to a 'best guess' before the component is rendered to ensure that the component's
-                 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
-                 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
-                 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
-                 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
-                 */
-                initialWidth = me.getWidth() - me.lastFrameWidth;
-
-                // Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
-                initialWidth = initialWidth > 4 ? initialWidth : 4;
-
-                value.setWidth(initialWidth);
-            }
-
-            // Part of the same IE 6/7 hack as onColumnVisibilityChange
-            if ((Ext.isIE6 || Ext.isIE7) && me.isHidden()) {
-                value.hide();
-            }
-        }
-
-        return value;
-    },
-
-    redoScrollbars: function() {
-        var me = this,
-            grid = me.up('tablepanel');
-
-        if (grid) {
-            // The presence of a resizeQueue signifies that we are currently suspended
-            if (me.resizeQueue) {
-                me.redoScrollbarsRequired = true;
-                return;
-            }
-
-            // After components are injected the need for a grid scrollbar may need redetermining
-            if (me.extVersion < 40100) {
-                // 4.0
-                grid.invalidateScroller();
-                grid.determineScrollbars();
-            }
-            else {
-                // 4.1+
-                grid.doLayout();
-            }
-        }
-    },
-
-    registerColumnListeners: function() {
-        var me = this;
-
-        if (me.autoWidthComponents) {
-            // Need to resize children when the column resizes
-            me.on('resize', me.onColumnResize);
-
-            // Need to resize children when the column is shown as they can't be resized correctly while it is hidden
-            me.on('show', me.onColumnShow);
-        }
-
-        if (Ext.isIE6 || Ext.isIE7) {
-            me.on({
-                hide: me.onColumnVisibilityChange,
-                show: me.onColumnVisibilityChange
-            });
-        }
-    },
-
-    registerListeners: function(component) {
-        var me = this;
-
-        // Remove the component from the child list when it is destroyed
-        component.on('destroy', me.onChildDestroy, me);
-
-        if (me.autoWidthComponents) {
-            // Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
-            component.on('afterrender', me.onChildAfterRender, me, {single: true});
-
-            // With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
-            if (me.extVersion >= 40100) {
-                component.on('boxready', me.onChildBoxReady, me, {single: true});
-            }
-        }
-
-        // Need to redo scrollbars when a child resizes
-        component.on('resize', me.onChildResize, me);
-    },
-
-    registerViewListeners: function() {
-        var me = this,
-            view = me.up('tablepanel').getView();
-
-        me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
-        me.mon(view, 'refresh', me.onViewChange, me);
-        me.mon(view, 'itemupdate', me.onViewChange, me);
-        me.mon(view, 'itemadd', me.onViewChange, me);
-        me.mon(view, 'itemremove', me.onViewChange, me);
-    },
-
-    resizeAll: function() {
-        var me = this;
-
-        me.suspendResizing();
-        me.resizeQueue = me.getRefItems();
-        me.resumeResizing();
-    },
-
-    resizeChild: function(component, defer) {
-        var me = this,
-            frameWidth,
-            newWidth,
-            oldWidth,
-            resizeQueue;
-
-        if (me.resizingSuspended) {
-            resizeQueue = me.resizeQueue;
-
-            if (!Ext.Array.contains(resizeQueue, component)) {
-                resizeQueue.push(component);
-            }
-
-            return;
-        }
-
-        frameWidth = me.calculateFrameWidth(component);
-
-        // TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
-        if (Ext.isNumber(frameWidth)) {
-            newWidth = me.getWidth() - frameWidth;
-            oldWidth = component.getWidth();
-
-            // Returns true if a resize actually happened
-            if (me.setChildWidth(component, newWidth, oldWidth)) {
-                // Avoid an infinite resizing loop, deferring will only happen once
-                if (defer !== false) {
-                    // Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
-                    Ext.each(me.widthUpdateDelay, function(delay) {
-                        Ext.defer(me.resizeChild, delay, me, [component, false]);
-                    });
-                }
-            }
-        }
-    },
-
-    resumeResizing: function() {
-        var me = this,
-            index = 0,
-            resizeQueue = me.resizeQueue,
-            len = resizeQueue.length;
-
-        if (!--me.resizingSuspended) {
-            for ( ; index < len ; ++index) {
-                me.resizeChild(resizeQueue[index]);
-            }
-
-            me.resizeQueue = null;
-
-            if (me.redoScrollbarsRequired) {
-                me.redoScrollbars();
-            }
-        }
-    },
-
-    setChildWidth: function(component, newWidth, oldWidth) {
-        if (oldWidth === newWidth) {
-            return false;
-        }
-
-        component.setWidth(newWidth);
-
-        return true;
-    },
-
-    suspendResizing: function() {
-        var me = this;
-
-        me.resizingSuspended = (me.resizingSuspended || 0) + 1;
-
-        if (!me.resizeQueue) {
-            me.resizeQueue = [];
-        }
-    }
-}, function(cls) {
-    var proto = cls.prototype,
-        version = Ext.getVersion();
-
-    // ExtJS version detection
-    proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch();
-
-    // 4.1.1 initially reported its version as 4.1.0
-    if (Ext.Element.prototype.syncContent && version.toString() === '4.1.0') {
-        proto.extVersion = 40101;
-    }
-});
-                /** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
-	(although there is some arrow key scrolling bug) 
-*/
-Ext.define('Intel.form.field.ComboBox', {
-	extend:'Ext.form.field.ComboBox',
-	alias: ['widget.intelcombo', 'widget.intelcombobox'],
-	
-	constructor: function(options) {
-		options = options || {};
-		options = Ext.merge({
-			enableKeyEvents:true,
-			queryMode:'local',
-			ignoreNoChange:true,
-			allowBlank:false,
-			listeners: {
-				keyup: function(a,b){
-					if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
-					var combo = this;
-					combo.store.clearFilter();
-					combo.store.filterBy(function(item){
-						return item.data[combo.displayField].match(new RegExp(combo.getRawValue(), 'i')) !== null;
-					});
+			});
+			return deferred.promise;
+		},
+		_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
 				},
-				focus: function(combo) {
-					combo.store.clearFilter();
-					combo.setValue('');
-					combo.expand();
+				filters:[{
+					property:'Name',
+					operator:'contains',
+					value: releaseName
+				},{
+					property:'Project', 
+					value:projectRecord.data._ref
+				}],
+				listeners: {
+					load: {
+						fn: function(store, records){
+							deferred.resolve(records);
+						},
+						single:true
+					}
 				}
-			}
-		}, options);
-		this.callParent([options]);
-	}
-});
-                Ext.define('Intel.form.field.FixedComboBox', {
-	extend:'Ext.form.field.ComboBox',
-	alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
-	
-	constructor: function(options) {
-		options = options || {};
-		options = Ext.merge({
-			editable: false,	
-			allowBlank:false,
-			queryMode:'local',
-			listeners: {
-				focus: function(combo) {
-					combo.setValue('');
-					combo.expand();
+			});
+			return deferred.promise;
+		},
+		
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+		_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+			var deferred = Q.defer();
+			Ext.create('Rally.data.wsapi.Store',{
+				model: 'Release',
+				limit:Infinity,
+				autoLoad:true,
+				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+				context:{
+					workspace: this.getContext().getWorkspace()._ref,
+					project: null
+				},
+				filters:[
+					{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					}
+				],
+				listeners: {
+					load: {
+						fn: function(releaseStore, releaseRecords){
+							console.log('releases loaded:', releaseRecords);
+							deferred.resolve(releaseStore);
+						},
+						single:true
+					}
 				}
-			}
-		}, options);
-		this.callParent([options]);
-	}	
-});
-                /** YOU MUST PASS IT 2 THINGS IN THE CONFIG
-	1: releases (array of release records)
-	2: currentRelease (what to show as initial value
-*/
-Ext.define('Intel.form.field.ReleasePicker', {
-	extend: 'Intel.form.field.FixedComboBox',
-	alias: ['widget.intelreleasepicker'],
-	
-	constructor: function(options){
-		if(!options.releases || !options.currentRelease) return;
+			});
+			return deferred.promise;
+		},
 		
-		options.displayField = 'Name';
-		options.value = options.currentRelease.data.Name;
-		options.store = Ext.create('Ext.data.Store', {
-			fields: ['Name'],
-			sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
-			data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
-		});
+		/** gets the most likely release to scope to base on the following order:
+			1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+							to use preferences for this one)
+			2) if we are in a release
+			3) the closest release planning date to the current date
+		*/
+		_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
+			var me=this,
+				d = new Date(),
+				rs = releaseRecords,
+				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+				_.find(rs, function(r){
+					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+				}) ||
+				_.reduce(rs, function(best, r){
+					if(best===null) return r;
+					else {
+						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+					}
+				}, null);
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//given named queues, only allows one function at a time in each queue to execute. 
+	Ext.define('AsyncQueue', {
 		
-		options.fieldLabel = options.fieldLabel || 'Release:';
-		options.editable = options.editable || false;
-		options.width = options.width || 240;
-		options.labelWidth = options.labelWidth || 50;
+		QueueOfFuncs: {},
 		
-		this.callParent([options]); //now that we have the extra stuff added
-	}
-});
-
-                Ext.define('IntelTextarea', {
-	extend: 'Ext.form.field.TextArea',
-	alias: ['widget.inteltextarea'],
-	
-	grow:true,
-	growMin:20,
-	growMax:160,
-	maxLength:150,
-	enforceMaxLength:true,
-	enterIsSpecial:true
-});
-                Ext.define('intel.grid.column.Component.', {
-	alias: 'widget.fastgridcolumn',
-	extend: 'Skirtle.grid.column.Component',
-
-	autoWidthComponents: false,
-
-	componentGC: true,
-
-	hasCustomRenderer: true,
-
-	lastFrameWidth: 12,
-	
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	registerViewListeners: function() {
-		var me = this,
-			view = me.up('tablepanel').getView();
-
-		me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
-		me.mon(view, 'refresh', me.onViewChange, me);
-		//me.mon(view, 'itemupdate', me.onViewChange, me); //why are these necessary...
-		//me.mon(view, 'itemadd', me.onViewChange, me);
-		//me.mon(view, 'itemremove', me.onViewChange, me);
-	},
-	onViewChange: function() {
-		var me = this, tpl = me.tpl;
-		me.suspendResizing();
-		if (tpl.isCTemplate) {
-				tpl.injectComponents();
-				tpl.reset();
-		}
-		//me.redoScrollbars();
-		me.resumeResizing();
-		me.performGC();
-	},
-	
-	resumeResizing: function() {
-		var me = this,
-			index = 0,
-			resizeQueue = me.resizeQueue,
-			len = resizeQueue.length;
-		if (!--me.resizingSuspended) {
-			for ( ; index < len ; ++index) {
-					me.resizeChild(resizeQueue[index]);
+		_dequeue: function(queueName){
+			var me=this;
+			queueName = queueName || 'undefined'; //to be clear
+			if(me.QueueOfFuncs[queueName]){
+				me.QueueOfFuncs[queueName].shift();
+				if(!me.QueueOfFuncs[queueName].length) return;
+				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
 			}
-			me.resizeQueue = null;
-			//if (me.redoScrollbarsRequired) {
-			//    me.redoScrollbars();
-			//}
-		}
-	},
-	onChildResize: function() {
-		//this.redoScrollbars();
-  }
-});
-                /**
-	the regular proxy calls record.commit() and later on, datarefresh event is called. since these both cause a rerender, 
-	we make the record edits SILENT, so only the datarefresh actually rerender the page
-*/
-
-Ext.define('Intel.data.proxy.SessionStorage', {
-	extend: 'Ext.data.proxy.SessionStorage',
-	alias: 'proxy.fastsessionproxy',
-
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	create: function(operation, callback, scope) {
-		var me = this,
-			records = operation.records,
-			length = records.length,
-			ids = me.getIds(),
-			id, record, i;
-
-		operation.setStarted();
-		if(me.isHierarchical === undefined) {
-				
-				
-			me.isHierarchical = !!records[0].isNode;
-			if(me.isHierarchical) {
-				me.getStorageObject().setItem(me.getTreeKey(), true);
-			}
-		}
-		for (i = 0; i < length; i++) {
-			record = records[i];
-
-			if (record.phantom) {
-				record.phantom = false;
-				id = me.getNextId();
-			} else {
-				id = record.getId();
-			}
-			
-			record.beginEdit();
-			me.setRecord(record, id);
-			record.endEdit(true); //SILENT!!!
-			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
-			
-			ids.push(id);
-		}
-		me.setIds(ids);
-
-		operation.setCompleted();
-		operation.setSuccessful();
-
-		if (typeof callback == 'function') {
-			callback.call(scope || me, operation);
-		}
-	},
-	
-	update: function(operation, callback, scope) {
-		var records = operation.records,
-			length = records.length,
-			ids = this.getIds(),
-			record, id, i;
-			
-		operation.setStarted();
-		for (i = 0; i < length; i++) {
-			record = records[i];
-			this.setRecord(record);
+		},
 		
-			record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
-
-			id = record.getId();
-			if (id !== undefined && Ext.Array.indexOf(ids, id) == -1) ids.push(id);
-		}
-		this.setIds(ids);
-
-		operation.setCompleted();
-		operation.setSuccessful();
-		if (typeof callback == 'function') callback.call(scope || this, operation);
-	}
-});
-                Ext.define('Intel.data.FastStore', {  //doesn't redundantly call fireEvent... me.sync() calls that downstream 
-	extend: 'Ext.data.Store',
-	alias: 'store.faststore',
-
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	afterEdit: function(record, modifiedFieldNames) {
-		var me = this, i, shouldSync;
-		if (me.autoSync && !me.autoSyncSuspended) {
-			for (i = modifiedFieldNames.length; i--;) {
-				if (record.fields.get(modifiedFieldNames[i]).persist) {
-					me.sync();  //all rendering changes made here
-					break;
-				}
+		//callback(done)...make sure you call done when you are finished
+		_enqueue: function(callback, queueName){
+			var me=this;
+			queueName = queueName || 'undefined'; //to be clear
+			if(typeof callback !== 'function') return console.log('ERR: not a function', callback);
+			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
+				me.QueueOfFuncs[queueName] = [callback];
+				callback.call(me, me._dequeue.bind(me, queueName));
 			}
+			else me.QueueOfFuncs[queueName].push(callback);
 		}
-		me.onUpdate(record, Ext.data.Model.EDIT, modifiedFieldNames);
-		//me.fireEvent('update', me, record, Ext.data.Model.EDIT, modifiedFieldNames); //redundant with me.sync()
-	}
-});
-                /**
-	Cell editing has redundant calls to store.afterEdit, which in turn renders the page multiple times per edit. 
-	fastcellediting solves this by wrapping all the calls in beginEdit and endEdit, so store.afterEdit is called only once
-*/
-Ext.define('Intel.grid.plugin.CellEditing', {
-	alias: 'plugin.fastcellediting',
-	extend: 'Ext.grid.plugin.CellEditing',
-
-	triggerEvent:'cellclick',
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
 	
-	onEditComplete : function(ed, value, startValue) {
-		var me = this,
-			activeColumn = me.getActiveColumn(),
-			context = me.context,
-			record;
-		if (activeColumn) {
-			record = context.record;
+	/*!
+	 * CTemplate
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/ctemplate
+	 */
+	Ext.define('Skirtle.CTemplate', {
+			extend: 'Ext.XTemplate',
 
-			me.setActiveEditor(null);
-			me.setActiveColumn(null);
-			me.setActiveRecord(null);
+			statics: {
+					AUTO_ID: 0
+			},
 
-			context.value = value;
-			if (!me.validateEdit()) {
-					me.editing = false;
-					return;
+			// May need to be increased if components are included deeper in the data object
+			copyDepth: 10,
+
+			// Placeholder element template. Should be changed in tandem with getPlaceholderEl()
+			cTpl: '<p id="ctemplate-{0}-{1}"></p>',
+
+			// Flag
+			isCTemplate: true,
+
+			constructor: function() {
+					var me = this;
+
+					me.callParent(arguments);
+
+					me.id = ++me.statics().AUTO_ID;
+
+					me.reset();
+			},
+
+			/* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
+			 * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
+			 * components.
+			 */
+			copyValues: function(values, depth) {
+					var me = this,
+							id,
+							copy = {},
+							copyDepth = depth || me.copyDepth;
+
+					if (copyDepth === 1) {
+							return values;
+					}
+
+					if (Ext.isArray(values)) {
+							return Ext.Array.map(values, function(value) {
+									return me.copyValues(value, copyDepth - 1);
+							});
+					}
+
+					if (!Ext.isObject(values)) {
+							return values;
+					}
+
+					// This is the key sleight-of-hand that makes the whole thing work
+					if (values.isComponent) {
+							id = values.getId();
+							me.ids.push(id);
+							return Ext.String.format(me.cTpl, id, me.id);
+					}
+
+					Ext.Object.each(values, function(key, value) {
+							// $comp is a special value for a renderTpl that references the current component
+							copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
+					});
+
+					return copy;
+			},
+
+			// Override
+			doInsert: function() {
+					var ret = this.callParent(arguments);
+
+					// There's no guarantee this will succeed so we still need polling as well
+					this.injectComponents();
+
+					return ret;
+			},
+
+			/* We have to resort to polling for component injection as we don't have full control over when the generated HTML
+			 * will be added to the DOM
+			 */
+			doPolling: function(interval) {
+					var me = this;
+
+					me.pollInterval = interval;
+
+					if (me.pollId) {
+							clearTimeout(me.pollId);
+					}
+
+					me.pollId = Ext.defer(me.injectComponents, interval, me);
+			},
+
+			getPlaceholderEl: function(id) {
+					return Ext.get('ctemplate-' + id + '-' + this.id);
+			},
+
+			/* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
+			 * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
+			 * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
+			 * call this method directly as soon as the generated HTML is inserted into the DOM.
+			 */
+			injectComponents: function() {
+					var me = this,
+							ids = me.ids,
+							index = ids.length - 1,
+							id,
+							cmp,
+							placeholderEl;
+
+					// Iterate backwards because we remove some elements in the loop
+					for ( ; index >= 0 ; --index) {
+							id = ids[index];
+							cmp = Ext.getCmp(id);
+							placeholderEl = me.getPlaceholderEl(id);
+
+							if (me.renderComponent(cmp, placeholderEl) || !cmp) {
+									// Either we've successfully done the switch or the component has been destroyed
+									Ext.Array.splice(ids, index, 1);
+
+									if (placeholderEl) {
+											placeholderEl.remove();
+									}
+							}
+					}
+
+					if (ids.length) {
+							// Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
+							me.doPolling(me.pollInterval * 1.5);
+					}
+			},
+
+			// Override
+			overwrite: function(el) {
+					var dom,
+							firstChild,
+							ret;
+
+					/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+					 * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
+					 * but we can guard against the case where all updates come through this template.
+					 */
+					if (Ext.isIE) {
+							dom = Ext.getDom(el);
+							while (dom.firstChild) {
+									dom.removeChild(dom.firstChild);
+							}
+					}
+
+					ret = this.callParent(arguments);
+
+					// There's no guarantee this will succeed so we still need polling as well
+					this.injectComponents();
+
+					return ret;
+			},
+
+			renderComponent: function(cmp, placeholderEl) {
+					if (cmp && placeholderEl) {
+							var parent = placeholderEl.parent();
+
+							if (cmp.rendered) {
+									// Move a component that has been rendered previously
+									cmp.getEl().replace(placeholderEl);
+							}
+							else {
+									cmp.render(parent, placeholderEl);
+							}
+
+							if (Ext.isIE6) {
+									// Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
+									parent.repaint();
+							}
+
+							return true;
+					}
+
+					return false;
+			},
+
+			reset: function() {
+					var me = this;
+
+					// The ids of injected components that haven't yet been rendered
+					me.ids = [];
+
+					if (me.pollId) {
+							clearTimeout(me.pollId);
+							me.pollId = null;
+					}
 			}
-			record.beginEdit(); //only call store.AfterEdit at the very End 
-			if (!record.isEqual(value, startValue)) 
-					record.set(activeColumn.dataIndex, value); //dont call store.AfterEdit
+	}, function(ctemplate) {
+			var apply = function() {
+					var me = this,
+							args = Ext.Array.slice(arguments);
 
-			context.view.focusRow(context.rowIdx, 100);
-			me.fireEvent('edit', me, context); //dont call store.AfterEdit if record.set() is called in here
-			record.endEdit(); //now call store.AfterEdit!
-			me.editing = false;
-		}
-	}
-});
-                Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant believe Extjs cant do this
-	extend: 'Ext.view.Table',
-	alias: 'widget.scrolltableview',
-	
-	constructor: function(cfg) {
-		var me = this;
-		me.callParent(arguments);
-	},
-	
-	refresh: function() {
-		var me = this,
-			targetEl,
-			targetParent,
-			oldDisplay,
-			nextSibling,
-			dom,
-			records,
-			el = me.getEl(), //edit
-			scroll = el && el.getScrollTop();//edit
-			
-		if (!me.rendered || me.isDestroyed) return;
+					args[0] = me.copyValues(args[0]);
 
-		if (!me.hasListeners.beforerefresh || me.fireEvent('beforerefresh', me) !== false) {
-			targetEl = me.getTargetEl();
-			records = me.getViewRange();
-			dom = targetEl.dom;
-			if (!me.preserveScrollOnRefresh) {
-				targetParent = dom.parentNode;
-				oldDisplay = dom.style.display;
-				dom.style.display = 'none';
-				nextSibling = dom.nextSibling;
-				targetParent.removeChild(dom);
+					// As we're returning an HTML string/array we can't actually complete the injection here
+					me.doPolling(10);
+
+					return me.callParent(args);
+			};
+
+			// The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
+			if (ctemplate.prototype.applyOut) {
+					// 4.1+
+					ctemplate.override({
+							applyOut: apply
+					});
 			}
-			if (me.refreshCounter) me.clearViewEl();
 			else {
-				me.fixedNodes = targetEl.dom.childNodes.length;
-				me.refreshCounter = 1;
-			}
-			me.tpl.append(targetEl, me.collectData(records, me.all.startIndex));
+					// 4.0
+					ctemplate.override({
+							applyTemplate: apply
+					});
 
-			if (records.length < 1) {
-				if (!this.store.loading && (!me.deferEmptyText || me.hasFirstRefresh)) {
-					Ext.core.DomHelper.insertHtml('beforeEnd', targetEl.dom, me.emptyText);
-				}
-				me.all.clear();
-			} else {
-				me.collectNodes(targetEl.dom);
-				me.updateIndexes(0);
+					ctemplate.createAlias('apply', 'applyTemplate');
 			}
-			if (me.hasFirstRefresh) {
-				if (me.refreshSelmodelOnRefresh !== false) {
-					me.selModel.refresh();
-				} else {
-					me.selModel.pruneIf();
-				}
-			}
-			me.hasFirstRefresh = true;
+	});
 
-			if (!me.preserveScrollOnRefresh) {
-				targetParent.insertBefore(dom, nextSibling);
-				dom.style.display = oldDisplay;
-			}
+	/*!
+	 * Component Column
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/component-column
+	 */
+	Ext.define('Skirtle.grid.column.Component', {
+			alias: 'widget.componentcolumn',
+			extend: 'Ext.grid.column.Column',
+			requires: ['Skirtle.CTemplate'],
 
-			Ext.suspendLayouts();
-			this.refreshSize();
-			me.fireEvent('refresh', me);
-			Ext.resumeLayouts(true);
-			
-			if (!me.viewReady) {
-				me.viewReady = true;
-				me.fireEvent('viewready', me);
+			// Whether or not to automatically resize the components when the column resizes
+			autoWidthComponents: true,
+
+			// Whether or not to destroy components when they are removed from the DOM
+			componentGC: true,
+
+			// Override the superclass - this must always be true or odd things happen, especially in IE
+			hasCustomRenderer: true,
+
+			// The estimated size of the cell frame. This is updated once there is a cell where it can be measured
+			lastFrameWidth: 12,
+
+			/* Defer durations for updating the component width when a column resizes. Required when a component has an animated
+			 * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
+			 *
+			 * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
+			 */
+			widthUpdateDelay: [10, 400],
+
+			constructor: function(cfg) {
+					var me = this;
+
+					me.callParent(arguments);
+
+					// Array of component ids for both component queries and GC
+					me.compIds = [];
+
+					// We need a dataIndex, even if it doesn't correspond to a real field
+					me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
+
+					me.tpl = me.createTemplate(me.tpl);
+					me.renderer = me.createRenderer(me.renderer);
+
+					me.registerColumnListeners();
+			},
+
+			addRefOwner: function(child) {
+					var me = this,
+							fn = me.refOwnerFn || (me.refOwnerFn = function() {
+									return me;
+							});
+
+					if (me.extVersion < 40200) {
+							// Component queries for ancestors use getBubbleTarget in 4.1 ...
+							child.getBubbleTarget = fn;
+					}
+					else {
+							// ... and getRefOwner in 4.2+
+							child.getRefOwner = fn;
+					}
+			},
+
+			applyTemplate: function(data, value) {
+					if (Ext.isDefined(value)) {
+							data[this.dataIndex] = value;
+					}
+
+					return this.tpl.apply(data);
+			},
+
+			/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+			 * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
+			 * from the DOM just before the grid view is refreshed.
+			 */
+			beforeViewRefresh: function() {
+					if (Ext.isIE) {
+							var ids = this.compIds,
+									index = 0,
+									len = ids.length,
+									item,
+									el,
+									parentEl;
+
+							for ( ; index < len ; index++) {
+									if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
+											parentEl.removeChild(el);
+									}
+							}
+					}
+			},
+
+			calculateFrameWidth: function(component) {
+					var el = component.getEl(),
+							parentDiv = el && el.parent(),
+							// By default the TD has no padding but it is quite common to add some via a tdCls
+							parentTd = parentDiv && parentDiv.parent();
+
+					if (parentTd) {
+							// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
+							return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+					}
+			},
+
+			createRenderer: function(renderer) {
+					var me = this;
+
+					return function(value, p, record) {
+							var data = Ext.apply({}, record.data, record.getAssociatedData());
+
+							if (renderer) {
+									// Scope must be this, not me
+									value = renderer.apply(this, arguments);
+							}
+
+							// Process the value even with no renderer defined as the record may contain a component config
+							value = me.processValue(value);
+
+							return me.applyTemplate(data, value);
+					};
+			},
+
+			createTemplate: function(tpl) {
+					return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
+			},
+
+			destroyChild: function(child) {
+					child.destroy();
+			},
+
+			getRefItems: function(deep) {
+					var items = this.callParent([deep]),
+							ids = this.compIds,
+							index = 0,
+							len = ids.length,
+							item;
+
+					for ( ; index < len ; index++) {
+				item = Ext.getCmp(ids[index]);
+							if (item) {
+									items.push(item);
+
+									if (deep && item.getRefItems) {
+											items.push.apply(items, item.getRefItems(true));
+									}
+							}
+					}
+
+					return items;
+			},
+
+			onChildAfterRender: function(child) {
+					this.resizeChild(child);
+			},
+
+			onChildBoxReady: function(child) {
+					// Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
+					this.resizeChild(child, false);
+			},
+
+			onChildDestroy: function(child) {
+					Ext.Array.remove(this.compIds, child.getId());
+			},
+
+			onChildResize: function() {
+					this.redoScrollbars();
+			},
+
+			onColumnResize: function(column) {
+					column.resizeAll();
+			},
+
+			onColumnShow: function(column) {
+					column.resizeAll();
+			},
+
+			// This is called in IE 6/7 as the components can still be seen even when a column is hidden
+			onColumnVisibilityChange: function(column) {
+					var items = column.getRefItems(),
+							index = 0,
+							length = items.length,
+							visible = !column.isHidden();
+
+					// In practice this probably won't help but it shouldn't hurt either
+					if(Ext.suspendLayouts) Ext.suspendLayouts();
+
+					for ( ; index < length ; ++index) {
+							items[index].setVisible(visible);
+					}
+
+					if(Ext.resumeLayouts) Ext.resumeLayouts(true);
+			},
+
+			onDestroy: function() {
+					Ext.destroy(this.getRefItems());
+
+					this.callParent();
+			},
+
+			// Override
+			onRender: function() {
+					this.registerViewListeners();
+					this.callParent(arguments);
+			},
+
+			// View has changed, may be a full refresh or just a single row
+			onViewChange: function() {
+					var me = this,
+							tpl = me.tpl;
+
+					// Batch the resizing of child components until after they've all been injected
+					me.suspendResizing();
+
+					if (tpl.isCTemplate) {
+							// No need to wait for the polling, the sooner we inject the less painful it is
+							tpl.injectComponents();
+
+							// If the template picked up other components in the data we can just ignore them, they're not for us
+							tpl.reset();
+					}
+
+					// A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
+					me.redoScrollbars();
+
+					me.resumeResizing();
+					
+					me.performGC();
+			},
+
+			// Component GC, try to stop components leaking
+			performGC: function() {
+					var compIds = this.compIds,
+							index = compIds.length - 1,
+							comp,
+							el;
+
+					for ( ; index >= 0 ; --index) {
+							// Could just assume that the component id is the el id but that seems risky
+							comp = Ext.getCmp(compIds[index]);
+							el = comp && comp.getEl();
+
+							if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
+									// The component is no longer in the DOM
+									if (comp && !comp.isDestroyed) {
+											comp.destroy();
+									}
+							}
+					}
+			},
+
+			processValue: function(value) {
+					var me = this,
+							compIds = me.compIds,
+							id, initialWidth, dom, parent;
+
+					if (Ext.isObject(value) && !value.isComponent && value.xtype) {
+							// Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
+							value = Ext.widget(value.xtype, value);
+					}
+
+					if (value && value.isComponent) {
+							id = value.getId();
+
+							// When the view is refreshed the renderer could return a component that's already in the list
+							if (!Ext.Array.contains(compIds, id)) {
+									compIds.push(id);
+							}
+
+							me.addRefOwner(value);
+							me.registerListeners(value);
+
+							if (value.rendered) {
+									/* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
+									 * The problem occurs when a record value is changed and the components in that same row are being
+									 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
+									 * one row. Unfortunately this nukes the existing components so we need to remove them first.
+									 */
+									if (Ext.isIE) {
+											// TODO: Should this be promoted to CTemplate?
+											dom = value.el.dom;
+											parent = dom.parentNode;
+
+											if (parent) {
+													if (me.extVersion === 40101) {
+															// Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
+															Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
+													}
+
+													// TODO: Removing the element like this could fall foul of Element GC
+													parent.removeChild(dom);
+											}
+									}
+							}
+							else if (me.autoWidthComponents) {
+									/* Set the width to a 'best guess' before the component is rendered to ensure that the component's
+									 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
+									 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
+									 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
+									 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
+									 */
+									initialWidth = me.getWidth() - me.lastFrameWidth;
+
+									// Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
+									initialWidth = initialWidth > 4 ? initialWidth : 4;
+
+									value.setWidth(initialWidth);
+							}
+
+							// Part of the same IE 6/7 hack as onColumnVisibilityChange
+							if ((Ext.isIE6 || Ext.isIE7) && me.isHidden()) {
+									value.hide();
+							}
+					}
+
+					return value;
+			},
+
+			redoScrollbars: function() {
+					var me = this,
+							grid = me.up('tablepanel');
+
+					if (grid) {
+							// The presence of a resizeQueue signifies that we are currently suspended
+							if (me.resizeQueue) {
+									me.redoScrollbarsRequired = true;
+									return;
+							}
+
+							// After components are injected the need for a grid scrollbar may need redetermining
+							if (me.extVersion < 40100) {
+									// 4.0
+									grid.invalidateScroller();
+									grid.determineScrollbars();
+							}
+							else {
+									// 4.1+
+									grid.doLayout();
+							}
+					}
+			},
+
+			registerColumnListeners: function() {
+					var me = this;
+
+					if (me.autoWidthComponents) {
+							// Need to resize children when the column resizes
+							me.on('resize', me.onColumnResize);
+
+							// Need to resize children when the column is shown as they can't be resized correctly while it is hidden
+							me.on('show', me.onColumnShow);
+					}
+
+					if (Ext.isIE6 || Ext.isIE7) {
+							me.on({
+									hide: me.onColumnVisibilityChange,
+									show: me.onColumnVisibilityChange
+							});
+					}
+			},
+
+			registerListeners: function(component) {
+					var me = this;
+
+					// Remove the component from the child list when it is destroyed
+					component.on('destroy', me.onChildDestroy, me);
+
+					if (me.autoWidthComponents) {
+							// Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
+							component.on('afterrender', me.onChildAfterRender, me, {single: true});
+
+							// With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
+							if (me.extVersion >= 40100) {
+									component.on('boxready', me.onChildBoxReady, me, {single: true});
+							}
+					}
+
+					// Need to redo scrollbars when a child resizes
+					component.on('resize', me.onChildResize, me);
+			},
+
+			registerViewListeners: function() {
+					var me = this,
+							view = me.up('tablepanel').getView();
+
+					me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+					me.mon(view, 'refresh', me.onViewChange, me);
+					me.mon(view, 'itemupdate', me.onViewChange, me);
+					me.mon(view, 'itemadd', me.onViewChange, me);
+					me.mon(view, 'itemremove', me.onViewChange, me);
+			},
+
+			resizeAll: function() {
+					var me = this;
+
+					me.suspendResizing();
+					me.resizeQueue = me.getRefItems();
+					me.resumeResizing();
+			},
+
+			resizeChild: function(component, defer) {
+					var me = this,
+							frameWidth,
+							newWidth,
+							oldWidth,
+							resizeQueue;
+
+					if (me.resizingSuspended) {
+							resizeQueue = me.resizeQueue;
+
+							if (!Ext.Array.contains(resizeQueue, component)) {
+									resizeQueue.push(component);
+							}
+
+							return;
+					}
+
+					frameWidth = me.calculateFrameWidth(component);
+
+					// TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
+					if (Ext.isNumber(frameWidth)) {
+							newWidth = me.getWidth() - frameWidth;
+							oldWidth = component.getWidth();
+
+							// Returns true if a resize actually happened
+							if (me.setChildWidth(component, newWidth, oldWidth)) {
+									// Avoid an infinite resizing loop, deferring will only happen once
+									if (defer !== false) {
+											// Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
+											Ext.each(me.widthUpdateDelay, function(delay) {
+													Ext.defer(me.resizeChild, delay, me, [component, false]);
+											});
+									}
+							}
+					}
+			},
+
+			resumeResizing: function() {
+					var me = this,
+							index = 0,
+							resizeQueue = me.resizeQueue,
+							len = resizeQueue.length;
+
+					if (!--me.resizingSuspended) {
+							for ( ; index < len ; ++index) {
+									me.resizeChild(resizeQueue[index]);
+							}
+
+							me.resizeQueue = null;
+
+							if (me.redoScrollbarsRequired) {
+									me.redoScrollbars();
+							}
+					}
+			},
+
+			setChildWidth: function(component, newWidth, oldWidth) {
+					if (oldWidth === newWidth) {
+							return false;
+					}
+
+					component.setWidth(newWidth);
+
+					return true;
+			},
+
+			suspendResizing: function() {
+					var me = this;
+
+					me.resizingSuspended = (me.resizingSuspended || 0) + 1;
+
+					if (!me.resizeQueue) {
+							me.resizeQueue = [];
+					}
 			}
-		}
+	}, function(cls) {
+			var proto = cls.prototype,
+					version = Ext.getVersion();
+
+			// ExtJS version detection
+			proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch();
+
+			// 4.1.1 initially reported its version as 4.1.0
+			if (Ext.Element.prototype.syncContent && version.toString() === '4.1.0') {
+					proto.extVersion = 40101;
+			}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+		(although there is some arrow key scrolling bug) 
+	*/
+	Ext.define('Intel.form.field.ComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		
-		if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
-	},
-	
-	onRemove : function(ds, records, indexes) {
-		var me = this,
-			fireItemRemove = me.hasListeners.itemremove,
-			i,
-			record,
-			index,
-			el = me.getEl(),//edit
-			scroll = el && el.getScrollTop();//edit
-
-		if (me.all.getCount()) {
-			if (me.dataSource.getCount() === 0) {
-				if (fireItemRemove) {
-					for (i = indexes.length - 1; i >= 0; --i) {
-						me.fireEvent('itemremove', records[i], indexes[i]);
+		constructor: function(options) {
+			options = options || {};
+			options = Ext.merge({
+				enableKeyEvents:true,
+				queryMode:'local',
+				ignoreNoChange:true,
+				allowBlank:false,
+				listeners: {
+					keyup: function(a,b){
+						if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+						var combo = this;
+						combo.store.clearFilter();
+						combo.store.filterBy(function(item){
+							return item.data[combo.displayField].match(new RegExp(combo.getRawValue(), 'i')) !== null;
+						});
+					},
+					focus: function(combo) {
+						combo.store.clearFilter();
+						combo.setValue('');
+						combo.expand();
 					}
 				}
-				//me.refresh();
-			} else {
-				for (i = indexes.length - 1; i >= 0; --i) {
-					record = records[i];
-					index = indexes[i];
-					me.doRemove(record, index);
+			}, options);
+			this.callParent([options]);
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.form.field.FixedComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
+		
+		constructor: function(options) {
+			options = options || {};
+			options = Ext.merge({
+				editable: false,	
+				allowBlank:false,
+				queryMode:'local',
+				listeners: {
+					focus: function(combo) {
+						combo.setValue('');
+						combo.expand();
+					}
+				}
+			}, options);
+			this.callParent([options]);
+		}	
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** YOU MUST PASS IT 2 THINGS IN THE CONFIG
+		1: releases (array of release records)
+		2: currentRelease (what to show as initial value
+	*/
+	Ext.define('Intel.form.field.ReleasePicker', {
+		extend: 'Intel.form.field.FixedComboBox',
+		alias: ['widget.intelreleasepicker'],
+		
+		constructor: function(options){
+			if(!options.releases || !options.currentRelease) return;
+			
+			options.displayField = 'Name';
+			options.value = options.currentRelease.data.Name;
+			options.store = Ext.create('Ext.data.Store', {
+				fields: ['Name'],
+				sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
+				data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
+			});
+			
+			options.fieldLabel = options.fieldLabel || 'Release:';
+			options.editable = options.editable || false;
+			options.width = options.width || 240;
+			options.labelWidth = options.labelWidth || 50;
+			
+			this.callParent([options]); //now that we have the extra stuff added
+		}
+	});
+}());
+
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('IntelTextarea', {
+		extend: 'Ext.form.field.TextArea',
+		alias: ['widget.inteltextarea'],
+		
+		grow:true,
+		growMin:20,
+		growMax:160,
+		maxLength:150,
+		enforceMaxLength:true,
+		enterIsSpecial:true
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	Ext.define('intel.grid.column.Component.', {
+		alias: 'widget.fastgridcolumn',
+		extend: 'Skirtle.grid.column.Component',
+
+		autoWidthComponents: false,
+
+		componentGC: true,
+
+		hasCustomRenderer: true,
+
+		lastFrameWidth: 12,
+		
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		registerViewListeners: function() {
+			var me = this,
+				view = me.up('tablepanel').getView();
+
+			me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+			me.mon(view, 'refresh', me.onViewChange, me);
+			//me.mon(view, 'itemupdate', me.onViewChange, me); //why are these necessary...
+			//me.mon(view, 'itemadd', me.onViewChange, me);
+			//me.mon(view, 'itemremove', me.onViewChange, me);
+		},
+		onViewChange: function() {
+			var me = this, tpl = me.tpl;
+			me.suspendResizing();
+			if (tpl.isCTemplate) {
+					tpl.injectComponents();
+					tpl.reset();
+			}
+			//me.redoScrollbars();
+			me.resumeResizing();
+			me.performGC();
+		},
+		
+		resumeResizing: function() {
+			var me = this,
+				index = 0,
+				resizeQueue = me.resizeQueue,
+				len = resizeQueue.length;
+			if (!--me.resizingSuspended) {
+				for ( ; index < len ; ++index) {
+						me.resizeChild(resizeQueue[index]);
+				}
+				me.resizeQueue = null;
+				//if (me.redoScrollbarsRequired) {
+				//    me.redoScrollbars();
+				//}
+			}
+		},
+		onChildResize: function() {
+			//this.redoScrollbars();
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	/**
+		the regular proxy calls record.commit() and later on, datarefresh event is called. since these both cause a rerender, 
+		we make the record edits SILENT, so only the datarefresh actually rerender the page
+	*/
+
+	Ext.define('Intel.data.proxy.SessionStorage', {
+		extend: 'Ext.data.proxy.SessionStorage',
+		alias: 'proxy.fastsessionproxy',
+
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		
+		create: function(operation, callback, scope) {
+			var me = this,
+				records = operation.records,
+				length = records.length,
+				ids = me.getIds(),
+				id, record, i;
+
+			operation.setStarted();
+			if(me.isHierarchical === undefined) {
+					
+					
+				me.isHierarchical = !!records[0].isNode;
+				if(me.isHierarchical) {
+					me.getStorageObject().setItem(me.getTreeKey(), true);
+				}
+			}
+			for (i = 0; i < length; i++) {
+				record = records[i];
+
+				if (record.phantom) {
+					record.phantom = false;
+					id = me.getNextId();
+				} else {
+					id = record.getId();
+				}
+				
+				record.beginEdit();
+				me.setRecord(record, id);
+				record.endEdit(true); //SILENT!!!
+				record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
+				
+				ids.push(id);
+			}
+			me.setIds(ids);
+
+			operation.setCompleted();
+			operation.setSuccessful();
+
+			if (typeof callback == 'function') {
+				callback.call(scope || me, operation);
+			}
+		},
+		
+		update: function(operation, callback, scope) {
+			var records = operation.records,
+				length = records.length,
+				ids = this.getIds(),
+				record, id, i;
+				
+			operation.setStarted();
+			for (i = 0; i < length; i++) {
+				record = records[i];
+				this.setRecord(record);
+			
+				record.commit(true); //SILENT, dataview refresh will get called anyways!!!!!!!!!!!
+
+				id = record.getId();
+				if (id !== undefined && Ext.Array.indexOf(ids, id) == -1) ids.push(id);
+			}
+			this.setIds(ids);
+
+			operation.setCompleted();
+			operation.setSuccessful();
+			if (typeof callback == 'function') callback.call(scope || this, operation);
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	Ext.define('Intel.data.FastStore', {  //doesn't redundantly call fireEvent... me.sync() calls that downstream 
+		extend: 'Ext.data.Store',
+		alias: 'store.faststore',
+
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		
+		afterEdit: function(record, modifiedFieldNames) {
+			var me = this, i, shouldSync;
+			if (me.autoSync && !me.autoSyncSuspended) {
+				for (i = modifiedFieldNames.length; i--;) {
+					if (record.fields.get(modifiedFieldNames[i]).persist) {
+						me.sync();  //all rendering changes made here
+						break;
+					}
+				}
+			}
+			me.onUpdate(record, Ext.data.Model.EDIT, modifiedFieldNames);
+			//me.fireEvent('update', me, record, Ext.data.Model.EDIT, modifiedFieldNames); //redundant with me.sync()
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	/**
+		Cell editing has redundant calls to store.afterEdit, which in turn renders the page multiple times per edit. 
+		fastcellediting solves this by wrapping all the calls in beginEdit and endEdit, so store.afterEdit is called only once
+	*/
+	Ext.define('Intel.grid.plugin.CellEditing', {
+		alias: 'plugin.fastcellediting',
+		extend: 'Ext.grid.plugin.CellEditing',
+
+		triggerEvent:'cellclick',
+		
+		onEditComplete : function(ed, value, startValue) {
+			var me = this,
+				activeColumn = me.getActiveColumn(),
+				context = me.context,
+				record;
+			if (activeColumn) {
+				record = context.record;
+
+				me.setActiveEditor(null);
+				me.setActiveColumn(null);
+				me.setActiveRecord(null);
+
+				context.value = value;
+				if (!me.validateEdit()) {
+						me.editing = false;
+						return;
+				}
+				record.beginEdit(); //only call store.AfterEdit at the very End 
+				if (!record.isEqual(value, startValue)) 
+						record.set(activeColumn.dataIndex, value); //dont call store.AfterEdit
+
+				context.view.focusRow(context.rowIdx, 100);
+				me.fireEvent('edit', me, context); //dont call store.AfterEdit if record.set() is called in here
+				record.endEdit(); //now call store.AfterEdit!
+				me.editing = false;
+			}
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant believe Extjs cant do this
+		extend: 'Ext.view.Table',
+		alias: 'widget.scrolltableview',
+		
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		
+		refresh: function() {
+			var me = this,
+				targetEl,
+				targetParent,
+				oldDisplay,
+				nextSibling,
+				dom,
+				records,
+				el = me.getEl(), //edit
+				scroll = el && el.getScrollTop();//edit
+				
+			if (!me.rendered || me.isDestroyed) return;
+
+			if (!me.hasListeners.beforerefresh || me.fireEvent('beforerefresh', me) !== false) {
+				targetEl = me.getTargetEl();
+				records = me.getViewRange();
+				dom = targetEl.dom;
+				if (!me.preserveScrollOnRefresh) {
+					targetParent = dom.parentNode;
+					oldDisplay = dom.style.display;
+					dom.style.display = 'none';
+					nextSibling = dom.nextSibling;
+					targetParent.removeChild(dom);
+				}
+				if (me.refreshCounter) me.clearViewEl();
+				else {
+					me.fixedNodes = targetEl.dom.childNodes.length;
+					me.refreshCounter = 1;
+				}
+				me.tpl.append(targetEl, me.collectData(records, me.all.startIndex));
+
+				if (records.length < 1) {
+					if (!this.store.loading && (!me.deferEmptyText || me.hasFirstRefresh)) {
+						Ext.core.DomHelper.insertHtml('beforeEnd', targetEl.dom, me.emptyText);
+					}
+					me.all.clear();
+				} else {
+					me.collectNodes(targetEl.dom);
+					me.updateIndexes(0);
+				}
+				if (me.hasFirstRefresh) {
+					if (me.refreshSelmodelOnRefresh !== false) {
+						me.selModel.refresh();
+					} else {
+						me.selModel.pruneIf();
+					}
+				}
+				me.hasFirstRefresh = true;
+
+				if (!me.preserveScrollOnRefresh) {
+					targetParent.insertBefore(dom, nextSibling);
+					dom.style.display = oldDisplay;
+				}
+
+				Ext.suspendLayouts();
+				this.refreshSize();
+				me.fireEvent('refresh', me);
+				Ext.resumeLayouts(true);
+				
+				if (!me.viewReady) {
+					me.viewReady = true;
+					me.fireEvent('viewready', me);
+				}
+			}
+			
+			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+		},
+		
+		onRemove : function(ds, records, indexes) {
+			var me = this,
+				fireItemRemove = me.hasListeners.itemremove,
+				i,
+				record,
+				index,
+				el = me.getEl(),//edit
+				scroll = el && el.getScrollTop();//edit
+
+			if (me.all.getCount()) {
+				if (me.dataSource.getCount() === 0) {
 					if (fireItemRemove) {
-						me.fireEvent('itemremove', record, index);
+						for (i = indexes.length - 1; i >= 0; --i) {
+							me.fireEvent('itemremove', records[i], indexes[i]);
+						}
+					}
+					//me.refresh();
+				} else {
+					for (i = indexes.length - 1; i >= 0; --i) {
+						record = records[i];
+						index = indexes[i];
+						me.doRemove(record, index);
+						if (fireItemRemove) {
+							me.fireEvent('itemremove', record, index);
+						}
+					}
+					me.updateIndexes(indexes[0]);
+				}
+				this.refreshSize();
+				if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+			}
+		},
+		
+		onUpdate : function(ds, record){
+			var me = this,
+				index,
+				node,
+				el = me.getEl(),//edit
+				scroll = el && el.getScrollTop();//edit
+
+			if (me.viewReady) {
+				index = me.dataSource.indexOf(record);
+				if (index > -1) {
+					node = me.bufferRender([record], index)[0];
+					if (me.getNode(record)) {
+						me.all.replaceElement(index, node, true);
+						me.updateIndexes(index, index);
+						me.selModel.onUpdate(record);
+						if (me.hasListeners.itemupdate) {
+							me.fireEvent('itemupdate', record, index, node);
+						}
+						return node;
 					}
 				}
-				me.updateIndexes(indexes[0]);
+				if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
 			}
-			this.refreshSize();
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
-		}
-	},
-	
-	onUpdate : function(ds, record){
-		var me = this,
-			index,
-			node,
-			el = me.getEl(),//edit
-			scroll = el && el.getScrollTop();//edit
+		},
+		
+		onAdd : function(store, records, index) {
+			var me = this,
+				nodes,
+				el = me.getEl(),
+				scroll = el && el.getScrollTop();
 
-		if (me.viewReady) {
-			index = me.dataSource.indexOf(record);
-			if (index > -1) {
-				node = me.bufferRender([record], index)[0];
-				if (me.getNode(record)) {
-					me.all.replaceElement(index, node, true);
-					me.updateIndexes(index, index);
-					me.selModel.onUpdate(record);
-					if (me.hasListeners.itemupdate) {
-						me.fireEvent('itemupdate', record, index, node);
+			if (me.rendered) {
+				if (me.all.getCount() === 0) {
+					me.refresh();
+					nodes = me.all.slice();
+				} else {
+					nodes = me.doAdd(records, index);
+					if (me.refreshSelmodelOnRefresh !== false) {
+						me.selModel.refresh();
 					}
-					return node;
+					me.updateIndexes(index);
+					//me.refreshSize(); //already being refreshed by store.sync()
 				}
-			}
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
-		}
-	},
-	
-	onAdd : function(store, records, index) {
-		var me = this,
-			nodes,
-			el = me.getEl(),
-			scroll = el && el.getScrollTop();
 
-		if (me.rendered) {
-			if (me.all.getCount() === 0) {
-				me.refresh();
-				nodes = me.all.slice();
-			} else {
-				nodes = me.doAdd(records, index);
-				if (me.refreshSelmodelOnRefresh !== false) {
-					me.selModel.refresh();
+				if (me.hasListeners.itemadd) {
+					me.fireEvent('itemadd', records, index, nodes);
 				}
-				me.updateIndexes(index);
-				//me.refreshSize(); //already being refreshed by store.sync()
+				if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
 			}
+		},
 
-			if (me.hasListeners.itemadd) {
-				me.fireEvent('itemadd', records, index, nodes);
+		scrollRowIntoView: function(row) {
+			if(row===0){										//this is just added because its a LOT faster and the main use case
+				this.getEl().setScrollTop(0);
+				return;
 			}
-			if(scroll && me.preserveScrollOnRefresh) el.setScrollTop(scroll);//edit
+			row = this.getNode(row, true);
+			if (row) {
+				Ext.fly(row).scrollIntoView(this.el, false);
+			}
 		}
-	},
-
-	scrollRowIntoView: function(row) {
-		if(row===0){										//this is just added because its a LOT faster and the main use case
-			this.getEl().setScrollTop(0);
-			return;
-		}
-		row = this.getNode(row, true);
-		if (row) {
-			Ext.fly(row).scrollIntoView(this.el, false);
-		}
-	}
-});
+	});
+}());
                 /** this app requires the following custom fields for your workspace:
 	c_TeamCommits on PortfolioItem/Feature, (type: 32 kB)
 	c_Risks on PortfolioItem/Feature, (type: 32 kB)
@@ -2593,24 +2720,6 @@ Ext.define('ProgramBoard', {
 				me.IterationStore = iterationStore; 
 			});
 	},
-	_loadUserStoryFilter: function(){
-		/** NOTE WE ARE ONLY PULLING USER STORIES FROM THIS RELEASE!
-			the implications are this: if on team has no user stories for a release yet. than no other team can depend on them 
-			for that release! So each predecessor and successor team must have at least one user story in the release before a dependency
-			can be established. Before, the predecessor team just needed to have 1 user story total from all time */
-		var me=this;
-		return Ext.create('Rally.data.wsapi.Filter', {
-			property:'Project',
-			value: me.ProjectRecord.data._ref
-		}).and(
-			Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-				property:'Release.Name',
-				value: me.ReleaseRecord.data.Name
-			}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-				property:'Feature.Release.Name',
-				value: me.ReleaseRecord.data.Name
-			})));
-	},	
 	_loadUserStories: function(){	
 		var me=this, 
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
@@ -2623,7 +2732,10 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[me._loadUserStoryFilter()]
+				filters:[
+					Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: me.ProjectRecord.data._ref }).and(
+					me._getUserStoryInReleaseTimeFrameFilter(me.ReleaseRecord))
+				]
 			});
 		return me._reloadStore(userStoryStore)
 			.then(function(userStoryStore){ 
@@ -3359,7 +3471,7 @@ Ext.define('ProgramBoard', {
 			if(!permissions.isProjectEditor(project)) 
 				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
 			else {
-				promises.push(me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+				promises.push(me._loadRandomUserStoryFromReleaseTimeframe(project.data._ref, me.ReleaseRecord).then(function(us){
 					if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 					else {
 						return Q(function(){ 
@@ -3411,7 +3523,7 @@ Ext.define('ProgramBoard', {
 						Edited: false
 					};
 					if(!us){
-						return me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+						return me._loadRandomUserStoryFromReleaseTimeframe(project.data._ref, me.ReleaseRecord).then(function(us){
 							if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 							else {
 								return Q(function(){ // got deleted from user story
@@ -3513,13 +3625,12 @@ Ext.define('ProgramBoard', {
 	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
-			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
-			appID: me.getAppId(),
-      filterByName:me._prefName+ uid,
+			filterByUser:true,
+      filterByName: me._prefName,
 			success: function(prefs) {
-				var appPrefs = prefs[me._prefName + uid];
+				var appPrefs = prefs[me._prefName];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}, refresh:30};}
 				console.log('loaded prefs', appPrefs);
@@ -3531,13 +3642,12 @@ Ext.define('ProgramBoard', {
 	},
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
-			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
-    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    s[me._prefName] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
-			appID: this.getAppId(),
+			filterByUser:true,
 			settings: s,
 			success: deferred.resolve,
 			failure: deferred.reject

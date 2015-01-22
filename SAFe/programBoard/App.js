@@ -198,24 +198,6 @@ Ext.define('ProgramBoard', {
 				me.IterationStore = iterationStore; 
 			});
 	},
-	_loadUserStoryFilter: function(){
-		/** NOTE WE ARE ONLY PULLING USER STORIES FROM THIS RELEASE!
-			the implications are this: if on team has no user stories for a release yet. than no other team can depend on them 
-			for that release! So each predecessor and successor team must have at least one user story in the release before a dependency
-			can be established. Before, the predecessor team just needed to have 1 user story total from all time */
-		var me=this;
-		return Ext.create('Rally.data.wsapi.Filter', {
-			property:'Project',
-			value: me.ProjectRecord.data._ref
-		}).and(
-			Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-				property:'Release.Name',
-				value: me.ReleaseRecord.data.Name
-			}).or(Ext.create('Rally.data.wsapi.Filter', { //to get release user stories
-				property:'Feature.Release.Name',
-				value: me.ReleaseRecord.data.Name
-			})));
-	},	
 	_loadUserStories: function(){	
 		var me=this, 
 			userStoryStore = Ext.create('Rally.data.wsapi.Store',{
@@ -228,7 +210,10 @@ Ext.define('ProgramBoard', {
 					workspace: this.getContext().getWorkspace()._ref,
 					project: null
 				},
-				filters:[me._loadUserStoryFilter()]
+				filters:[
+					Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: me.ProjectRecord.data._ref }).and(
+					me._getUserStoryInReleaseTimeFrameFilter(me.ReleaseRecord))
+				]
 			});
 		return me._reloadStore(userStoryStore)
 			.then(function(userStoryStore){ 
@@ -964,7 +949,7 @@ Ext.define('ProgramBoard', {
 			if(!permissions.isProjectEditor(project)) 
 				promises.push(Q.reject('You lack permissions to modify project: ' + project.data.Name));
 			else {
-				promises.push(me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+				promises.push(me._loadRandomUserStoryFromReleaseTimeframe(project.data._ref, me.ReleaseRecord).then(function(us){
 					if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 					else {
 						return Q(function(){ 
@@ -1016,7 +1001,7 @@ Ext.define('ProgramBoard', {
 						Edited: false
 					};
 					if(!us){
-						return me._loadRandomUserStoryFromRelease(project.data._ref, me.ReleaseRecord.data.Name).then(function(us){
+						return me._loadRandomUserStoryFromReleaseTimeframe(project.data._ref, me.ReleaseRecord).then(function(us){
 							if(!us) return Q.reject('Project ' + project.data.Name + ' has no user stories in this Release, cannot continue');
 							else {
 								return Q(function(){ // got deleted from user story
@@ -1118,13 +1103,12 @@ Ext.define('ProgramBoard', {
 	/************************************************** Preferences FUNCTIONS ***************************************************/	
 	_loadPreferences: function(){ //parse all settings too
 		var me=this,
-			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		Rally.data.PreferenceManager.load({
-			appID: me.getAppId(),
-      filterByName:me._prefName+ uid,
+			filterByUser:true,
+      filterByName: me._prefName,
 			success: function(prefs) {
-				var appPrefs = prefs[me._prefName + uid];
+				var appPrefs = prefs[me._prefName];
 				try{ appPrefs = JSON.parse(appPrefs); }
 				catch(e){ appPrefs = { projs:{}, refresh:30};}
 				console.log('loaded prefs', appPrefs);
@@ -1136,13 +1120,12 @@ Ext.define('ProgramBoard', {
 	},
 	_savePreferences: function(prefs){ // stringify and save only the updated settings
 		var me=this, s = {}, 
-			uid = me.getContext().getUser().ObjectID,
 			deferred = Q.defer();
 		prefs = {projs: prefs.projs, refresh:prefs.refresh};
-    s[me._prefName + uid] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
+    s[me._prefName] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
     console.log('saving prefs', prefs);
 		Rally.data.PreferenceManager.update({
-			appID: this.getAppId(),
+			filterByUser:true,
 			settings: s,
 			success: deferred.resolve,
 			failure: deferred.reject

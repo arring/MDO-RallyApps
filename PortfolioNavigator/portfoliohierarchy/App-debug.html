@@ -11,11 +11,8 @@
         // I am keeping the extra , in there to simplify my code. If someone is actually using an old version of IE to make an app let me know.
         Rally.loadScripts(
                 [
-                      "../../lib/de-iframer.js",
                       "../../lib/intel-rally-app.js",
                       "../../lib/data/intel-models.js",
-                      "../../lib/mixins/window-listener.js",
-                      "../../lib/mixins/iframe-resize.js",
                       "../../lib/mixins/pretty-alert.js",
                       "../../lib/mixins/release-query.js",
                       "../../lib/mixins/async-queue.js",
@@ -27,7 +24,7 @@
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('Rally.apps.portfoliohierarchy.PortfolioHierarchyApp', {
+            Rally.launchApp('Intel.portfolioHierarchy', {
                 name:"Portfolio Hierarchy"
             });
         }, true);
