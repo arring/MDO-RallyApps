@@ -2,7 +2,7 @@
 	var Ext = window.Ext4 || window.Ext;
 	
 	/************************** PRODUCTION *****************************/
-	//console = { log: function(){} };	////DEBUG!!!	
+	console = { log: function(){} };	////DEBUG!!!	
 
 	/************************** Sanity Dashboard *****************************/
 	Ext.define('SanityDashboard', {

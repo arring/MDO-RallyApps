@@ -49,11 +49,11 @@
 	border-bottom:1px solid black;
 	border-bottom-left-radius:5px;
 	border-top-left-radius:5px; }
-.orange-bg-cell { background-color:#FAA43A !important; }
-.green-bg-cell { background-color:#60BD68 !important; }
-.pink-bg-cell { background-color:#F17CB0 !important; }
-.brown-bg-cell { background-color:#B2912F !important; }
-.yellow-bg-cell { background-color:#DECF3F !important; }
+.green-bg-cell { background-color:#2ECC40 !important; }
+.aqua-bg-cell { background-color:#7FDBFF !important; }
+.silver-bg-cell { background-color:#DDDDDD !important; }
+.orange-bg-cell { background-color:#FF851B !important; }
+.lime-bg-cell { background-color:#01FF70 !important; }
 .sanity-num-cell { 
 	text-align:center;
 	border:1px solid black; }
