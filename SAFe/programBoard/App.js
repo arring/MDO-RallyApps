@@ -1,6 +1,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
+	var RALLY_MAX_STRING_SIZE = 32768;
+	var console = { log: function(){} }; 
+	
 	/** this app requires the following custom fields for your workspace:
 		c_TeamCommits on PortfolioItem/Feature, (type: 32 kB)
 		c_Risks on PortfolioItem/Feature, (type: 32 kB)
@@ -66,12 +69,6 @@
 		ALSO, this app depends on a specific naming convention for your ARTs and Scrums within them, otherwise the releases wont load correctly
 	*/
 
-	RALLY_MAX_STRING_SIZE = 32768;
-
-	/********************* PRODUCTION *****************/
-	console = { log: function(){} }; // DEBUG!!!!		
-
-	/********************* END PRODUCTION *****************/
 	Ext.define('ProgramBoard', {
 		extend: 'IntelRallyApp',
 		mixins:[
@@ -80,9 +77,9 @@
 			'IframeResize',
 			'IntelWorkweek',
 			'ReleaseQuery',
-			'AsyncQueue'
+			'AsyncQueue',
+			'UserAppPreferences'
 		],
-		_prefName: 'intel-program-board',
 		
 		layout: {
 			type:'vbox',
@@ -135,6 +132,7 @@
 			}]
 		}],
 		minWidth:910, //thats when rally adds a horizontal scrollbar for a pagewide app
+		_prefName: 'intel-SAFe-apps-preference',
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadFeatures: function(){ 
@@ -1102,40 +1100,7 @@
 				});
 			}
 		},
-		
-		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){ //parse all settings too
-			var me=this,
-				deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser:true,
-				filterByName: me._prefName,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}, refresh:30};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){ // stringify and save only the updated settings
-			var me=this, s = {}, 
-				deferred = Q.defer();
-			prefs = {projs: prefs.projs, refresh:prefs.refresh};
-			s[me._prefName] = JSON.stringify(prefs); //release: objectID, refresh: (off, 10, 15, 30, 60, 120)
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				filterByUser:true,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		
+
 		/************************************************** MISC HELPERS ***************************************************/		
 		_htmlEscape: function(str) {
 			return String(str)

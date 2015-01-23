@@ -1,8 +1,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/************************** PRODUCTION *****************************/
-	console = { log: function(){} };	////DEBUG!!!	
+	var console = { log: function(){} };
 
 	/************************** Sanity Dashboard *****************************/
 	Ext.define('SanityDashboard', {
@@ -13,7 +12,8 @@
 			'PrettyAlert',
 			'IframeResize',
 			'IntelWorkweek',
-			'ReleaseQuery'
+			'ReleaseQuery',
+			'UserAppPreferences'
 		],	
 		minWidth:1100,
 		items:[{ 
@@ -51,7 +51,7 @@
 				cls:'grids-right'
 			}]
 		}],
-		_prefName: 'sanity-dashboard-pref',
+		_prefName: 'intel-SAFe-apps-preference',
 		_colors: [
 			'#AAAAAA', //GRAY
 			'#2ECC40', //GREEN
@@ -142,38 +142,7 @@
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
 		},
-		
-		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser: true,
-				filterByName: me._prefName,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){
-			var me=this, s = {}, deferred = Q.defer();
-			prefs = {projs: prefs.projs};
-			s[me._prefName] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				filterByUser: true,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-				
+
 		/********************************************************** tooltip functions **************************************/
 		_clearToolTip: function(){
 			var me = this;

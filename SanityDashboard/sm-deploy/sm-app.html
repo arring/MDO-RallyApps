@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Sanity_Dashboard501253";
+	var smAppID = "Sanity_Dashboard885913";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -105,7 +105,8 @@
 			
 			//for the iframe toolbar, which queries into the iframe
 			window.Rally = {};
-			Rally.getApp = function(){ return window.parent.Rally.getApp(smAppID); };
+			window.Rally.getApp = function(){ return window.parent.Rally.getApp(smAppID); };
+			window.Rally.getSdkInfo = function(){ return window.parent.Rally.getSdkInfo(smAppID); };
 			
 			//add new scripts, links and styles to parent window
 			addScripts(parentDoc, parentHead, iframeScripts, function(){ 
@@ -123,10 +124,15 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
-							delete window.Highcharts;
-delete window.HighchartsAdapter;						}
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	//i bet your wondering what this file is used for. its used for sanity dashboard when built with sm-rab
+	delete window.Highcharts;
+	delete window.HighchartsAdapter;
+}());						}
 					}());
 				</script>
 			
@@ -146,12 +152,416 @@ delete window.HighchartsAdapter;						}
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Sanity_Dashboard501253";	
+					var smAppID = "Sanity_Dashboard885913";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
-	
+
 	if(Ext.ClassManager.get('Rally.sdk')) return; //installed sdk already
+	
+  Ext.define("Rally.app.App", {  //app settings placed in parent div
+		alias: "widget.rallyapp",
+		extend: 
+		Ext.Container,
+		mixins: [Rally.Messageable, Rally.clientmetrics.ClientMetricsRecordable],
+		plugins: [],
+		autoScroll: true,
+		config: {
+			context: undefined,
+			settings: {},
+			defaultSettings: {}
+		},
+		appName: undefined,
+		settingsScope: "app",
+		constructor: function(b){
+			this.mergeConfig(b);
+			if (Rally.realtime.Realtime.enabled) this.plugins.push({ptype: "rallyrealtime"});
+			this.callParent([this.config]);
+		},
+		initEvents: function(){
+			this.callParent(arguments);
+			this.addEvents("beforelaunch", "contentupdated", "preferencesaved", "ready");
+		},
+		initComponent: function(){
+			this.callParent(arguments);
+			if(this.getAppId()){
+				if(this.stateful && !this.stateId) this.stateId = this.getContext().getScopedStateId(this.getAppId());
+				this._loadSettings().then({success: this._applyDefaultSettingsAndLaunch,scope: this});
+			}
+			else this._applyDefaultSettingsAndLaunch({});
+			this.addCls("rally-app");
+			this.subscribe(this, Rally.app.Message.timeboxScopeChange, this.onTimeboxScopeChange, this);
+		},
+		_loadSettings: function(){
+			return Rally.app.settings.Loader.load({
+				requester: this,
+				appSettings: this.settings,
+				context: this.getContext(),
+				scope: this,
+				settingsScope: this.settingsScope,
+				appScopedSettings: this.appScopedSettings,
+				workspaceScopedSettings: this.workspaceScopedSettings,
+				projectScopedSettings: this.projectScopedSettings,
+				userScopedSettings: this.userScopedSettings
+			}).then({
+				success: this._onSettingsLoaded,
+				scope: this
+			});
+		},
+		_areDifferentProjects: function(c, b){
+			return Rally.util.Ref.getOidFromRef(c) !== Rally.util.Ref.getOidFromRef(b);
+		},
+		_getSettingsScopedProjectRef: function(c, b){
+			var d = b.getProject(), e = c.project;
+			if(this._hasAppProjectSettings(e, d)) return e;
+			if(this._hasDashboardProjectSettings(d)) return "/project/" + d;
+		},
+		_hasAppProjectSettings: function(c, b){
+			return c && this._areDifferentProjects(c, b._ref);
+		},
+		_hasDashboardProjectSettings: function(b){
+			return Ext.isNumber(b);
+		},
+		_onSettingsLoaded: function(c){
+			var b = this._getSettingsScopedProjectRef(c, this.getContext());
+			if(b){
+				return this._loadProject(b).then({
+					success: function(d){
+						return this._setSettingsScopedProject(c, d);
+					},
+					failure: function(d){
+						this.add({xtype: "panel",cls: "no-data",html: "<p>" + d + "</p>"});
+					},
+					scope: this
+				});
+			}
+			return Deft.Promise.when(c);
+		},
+		_setSettingsScopedProject: function(c, d){
+			var b = this.getContext();
+			if(this._hasDashboardProjectSettings(b.getProject())) this.projectScopedSettings = null;
+			b.setProject(d);
+			b.setWorkspace(d.get("Workspace"));
+			if(!_.isUndefined(c.projectScopeDown)) b.put("projectScopeDown", c.projectScopeDown);
+			if(!_.isUndefined(c.projectScopeUp)) b.put("projectScopeUp", c.projectScopeUp);
+			return c;
+		},
+		_loadProject: function(d){
+			var b = new Deft.Deferred(), c = Rally.util.Ref.getOidFromRef(d), e = this;
+			Rally.data.ModelFactory.getModel({type: "Project"}).then(function(f){
+				e.recordLoadBegin({description: "loading the project"});
+				f.load(c, {
+					requester: e,
+					fetch: [
+						"ObjectID", "Name", "Workspace", "SchemaVersion", "WorkspaceConfiguration", 
+						"DateFormat", "DateTimeFormat", "DragDropRankingEnabled", "BuildandChangesetEnabled", "TimeZone", "WorkDays"
+					],
+					success: function(g){
+						e.recordLoadEnd();
+						b.resolve(g);
+					},
+					failure: function(g, h){
+						e.recordLoadEnd();
+						b.reject(h.getError().errors[0]);
+					}
+				});
+			});
+			return b.promise;
+		},
+		_applyDefaultSettingsAndLaunch: function(b) {
+			Ext.apply(this.settings, b);
+			Ext.applyIf(this.settings, this.defaultSettings);
+			this.initState();
+			if(this.fireEvent("beforelaunch", this) !== false) this.launch();
+			this.fireEvent("ready", this);
+		},
+		getSetting: function(b) {
+			var c = this.getSettings()[b];
+			if(c === "true") return true;
+			else if(c === "false") return false;
+			else if(!isNaN(c) && !isNaN(parseFloat(c))) return parseFloat(c);
+			return c;
+		},
+		updateSettingsValues: function(b) {
+			Rally.data.PreferenceManager.update(Ext.apply(this._getAppSettingsLoadOptions(), {
+				requester: this,
+				settings: b.settings,
+				success: function(c){
+					Ext.apply(this.settings, c);
+					if(b.success) b.success.call(b.scope);
+				},
+				scope: this
+			}));
+		},
+		removeSetting: function(b) {
+			Rally.data.PreferenceManager.remove(Ext.apply(this._getAppSettingsLoadOptions(), {
+				requester: this,
+				filterByName: b.name,
+				success: function(){
+					delete this.settings[b.name];
+					if(b.success) b.success.call(b.scope)
+				},
+				scope: this
+			}));
+		},
+		_getAppSettingsLoadOptions: function(c) {
+			c = c || this.settingsScope;
+			var b = {appID: this.getAppId()};
+			if(c === "project") b.project = this.getContext().getProject();
+			else if (c === "workspace") b.workspace = this.getContext().getWorkspace();
+			return b;
+		},
+		getAppId: function() {
+			return this.getContext().get("appID")
+		},
+		launch: Ext.emptyFn,
+		getOptions: function() { return []; },
+		getSettingsFields: function() { return []; },
+		getUserSettingsFields: function() { return []; },
+		showSettings: function(b){
+			this._appSettings = Ext.create("Rally.app.AppSettings", Ext.apply({
+				fields: this.getSettingsFields(),
+				userFields: this.getUserSettingsFields(),
+				settings: this.getSettings(),
+				defaultSettings: this.getDefaultSettings(),
+				context: this.getContext(),
+				settingsScope: this.settingsScope
+			}, b));
+			this._appSettings.on("cancel", this._hideSettings, this);
+			this._appSettings.on("save", this._onSettingsSaved, this);
+			this.hide();
+			this._appSettings.render(this.el.up('.x-panel-body'));    //we HAVE to add it to parent of app
+			return this._appSettings;
+		},
+		_onSettingsSaved: function(b) {
+			Ext.apply(this.settings, b);
+			this._hideSettings();
+			this.onSettingsUpdate(b);
+		},
+		_hideSettings: function() {
+			if(this._appSettings){
+				this._appSettings.destroy();
+				delete this._appSettings;
+			}
+			this.show();
+		},
+		onSettingsUpdate: function(b){},
+		onTimeboxScopeChange: function(b) {
+			this.getContext().setTimeboxScope(b);
+		}
+	});
+
+	Ext.define("Rally.data.wsapi.ProxyBase", { //compact===FALSE!!!!
+		alternateClassName: ["Rally.data.Proxy"],
+		statics: {
+			getGlobalWorkspace: function(){
+				return "/workspace/" + Rally.environment.getContext().getWorkspace().ObjectID;
+			},
+			getGlobalProject: function() {
+				return "/project/" + Rally.environment.getContext().getProject().ObjectID;
+			},
+			getGlobalProjectScopeUp: function() {
+				return Rally.environment.getContext().getProjectScopeUp();
+			},
+			getGlobalProjectScopeDown: function() {
+				return Rally.environment.getContext().getProjectScopeDown();
+			},
+			actionMethods: {create: "PUT",read: "GET",update: "POST",destroy: "DELETE"},getMethod: function(b) {
+				return Rally.data.wsapi.ProxyBase.actionMethods[b];
+			},
+			compact: false
+		},
+		setProject: function(b){
+			if(b.self.getField("Project") && !b.get("Project") && b.get("Project") !== null){
+				b.set("Project", this._getProject());
+				if (this._getWorkspace() !== null) b.set("Workspace", this._getWorkspace());
+			}
+		},
+		buildRequest: function(b, c) {
+			if(b.action === "create") _.each(b.records, this.setProject, this);
+			c.enableQueuing = true;
+			c.params = c.params || {};
+			Ext.apply(c.params, b.params || {});
+			var d = b.useShallowFetch ? "shallowFetch" : "fetch";
+			if(b.useShallowFetch){
+				c.params.shallowFetch = b.fetch;
+				delete c.params.fetch;
+			} 
+			else c.params.fetch = c.params.fetch || (typeof b.fetch !== "undefined" ? b.fetch : true);
+			if(b.includeSchema) c.params.includeSchema = b.includeSchema;
+			if(_.isArray(c.params[d])) c.params[d] = c.params[d].join(",");
+			if(b.search !== undefined) c.params.search = b.search;
+			c.params.includePermissions = true;
+			if(b.action === "read"){
+				if(c.params[this.sortParam]){
+					if(c.params[this.directionParam]){
+						c.params[this.sortParam] = c.params[this.sortParam] + " " + c.params[this.directionParam];
+						delete c.params[this.directionParam];
+					}
+				}
+				c.params.start = c.params.start || 0;
+				c.params.start++;
+				if(!Ext.isDefined(c.params.pagesize)) c.params.pagesize = this.defaultPageSize;
+			}
+			this.setRequestContext(c, b.context);
+			return c
+		},
+		setRequestContext: function(c, b) {
+			var d = {};
+			if(Rally.environment.getContext()){
+				d.workspace = this._getWorkspace();
+				d.project = this._getProject();
+				d.projectScopeUp = this._getProjectScopeUp();
+				d.projectScopeDown = this._getProjectScopeDown();
+			}
+			if(b){
+				Ext.apply(d, b);
+				if(!d.project){
+					delete d.project;
+					delete d.projectScopeUp;
+					delete d.projectScopeDown;
+				}
+			}
+			if(d.project && d.workspace !== "null") delete d.workspace;
+			Ext.apply(c.params, d);
+		},
+		_getProject: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.project)) return this.model.context.project;
+			else return Rally.data.wsapi.ProxyBase.getGlobalProject();
+		},
+		_getProjectScopeUp: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.projectScopeUp)) return this.model.context.projectScopeUp;
+			return Rally.data.wsapi.ProxyBase.getGlobalProjectScopeUp();
+		},
+		_getProjectScopeDown: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.projectScopeDown)) return this.model.context.projectScopeDown;
+			return Rally.data.wsapi.ProxyBase.getGlobalProjectScopeDown();
+		},
+		_getWorkspace: function() {
+			if(Ext.isDefined(this.model.context) && Ext.isDefined(this.model.context.workspace)) return this.model.context.workspace;
+			return Rally.data.wsapi.ProxyBase.getGlobalWorkspace();
+		},
+		buildUrl: function(c) {
+			var b = c.url || this.url;
+			if (c.action === "create") c.url = b + "/create";
+			else {
+				if(c.action === "read" && b.match(/\/user$/i)) c.url = b + "s";
+			}
+		},
+		processResponse: function(g, c, e, b, i, d) {
+			if(g){
+				var f = this.parseResponse(b);
+				var h = Ext.Object.getValues(f)[0].Errors;
+				if (!_.isEmpty(h)) g = false;
+			}
+			return g;
+		},
+		parseResponse: Ext.emptyFn,setException: function(c, b) {
+			var d = {response: b};
+			try {
+				d.errors = Ext.Object.getValues(this.parseResponse(b))[0].Errors;
+			} catch(f){
+				d.errors = [b.statusText];
+			}
+			c.setException(d)
+		},
+		encodeFilters: function(c) {
+			var d;
+			var b = Ext.Array.clean(Ext.Array.map(c || [], function(e) {
+				return (e instanceof Rally.data.wsapi.Filter) ? e : Rally.data.wsapi.Filter.fromExtFilter(e);
+			}));
+			if(b && b.length){
+				Ext.Array.forEach(b, function(e) {
+					if(e){
+						if(!d) d = e
+						else d = d.and(e)
+					}
+				});
+				return d.toString()
+			} 
+			else return "";
+		},
+		encodeSorters: function(d) {
+			var b = [], c = false;
+			if(d){
+				if(Ext.isObject(d)) d = [d];
+				if(Ext.isArray(d)){
+					Ext.each(d, function(e){
+						if(e.property){
+							if (e.property.indexOf("ObjectID") >= 0) c = true;
+							b.push([e.property, e.direction].join(" "));
+						}
+					});
+				}
+			}
+			if(!c) b.push("ObjectID");
+
+			return b.join(",");
+		}
+	});
+
+	Ext.define("Rally.data.wsapi.Proxy", { //compact===FALSE!!!!
+		extend: Ext.data.proxy.Rest,
+		alias: ["proxy.rally.data.proxy.wsapi", "proxy.rally.data.proxy.rest", "proxy.Rally.data.WsapiRestProxy", "proxy.rallywsapiproxy"],
+		alternateClassName: ["Rally.data.WsapiProxy", "Rally.data.WsapiRestProxy"],
+		mixins: {
+			proxy: Rally.data.wsapi.ProxyBase
+		},
+		defaultPageSize: 200,
+		filterParam: "query",
+		limitParam: "pagesize",
+		groupParam: "order",
+		sortParam: "order",
+		pageParam: undefined,
+		noCache: false,
+		wsapiVersion: undefined,
+		constructor: function(b){
+			b = b || {};
+			this.actionMethods = Rally.data.wsapi.ProxyBase.actionMethods;
+			b.wsapiVersion = b.wsapiVersion || Rally.environment.getServer().getWsapiVersion();
+			if (b.wsapiVersion.indexOf("v2.") !== 0) b.format = "js";
+			this.callParent(arguments);
+		},
+		buildRequest: function(b) {
+			var c = this.callParent(arguments);
+			return this.mixins.proxy.buildRequest.call(this, b, c);
+		},
+		getMethod: function(b) {
+			var c = this.callParent(arguments);
+			if (c === "GET" && this._shouldUsePostGet(b)) {
+				this._changeGetToPost(b);
+				return "POST";
+			}
+			return c;
+		},
+		_shouldUsePostGet: function(b) {
+			return b.operation && b.operation.enablePostGet;
+		},
+		_changeGetToPost: function(b) {
+			if(b.params) b.params._method = "GET";
+		},
+		buildUrl: function(c) {
+			this.mixins.proxy.buildUrl.call(this, c);
+			var b = this.callParent(arguments);
+			return b;
+		},
+		processResponse: function(f, c, e, b, g, d) {
+			f = this.mixins.proxy.processResponse.call(this, f, c, e, b, g, d);
+			this.callParent([f, c, e, b, g, d]);
+		},
+		setException: function(c, b) {
+			this.mixins.proxy.setException.call(this, c, b);
+		},
+		encodeFilters: function(b) {
+			return this.mixins.proxy.encodeFilters.call(this, b);
+		},
+		encodeSorters: function(b) {
+			return this.mixins.proxy.encodeSorters.call(this, b);
+		},
+		parseResponse: function(b) {
+			return Ext.JSON.decode(b.responseText);
+		}
+	});
 	
 	Ext.define('Rally.sdk.env.JsonPIoProvider', {//good
 		extend: Rally.env.IoProvider ,
@@ -1035,7 +1445,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1244,6 +1654,43 @@ delete window.HighchartsAdapter;						}
 				else return Q(undefined);
 			});
 		},
+		
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ //only pull look at Feature Release if US relese == null
+			/************************* NOTE ***********************************************
+				for Q215 we need to uncomment the below lines for a better user story filter!
+				
+				from: (US.Release == X || (US.Feature.Release ==X))
+				to: (US.Release ==X || (US.Release ==null && US .Feature.Release==X))
+			******************************************************************************/
+			var me=this,
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				// Ext.create('Rally.data.wsapi.Filter', {
+					// property:'Release.ObjectID',
+					// value: null
+				// }).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property:'Feature.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property:'Feature.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				// )
+			);
+		},
 		_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
 			if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
@@ -1265,6 +1712,36 @@ delete window.HighchartsAdapter;						}
 							Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
 							Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
 						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){ //get the most recent 5 in the project!!
+			/**this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
+				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
+				Then 1 of the 5 user stories is randomly selected and returned */
+			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
 			return me._reloadStore(store).then(function(store){
@@ -1538,7 +2015,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1559,7 +2036,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1604,7 +2081,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1741,7 +2218,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1753,12 +2230,11 @@ delete window.HighchartsAdapter;						}
 	Ext.define('PrettyAlert', {
 
 		__getMessageBoxY: function(){ 
-			var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-				iframe = pd.querySelector('iframe[src="' + l.pathname + l.search + '"]');
-			
-			var ph = p.getWindowHeight(), 
-				ps = p.getScrollY(), 
-				ofy = ps + iframe.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.parent.getWindowHeight(), 
+				ps = window.parent.getScrollY(), 
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
 				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
 			return iyOffset<0 ? 0 : iyOffset;
 		},
@@ -1801,7 +2277,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1895,7 +2371,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2145,7 +2621,54 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
+						if(!window[smAppID].stillInIframe){	
+							(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('UserAppPreferences', {
+		
+		_prefName: 'intel-user-app-preferences', //this preference can be overridden, unless you want all apps to share prefs
+		
+		_loadPreferences: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				filterByUser:true,
+				filterByName:me._prefName,
+				success: function(prefs) {
+					var appPrefs = prefs[me._prefName];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { projs:{}, refresh:30};}
+					console.log('loaded prefs', appPrefs);
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_savePreferences: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {projs:prefs.projs, refresh:prefs.refresh};
+			s[me._prefName] = JSON.stringify(prefs); 
+			console.log('saving prefs', prefs);
+			Rally.data.PreferenceManager.update({
+				filterByUser: true,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2191,7 +2714,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2224,7 +2747,7 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2264,13 +2787,12 @@ delete window.HighchartsAdapter;						}
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Sanity_Dashboard501253";			
+						var smAppID = "Sanity_Dashboard885913";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/************************** PRODUCTION *****************************/
-	console = { log: function(){} };	////DEBUG!!!	
+	var console = { log: function(){} };
 
 	/************************** Sanity Dashboard *****************************/
 	Ext.define('SanityDashboard', {
@@ -2281,7 +2803,8 @@ delete window.HighchartsAdapter;						}
 			'PrettyAlert',
 			'IframeResize',
 			'IntelWorkweek',
-			'ReleaseQuery'
+			'ReleaseQuery',
+			'UserAppPreferences'
 		],	
 		minWidth:1100,
 		items:[{ 
@@ -2295,7 +2818,7 @@ delete window.HighchartsAdapter;						}
 			layout: 'column',
 			items: [{
 				xtype: 'container',
-				width:445,
+				width:480,
 				id: 'pie'
 			},{
 				xtype: 'container',
@@ -2319,19 +2842,69 @@ delete window.HighchartsAdapter;						}
 				cls:'grids-right'
 			}]
 		}],
-		_prefName: 'sanity-dashboard-pref',
+		_prefName: 'intel-SAFe-apps-preference',
 		_colors: [
-			'#5DA5DA', //(blue)
-			'#FAA43A', //(orange)
-			'#60BD68', //(green)
-			'#F17CB0', //(pink)
-			'#B2912F', //(brown)
-			'#B276B2', //(purple)
-			'#DECF3F', //(yellow)
-			'#F15854', //(red)
-			'#4D4D4D' //(gray)
+			'#AAAAAA', //GRAY
+			'#2ECC40', //GREEN
+			'#7FDBFF', //AQUA
+			'#DDDDDD', //SILVER
+			'#39CCCC', //TEAL
+			'#FF851B', //ORANGE
+			'#3D9970', //OLIVE
+			'#01FF70', //LIME
+			'#FFDC00', //YELLOW
+			'#0074D9' //BLUE
 		],
-
+		
+		/***************************************************** Store Loading *******************************************************/	
+		_getTotalStories: function(){
+			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
+				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'UserStory',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).and(
+							me.CurrentTeam ? 
+								Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID}) : 
+								Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName})
+						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		_getTotalFeatures: function(){
+			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
+				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/Feature',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).and(
+							_.reduce(me.Products, function(filter, product){
+								var thisFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.Parent.Name',  value:product.data.Name });
+								return filter ? filter.or(thisFilter) : thisFilter;
+							}, null)
+						)
+					]
+				});
+			return me.CurrentTeam ? Q(0) : me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		
 		/******************************************************* Reloading ********************************************************/	
 		_removeAllItems: function(){
 			var me = this;
@@ -2343,56 +2916,38 @@ delete window.HighchartsAdapter;						}
 		_reloadEverything:function(){
 			var me=this;
 			me.setLoading('Loading Grids');
+			
 			me._removeAllItems();
 			if(!me.ReleasePicker) me._loadReleasePicker();
 			if(!me.TeamPicker) me._loadTeamPicker();
-			return me._buildGrids()
+			
+			return Q.all([
+					me._getTotalStories().then(function(storyCount){ me.TotalStoriesInRelease = storyCount; }),
+					me._getTotalFeatures().then(function(featureCount){ me.TotalFeaturesInRelease = featureCount; })
+				])
+				.then(function(){ return me._buildGrids(); })
 				.then(function(){ 
 					me.setLoading('Loading Piechart and Heatmap');
 					return me._buildRibbon();
 				})
-				.then(function(){
-					me.setLoading(false); 
-				})
-				.fail(function(reason){
-					me.setLoading(false);
-					return Q.reject(reason);
-				});
+				.fail(function(reason){ return Q.reject(reason); })
+				.then(function(){ me.setLoading(false); });
 		},
-		
-		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){ //parse all settings too
-			var me=this,
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				appID: me.getAppId(),
-				filterByName:me._prefName+ uid,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName + uid];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){ // stringify and save only the updated settings
-			var me=this, s = {}, 
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
-			prefs = {projs: prefs.projs};
-			s[me._prefName + uid] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				appID: this.getAppId(),
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
+
+		/********************************************************** tooltip functions **************************************/
+		_clearToolTip: function(){
+			var me = this;
+			if(me.tooltip){
+				me.tooltip.panel.hide();
+				me.tooltip.triangle.hide();
+				me.tooltip.panel.destroy();
+				me.tooltip.triangle.destroy();
+				me.tooltip = null;
+			}
+		},	
+		_addScrollEventListener: function(){
+			var me=this;
+			me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
 		},
 		
 		/******************************************************* LAUNCH ********************************************************/
@@ -2400,6 +2955,7 @@ delete window.HighchartsAdapter;						}
 			var me=this; 
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
+			me._addScrollEventListener();
 			me.setLoading('Loading Configuration');
 			me._loadModels()
 				.then(function(){
@@ -2519,11 +3075,8 @@ delete window.HighchartsAdapter;						}
 				}
 			});
 		},
-		
-		/******************************************************* Render Ribbon ********************************************************/
-		_hideHighchartsLinks: function(){
-			$('.highcharts-container > svg > text:last-child').hide();
-		},
+	
+		/******************************************************* Render Ribbon ********************************************************/	
 		_getCountForTeamAndGrid: function(project, grid){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -2545,6 +3098,120 @@ delete window.HighchartsAdapter;						}
 				return me._reloadStore(store).then(function(store){ return store.totalCount; });
 			else return Q(0);
 		},
+		_getUserStoryCountForRelease: function(project){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'UserStory',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					fetch: false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: project.data._ref }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }))
+					]
+				});
+			return me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		_onHeatmapClick: function(point, team, grid){
+			var me=this,
+				panelWidth=300,
+				rect = point.graphic.element.getBoundingClientRect(),
+				leftSide = rect.left,
+				topSide = rect.top,
+				x = point.x,
+				y = point.y;
+			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y){
+				me._clearToolTip();
+				return; 
+			}
+			me._clearToolTip();
+			me._getUserStoryCountForRelease(team).then(function(totalStories){
+				me.tooltip = {
+					x:x,
+					y:y,
+					panel: Ext.widget('container', {
+						floating:true,
+						width: panelWidth,
+						autoScroll:false,
+						id:'HeatmapTooltipPanel',
+						cls: 'intel-tooltip',
+						focusOnToFront:false,
+						shadow:false,
+						renderTo:Ext.getBody(),
+						items: [{
+							xtype:'container',
+							layout:'hbox',
+							cls: 'heatmap-tooltip-inner-container',
+							items:[{
+								xtype:'container',
+								flex:1,
+								items:[{
+									xtype:'container',
+									html: [
+										'<p><b>How big of problem</b>: ',
+											'<span class="heatmap-tooltip-big-problem">' + ((point.value/totalStories*10000>>0)/100) + '%</span>',
+										'</p>',
+										'<p><b>' + grid.originalConfig.title + '</b>: ' + point.value + '</p>',
+										'<p><b>Stories in Release</b>: ' + totalStories + '</p>'
+									].join('')
+								},{
+									xtype:'button',
+									cls:'heatmap-tooltip-button',
+									text:'GO TO THIS GRID',
+									handler: function(){
+										me._clearToolTip();
+										if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID != team.data.ObjectID){
+											me.CurrentTeam = team;
+											me.TeamPicker.setValue(team.data.Name);
+											me._reloadEverything()
+												.then(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); })
+												.done();
+										}
+										else Ext.get(grid.originalConfig.id).scrollIntoView(me.el);
+									}
+								}]
+							},{
+								xtype:'button',
+								cls:'heatmap-tooltip-close',
+								text:'X',
+								width:20,
+								handler: function(){ me._clearToolTip(); }
+							}]
+						}],
+						listeners:{
+							afterrender: function(panel){
+								panel.setPosition(leftSide-panelWidth, topSide);
+							}
+						}
+					})	
+				};
+				me.tooltip.triangle = Ext.widget('container', {
+					floating:true,
+					width:0, height:0,
+					focusOnToFront:false,
+					shadow:false,
+					renderTo:Ext.getBody(),
+					listeners:{
+						afterrender: function(panel){
+							setTimeout(function(){
+								panel.addCls('intel-tooltip-triangle');
+								panel.setPosition(leftSide - 10, topSide);
+							}, 10);
+						}
+					}
+				});	
+			})
+			.fail(function(reason){ me._alert('ERROR', reason || ''); })
+			.done();
+		},	
+		_hideHighchartsLinks: function(){
+			$('.highcharts-container > svg > text:last-child').hide();
+		},
 		_getHeatMapConfig: function() { 
 			var me=this,
 				highestNum = 0,
@@ -2563,8 +3230,13 @@ delete window.HighchartsAdapter;						}
 			});
 			window._selectTeam = function(value){
 				var team = _.find(me.LeafProjects, function(p){ return p.data.Name.split('-')[0].trim() === value; });
-				if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID) me.CurrentTeam = null;
-				else me.CurrentTeam = team;
+				if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID){
+					me.CurrentTeam = null;
+					me.TeamPicker.setValue('All');
+				} else {
+					me.CurrentTeam = team;
+					me.TeamPicker.setValue(team.data.Name);
+				}
 				me._reloadEverything();
 			};
 			window._selectId = function(gridId){
@@ -2574,9 +3246,9 @@ delete window.HighchartsAdapter;						}
 				return {       
 					chart: {
 						type: 'heatmap',
-						height:340,
+						height:420,
 						marginTop: 10,
-						marginLeft: 130,
+						marginLeft: 140,
 						marginBottom: 80
 					},
 					title: { text: null },
@@ -2623,13 +3295,7 @@ delete window.HighchartsAdapter;						}
 										var point = this,
 											team = _.sortBy(me.LeafProjects, function(p){ return p.data.Name; })[point.x],
 											grid = userStoryGrids[point.y];
-										if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID != team.data.ObjectID){
-											me.CurrentTeam = team;
-											setTimeout(function(){
-												me._reloadEverything().then(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); }).done();
-											}, 0);
-										}
-										else Ext.get(grid.originalConfig.id).scrollIntoView(me.el);
+										me._onHeatmapClick(point, team, grid);
 									}
 								}
 							}
@@ -2658,19 +3324,21 @@ delete window.HighchartsAdapter;						}
 					return {
 						name: grid.originalConfig.title,
 						y: grid.store.totalCount || 0,
-						gridID: grid.originalConfig.id
+						gridID: grid.originalConfig.id,
+						model: grid.originalConfig.model
 					};
 				});
 			if(_.every(chartData, function(item){ return item.y === 0; })){
 				chartData = [{
 					name: 'Everything is correct!',
 					y:1,
-					color:'#60BD68'
+					color:'#2ECC40', //GREEN
+					model:''
 				}];
 			}
 			return {
 				chart: {
-					height:345,
+					height:420,
 					marginLeft: -15,
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -2685,7 +3353,14 @@ delete window.HighchartsAdapter;						}
 							distance:25,
 							crop:false,
 							overflow:'none',
-							format:'<b>{point.name}</b>: {y}',
+							formatter: function(){
+								var isFeature = (this.point.model == 'PortfolioItem/Feature'),
+									isStory = (this.point.model == 'UserStory'),
+									str = '<b>' + this.point.name + '</b>: ' + this.point.y;
+								if(isFeature) return str + '/' + me.TotalFeaturesInRelease;
+								else if(isStory) return str + '/' + me.TotalStoriesInRelease;
+								else return str;
+							},
 							style: { 
 								cursor:'pointer',
 								color: 'black'
@@ -2717,6 +3392,7 @@ delete window.HighchartsAdapter;						}
 			var me=this;
 			Highcharts.setOptions({ colors: me._colors });
 			$('#pie').highcharts(me._getPieChartConfig());
+			Highcharts.setOptions({ colors: ['#AAAAAA'] });
 			if(!me.TrainRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-train teams
 			else return me._getHeatMapConfig()
 				.then(function(chartConfig){
@@ -2734,11 +3410,18 @@ delete window.HighchartsAdapter;						}
 			
 			window._scrollToTop = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
 			
-			var gridTitleLink = gridConfig.title +
-					'<span style="float:right;font-weight:bold;font-size:0.8rem;"><a onclick="_scrollToTop()">Top</a></span>',
+			var getGridTitleLink = function(store, model){
+					var num = store && store.totalCount,
+						den = (model==='UserStory' ? me.TotalStoriesInRelease : me.TotalFeaturesInRelease),
+						type = (model==='UserStory' ? 'Stories' : 'Features');
+					return gridConfig.title +
+						'<span class="sanity-grid-header-stats">' + 
+							(store ? (' (' + num+ '/' + den + ' ' + type + ' - ' + ((num/den*10000>>0)/100) + '% )') : '') + 
+						'</span>' + 
+						'<span class="sanity-grid-header-top-link"><a onclick="_scrollToTop()">Top</a></span>';
+				},
 				deferred = Q.defer(),
 				grid = Ext.create('Rally.ui.grid.Grid', {
-					title: gridTitleLink,
 					id: gridConfig.id,
 					columnCfgs: gridConfig.columns,
 					showPagingToolbar: true,
@@ -2762,7 +3445,7 @@ delete window.HighchartsAdapter;						}
 								if(!store.getRange().length){
 									var goodGrid = Ext.create('Rally.ui.grid.Grid', {
 										xtype:'rallygrid',
-										title: gridTitleLink,
+										title: getGridTitleLink(),
 										id: gridConfig.id,
 										cls:' sanity-grid grid-healthy',
 										originalConfig: gridConfig,
@@ -2773,9 +3456,10 @@ delete window.HighchartsAdapter;						}
 									});
 									goodGrid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
 									deferred.resolve(goodGrid);
-								} else{
+								} else {
 									grid.addCls('grid-unhealthy sanity-grid');
 									grid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
+									grid.setTitle(getGridTitleLink(store, gridConfig.model));
 									deferred.resolve(grid);
 								}
 							}  
@@ -2789,6 +3473,7 @@ delete window.HighchartsAdapter;						}
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				todayISO = new Date().toISOString(),
 				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
 				defaultUserStoryColumns = [{
 						text:'FormattedID',
@@ -2817,7 +3502,7 @@ delete window.HighchartsAdapter;						}
 						editor:false
 					}],
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
-					//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //i guess we dont want this :(
+					//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //dont want this
 				userStoryProjectFilter = me.CurrentTeam ? 
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID }) : 
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName}),
@@ -2957,8 +3642,44 @@ delete window.HighchartsAdapter;						}
 						.and(releaseNameFilter).and(userStoryProjectFilter)
 					]
 				},{
+					showIfLeafProject:true,
+					title: 'Stories in Current Sprint With No Task',
+					id: 'grid-features-notask-current-sprint',
+					model: 'UserStory',
+					columns: defaultUserStoryColumns.concat([{
+						text:'',
+						renderer: function(value, meta, record){
+							return '<a target="_blank" href="https://rally1.rallydev.com/#/' + record.data.Project.ObjectID + 
+								'd/detail/task/new?WorkProduct=/hierarchicalrequirement/' + record.data.ObjectID + '">Add Task</a>';
+						}
+					}]),
+					side: 'Right',
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:todayISO}).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:todayISO})).and(
+						Ext.create('Rally.data.wsapi.Filter',{ property: 'Tasks.ObjectID', operator: '=', value: null}))
+						.and(releaseNameFilter).and(userStoryProjectFilter)
+					]
+				},{
+					showIfLeafProject: true,
+					title: 'Stories in Current Sprint With No Description',
+					id: 'grid-features-no-description-currentsprint',
+					model: 'UserStory',
+					columns: defaultUserStoryColumns.concat([{
+						text: 'Description',
+						dataIndex: 'Description',
+						tdCls:'editor-cell'
+					}]),
+					side: 'Left',
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:todayISO}).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:todayISO})).and(
+						Ext.create('Rally.data.wsapi.Filter',{ property: 'Description', operator: '=', value: null}))	
+						.and(releaseNameFilter).and(userStoryProjectFilter)	
+					]
+				},{
 					showIfLeafProject:false,
-					title: 'Features with no stories',
+					title: 'Features with No Stories',
 					id: 'grid-features-with-no-stories',
 					model: 'PortfolioItem/Feature',
 					columns: defaultFeatureColumns,
@@ -2991,11 +3712,11 @@ delete window.HighchartsAdapter;						}
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Sanity_Dashboard501253";			
+				var smAppID = "Sanity_Dashboard885913";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("SanityDashboard", {
 						name: "Sanity Dashboard",
-						smAppID: "Sanity_Dashboard501253"
+						smAppID: "Sanity_Dashboard885913"
 					});
 				}
 			}());
@@ -3014,7 +3735,7 @@ delete window.HighchartsAdapter;						}
 	margin:10px 0 0 0;
 	padding:0;
 	width: 98%; 
-	height:350px;
+	height:430px;
 	border: 1px solid #AAA; }
 
 .grids-container {
@@ -3062,6 +3783,15 @@ delete window.HighchartsAdapter;						}
 	.sanity-grid.rally-grid .x4-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
 		background-image:none; }
 
+	.sanity-grid-header-top-link {
+		float:right;
+		cursor:pointer;
+		font-weight:bold;
+		font-size:0.8rem; }
+	
+	.sanity-grid-header-stats {
+		font-size: 12px;}
+		
 .highcharts-container { overflow: visible !important; }
 
 .my-heatmap-tooltip {
@@ -3084,7 +3814,7 @@ delete window.HighchartsAdapter;						}
 		
 .heatmap-ylabel {
 	white-space:normal;
-	width:124px; 
+	width:134px; 
 	height:35px;
 	text-align:center;
 	display:flex;
@@ -3095,7 +3825,47 @@ delete window.HighchartsAdapter;						}
 	font-size:0.65rem;
 	cursor:pointer;
 	padding:0 2px 0 2px; 
-	margin:0; }				</style>
+	margin:0; }
+	
+/*********************************** TOOLTIP ****************************/
+.intel-tooltip {
+	padding:10px;
+	background-color:#C0D9FA;
+	border-radius:8px;
+	z-index:500; }
+
+	.intel-tooltip p {
+		margin:2px 0 2px 0; }
+		
+	.intel-tooltip ol {
+		margin:2px 0 2px 0;
+		padding-left:20px; }
+
+.intel-tooltip-triangle {
+	border-left: 10px solid transparent;
+	border-right: 10px solid transparent;
+	border-top: 10px solid #C0D9FA;
+	height: 0px;
+	width: 0px;
+	z-index:500; }	
+
+.heatmap-tooltip-close {
+	padding:0 0 2px 0;
+	font-weight:bold;
+	margin-left: 5px;
+	margin-top: -5px;
+	border-radius:10px; }
+
+.heatmap-tooltip-inner-container,
+.heatmap-tooltip-inner-container * {
+	overflow: visible; }
+	
+.heatmap-tooltip-button {
+	margin-top:5px; }
+	
+.heatmap-tooltip-big-problem {
+	font-weight: bold;
+	font-size:1.1em; }				</style>
 			
 			
 		</script>

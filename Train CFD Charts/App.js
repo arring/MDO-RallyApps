@@ -16,7 +16,8 @@
 			'IframeResize',
 			'IntelWorkweek',
 			'ReleaseQuery',
-			'ChartUpdater'
+			'ChartUpdater',
+			'UserAppPreferences'
 		],
 		_prefName: 'intel-ART-CFD',	
 		minWidth:910,

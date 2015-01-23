@@ -13,6 +13,7 @@
       "../../lib/mixins/intel-workweek.js",
       "../../lib/mixins/release-query.js",
       "../../lib/mixins/async-queue.js",
+      "../../lib/mixins/user-app-preferences.js",
       "../../lib/components/intel-fixed-combobox.js",
       "../../lib/components/intel-release-picker.js",
       "../../lib/overrides/fast-session-proxy.js",

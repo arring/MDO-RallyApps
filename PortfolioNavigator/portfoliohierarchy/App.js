@@ -1,18 +1,18 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	//var console = { log: function(){} }; // DEBUG!!!!		
+	var console = { log: function(){} };	
 
 	Ext.define('Intel.portfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
 			'Rally.Messageable',
 			'PrettyAlert',
-			'ReleaseQuery'
+			'ReleaseQuery',
+			'UserAppPreferences'
 		],
-		
-		_prefName: 'intel-PortfolioNav',
 		_uid: (__PROJECT_OID__ + '-' + __USER_OID__),
+		_prefName: 'intel-portfolio-nav',
 		
 		layout: {
 			type:'vbox',
@@ -85,37 +85,6 @@
 					}
 				}
 			}];
-		},
-
-		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){ //parse all settings too
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser:true,
-				filterByName: me._prefName,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){ 
-			var me=this, s = {}, deferred = Q.defer();
-			prefs = {projs: prefs.projs};
-			s[me._prefName] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				filterByUser:true,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
 		},
 		
 		/************************************************** Refreshing Data ***************************************************/

@@ -9,6 +9,7 @@
       "../../lib/mixins/pretty-alert.js",
       "../../lib/mixins/release-query.js",
       "../../lib/mixins/async-queue.js",
+      "../../lib/mixins/user-app-preferences.js",
       "../../lib/components/intel-combobox.js",
       "../../lib/components/intel-fixed-combobox.js",
       "../../lib/components/pi-projectpicker-settings.js",
