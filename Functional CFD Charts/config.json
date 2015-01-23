@@ -18,7 +18,5 @@
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"
    ],
-   "css": [
-      "app.css"
-   ]
+   "css": []
 }

@@ -1,6 +1,0 @@
-Program Board: 
-1.  FIXED: check for custom field space limit (not likely to be reached. and make sure it doesn't happen.
-    JSON might get correupted dependeing on how rally handles it
-2.  Change dependencies user story loading to only user stories in the release, or else one user story is going to be used for ALL the 
-    unassigned dependencies. Figure out how to spread the randomness out, instead of picking the first from the random-list.
-3.  Fix the Predecessor/Successor field clobbering issue

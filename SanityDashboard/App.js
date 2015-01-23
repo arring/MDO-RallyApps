@@ -2,7 +2,7 @@
 	var Ext = window.Ext4 || window.Ext;
 	
 	/************************** PRODUCTION *****************************/
-	console = { log: function(){} };	////DEBUG!!!	
+	//console = { log: function(){} };	////DEBUG!!!	
 
 	/************************** Sanity Dashboard *****************************/
 	Ext.define('SanityDashboard', {
@@ -27,7 +27,7 @@
 			layout: 'column',
 			items: [{
 				xtype: 'container',
-				width:445,
+				width:480,
 				id: 'pie'
 			},{
 				xtype: 'container',
@@ -53,17 +53,67 @@
 		}],
 		_prefName: 'sanity-dashboard-pref',
 		_colors: [
-			'#5DA5DA', //(blue)
-			'#FAA43A', //(orange)
-			'#60BD68', //(green)
-			'#F17CB0', //(pink)
-			'#B2912F', //(brown)
-			'#B276B2', //(purple)
-			'#DECF3F', //(yellow)
-			'#F15854', //(red)
-			'#4D4D4D' //(gray)
+			'#AAAAAA', //GRAY
+			'#2ECC40', //GREEN
+			'#7FDBFF', //AQUA
+			'#DDDDDD', //SILVER
+			'#39CCCC', //TEAL
+			'#FF851B', //ORANGE
+			'#3D9970', //OLIVE
+			'#01FF70', //LIME
+			'#FFDC00', //YELLOW
+			'#0074D9' //BLUE
 		],
-
+		
+		/***************************************************** Store Loading *******************************************************/	
+		_getTotalStories: function(){
+			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
+				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'UserStory',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).and(
+							me.CurrentTeam ? 
+								Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID}) : 
+								Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName})
+						)
+					]
+				});
+			return me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		_getTotalFeatures: function(){
+			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
+				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/Feature',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).and(
+							_.reduce(me.Products, function(filter, product){
+								var thisFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.Parent.Name',  value:product.data.Name });
+								return filter ? filter.or(thisFilter) : thisFilter;
+							}, null)
+						)
+					]
+				});
+			return me.CurrentTeam ? Q(0) : me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		
 		/******************************************************* Reloading ********************************************************/	
 		_removeAllItems: function(){
 			var me = this;
@@ -75,33 +125,32 @@
 		_reloadEverything:function(){
 			var me=this;
 			me.setLoading('Loading Grids');
+			
 			me._removeAllItems();
 			if(!me.ReleasePicker) me._loadReleasePicker();
 			if(!me.TeamPicker) me._loadTeamPicker();
-			return me._buildGrids()
+			
+			return Q.all([
+					me._getTotalStories().then(function(storyCount){ me.TotalStoriesInRelease = storyCount; }),
+					me._getTotalFeatures().then(function(featureCount){ me.TotalFeaturesInRelease = featureCount; })
+				])
+				.then(function(){ return me._buildGrids(); })
 				.then(function(){ 
 					me.setLoading('Loading Piechart and Heatmap');
 					return me._buildRibbon();
 				})
-				.then(function(){
-					me.setLoading(false); 
-				})
-				.fail(function(reason){
-					me.setLoading(false);
-					return Q.reject(reason);
-				});
+				.fail(function(reason){ return Q.reject(reason); })
+				.then(function(){ me.setLoading(false); });
 		},
 		
 		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){ //parse all settings too
-			var me=this,
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
+		_loadPreferences: function(){
+			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
-				appID: me.getAppId(),
-				filterByName:me._prefName+ uid,
+				filterByUser: true,
+				filterByName: me._prefName,
 				success: function(prefs) {
-					var appPrefs = prefs[me._prefName + uid];
+					var appPrefs = prefs[me._prefName];
 					try{ appPrefs = JSON.parse(appPrefs); }
 					catch(e){ appPrefs = { projs:{}};}
 					console.log('loaded prefs', appPrefs);
@@ -111,20 +160,34 @@
 			});
 			return deferred.promise;
 		},
-		_savePreferences: function(prefs){ // stringify and save only the updated settings
-			var me=this, s = {}, 
-				uid = me.getContext().getUser().ObjectID,
-				deferred = Q.defer();
+		_savePreferences: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
 			prefs = {projs: prefs.projs};
-			s[me._prefName + uid] = JSON.stringify(prefs); 
+			s[me._prefName] = JSON.stringify(prefs); 
 			console.log('saving prefs', prefs);
 			Rally.data.PreferenceManager.update({
-				appID: this.getAppId(),
+				filterByUser: true,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
 			});
 			return deferred.promise;
+		},
+				
+		/********************************************************** tooltip functions **************************************/
+		_clearToolTip: function(){
+			var me = this;
+			if(me.tooltip){
+				me.tooltip.panel.hide();
+				me.tooltip.triangle.hide();
+				me.tooltip.panel.destroy();
+				me.tooltip.triangle.destroy();
+				me.tooltip = null;
+			}
+		},	
+		_addScrollEventListener: function(){
+			var me=this;
+			me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
 		},
 		
 		/******************************************************* LAUNCH ********************************************************/
@@ -132,6 +195,7 @@
 			var me=this; 
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
+			me._addScrollEventListener();
 			me.setLoading('Loading Configuration');
 			me._loadModels()
 				.then(function(){
@@ -251,11 +315,8 @@
 				}
 			});
 		},
-		
-		/******************************************************* Render Ribbon ********************************************************/
-		_hideHighchartsLinks: function(){
-			$('.highcharts-container > svg > text:last-child').hide();
-		},
+	
+		/******************************************************* Render Ribbon ********************************************************/	
 		_getCountForTeamAndGrid: function(project, grid){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -277,6 +338,120 @@
 				return me._reloadStore(store).then(function(store){ return store.totalCount; });
 			else return Q(0);
 		},
+		_getUserStoryCountForRelease: function(project){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'UserStory',
+					limit:1,
+					pageSize:1,
+					remoteSort:false,
+					fetch: false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: project.data._ref }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }))
+					]
+				});
+			return me._reloadStore(store).then(function(store){ return store.totalCount; });
+		},
+		_onHeatmapClick: function(point, team, grid){
+			var me=this,
+				panelWidth=300,
+				rect = point.graphic.element.getBoundingClientRect(),
+				leftSide = rect.left,
+				topSide = rect.top,
+				x = point.x,
+				y = point.y;
+			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y){
+				me._clearToolTip();
+				return; 
+			}
+			me._clearToolTip();
+			me._getUserStoryCountForRelease(team).then(function(totalStories){
+				me.tooltip = {
+					x:x,
+					y:y,
+					panel: Ext.widget('container', {
+						floating:true,
+						width: panelWidth,
+						autoScroll:false,
+						id:'HeatmapTooltipPanel',
+						cls: 'intel-tooltip',
+						focusOnToFront:false,
+						shadow:false,
+						renderTo:Ext.getBody(),
+						items: [{
+							xtype:'container',
+							layout:'hbox',
+							cls: 'heatmap-tooltip-inner-container',
+							items:[{
+								xtype:'container',
+								flex:1,
+								items:[{
+									xtype:'container',
+									html: [
+										'<p><b>How big of problem</b>: ',
+											'<span class="heatmap-tooltip-big-problem">' + ((point.value/totalStories*10000>>0)/100) + '%</span>',
+										'</p>',
+										'<p><b>' + grid.originalConfig.title + '</b>: ' + point.value + '</p>',
+										'<p><b>Stories in Release</b>: ' + totalStories + '</p>'
+									].join('')
+								},{
+									xtype:'button',
+									cls:'heatmap-tooltip-button',
+									text:'GO TO THIS GRID',
+									handler: function(){
+										me._clearToolTip();
+										if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID != team.data.ObjectID){
+											me.CurrentTeam = team;
+											me.TeamPicker.setValue(team.data.Name);
+											me._reloadEverything()
+												.then(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); })
+												.done();
+										}
+										else Ext.get(grid.originalConfig.id).scrollIntoView(me.el);
+									}
+								}]
+							},{
+								xtype:'button',
+								cls:'heatmap-tooltip-close',
+								text:'X',
+								width:20,
+								handler: function(){ me._clearToolTip(); }
+							}]
+						}],
+						listeners:{
+							afterrender: function(panel){
+								panel.setPosition(leftSide-panelWidth, topSide);
+							}
+						}
+					})	
+				};
+				me.tooltip.triangle = Ext.widget('container', {
+					floating:true,
+					width:0, height:0,
+					focusOnToFront:false,
+					shadow:false,
+					renderTo:Ext.getBody(),
+					listeners:{
+						afterrender: function(panel){
+							setTimeout(function(){
+								panel.addCls('intel-tooltip-triangle');
+								panel.setPosition(leftSide - 10, topSide);
+							}, 10);
+						}
+					}
+				});	
+			})
+			.fail(function(reason){ me._alert('ERROR', reason || ''); })
+			.done();
+		},	
+		_hideHighchartsLinks: function(){
+			$('.highcharts-container > svg > text:last-child').hide();
+		},
 		_getHeatMapConfig: function() { 
 			var me=this,
 				highestNum = 0,
@@ -295,8 +470,13 @@
 			});
 			window._selectTeam = function(value){
 				var team = _.find(me.LeafProjects, function(p){ return p.data.Name.split('-')[0].trim() === value; });
-				if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID) me.CurrentTeam = null;
-				else me.CurrentTeam = team;
+				if(me.CurrentTeam && team.data.ObjectID == me.CurrentTeam.data.ObjectID){
+					me.CurrentTeam = null;
+					me.TeamPicker.setValue('All');
+				} else {
+					me.CurrentTeam = team;
+					me.TeamPicker.setValue(team.data.Name);
+				}
 				me._reloadEverything();
 			};
 			window._selectId = function(gridId){
@@ -306,9 +486,9 @@
 				return {       
 					chart: {
 						type: 'heatmap',
-						height:340,
+						height:420,
 						marginTop: 10,
-						marginLeft: 130,
+						marginLeft: 140,
 						marginBottom: 80
 					},
 					title: { text: null },
@@ -355,13 +535,7 @@
 										var point = this,
 											team = _.sortBy(me.LeafProjects, function(p){ return p.data.Name; })[point.x],
 											grid = userStoryGrids[point.y];
-										if(!me.CurrentTeam || me.CurrentTeam.data.ObjectID != team.data.ObjectID){
-											me.CurrentTeam = team;
-											setTimeout(function(){
-												me._reloadEverything().then(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); }).done();
-											}, 0);
-										}
-										else Ext.get(grid.originalConfig.id).scrollIntoView(me.el);
+										me._onHeatmapClick(point, team, grid);
 									}
 								}
 							}
@@ -390,19 +564,21 @@
 					return {
 						name: grid.originalConfig.title,
 						y: grid.store.totalCount || 0,
-						gridID: grid.originalConfig.id
+						gridID: grid.originalConfig.id,
+						model: grid.originalConfig.model
 					};
 				});
 			if(_.every(chartData, function(item){ return item.y === 0; })){
 				chartData = [{
 					name: 'Everything is correct!',
 					y:1,
-					color:'#60BD68'
+					color:'#2ECC40', //GREEN
+					model:''
 				}];
 			}
 			return {
 				chart: {
-					height:345,
+					height:420,
 					marginLeft: -15,
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -417,7 +593,14 @@
 							distance:25,
 							crop:false,
 							overflow:'none',
-							format:'<b>{point.name}</b>: {y}',
+							formatter: function(){
+								var isFeature = (this.point.model == 'PortfolioItem/Feature'),
+									isStory = (this.point.model == 'UserStory'),
+									str = '<b>' + this.point.name + '</b>: ' + this.point.y;
+								if(isFeature) return str + '/' + me.TotalFeaturesInRelease;
+								else if(isStory) return str + '/' + me.TotalStoriesInRelease;
+								else return str;
+							},
 							style: { 
 								cursor:'pointer',
 								color: 'black'
@@ -449,6 +632,7 @@
 			var me=this;
 			Highcharts.setOptions({ colors: me._colors });
 			$('#pie').highcharts(me._getPieChartConfig());
+			Highcharts.setOptions({ colors: ['#AAAAAA'] });
 			if(!me.TrainRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-train teams
 			else return me._getHeatMapConfig()
 				.then(function(chartConfig){
@@ -466,11 +650,18 @@
 			
 			window._scrollToTop = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
 			
-			var gridTitleLink = gridConfig.title +
-					'<span style="float:right;font-weight:bold;font-size:0.8rem;"><a onclick="_scrollToTop()">Top</a></span>',
+			var getGridTitleLink = function(store, model){
+					var num = store && store.totalCount,
+						den = (model==='UserStory' ? me.TotalStoriesInRelease : me.TotalFeaturesInRelease),
+						type = (model==='UserStory' ? 'Stories' : 'Features');
+					return gridConfig.title +
+						'<span class="sanity-grid-header-stats">' + 
+							(store ? (' (' + num+ '/' + den + ' ' + type + ' - ' + ((num/den*10000>>0)/100) + '% )') : '') + 
+						'</span>' + 
+						'<span class="sanity-grid-header-top-link"><a onclick="_scrollToTop()">Top</a></span>';
+				},
 				deferred = Q.defer(),
 				grid = Ext.create('Rally.ui.grid.Grid', {
-					title: gridTitleLink,
 					id: gridConfig.id,
 					columnCfgs: gridConfig.columns,
 					showPagingToolbar: true,
@@ -494,7 +685,7 @@
 								if(!store.getRange().length){
 									var goodGrid = Ext.create('Rally.ui.grid.Grid', {
 										xtype:'rallygrid',
-										title: gridTitleLink,
+										title: getGridTitleLink(),
 										id: gridConfig.id,
 										cls:' sanity-grid grid-healthy',
 										originalConfig: gridConfig,
@@ -505,9 +696,10 @@
 									});
 									goodGrid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
 									deferred.resolve(goodGrid);
-								} else{
+								} else {
 									grid.addCls('grid-unhealthy sanity-grid');
 									grid.gridContainer = Ext.getCmp('grids' + gridConfig.side);
+									grid.setTitle(getGridTitleLink(store, gridConfig.model));
 									deferred.resolve(grid);
 								}
 							}  
@@ -521,6 +713,7 @@
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				todayISO = new Date().toISOString(),
 				trainName = me.TrainRecord && me.TrainRecord.data.Name.split(' ART')[0],
 				defaultUserStoryColumns = [{
 						text:'FormattedID',
@@ -549,7 +742,7 @@
 						editor:false
 					}],
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
-					//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //i guess we dont want this :(
+					//.or(Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName })) //dont want this
 				userStoryProjectFilter = me.CurrentTeam ? 
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID }) : 
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Name', operator:'contains', value: trainName}),
@@ -689,8 +882,44 @@
 						.and(releaseNameFilter).and(userStoryProjectFilter)
 					]
 				},{
+					showIfLeafProject:true,
+					title: 'Stories in Current Sprint With No Task',
+					id: 'grid-features-notask-current-sprint',
+					model: 'UserStory',
+					columns: defaultUserStoryColumns.concat([{
+						text:'',
+						renderer: function(value, meta, record){
+							return '<a target="_blank" href="https://rally1.rallydev.com/#/' + record.data.Project.ObjectID + 
+								'd/detail/task/new?WorkProduct=/hierarchicalrequirement/' + record.data.ObjectID + '">Add Task</a>';
+						}
+					}]),
+					side: 'Right',
+					filters: [
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:todayISO}).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:todayISO})).and(
+						Ext.create('Rally.data.wsapi.Filter',{ property: 'Tasks.ObjectID', operator: '=', value: null}))
+						.and(releaseNameFilter).and(userStoryProjectFilter)
+					]
+				},{
+					showIfLeafProject: true,
+					title: 'Stories in Current Sprint With No Description',
+					id: 'grid-features-no-description-currentsprint',
+					model: 'UserStory',
+					columns: defaultUserStoryColumns.concat([{
+						text: 'Description',
+						dataIndex: 'Description',
+						tdCls:'editor-cell'
+					}]),
+					side: 'Left',
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:todayISO}).and(
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:todayISO})).and(
+						Ext.create('Rally.data.wsapi.Filter',{ property: 'Description', operator: '=', value: null}))	
+						.and(releaseNameFilter).and(userStoryProjectFilter)	
+					]
+				},{
 					showIfLeafProject:false,
-					title: 'Features with no stories',
+					title: 'Features with No Stories',
 					id: 'grid-features-with-no-stories',
 					model: 'PortfolioItem/Feature',
 					columns: defaultFeatureColumns,

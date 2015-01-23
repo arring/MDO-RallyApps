@@ -8,7 +8,7 @@
 	margin:10px 0 0 0;
 	padding:0;
 	width: 98%; 
-	height:350px;
+	height:430px;
 	border: 1px solid #AAA; }
 
 .grids-container {
@@ -56,6 +56,15 @@
 	.sanity-grid.rally-grid .x4-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
 		background-image:none; }
 
+	.sanity-grid-header-top-link {
+		float:right;
+		cursor:pointer;
+		font-weight:bold;
+		font-size:0.8rem; }
+	
+	.sanity-grid-header-stats {
+		font-size: 12px;}
+		
 .highcharts-container { overflow: visible !important; }
 
 .my-heatmap-tooltip {
@@ -78,7 +87,7 @@
 		
 .heatmap-ylabel {
 	white-space:normal;
-	width:124px; 
+	width:134px; 
 	height:35px;
 	text-align:center;
 	display:flex;
@@ -90,3 +99,44 @@
 	cursor:pointer;
 	padding:0 2px 0 2px; 
 	margin:0; }
+	
+/*********************************** TOOLTIP ****************************/
+.intel-tooltip {
+	padding:10px;
+	background-color:#C0D9FA;
+	border-radius:8px;
+	z-index:500; }
+
+	.intel-tooltip p {
+		margin:2px 0 2px 0; }
+		
+	.intel-tooltip ol {
+		margin:2px 0 2px 0;
+		padding-left:20px; }
+
+.intel-tooltip-triangle {
+	border-left: 10px solid transparent;
+	border-right: 10px solid transparent;
+	border-top: 10px solid #C0D9FA;
+	height: 0px;
+	width: 0px;
+	z-index:500; }	
+
+.heatmap-tooltip-close {
+	padding:0 0 2px 0;
+	font-weight:bold;
+	margin-left: 5px;
+	margin-top: -5px;
+	border-radius:10px; }
+
+.heatmap-tooltip-inner-container,
+.heatmap-tooltip-inner-container * {
+	overflow: visible; }
+	
+.heatmap-tooltip-button {
+	margin-top:5px; }
+	
+.heatmap-tooltip-big-problem {
+	font-weight: bold;
+	font-size:1.1em; }
+	
