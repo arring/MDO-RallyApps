@@ -646,11 +646,14 @@
 					storeConfig: {
 						model: gridConfig.model,
 						autoLoad:{start: 0, limit: 10},
+						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'EndDate', 'Iteration', 'Release', 'Description', 
+							'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'Blocked', 'BlockedReason', 'Feature'],
 						pageSize: 10,
 						context: { workspace: me.getContext().getWorkspace()._ref, project:null },
 						filters: gridConfig.filters,
 						listeners: {
 							load: function(store) {
+								if(gridConfig.filterFnAfterLoad) store.filterBy(gridConfig.filterFnAfterLoad);
 								if(!store.getRange().length){
 									var goodGrid = Ext.create('Rally.ui.grid.Grid', {
 										xtype:'rallygrid',
@@ -846,10 +849,13 @@
 					}]),
 					side: 'Right',
 					filters: [
-						Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Name', operator: '!=', value: null }).and(
-						Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator: '>', value: releaseDate}))
+						Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.PlannedEndDate', operator: '!=', value: null })
 						.and(releaseNameFilter).and(userStoryProjectFilter)
-					]
+					],
+					filterFnAfterLoad: function(userStory){
+						debugger;
+						return new Date(userStory.data.Iteration.EndDate) > new Date(userStory.data.Feature.PlannedEndDate);
+					}
 				},{
 					showIfLeafProject:true,
 					title: 'Stories in Current Sprint With No Task',

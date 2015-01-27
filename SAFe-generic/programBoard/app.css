@@ -1,0 +1,60 @@
+.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
+.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
+
+.grey-row .x-grid-cell { background-color:rgba(224, 224, 224, 0.15) !important; }
+.grey-row.x-grid-row-selected .x-grid-cell { background-color:rgba(224, 224, 224, 0.25) !important; }
+.red-row .x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
+.red-row.x-grid-row-selected .x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+.green-row .x-grid-cell{ background-color:rgba(0, 255, 0, 0.15) !important; }
+.green-row.x-grid-row-selected .x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+
+
+.x-grid-row .green-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
+.x-grid-row-selected .green-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+
+.x-grid-row .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
+.x-grid-row-selected .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+
+.x-grid-row .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.15) !important; }
+.x-grid-row-selected .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.25) !important; }
+
+/************ dependencies stuff ******************/
+.x-grid-body .x-grid-body { background-color:rgba(0,0,0,0) !important; }
+.rally-grid .x-grid-body { border-top:0 !important; }
+
+.x-grid-row.intel-team-dep-row .x-grid-cell,
+.x-grid-row-hover.intel-team-dep-row.x-grid-cell,
+.x-grid-row-selected.intel-team-dep-row .x-grid-cell { background-color:rgba(0,0,0,0) !important; }
+	
+.x-grid-row .intel-not-supported-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
+.x-grid-row-selected .intel-not-supported-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+
+.x-grid-row .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
+.x-grid-row-selected .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+
+.hidden { display:none !important; }
+
+.rally-grid .x-grid-header-ct .x-box-inner .x-box-inner { border-bottom: none !important; }
+
+.grid-header-text {
+	font-size: 13px !important; }
+	
+.sanity-list-item {
+	white-space:nowrap;
+	margin:5px 0 0 0;
+	overflow:hidden;}
+.sanity-name-cell { 
+	border-left:1px solid black;
+	border-top:1px solid black;
+	border-bottom:1px solid black;
+	border-bottom-left-radius:5px;
+	border-top-left-radius:5px; }
+.green-bg-cell { background-color:#2ECC40 !important; }
+.aqua-bg-cell { background-color:#7FDBFF !important; }
+.silver-bg-cell { background-color:#DDDDDD !important; }
+.orange-bg-cell { background-color:#FF851B !important; }
+.lime-bg-cell { background-color:#01FF70 !important; }
+.sanity-num-cell { 
+	text-align:center;
+	border:1px solid black; }
+.sanity-header { font-size:13px; }

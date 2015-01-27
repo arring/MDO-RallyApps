@@ -1,0 +1,8 @@
+.app { background-color: black !important; padding:30px; }
+
+.header-cls { background-color:white !important; }
+
+.pre-wrap-cell { white-space:pre-wrap !important; }
+
+.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
+.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }

@@ -1,0 +1,65 @@
+.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
+.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
+
+.intel-legend-dot {
+	width:12px;
+	height:12px;
+	border-radius:6px;
+	border:1px solid black;
+	display:inline-block;
+	vertical-align:middle;
+}
+
+.intel-legend-item {
+	font-size:1em;
+	text-align:right;
+}
+
+.intel-tooltip {
+	padding:10px;
+	background-color:#C0D9FA;
+	border-radius:8px;
+	z-index:500;
+}
+
+.intel-tooltip p {
+	margin:2px 0 2px 0; 
+}
+.intel-tooltip ol {
+	margin:2px 0 2px 0;
+	padding-left:20px;
+}
+
+.intel-tooltip-triangle {
+	border-left: 10px solid transparent;
+	border-right: 10px solid transparent;
+	border-top: 10px solid #C0D9FA;
+	height: 0px;
+	width: 0px;
+	z-index:500;
+}	
+
+.intel-tooltip-triangle-up {
+	border-left: 10px solid transparent;
+	border-right: 10px solid transparent;
+	border-bottom: 10px solid #C0D9FA;
+	height: 0px;
+	width: 0px;
+	z-index:500;
+}	
+
+/**************************************** GRID HEADERS STUFF *******************************/
+.x-column-header-inner .x-column-header-text {
+white-space: normal !important;
+line-height: 15px;
+}
+
+
+.x-column-header-inner {
+text-align: center;
+height:100 !important;
+}
+
+.intel-qtip-over-style {
+
+}
