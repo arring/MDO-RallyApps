@@ -66,7 +66,7 @@
 			'#0074D9' //BLUE
 		],
 		
-		/***************************************************** Store Loading *******************************************************/		
+		/***************************************************** Store Loading ************************************************/		
 		_getUserStoryFilter: function(){			
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
@@ -75,14 +75,16 @@
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				userStoryProjectFilter,
 				inIterationButNotReleaseFilter;
-			if(me.CurrentTeam) 
+			if(!me.TrainRecord) //scoped outside train
 				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: me.CurrentTeam.data.ObjectID });
-			else if(me.LeafProjects && Object.keys(me.LeafProjects).length)
+			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within train
 				userStoryProjectFilter = _.reduce(me.LeafProjects, function(filter, projectData, projectOID){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: projectOID});
 					if(filter) return filter.or(newFilter);
 					else return newFilter;
 				}, null);
+			else throw "Train has no Scrums!";
+			
 			inIterationButNotReleaseFilter =
 				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 				Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
@@ -99,8 +101,9 @@
 					params: {
 						pagesize:200,
 						query:me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'StartDate', 'EndDate', 'Iteration', 'Release', 'Description', 
-							'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'Blocked', 'BlockedReason', 'Feature'].join(','),
+						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'StartDate', 'EndDate', 'Iteration', 
+							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'Feature'].join(','),
 						workspace:me.getContext().getWorkspace()._ref,
 						includePermissions:true
 					}
@@ -141,13 +144,15 @@
 			});
 		},
 		
-		/******************************************************* Reloading ********************************************************/	
+		/******************************************************* Reloading ************************************************/	
 		_removeAllItems: function(){
 			var me = this;
 			Ext.getCmp('pie').removeAll();
 			Ext.getCmp('heatmap').removeAll();
 			Ext.getCmp('gridsLeft').removeAll();
 			Ext.getCmp('gridsRight').removeAll();
+			var indicator = Ext.getCmp('integrityIndicator');
+			if(indicator) indicator.destroy();
 		},
 		_redrawEverything: function(){
 			var me=this;
@@ -155,7 +160,12 @@
 			me._removeAllItems();
 			me.setLoading('Loading Grids and Charts');
 			return me._buildGrids()
-				.then(function(){ return me._buildRibbon(); })
+				.then(function(){ 
+					return Q.all([
+						me._buildRibbon(),
+						me._buildIntegrityIndicator()
+					]);
+				})
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
 		},
@@ -191,7 +201,7 @@
 			me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
 		},
 		
-		/******************************************************* LAUNCH ********************************************************/
+		/******************************************************* LAUNCH *****************************************************/
 		launch: function() {
 			var me=this; 
 			me._initDisableResizeHandle();
@@ -254,7 +264,7 @@
 				.done();
 		},
 
-		/******************************************************* RELEASE PICKER ********************************************************/
+		/******************************************************* NAV CONTROLS ************************************************/
 		_releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -315,33 +325,84 @@
 			});
 		},
 	
-		/******************************************************* Render Ribbon ********************************************************/	
-		_getCountForTeamAndGrid: function(project, grid){
+		/*********************************************** Story/Point util for projects ************************************/	
+		_getProjectStoriesForGrid: function(project, grid){
 			return _.filter(grid.originalConfig.data, function(story){
 				return story.data.Project.ObjectID == project.data.ObjectID;
-			}).length;
+			});
 		},
-		_getProjectsUserStoriesInRelease: function(project){
-			var me=this;
-			return _.filter(me.UserStoryStore.getRange(), function(story){
+		_getProjectStoriesForRelease: function(project, grid){
+			return _.filter(grid.originalConfig.totalStories, function(story){
 				return story.data.Project.ObjectID == project.data.ObjectID;
 			});
-		},	
+		},
+		_getProjectPointsForGrid: function(project, grid){
+			return _.reduce(this._getProjectStoriesForGrid(project, grid), function(sum, story){
+				return sum + story.data.PlanEstimate;
+			}, 0);
+		},		
+		_getProjectPointsForRelease: function(project, grid){
+			return _.reduce(this._getProjectStoriesForRelease(project, grid), function(sum, story){
+				return sum + story.data.PlanEstimate;
+			}, 0);
+		},
+		
+		/************************************************* Render integrity indicator *****************************************/
+		_buildIntegrityIndicator: function(){
+			var me=this,
+				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
+					return grid.originalConfig.model == 'UserStory'; 
+				}).reverse(),
+				storyNum = {},
+				storyDen = userStoryGrids[0].originalConfig.totalCount,
+				pointNum,
+				pointDen = userStoryGrids[0].originalConfig.totalPoints,
+				storyPer,
+				pointPer;
+			_.each(userStoryGrids, function(grid){
+				_.each(grid.originalConfig.data, function(item){ storyNum[item.data.ObjectID] = item.data.PlanEstimate; });
+			});
+			pointNum = (100*(pointDen - _.reduce(storyNum, function(sum, planEstimate){ return sum + planEstimate; }, 0))>>0)/100;
+			storyNum = storyDen - Object.keys(storyNum).length;
+			storyPer = (storyNum/storyDen*10000>>0)/100;
+			pointPer = (pointNum/pointDen*10000>>0)/100;
+			
+			me.IntegrityIndicator = Ext.getCmp('controlsContainer').add({
+				xtype:'container',
+				id:'integrityIndicator',
+				padding:'5px 20px 0 0',
+				flex:1,
+				layout:{
+					type:'hbox',
+					pack:'end'
+				},
+				items:[{
+					xtype:'container',
+					html:'<span class="integrity-inticator-title">' + 
+						(me.CurrentTeam ? me.CurrentTeam.data.Name : me.TrainRecord.data.Name) + ' Integrity <em>(% Correct)</em></span><br/>' + 
+						'<span class="integrity-indicator-value"><b>Stories: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' +
+						'<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'
+				}]
+			});
+		},
+		
+		/******************************************************* Render Ribbon ************************************************/	
 		_onHeatmapClick: function(point, team, grid){
 			var me=this,
-				panelWidth=300,
+				panelWidth=320,
 				rect = point.graphic.element.getBoundingClientRect(),
 				leftSide = rect.left,
 				topSide = rect.top,
 				x = point.x,
 				y = point.y,
-				projectsStoriesInRelease = me._getProjectsUserStoriesInRelease(team),
-				totalStories = projectsStoriesInRelease.length,
-				totalPoints = _.reduce(projectsStoriesInRelease, function(sum, p){ return sum + p.data.PlanEstimate; });
-			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y){
-				me._clearToolTip();
-				return; 
-			}
+				storyDen = me._getProjectStoriesForRelease(team, grid).length,
+				storyNum = me._getProjectStoriesForGrid(team, grid).length,
+				pointDen = (10000*me._getProjectPointsForRelease(team, grid)>>0)/100,
+				pointNum = (10000*me._getProjectPointsForGrid(team, grid)>>0)/100,
+				storyPer = (10000*storyNum/storyDen>>0)/100,
+				pointPer = (10000*pointNum/pointDen>>0)/100;
+				
+			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y) return me._clearToolTip();
 			me._clearToolTip();
 			me.tooltip = {
 				x:x,
@@ -361,16 +422,57 @@
 						cls: 'heatmap-tooltip-inner-container',
 						items:[{
 							xtype:'container',
+							cls: 'heatmap-tooltip-inner-left-container',
 							flex:1,
 							items:[{
-								xtype:'container',
-								html: [
-									'<p><b>How big of problem</b>: ',
-										'<span class="heatmap-tooltip-big-problem">' + ((point.value/totalStories*10000>>0)/100) + '%</span>',
-									'</p>',
-									'<p><b>' + grid.originalConfig.title + '</b>: ' + point.value + '</p>',
-									'<p><b>Stories in Release</b>: ' + totalStories + '</p>'
-								].join('')
+								xtype:'rallygrid',
+								columnCfgs:[{
+									dataIndex:'Label',
+									width:60,
+									draggable:false,
+									sortable:false,
+									resizable:false,
+									editable:false
+								},{
+									text:'Outstanding',
+									dataIndex:'Outstanding',
+									width:85,
+									draggable:false,
+									sortable:false,
+									resizable:false,
+									editable:false
+								},{
+									text:'Total',
+									dataIndex:'Total',
+									width:60,
+									draggable:false,
+									sortable:false,
+									resizable:false,
+									editable:false
+								},{
+									text:'% Problem',
+									dataIndex:'Percent',
+									width:70,
+									draggable:false,
+									sortable:false,
+									resizable:false,
+									editable:false
+								}],
+								store: Ext.create('Rally.data.custom.Store', {
+									data:[{
+										Label:'Stories',
+										Outstanding:storyNum,
+										Total:storyDen,
+										Percent:storyPer + '%'
+									},{
+										Label:'Points',
+										Outstanding:pointNum,
+										Total:pointDen,
+										Percent:pointPer + '%'
+									}]
+								}),
+								showPagingToolbar: false,
+								showRowActionsColumn: false
 							},{
 								xtype:'button',
 								cls:'heatmap-tooltip-button',
@@ -429,7 +531,7 @@
 				selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
 			_.each(userStoryGrids, function(grid, gindex) {
 				_.each(_.sortBy(me.LeafProjects, function(p){ return p.data.Name; }), function(project, pindex){
-					var gridCount = me._getCountForTeamAndGrid(project, grid);
+					var gridCount = me._getProjectStoriesForGrid(project, grid).length;
 					highestNum = Math.max(gridCount, highestNum);
 					chartData.push([pindex, gindex, gridCount]);
 				});
@@ -591,7 +693,9 @@
 				}]
 			};
 		},	
-		_hideHighchartsLinks: function(){ $('.highcharts-container > svg > text:last-child').hide(); },
+		_hideHighchartsLinks: function(){ 
+			$('.highcharts-container > svg > text:last-child').hide(); 
+		},
 		_buildRibbon: function() {
 			var me=this;
 			Highcharts.setOptions({ colors: me._colors });
@@ -606,7 +710,8 @@
 		
 		/******************************************************* Render GRIDS ********************************************************/
 		_getFilteredStories: function(){
-			var me=this;
+			/** gets the stories in this release for the scoped team or the train **/
+			var me=this; 
 			if(me.TrainRecord){
 				if(me.CurrentTeam) return _.filter(me.UserStoryStore.getRange(), function(item){ 
 					return item.data.Project.ObjectID == me.CurrentTeam.data.ObjectID;
@@ -615,7 +720,9 @@
 			}
 			else return me.UserStoryStore.getRange();
 		},
-		_getFilteredFeatures: function(){ return this.FeatureStore.getRange(); },
+		_getFilteredFeatures: function(){ 
+			return this.FeatureStore.getRange(); 
+		},
 		_addGrid: function(gridConfig){
 			var me=this,
 				randFunctionName = '_scrollToTop' + (Math.random()*10000>>0);
@@ -623,12 +730,19 @@
 			window[randFunctionName] = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
 			
 			var getGridTitleLink = function(data, model){
-					var num = data && data.length,
-						den = gridConfig.totalCount,
+					var storyNum = data && data.length,
+						storyDen = gridConfig.totalCount,
+						pointNum = data && (100*_.reduce(data, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100,
+						pointDen = gridConfig.totalPoints,
 						type = (model==='UserStory' ? 'Stories' : 'Features');
-					return gridConfig.title +
-						'<span class="sanity-grid-header-stats">' + 
-							(data ? (' (' + num+ '/' + den + ' ' + type + ' - ' + ((num/den*10000>>0)/100) + '% )') : '') + 
+					return '<span class="sanity-grid-header-left">' + 
+						gridConfig.title + (data ? '<br>' : '') + 
+							'<span class="sanity-grid-header-stats">' + 
+								(data ? ('<b>' + type + ':</b> ' + storyNum+ '/' + storyDen + ' (' + ((storyNum/storyDen*10000>>0)/100) + '%)') : '') + 
+								((data && model=='UserStory') ? 
+									('<br><b>Points:</b> ' + pointNum+ '/' + pointDen + '  (' + ((pointNum/pointDen*10000>>0)/100) + '%)') : ''
+								) + 
+							'</span>' + 
 						'</span>' + 
 						'<span class="sanity-grid-header-top-link"><a onclick="' + randFunctionName + '()">Top</a></span>';
 				},
@@ -717,6 +831,14 @@
 						text:'BlockedReason',
 						dataIndex:'BlockedReason',
 						tdCls:'editor-cell'
+					},{
+						text:'Days Blocked',
+						tdCls:'editor-cell',
+						editor:false,
+						renderer:function(val, meta, record){
+							var day = 1000*60*60*24;
+							return (new Date()*1 - new Date(record.data.Blocker.CreationDate)*1)/day>>0;
+						}
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
@@ -886,7 +1008,9 @@
 				else {
 					var list = gridConfig.model == 'UserStory' ? filteredStories : filteredFeatures;
 					gridConfig.data = _.filter(list, gridConfig.filterFn);
+					gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Stories' : 'Features')] = list;
 					gridConfig.totalCount = list.length;
+					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100;
 					return me._addGrid(gridConfig);
 				}
 			}))

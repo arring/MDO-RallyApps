@@ -45,10 +45,7 @@
 		 
 	.sanity-grid .grid-pager {
 		margin:3px !important; }
-	
-/*	.sanity-grid .page-size-links {
-		visibility:hidden !important; } */
-		
+
 	.sanity-grid .editor-cell,
 	.sanity-grid .editor-cell *{
 		cursor:pointer !important; }
@@ -57,16 +54,21 @@
 	.sanity-grid.rally-grid .x4-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover { 
 		background-image:none; }
 
+	.sanity-grid-header-left {
+		float: left; 
+		font-size:1rem; }
+	
+		.sanity-grid-header-stats {
+			font-size: 12px; }
+		
 	.sanity-grid-header-top-link {
 		float:right;
 		cursor:pointer;
 		font-weight:bold;
 		font-size:0.8rem; }
-	
-	.sanity-grid-header-stats {
-		font-size: 12px;}
 
-.sanity-grid .x-grid-cell-inner {
+	.sanity-grid .x-grid-cell-inner,
+	.sanity-grid .x4-grid-cell-inner  {
 		white-space:normal; }
 		
 /*********************************** HEATMAP  ****************************/
@@ -105,12 +107,23 @@
 	padding:0 2px 0 2px; 
 	margin:0; }
 	
+/*********************************** integrity indicator ****************/
+.integrity-inticator-title{
+	font-size:1.1rem;
+	padding-right:5px;
+	text-decoration:underline;}
+	
+.integrity-indicator-value {
+	font-size:1rem; }
+	
+	
 /*********************************** TOOLTIP ****************************/
 .intel-tooltip {
 	padding:10px;
 	background-color:#C0D9FA;
 	border-radius:8px;
-	z-index:500; }
+	z-index:500; 
+	box-shadow:-3px 3px 3px;}
 
 	.intel-tooltip p {
 		margin:2px 0 2px 0; }
@@ -137,6 +150,9 @@
 .heatmap-tooltip-inner-container,
 .heatmap-tooltip-inner-container * {
 	overflow: visible; }
+	
+.heatmap-tooltip-inner-left-container {
+	overflow: hidden; }
 	
 .heatmap-tooltip-button {
 	margin-top:5px; }
