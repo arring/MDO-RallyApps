@@ -545,6 +545,7 @@
 					me.CurrentTeam = team;
 					me.TeamPicker.setValue(team.data.Name);
 				}
+				me._clearToolTip();
 				me._redrawEverything();
 			};
 			window[selectIdFunctionName] = function(gridId){

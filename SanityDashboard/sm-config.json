@@ -16,6 +16,7 @@
 		"../lib/mixins/intel-workweek.js",
 		"../lib/mixins/release-query.js",
 		"../lib/mixins/user-app-preferences.js",
+		"../lib/mixins/parallel-loader.js",
 		"../lib/components/intel-combobox.js",
 		"../lib/components/intel-fixed-combobox.js",
 		"../lib/components/intel-release-picker.js",
