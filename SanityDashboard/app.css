@@ -10,7 +10,8 @@
 	width: 98%; 
 	height:430px;
 	border: 1px solid #AAA; }
-
+	
+/*********************************** GRIDS  ****************************/
 .grids-container {
 	margin:10px 0 0 0;
 	padding:0;
@@ -64,7 +65,11 @@
 	
 	.sanity-grid-header-stats {
 		font-size: 12px;}
+
+.sanity-grid .x-grid-cell-inner {
+		white-space:normal; }
 		
+/*********************************** HEATMAP  ****************************/
 .highcharts-container { overflow: visible !important; }
 
 .my-heatmap-tooltip {
