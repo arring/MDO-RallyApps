@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>myfirstapp</title>
+
+    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                Ext.define("CustomApp",{extend:"Rally.app.App",componentCls:"app",launch:function(){var storyBacklog={xtype:"rallygrid",columnCfgs:["FormattedID","Name"],context:this.getContext(),enableRanking:!0,defaultSortToRank:!0,storeConfig:{model:"userstory"}},featureBacklog={xtype:"rallygrid",columnCfgs:["FormattedID","Name","Iteration"],context:this.getContext(),features:[{ftype:"groupingsummary",groupHeaderTpl:"{name} ({rows.length})"}],storeConfig:{model:"task",groupField:"Owner",groupDir:"ASC",fetch:["Owner"],getGroupString:function(record){var owner=record.get("Owner");return owner&&owner._refObjectName||"No Owner"}}},container=Ext.create("Ext.Panel",{title:"HBoxLayout Panel",layout:{type:"hbox",align:"stretch"},renderTo:document.body,items:[{xtype:"container",title:"Inner Panel Three",flex:1,items:[storyBacklog]},{xtype:"container",title:"Inner Panel Two",flex:2,items:[featureBacklog]},{xtype:"container",title:"Inner Panel Three",flex:1}]});this.add(container)}});
+
+            Rally.launchApp('CustomApp', {
+                name:"myfirstapp",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+    <style type="text/css">
+        
+    </style>
+</head>
+<body>
+</body>
+</html>
