@@ -1251,6 +1251,7 @@
 			console.log('saving prefs', prefs);
 			Rally.data.PreferenceManager.update({
 				filterByUser: true,
+				filterByName:me._userAppsPref,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
