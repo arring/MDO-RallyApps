@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SAFe Workspace Configuration</title>
+    <title>Train Configuration</title>
 
     <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
@@ -11,8 +11,17 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
+		/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
+	Ext.define('WorkweekDropdown', {
+		extend: 'Ext.data.Model',
+		fields: [
+			{name: 'Workweek', type:'string'},
+			{name: 'DateVal', type:'number'}
+		]
+	});
+		
 	/************************* USED FOR WORKSPACE CONFIG *********************************************/
-	Ext.define('IntelSAFeWorkspaceConfigItem', {
+	Ext.define('TrainConfigItem', {
 		extend: 'Ext.data.Model',
 		fields: [
 			{name: 'TrainProjectOID', type: 'number'},
@@ -21,192 +30,11 @@
 			{name: 'PortfolioProjectOID', type:'number'}
 		]
 	});
-	
-	/************************* USED FOR PROGRAMBOARD VIEW *********************************************/
-	Ext.define('IntelVelocity', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'Name', type: 'string'},
-			{name: 'PlannedVelocity', type: 'number'},
-			{name: 'RealVelocity', type:'number'}
-		]
-	});
-	Ext.define('IntelTeamCommits', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'Rank', type: 'number'},
-			{name: 'Name', type: 'string'},
-			{name: 'ObjectID', type: 'string'},
-			{name: 'FormattedID', type:'string'},
-			{name: 'Commitment', type: 'string'},
-			{name: 'Expected', type: 'boolean'},
-			{name: 'Objective', type:'string'},
-			{name: 'Product', type:'string'},
-			{name: 'PlannedEnd', type:'number'}
-		]
-	});
-	Ext.define('IntelRisk', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'RiskID', type:'string'},
-			{name: 'ObjectID', type:'number'}, //what feature OID the risk is saved to in Rally (not necessarily the FormattedID/FeatureName)
-			{name: 'FormattedID',  type: 'string'},
-			{name: 'FeatureName', type:'string'},
-			{name: 'Description', type: 'string'},
-			{name: 'Impact', type: 'string'},	
-			{name: 'MitigationPlan', type: 'string'},					
-			{name: 'Urgency', type: 'string'},
-			{name: 'Status', type: 'string'},
-			{name: 'Contact', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Edited', type: 'boolean'}
-		]
-	});
-	Ext.define('IntelDepTeam', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'TID',  type: 'string'},  //teamDep ID
-			{name: 'PID',  type: 'string'},  //pred team id
-			{name: 'Sup', type: 'string'},  //Yes, No, Undefined
-			{name: 'USID', type: 'string'}, //pred formatted id
-			{name: 'USName', type: 'string'},
-			{name: 'A', type: 'boolean'} //yes/no
-		]
-	});
-	Ext.define('IntelPredDep', { //predecessor dependencies
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
-			{name: 'DependencyID', type:'string'},
-			{name: 'FormattedID',  type: 'string'}, 
-			{name: 'UserStoryName',  type: 'string'},
-			{name: 'Description', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Status', type:'string'}, //only set by chief engineers. not viewable in this app
-			{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
-			{name: 'Edited', type: 'boolean'}
-		]
-	});				
-	Ext.define('IntelSuccDep', { //predecessor dependency
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'ObjectID', type: 'number'},//what US OID the risk is saved to in Rally (not necessarily the FormattedID/UserStoryName)
-			{name: 'DependencyID', type:'string'}, //same id as the pred id that references it
-			{name: 'SuccUserStoryName', type: 'string' },
-			{name: 'SuccFormattedID',  type: 'string'}, 
-			{name: 'SuccProjectID', type: 'string'}, //of predecessor team
-			{name: 'UserStoryName', type: 'string'}, //can be null!!!!!!!!!!!!
-			{name: 'FormattedID',  type: 'string'},  //CAN BE NULL!!!!!!!!!!!!
-			{name: 'ReleaseStartDate',  type: 'number'}, 
-			{name: 'ReleaseDate',  type: 'number'}, 
-			{name: 'Description', type: 'string'}, 
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Supported', type: 'string'}, //Yes, No, Undefined
-			{name: 'Assigned', type: 'boolean'}, //yes/no
-			{name: 'Edited', type: 'boolean'}
-		]
-	});	
-
-	/************************* USED FOR RISKS/DEPS VIEW *********************************************/
-	Ext.define('IntelRiskWithProject', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'RiskID', type:'string'},
-			{name: 'ProjectName', type:'string'},
-			{name: 'ProjectID', type:'number'},
-			{name: 'Product', type:'string'},
-			{name: 'ObjectID', type:'number'},
-			{name: 'FormattedID',  type: 'string'},
-			{name: 'FeatureName', type:'string'},
-			{name: 'Description', type: 'string'},
-			{name: 'Impact', type: 'string'},			
-			{name: 'Status', type: 'string'},
-			{name: 'MitigationPlan', type: 'string'},					
-			{name: 'Urgency', type: 'string'},
-			{name: 'Contact', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Edited', type: 'boolean'}
-		]
-	});
-	Ext.define('IntelPredDepWithProject', { //predecessor dependencies
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'DependencyID', type:'string'},
-			{name: 'ProjectName', type:'string'},
-			{name: 'ProjectID', type:'number'},
-			{name: 'Product', type:'string'},
-			{name: 'ObjectID', type: 'number'},
-			{name: 'FormattedID',  type: 'string'}, 
-			{name: 'UserStoryName',  type: 'string'},
-			{name: 'Description', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Status', type:'string'}, 
-			{name: 'Predecessors', type: 'auto'}, //TID: Pred: ProjectID, supported, UserStoryID, Assigned
-			{name: 'Edited', type: 'boolean'}
-		]
-	});		
-
-
-	/************************* USED FOR TEAMCOMMITS VIEW *********************************************/
-	Ext.define('CommitsMatrixFeature', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'Rank', type:'number'},
-			{name: 'FormattedID', type:'string'},
-			{name: 'ObjectID', type:'number'},
-			{name: 'FeatureName',  type: 'string'},
-			{name: 'ProductName', type:'string'},
-			{name: 'PlannedEndDate', type:'number'}
-		]
-	});
-
-	/************************* USED FOR CUSTOMFIELD EDITOR *********************************************/
-	Ext.define('CFEditorModel', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'FormattedID', type:'string'},
-			{name: 'Name', type:'string'},
-			{name: 'Release', type:'string'},
-			{name: 'CustomFieldValue',  type: 'string'}
-		]
-	});
 }());
-                (function(){
-	var Ext = window.Ext4 || window.Ext;
-
-	Ext.define('SAFeWorkspaceConfig', {
-		
-		_SAFeWorkspaceConfigPrefName: 'intel-SAFe-workspace-config', 
-		
-		_loadSAFeWorkspaceConfig: function(){
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				workspace: me.getContext().getWorkspace(),
-				filterByName: me._SAFeWorkspaceConfigPrefName,
-				success: function(prefs) {
-					var workspaceConfigString = prefs[me._SAFeWorkspaceConfigPrefName], workspaceConfig;
-					try{ workspaceConfig = JSON.parse(workspaceConfigString); }
-					catch(e){ workspaceConfig = []; }
-					deferred.resolve(workspaceConfig);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_saveSAFeWorkspaceConfig: function(workspaceConfig){
-			var me=this, s = {}, deferred = Q.defer();
-			s[me._SAFeWorkspaceConfigPrefName] = JSON.stringify(workspaceConfig); 
-			Rally.data.PreferenceManager.update({
-				workspace: me.getContext().getWorkspace(),
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		}
-	});
-}());
-                (function(){
+                /** this extends Rally.app.app. if you want to use it's utility functions, just
+		extend IntelRallyApp instead of Rally.app.App
+	*/
+(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
 	Ext.define('IntelRallyApp', {
@@ -748,7 +576,6 @@
 					}
 				}
 				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-				console.log('childrenProjects', childrenProjects);
 				return Q(childrenProjects);
 			});	
 		},
@@ -765,18 +592,6 @@
 			});
 			return deferred.promise;
 		}
-	});
-}());
-                (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-		/************************* MODEL FOR WORKWEEK DROPDOWNS *********************************************/
-	Ext.define('WorkweekDropdown', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'Workweek', type:'string'},
-			{name: 'DateVal', type:'number'}
-		]
 	});
 }());
                 (function(){
@@ -882,18 +697,20 @@
 			me._applyIframeResizeToWindow();
 		},
 		
-		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/
-		
+		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/		
 		_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
 				portlet = bottomEl.up('.x-portlet'), 
 				portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
 				dashboard = portlet.up('#mydash_portlet'), //has huge padding values
+				titleBar = dashboard.down('.titlebar'), //redundant with app header bar
 				domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
 				innerHeight = window.parent.innerHeight,
 				innerWidth = window.parent.innerWidth;
 				
+			titleBar.dom.style.display = 'none';
+			
 			//adjust widths
 			while(true){
 				domNodeW.style.width = (innerWidth - 4) + 'px';
@@ -905,17 +722,16 @@
 			
 			//adjust heights
 			while(true){
-				domNodeH.style.height = (innerHeight - 135) + 'px';
+				domNodeH.style.height = (innerHeight - 105) + 'px';
 				if(domNodeH.classList.contains('x-portlet')) break;
 				domNodeH = domNodeH.parentNode;
 			}
 			dashboard.dom.style.height = (innerHeight - 65) + 'px';
-			portlet.dom.style.height = (innerHeight - 105) + 'px';
+			portlet.dom.style.height = (innerHeight - 75) + 'px';
 			
 			//final touches LOL
 			dashboard.dom.style.padding = "0 2px 0 2px";
-		},
-		
+		},		
 		_initFixRallyDashboard: function(){ 
 			var me=this;
 			if(me._addWindowEventListener){
@@ -990,6 +806,41 @@
 				while(x.isHidden()) x = x.nextSibling();
 				x.focus();
 			}, 20);
+		}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('TrainPreferenceConfig', {
+		
+		_TrainConfigPrefName: 'intel-train-config', 
+		
+		_loadTrainConfig: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace(),
+				filterByName: me._TrainConfigPrefName,
+				success: function(prefs) {
+					var workspaceConfigString = prefs[me._TrainConfigPrefName], trainConfig;
+					try{ trainConfig = JSON.parse(workspaceConfigString); }
+					catch(e){ trainConfig = []; }
+					deferred.resolve(trainConfig);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_saveTrainConfig: function(trainConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[me._TrainConfigPrefName] = JSON.stringify(trainConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace(),
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
 		}
 	});
 }());
@@ -1855,19 +1706,19 @@
 
 	/********************* END PRODUCTION *****************/
 
-	Ext.define('SAFeWorkspaceConfiguration', {
+	Ext.define('TrainConfiguration', {
 		extend: 'IntelRallyApp',
 		mixins:[
 			'WindowListener',
 			'PrettyAlert',
 			'IframeResize',
-			'SAFeWorkspaceConfig'
+			'TrainPreferenceConfig'
 		],	
 
 		/************************************************** UTIL FUNCS **********************************************/
 		_getStoreData: function(){
 			var me=this;
-			return _.map(me.SAFeWorkspaceConfig, function(configItem){
+			return _.map(me.TrainConfig, function(configItem){
 				return {
 					TrainProjectOID: configItem.TrainProjectOID || 0,
 					TrainName: configItem.TrainName || '',
@@ -1904,10 +1755,10 @@
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
-					return me._loadSAFeWorkspaceConfig();
+					return me._loadTrainConfig();
 				})
-				.then(function(workspaceConfig){
-					me.SAFeWorkspaceConfig = workspaceConfig;
+				.then(function(trainConfig){
+					me.TrainConfig = trainConfig;
 					me.setLoading(false);
 					me._renderGrid();
 				})
@@ -1922,8 +1773,8 @@
 		_renderGrid: function(){
 			var me = this;
 			
-			me.SAFeWorkspaceConfigStore = Ext.create('Ext.data.Store', { 
-				model:'IntelSAFeWorkspaceConfigItem',
+			me.TrainConfigStore = Ext.create('Ext.data.Store', { 
+				model:'TrainConfigItem',
 				data: me._getStoreData()
 			});
 
@@ -2002,12 +1853,12 @@
 						xtype:'button',
 						text:'Remove Train',
 						width:'100%',
-						handler: function(){ me.SAFeWorkspaceConfigStore.remove(record); }
+						handler: function(){ me.TrainConfigStore.remove(record); }
 					};
 				}
 			}];
 
-			me.SAFeWorkspaceConfigGrid = me.add({
+			me.TrainConfigGrid = me.add({
 				xtype: 'rallygrid',
 				emptyText: ' ',
 				header: {
@@ -2031,13 +1882,13 @@
 							margin:'0 10 0 0',
 							listeners:{
 								click: function(){
-									var model = Ext.create('IntelSAFeWorkspaceConfigItem', {
+									var model = Ext.create('TrainConfigItem', {
 										TrainProjectOID: 0,
 										TrainName: '',
 										TrainAndPortfolioLocationTheSame: true,
 										PortfolioProjectOID: 0
 									});
-									me.SAFeWorkspaceConfigStore.insert(0, [model]);
+									me.TrainConfigStore.insert(0, [model]);
 								}
 							}
 						},{
@@ -2047,8 +1898,8 @@
 							margin:'0 10 0 0',
 							listeners:{
 								click: function(){
-									me.SAFeWorkspaceConfigStore.removeAll();
-									me.SAFeWorkspaceConfigStore.add(me._getStoreData());
+									me.TrainConfigStore.removeAll();
+									me.TrainConfigStore.add(me._getStoreData());
 								}
 							}
 						},{
@@ -2057,7 +1908,7 @@
 							width:100,
 							listeners:{ 
 								click: function(){
-									var trainRecords = me.SAFeWorkspaceConfigStore.getRange(),
+									var trainRecords = me.TrainConfigStore.getRange(),
 										trainData = _.map(trainRecords, function(trainRecord){
 											return {
 												TrainProjectOID: trainRecord.data.TrainProjectOID,
@@ -2099,10 +1950,10 @@
 									else if(conflictingTrainName) 
 										me._alert('ERROR', conflictingTrainName.TrainName + ' Train Name is used by more than 1 Train!');
 									else {
-										me.SAFeWorkspaceConfigGrid.setLoading('Saving Config');
-										me._saveSAFeWorkspaceConfig(trainData)
+										me.TrainConfigGrid.setLoading('Saving Config');
+										me._saveTrainConfig(trainData)
 											.fail(function(reason){ me._alert(reason); })
-											.then(function(){ me.SAFeWorkspaceConfigGrid.setLoading(false); })
+											.then(function(){ me.TrainConfigGrid.setLoading(false); })
 											.done();
 									}
 								}
@@ -2137,14 +1988,14 @@
 				showRowActionsColumn:false,
 				showPagingToolbar:false,
 				enableEditing:false,
-				store: me.SAFeWorkspaceConfigStore
+				store: me.TrainConfigStore
 			});	
 		}
 	});
 }());
 
-            Rally.launchApp('SAFeWorkspaceConfiguration', {
-                name:"SAFe Workspace Configuration",
+            Rally.launchApp('TrainConfiguration', {
+                name:"Train Configuration",
 	            parentRepos:""
             });
 
@@ -2152,66 +2003,6 @@
     </script>
 
 
-    <style type="text/css">
-        .x-grid-cell.manager-expected-cell {
-  background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-size: 100% 30px;
-  background-repeat: no-repeat;
-}
-.x-grid-cell.manager-expected-cell-small {
-  background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.x-grid-cell.manager-comment-cell-small {
-  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
-  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
-  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
-  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
-  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.x-grid-cell.manager-expected-comment-cell-small {
-  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.x-grid-cell.intel-team-commits-RED {
-  background-color: rgba(255, 0, 0, 0.5) !important;
-}
-.x-grid-row-selected .x-grid-cell.intel-team-commits-RED,
-.x-grid-row-over .x-grid-cell.intel-team-commits-RED {
-  background-color: rgba(255, 0, 0, 0.7) !important;
-}
-.x-grid-cell.intel-team-commits-GREEN {
-  background-color: rgba(0, 255, 0, 0.5) !important;
-}
-.x-grid-row-selected .x-grid-cell.intel-team-commits-GREEN,
-.x-grid-row-over .x-grid-cell.intel-team-commits-GREEN {
-  background-color: rgba(0, 255, 0, 0.7) !important;
-}
-.x-grid-cell.intel-team-commits-GREY {
-  background-color: rgba(183, 183, 183, 0.5) !important;
-}
-.x-grid-row-selected .x-grid-cell.intel-team-commits-GREY,
-.x-grid-row-over .x-grid-cell.intel-team-commits-GREY {
-  background-color: rgba(183, 183, 183, 0.7) !important;
-}
-
-    </style>
     <style type="text/css">
         .grid-header-text {
   font-size: 1.5rem;

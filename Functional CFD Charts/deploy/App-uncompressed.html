@@ -4,11 +4,16 @@
     <title>Functional CFD Charts</title>
 
     <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.3.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+    <script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                (function(){
+                /** this extends Rally.app.app. if you want to use it's utility functions, just
+		extend IntelRallyApp instead of Rally.app.App
+	*/
+(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
 	Ext.define('IntelRallyApp', {
@@ -550,7 +555,6 @@
 					}
 				}
 				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-				console.log('childrenProjects', childrenProjects);
 				return Q(childrenProjects);
 			});	
 		},
@@ -578,6 +582,17 @@
 		fields: [
 			{name: 'Workweek', type:'string'},
 			{name: 'DateVal', type:'number'}
+		]
+	});
+		
+	/************************* USED FOR WORKSPACE CONFIG *********************************************/
+	Ext.define('TrainConfigItem', {
+		extend: 'Ext.data.Model',
+		fields: [
+			{name: 'TrainProjectOID', type: 'number'},
+			{name: 'TrainName', type: 'string'},
+			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
+			{name: 'PortfolioProjectOID', type:'number'}
 		]
 	});
 }());
@@ -684,18 +699,20 @@
 			me._applyIframeResizeToWindow();
 		},
 		
-		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/
-		
+		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/		
 		_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
 				portlet = bottomEl.up('.x-portlet'), 
 				portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
 				dashboard = portlet.up('#mydash_portlet'), //has huge padding values
+				titleBar = dashboard.down('.titlebar'), //redundant with app header bar
 				domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
 				innerHeight = window.parent.innerHeight,
 				innerWidth = window.parent.innerWidth;
 				
+			titleBar.dom.style.display = 'none';
+			
 			//adjust widths
 			while(true){
 				domNodeW.style.width = (innerWidth - 4) + 'px';
@@ -707,17 +724,16 @@
 			
 			//adjust heights
 			while(true){
-				domNodeH.style.height = (innerHeight - 135) + 'px';
+				domNodeH.style.height = (innerHeight - 105) + 'px';
 				if(domNodeH.classList.contains('x-portlet')) break;
 				domNodeH = domNodeH.parentNode;
 			}
 			dashboard.dom.style.height = (innerHeight - 65) + 'px';
-			portlet.dom.style.height = (innerHeight - 105) + 'px';
+			portlet.dom.style.height = (innerHeight - 75) + 'px';
 			
 			//final touches LOL
 			dashboard.dom.style.padding = "0 2px 0 2px";
-		},
-		
+		},		
 		_initFixRallyDashboard: function(){ 
 			var me=this;
 			if(me._addWindowEventListener){
@@ -1121,20 +1137,104 @@
 		}
 	});
 }());
-                (function(){
+                /** This is a mixin that updates highchart data after it is run through the lookback calculator 
+	it specifically: (optionally) adds trendlines, zeros out the future numbers, and 
+	adds a datemap from workweeks to actual dates
+*/
+(function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('UserAppPreferences', {
+	Ext.define('ChartUpdater', {
+		requires:['IntelWorkweek'],
+
+		_updateChartData: function(data, hideTrends){
+			var me = this, 
+				now = new Date(),
+				datemap = [];
+
+			//get ideal trendline if release has started
+			var totalPoints = (new Date(data.categories[0]) > now ? 0 : 
+					_.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); 
+				}, 0) || 0),
+				idealTrend, ratio;
+				
+			if(!hideTrends){
+				idealTrend = {type:'spline', dashStyle:'Solid', name:'Ideal', data:new Array(data.categories.length)};
+				ratio = (totalPoints/(data.categories.length-1)) || 0; //for NaN
+				idealTrend.data = _.map(idealTrend.data, function(e, i){ return Math.round(100*(0 + i*ratio))/100; });
+			}
+			
+			//zero future points, convert to workweeks, and set datemap
+			_.each(data.categories, function(c, i, a){
+				var d = new Date(c);
+				a[i] = 'ww' + me._getWorkweek(d);
+				datemap[i] = c;
+				if(d>now){
+					_.each(data.series, function(s, j){
+						s.data = s.data.slice(0, i).concat(_.map(new Array(a.length - i), function(){ return 0; }));
+					});
+				}
+			});
+
+			if(!hideTrends){
+				//get projected trendline
+				var s = _.find(data.series, function(s){ return s.name === 'Accepted'; }), i, len,
+					projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:s.data.slice()},
+					begin=0, 
+					end=projectedTrend.data.length-1;
+				for(i=1;i<projectedTrend.data.length;++i)
+					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (remember ISSG_binsplit bug)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				ratio = (end===begin) ? 0 : (projectedTrend.data[end] - 0)/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					if(j>=begin) return Math.round(100*(0 + (j-begin)*ratio))/100;
+					else return p; 
+				});
+
+				//apply label to correct point if needed IGNORE FIRST POINT!
+				for(i=1,len=projectedTrend.data.length; i<len;++i){
+					if(projectedTrend.data[i] >= totalPoints){
+						projectedTrend.data[i] = {
+							color:'red',
+							marker:{
+								enabled:true,
+								lineWidth:4,
+								symbol:'circle',
+								fillColor:'red',
+								lineColor:'red'
+							},
+							y: projectedTrend.data[i]
+						};
+						break;
+					}	
+				}
+				data.series.push(projectedTrend);
+				data.series.push(idealTrend);
+			}		
+			data.datemap = datemap;
+			
+			return data;
+		}
+	});
+}());
+                /** This class is used to save user preferences per project, that can follow the user from app to app **/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('UserAppsPreference', {
 		
-		_prefName: 'intel-user-app-preferences', //this preference can be overridden, unless you want all apps to share prefs
+		_userAppsPref: 'intel-user-apps-preference', //this preference can be overridden, unless you want all apps to share prefs
 		
-		_loadPreferences: function(){
+		_loadAppsPreference: function(){
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				filterByUser:true,
-				filterByName:me._prefName,
+				filterByName:me._userAppsPref,
 				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
+					var appPrefs = prefs[me._userAppsPref];
 					try{ appPrefs = JSON.parse(appPrefs); }
 					catch(e){ appPrefs = { projs:{}, refresh:30};}
 					console.log('loaded prefs', appPrefs);
@@ -1144,10 +1244,10 @@
 			});
 			return deferred.promise;
 		},
-		_savePreferences: function(prefs){
+		_saveAppsPreference: function(prefs){
 			var me=this, s = {}, deferred = Q.defer();
 			prefs = {projs:prefs.projs, refresh:prefs.refresh};
-			s[me._prefName] = JSON.stringify(prefs); 
+			s[me._userAppsPref] = JSON.stringify(prefs); 
 			console.log('saving prefs', prefs);
 			Rally.data.PreferenceManager.update({
 				filterByUser: true,
@@ -1215,21 +1315,18 @@
 	});
 }());
 
-                (function(){
+                /** Fast CFD Calculator is like 1000x faster than the rally build in calculators because this is not a generic 
+	calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields in an area chart
+	between two dates. Example app using this is Train CFD Charts.
+	
+	NOTE: you MUST give this calculator startDate, and endDate in the config. ONLY.
+*/
+(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/** Fast CFD Calculator is like 1000x faster than the rally build in calculators because this is not a generic 
-		calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields, in an area chart
-		between two dates. Example app using this is Train CFD Charts */
-		
 	Ext.define("FastCfdCalculator", {
-		extend:'Rally.data.lookback.SnapshotStore',
-		
+		extend:'Rally.data.lookback.SnapshotStore',	
 		scheduleStates: ['Undefined', 'Defined', 'In-Progress', 'Completed', 'Accepted'],
-		
-		constructor: function() { //you MUST give this calculator startDate, and endDate. That is all it needs
-			this.callParent(arguments);
-		},
 		
 		_getDates:function(){
 			var dates = [], curDay = this.startDate, day=1000*60*60*24;
@@ -1308,105 +1405,15 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/** updates the chart data. the following boolean options exist:
-		noDatemap: to NOT set window.Datemap to allow for a tooltip mapping of points to non-workweek dates
-		noTrends: to NOT show ideal tredn
-		*/
-	Ext.define('ChartUpdater', {
-		requires:['IntelWorkweek'],
-		
-		// __tooltipfunc: function () {
-			// return "<b>100% Complete</b><br />" + 
-				// "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ")";
-		// },
-		
-		_updateChartData: function(data, opts){
-			var me = this, now = new Date();
-			if(!opts || !opts.noDatemap) window.Datemap = []; //for the tooltip to have extra info to display on the chart
-
-			//get ideal trendline
-			var total = (new Date(data.categories[0]) > now ? 0 : 
-					_.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); }, 0) || 0),
-				idealTrend, ratio;
-				
-			if(!opts || !opts.noTrends){
-				idealTrend = {type:'spline', dashStyle:'Solid', name:'Ideal', data:new Array(data.categories.length)};
-				ratio = (total/(data.categories.length-1)) || 0; //for NaN
-				idealTrend.data = _.map(idealTrend.data, function(e, i){ return Math.round(100*(0 + i*ratio))/100; });
-			}
-			
-			//zero future points, convert to workweeks, and set window.Datemap
-			_.each(data.categories, function(c, i, a){
-				var d = new Date(c);
-				a[i] = 'ww' + me._getWorkweek(d);
-				if(!opts || !opts.noDatemap) window.Datemap[i] = c;
-				if(d>now){
-					_.each(data.series, function(s, j){
-						s.data = s.data.slice(0, i).concat(_.map(new Array(a.length - i), function(){ return 0; }));
-					});
-				}
-			});
-
-			if(!opts || !opts.noTrends){
-				//get projected trendline
-				var s = _.find(data.series, function(s){ return s.name === 'Accepted'; }), i, len,
-					projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:s.data.slice()},
-					begin=0, end=projectedTrend.data.length-1;
-				for(i=1;i<projectedTrend.data.length;++i)
-					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
-						begin = i-1; break; }
-				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (remember ISSG_binsplit bug)
-					if(projectedTrend.data[i]!==0){
-						end = i; break; }
-				ratio = end===begin ? 0 : (projectedTrend.data[end] - 0)/(end-begin);
-				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
-					if(j>=begin) return Math.round(100*(0 + (j-begin)*ratio))/100;
-					else return p; 
-				});
-
-				//apply label to correct point if needed IGNORE FIRST POINT!
-				for(i=1,len=projectedTrend.data.length; i<len;++i){
-					if(projectedTrend.data[i] >= total){
-						projectedTrend.data[i] = {
-							// dataLabels: {
-								// enabled: true,
-								// backgroundColor:'white',
-								// borderColor:'black',
-								// borderRadius:3,
-								// borderWidth:1,
-								// formatter: me.__tooltipfunc,
-								// align:((len-i)/len > 0.75) 'center', y:-25
-							// },
-							color:'red',
-							marker:{
-								enabled:true,
-								lineWidth:4,
-								symbol:'circle',
-								fillColor:'red',
-								lineColor:'red'
-							},
-							y: projectedTrend.data[i]
-						};
-						break;
-					}	
-				}
-				data.series.push(projectedTrend);
-				data.series.push(idealTrend);
-			}
-			
-			return data;
-		}
-	});
-}());
-                (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
 	/************************** PRODUCTION *****************************/
 	console = { log: function(){} };	////DEBUG!!!	
 
 	/****************************************************************/
+	var datemap = [];
+	
 	Ext.define('FunctionalCFDCharts', {
 		extend: 'IntelRallyApp',
+		cls:'app',
 		requires:[
 			'FastCfdCalculator'
 		],
@@ -1417,13 +1424,43 @@
 			'IntelWorkweek',
 			'ReleaseQuery',
 			'ChartUpdater',
-			'UserAppPreferences'
+			'UserAppsPreference'
 		],
-		_prefName: 'intel-Func-CFD',	
 		minWidth:910,
+		items:[{
+			xtype:'container',
+			id:'navBar'
+		},{
+			xtype:'container',
+			width:'100%',
+			layout:{
+				type:'hbox',
+				pack:'center'
+			},
+			items:[{
+				xtype:'container',
+				width:'66%',
+				id:'aggregateChart'
+			}]
+		},{
+			xtype:'container',
+			id:'scrumCharts',
+			layout:'column',
+			width:'100%'
+		}],
+
+		_userAppsPref: 'intel-Func-CFD',	
 		
-		/****************************************************** SOME CONFIG CONSTANTS *******************************************************/
-		_chartColors: ['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],	
+		/****************************************** SOME CONFIG CONSTANTS *******************************************/
+		_chartColors: [
+			'#ABABAB', 
+			'#E57E3A', 
+			'#E5D038', 
+			'#0080FF', 
+			'#3A874F', 
+			'#000000',
+			'#26FF00'
+		],	
 		_defaultChartConfig: {
 			chart: {
 				defaultSeriesType: "area",
@@ -1453,7 +1490,7 @@
 					var sum = 0;
 					for(var i=4; i>= this.series.index; --i) 
 						sum += this.series.chart.series[i].data[this.point.x].y;
-					return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ')' + 
+					return "<b>" + this.x + '</b> (' + datemap[this.point.x] + ')' + 
 						"<br /><b>" + this.series.name + "</b>: " + this.y +
 						(this.series.index <=4 ? "<br /><b>Total</b>: " + sum : '');
 				}
@@ -1482,11 +1519,11 @@
 		},
 		_getConfiguredChartTicks: function (startDate, endDate, width) {
 			var pixelTickWidth = 40,
-				ticks = Math.floor(width / pixelTickWidth),
-				days = Math.floor((endDate*1 - startDate*1) / (86400000*5/7)), //only workdays
-				interval = Math.floor(Math.floor(days / ticks) / 5) * 5;
-			if(interval < 5) return 5; //make it weekly at the minimum
-			else return interval;
+				ticks = width/pixelTickWidth>>0,
+				oneDay = 1000*60*60*24,
+				days = (endDate*1 - startDate*1)/(oneDay*5/7)>>0, //only workdays
+				interval = ((days/ticks>>0)/5>>0)*5;
+			return (interval < 5) ? 5 : interval; //make it weekly at the minimum
 		},
 		
 		/********************************************************** UTIL FUNC ******************************/
@@ -1549,20 +1586,21 @@
 		},
 
 		/******************************************************* Reloading ********************************************************/			
-		_resizeWhenRendered: function(){
-			var me = this;
-			setTimeout(function(){ me._fireParentWindowEvent('resize'); }, 0);
-		},	
+		_hideHighchartsLinks: function(){ 
+			$('.highcharts-container > svg > text:last-child').hide(); 
+		},
 		_reloadEverything:function(){
 			var me=this;
-			me.setLoading(true);		
+			me.setLoading('Loading Stores');		
 			return me._loadAllProjectReleases()
 				.then(function(){ return me._loadSnapshotStores(); })
 				.then(function(){
-					me.removeAll();
+					$('#scrumCharts-innerCt').empty();
+					me.setLoading('Loading Charts');	
+					if(!me.ReleasePicker) me._buildReleasePicker();
+					me._buildCharts();
+					me._hideHighchartsLinks();
 					me.setLoading(false);
-					me._loadReleasePicker();
-					me._renderCharts(); 
 				});
 		},
 
@@ -1571,54 +1609,49 @@
 			var me = this;
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
+			Highcharts.setOptions({ colors: me._chartColors });
 			me.setLoading(true);
-			if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
-				Rally.sdk.dependencies.Analytics.load(function(){	
-					me._loadModels()
-						.then(function(){
-							var scopeProject = me.getContext().getProject();
-							return me._loadProject(scopeProject.ObjectID);
-						})
-						.then(function(scopeProjectRecord){
-							me.ProjectRecord = scopeProjectRecord;
-							return me._loadRootProject(me.ProjectRecord);
-						})
-						.then(function(rootProject){
-							me.RootProject = rootProject;
-							return me._loadAllLeafProjects(rootProject);
-						})
-						.then(function(leafProjects){
-							me.LeafProjects = leafProjects;
-							if(!me.LeafProjects[me.ProjectRecord.data.ObjectID]) 
-								return Q.reject('You are not Scoped to a valid Scrum in a Train');
-							me.TeamType = me._getTeamTypeAndNumber(me.ProjectRecord.data.Name).TeamType;
-							me.ProjectsOfFunction = _.filter(me.LeafProjects, function(proj){
-								return me._getTeamTypeAndNumber(proj.data.Name).TeamType == me.TeamType; 
-							});
-							return me._loadPreferences();
-						})
-						.then(function(appPrefs){
-							me.AppPrefs = appPrefs;
-							var twelveWeeks = 1000*60*60*24*12;
-							return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-						})
-						.then(function(releaseStore){
-							me.ReleaseStore = releaseStore;
-							var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
-							if(currentRelease){
-								me.ReleaseRecord = currentRelease;
-								console.log('release loaded', currentRelease);
-								return me._reloadEverything();
-							}
-							else return Q.reject('This project has no releases.');
-						})
-						.fail(function(reason){
-							me.setLoading(false);
-							me._alert('ERROR', reason || '');
-						})
-						.done();
-				});
-			}
+			me._loadModels()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me._loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return Q.all([ //parallel loads
+						me._loadTopProject(me.ProjectRecord) /******** load stream 1 *****/
+							.then(function(topProject){
+								return me._loadAllLeafProjects(topProject);
+							})
+							.then(function(leafProjects){
+								me.LeafProjects = leafProjects;
+								if(!me.LeafProjects[me.ProjectRecord.data.ObjectID]) 
+									return Q.reject('You are not Scoped to a valid Scrum in a Train');
+								me.TeamType = me._getTeamTypeAndNumber(me.ProjectRecord.data.Name).TeamType;
+								me.ProjectsOfFunction = _.filter(me.LeafProjects, function(proj){
+									return me._getTeamTypeAndNumber(proj.data.Name).TeamType == me.TeamType; 
+								});
+							}),
+						me._loadAppsPreference()	/******** load stream 2 *****/
+							.then(function(appsPref){
+								me.AppsPref = appsPref;
+								var twelveWeeks = 1000*60*60*24*12;
+								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+							})
+							.then(function(releaseStore){
+								me.ReleaseStore = releaseStore;
+								var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								if(currentRelease) me.ReleaseRecord = currentRelease;
+								else return Q.reject('This project has no releases.');
+							})
+					]);
+				})
+				.then(function(){	return me._reloadEverything(); })
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason || '');
+				})
+				.done();
 		},
 		
 		/******************************************************* RENDERING CHARTS ********************************************************/
@@ -1629,21 +1662,19 @@
 			me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
 			me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
-			me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._savePreferences(me.AppPrefs)
-				.then(function(){ 
-					return me._reloadEverything(); 
-				})
+			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			me._saveAppsPreference(me.AppsPref)
+				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
 					me._alert('ERROR', reason || '');
 					me.setLoading(false);
 				})
 				.done();
 		},		
-		_loadReleasePicker: function(){
+		_buildReleasePicker: function(){
 			var me=this;
-			me.ReleasePicker = me.add({
+			me.ReleasePicker = Ext.getCmp('navBar').add({
 				xtype:'intelreleasepicker',
 				labelWidth: 80,
 				width: 240,
@@ -1655,108 +1686,70 @@
 				}
 			});
 		},
-		_renderCharts: function(){
-			var me = this;
+		_buildCharts: function(){
+			var me = this, 
+				calc = Ext.create('FastCfdCalculator', {
+					startDate: me.ReleaseRecord.data.ReleaseStartDate,
+					endDate: me.ReleaseRecord.data.ReleaseDate
+				});
 
 			if(me.AllSnapshots.length === 0){
 				me._alert('ERROR', me.TeamType + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 				return;
-			}
-		
-			/************************************** CHART STUFF *********************************************/
-			me.panel = me.add({
-				xtype: 'container',
-				layout: 'column',
-				width:'100%'
-			});	
-			me.aggregatePanel = me.panel.add({	
-				xtype: 'container',
-				layout: 'column',
-				columnWidth:1
-			});
+			}	
 
-			var calc = Ext.create('FastCfdCalculator', {
-				startDate: me.ReleaseRecord.data.ReleaseStartDate,
-				endDate: me.ReleaseRecord.data.ReleaseDate
-			});
-		
-			me.aggregatePanel.add({
-				xtype:'panel',
-				html:'',
-				columnWidth:0.16
-			});
-			me.aggregatePanel.add({
-				xtype:'rallychart',
-				columnWidth:0.66,
-				loadMask:false,
-				chartColors:me._chartColors,
-				chartData: me._updateChartData(calc.runCalculation(me.AllSnapshots)),
-				chartConfig: Ext.Object.merge({
-					chart: {
-						height:400
-					},
-					legend:{
-						borderWidth:0,
-						width:500,
-						itemWidth:100
-					},
-					title: {
-						text: me.TeamType
-					},
-					subtitle:{
-						text: me.ReleaseRecord.data.Name.split(' ')[0]
-					},
-					xAxis:{
-						tickInterval: me._getConfiguredChartTicks(
-							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
+			/************************************** Aggregate panel STUFF *********************************************/
+			var aggregateChartData = me._updateChartData(calc.runCalculation(me.AllSnapshots));
+			datemap = aggregateChartData.datemap;
+			$('#aggregateChart-innerCt').highcharts(Ext.Object.merge(me._defaultChartConfig, {
+				chart: {
+					height:400,
+					events:{
+						load: function(){  }
 					}
-				}, me._defaultChartConfig),
-				listeners:{
-					afterrender: me._resizeWhenRendered.bind(me)
-				}
-			});
-			me.aggregatePanel.add({
-				xtype:'panel',
-				html:'',
-				columnWidth:0.16
-			});	
+				},
+				legend:{
+					borderWidth:0,
+					width:500,
+					itemWidth:100
+				},
+				title: {
+					text: me.TeamType
+				},
+				subtitle:{
+					text: me.ReleaseRecord.data.Name.split(' ')[0]
+				},
+				xAxis:{
+					categories: aggregateChartData.categories,
+					tickInterval: me._getConfiguredChartTicks(
+						me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
+				},
+				series: aggregateChartData.series
+			}));
 			
 			/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
 				return projName.split('-')[1].trim() + projName; 
 			});
 			_.each(sortedProjectNames, function(projectName){
-				me.panel.add({
-					xtype:'rallychart',
-					columnWidth:0.32,
-					loadMask:false,
-					height:360,
-					padding:"20px 0 0 0",
-					chartColors:me._chartColors,
-					chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),
-					chartConfig: Ext.Object.merge({
-						chart: {
-							height:300
-						},
-						legend: {
-							enabled: false
-						},
-						title: {
-							text: null
-						},
-						subtitle:{
-							text: projectName
-						},
-						xAxis: {
-							tickInterval: me._getConfiguredChartTicks(
-								me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
-						}
-					}, me._defaultChartConfig),
-					listeners:{
-						afterrender: me._resizeWhenRendered.bind(me)
-					}
-				});
+				var scrumChartData = me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),		
+					scrumCharts = $('#scrumCharts-innerCt'),
+					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
+				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
+				$('#' + scrumChartID).highcharts(Ext.Object.merge(me._defaultChartConfig, {
+					chart: { height:300 },
+					legend: { enabled: false },
+					title: { text: null },
+					subtitle:{ text: projectName },
+					xAxis: {
+						categories: scrumChartData.categories,
+						tickInterval: me._getConfiguredChartTicks(
+							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
+					},
+					series: scrumChartData.series
+				}));
 			});
+			me.doLayout();
 		}
 	});
 }());
@@ -1770,6 +1763,18 @@
     </script>
 
 
+    <style type="text/css">
+        .app {
+  overflow-x: hidden !important;
+}
+.scrum-chart {
+  padding-top: 20px;
+  height: 360px;
+  width: 32%;
+  float: left;
+}
+
+    </style>
 </head>
 <body>
 </body>

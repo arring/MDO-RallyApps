@@ -2,7 +2,7 @@
 	"name": "Sanity Dashboard",
 	"className": "SanityDashboard",
 	"jsBeforeSdk": [
-		"../lib/delete-highcharts.js",
+		"../lib/misc/delete-highcharts.js",
 		"https://mdoproceffrpt/cdn/highcharts/highcharts-v4.0.4-modified.js",
 		"https://code.highcharts.com/modules/heatmap.src.js",
 		"https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"

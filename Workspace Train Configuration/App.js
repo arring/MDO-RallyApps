@@ -6,19 +6,19 @@
 
 	/********************* END PRODUCTION *****************/
 
-	Ext.define('SAFeWorkspaceConfiguration', {
+	Ext.define('TrainConfiguration', {
 		extend: 'IntelRallyApp',
 		mixins:[
 			'WindowListener',
 			'PrettyAlert',
 			'IframeResize',
-			'SAFeWorkspaceConfig'
+			'TrainPreferenceConfig'
 		],	
 
 		/************************************************** UTIL FUNCS **********************************************/
 		_getStoreData: function(){
 			var me=this;
-			return _.map(me.SAFeWorkspaceConfig, function(configItem){
+			return _.map(me.TrainConfig, function(configItem){
 				return {
 					TrainProjectOID: configItem.TrainProjectOID || 0,
 					TrainName: configItem.TrainName || '',
@@ -55,10 +55,10 @@
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
-					return me._loadSAFeWorkspaceConfig();
+					return me._loadTrainConfig();
 				})
-				.then(function(workspaceConfig){
-					me.SAFeWorkspaceConfig = workspaceConfig;
+				.then(function(trainConfig){
+					me.TrainConfig = trainConfig;
 					me.setLoading(false);
 					me._renderGrid();
 				})
@@ -73,8 +73,8 @@
 		_renderGrid: function(){
 			var me = this;
 			
-			me.SAFeWorkspaceConfigStore = Ext.create('Ext.data.Store', { 
-				model:'IntelSAFeWorkspaceConfigItem',
+			me.TrainConfigStore = Ext.create('Ext.data.Store', { 
+				model:'TrainConfigItem',
 				data: me._getStoreData()
 			});
 
@@ -153,12 +153,12 @@
 						xtype:'button',
 						text:'Remove Train',
 						width:'100%',
-						handler: function(){ me.SAFeWorkspaceConfigStore.remove(record); }
+						handler: function(){ me.TrainConfigStore.remove(record); }
 					};
 				}
 			}];
 
-			me.SAFeWorkspaceConfigGrid = me.add({
+			me.TrainConfigGrid = me.add({
 				xtype: 'rallygrid',
 				emptyText: ' ',
 				header: {
@@ -182,13 +182,13 @@
 							margin:'0 10 0 0',
 							listeners:{
 								click: function(){
-									var model = Ext.create('IntelSAFeWorkspaceConfigItem', {
+									var model = Ext.create('TrainConfigItem', {
 										TrainProjectOID: 0,
 										TrainName: '',
 										TrainAndPortfolioLocationTheSame: true,
 										PortfolioProjectOID: 0
 									});
-									me.SAFeWorkspaceConfigStore.insert(0, [model]);
+									me.TrainConfigStore.insert(0, [model]);
 								}
 							}
 						},{
@@ -198,8 +198,8 @@
 							margin:'0 10 0 0',
 							listeners:{
 								click: function(){
-									me.SAFeWorkspaceConfigStore.removeAll();
-									me.SAFeWorkspaceConfigStore.add(me._getStoreData());
+									me.TrainConfigStore.removeAll();
+									me.TrainConfigStore.add(me._getStoreData());
 								}
 							}
 						},{
@@ -208,7 +208,7 @@
 							width:100,
 							listeners:{ 
 								click: function(){
-									var trainRecords = me.SAFeWorkspaceConfigStore.getRange(),
+									var trainRecords = me.TrainConfigStore.getRange(),
 										trainData = _.map(trainRecords, function(trainRecord){
 											return {
 												TrainProjectOID: trainRecord.data.TrainProjectOID,
@@ -250,10 +250,10 @@
 									else if(conflictingTrainName) 
 										me._alert('ERROR', conflictingTrainName.TrainName + ' Train Name is used by more than 1 Train!');
 									else {
-										me.SAFeWorkspaceConfigGrid.setLoading('Saving Config');
-										me._saveSAFeWorkspaceConfig(trainData)
+										me.TrainConfigGrid.setLoading('Saving Config');
+										me._saveTrainConfig(trainData)
 											.fail(function(reason){ me._alert(reason); })
-											.then(function(){ me.SAFeWorkspaceConfigGrid.setLoading(false); })
+											.then(function(){ me.TrainConfigGrid.setLoading(false); })
 											.done();
 									}
 								}
@@ -288,7 +288,7 @@
 				showRowActionsColumn:false,
 				showPagingToolbar:false,
 				enableEditing:false,
-				store: me.SAFeWorkspaceConfigStore
+				store: me.TrainConfigStore
 			});	
 		}
 	});

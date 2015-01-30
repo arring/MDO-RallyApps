@@ -1,12 +1,16 @@
+/** this app shows the cumulative flow charts for a train, and the scrums in it
+	it is scoped to a specific release (and optionally) product
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/************************** PRODUCTION *****************************/
-	console = { log: function(){} };	////DEBUG!!!	
+	console = { log: function(){} };
 
-	/****************************************************************/
+	var datemap = []; //closure variable that maps the data points in the grids to the date string
+	
 	Ext.define('TrainCfdCharts', {
 		extend: 'IntelRallyApp',
+		cls:'app',
 		requires:[
 			'FastCfdCalculator'
 		],
@@ -17,13 +21,43 @@
 			'IntelWorkweek',
 			'ReleaseQuery',
 			'ChartUpdater',
-			'UserAppPreferences'
+			'UserAppsPreference'
 		],
-		_prefName: 'intel-ART-CFD',	
 		minWidth:910,
+		items:[{
+			xtype:'container',
+			id:'navBar'
+		},{
+			xtype:'container',
+			width:'100%',
+			layout:{
+				type:'hbox',
+				pack:'center'
+			},
+			items:[{
+				xtype:'container',
+				width:'66%',
+				id:'aggregateChart'
+			}]
+		},{
+			xtype:'container',
+			id:'scrumCharts',
+			layout:'column',
+			width:'100%'
+		}],
 		
-		/****************************************************** SOME CONFIG CONSTANTS *******************************************************/
-		_chartColors: ['#ABABAB', '#E57E3A', '#E5D038', '#0080FF', '#3A874F', '#000000','#26FF00'],		
+		_userAppsPref: 'intel-ART-CFD',	
+		
+		/********************************************** SOME CONFIG CONSTANTS *******************************************/
+		_chartColors: [
+			'#ABABAB', 
+			'#E57E3A',
+			'#E5D038', 
+			'#0080FF', 
+			'#3A874F', 
+			'#000000',
+			'#26FF00'
+		],		
 		_defaultChartConfig: {
 			chart: {
 				defaultSeriesType: "area",
@@ -53,7 +87,7 @@
 					var sum = 0;
 					for(var i=4; i>= this.series.index; --i) 
 						sum += this.series.chart.series[i].data[this.point.x].y;
-					return "<b>" + this.x + '</b> (' + window.Datemap[this.point.x] + ')' + 
+					return "<b>" + this.x + '</b> (' + datemap[this.point.x] + ')' + 
 						"<br /><b>" + this.series.name + "</b>: " + this.y +
 						(this.series.index <=4 ? "<br /><b>Total</b>: " + sum : '');
 				}
@@ -80,13 +114,13 @@
 				}
 			}
 		},		
-		_getConfiguredChartTicks: function (startDate, endDate, width) {
+		_getConfiguredChartTicks: function(startDate, endDate, width){
 			var pixelTickWidth = 40,
-				ticks = Math.floor(width / pixelTickWidth);
-			var days = Math.floor((endDate*1 - startDate*1) / (86400000*5/7)); //only workdays
-			var interval = Math.floor(Math.floor(days / ticks) / 5) * 5;
-			if(interval < 5) return 5; //make it weekly at the minimum
-			else return interval;
+				ticks = width/pixelTickWidth>>0,
+				oneDay = 1000*60*60*24,
+				days = (endDate*1 - startDate*1)/(oneDay*5/7)>>0, //only workdays
+				interval = ((days/ticks>>0)/5>>0)*5;
+			return (interval < 5) ? 5 : interval; //make it weekly at the minimum
 		},
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
@@ -142,57 +176,24 @@
 					});
 				});
 		},
-		
-		/************************************************** Preferences FUNCTIONS ***************************************************/
-		_loadPreferences: function(){ 
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser:true,
-				filterByName: me._prefName,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){
-			var me=this, s = {}, deferred = Q.defer();
-			prefs = {projs: prefs.projs};
-			s[me._prefName] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				filterByUser:true,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
 
 		/******************************************************* Reloading ********************************************************/			
-		_resizeWhenRendered: function(){
-			var me = this;
-			setTimeout(function(){ 
-				me._fireParentWindowEvent('resize');
-			}, 0);
-		},		
+		_hideHighchartsLinks: function(){ 
+			$('.highcharts-container > svg > text:last-child').hide(); 
+		},	
 		_reloadEverything:function(){
 			var me=this;
-			me.setLoading(true);		
+			me.setLoading('Loading Stores');	
 			return me._loadAllChildReleases()
+				.then(function(){ return me._loadSnapshotStores(); })
 				.then(function(){
-					return me._loadSnapshotStores();
-				})
-				.then(function(){
-					me.removeAll();
+					$('#scrumCharts-innerCt').empty();
+					me.setLoading('Loading Charts');	
+					if(!me.ReleasePicker) me._buildReleasePicker();
+					//if(!me.ProductPicker) me._buildProductPicker();
+					me._buildCharts();
+					me._hideHighchartsLinks();
 					me.setLoading(false);
-					me._loadReleasePicker();
-					me._renderCharts(); 
 				});
 		},
 
@@ -201,48 +202,45 @@
 			var me = this;
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
+			Highcharts.setOptions({ colors: me._chartColors });
 			me.setLoading(true);
-			if (Rally && Rally.sdk && Rally.sdk.dependencies && Rally.sdk.dependencies.Analytics) {
-				Rally.sdk.dependencies.Analytics.load(function(){	
-					me._loadModels()
-						.then(function(){
-							var scopeProject = me.getContext().getProject();
-							return me._loadProject(scopeProject.ObjectID);
-						})
-						.then(function(scopeProjectRecord){
-							me.ProjectRecord = scopeProjectRecord;
-							return me._loadPreferences();
-						})
-						.then(function(appPrefs){
-							me.AppPrefs = appPrefs;
-							return me._projectInWhichTrain(me.ProjectRecord);
-						})
-						.then(function(trainRecord){
-							if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-								me.TrainRecord = trainRecord;
-								console.log('train loaded:', trainRecord);
+			me._loadModels()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me._loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return Q.all([ //parallel loads
+						me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
+							.then(function(trainRecord){
+								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID) me.TrainRecord = trainRecord;
+								else return Q.reject('You are not scoped to a train.');
+								me._loadProducts(trainRecord);
+							})
+							.then(function(products){
+								me.Products = products;
+							}),
+						me._loadAppsPreference() /******** load stream 2 *****/
+							.then(function(appsPref){
+								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*12;
-								return me._loadReleasesAfterGivenDate(me.TrainRecord, (new Date()*1 - twelveWeeks));
-							} 
-							else return Q.reject('You are not scoped to a train.');
-						})
-						.then(function(releaseStore){
-							me.ReleaseStore = releaseStore;
-							var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppPrefs);
-							if(currentRelease){
-								me.ReleaseRecord = currentRelease;
-								console.log('release loaded', currentRelease);
-								return me._reloadEverything();
-							}
-							else return Q.reject('This train has no releases.');
-						})
-						.fail(function(reason){
-							me.setLoading(false);
-							me._alert('ERROR', reason || '');
-						})
-						.done();
-				});
-			}
+								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+							})
+							.then(function(releaseStore){
+								me.ReleaseStore = releaseStore;
+								var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								if(currentRelease) me.ReleaseRecord = currentRelease;
+								else return Q.reject('This train has no releases.');
+							})
+					]);
+				})
+				.then(function(){ return me._reloadEverything(); })
+				.fail(function(reason){
+					me.setLoading(false);
+					me._alert('ERROR', reason || '');
+				})
+				.done();
 		},
 		
 		/******************************************************* RENDERING CHARTS ********************************************************/
@@ -253,21 +251,19 @@
 			me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
 			me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
-			me.AppPrefs.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._savePreferences(me.AppPrefs)
-				.then(function(){ 
-					return me._reloadEverything(); 
-				})
+			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			me._saveAppsPreference(me.AppsPref)
+				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
 					me._alert('ERROR', reason || '');
 					me.setLoading(false);
 				})
 				.done();
 		},
-		_loadReleasePicker: function(){
+		_buildReleasePicker: function(){
 			var me=this;
-			me.ReleasePicker = me.add({
+			me.ReleasePicker = Ext.getCmp('navBar').add({
 				xtype:'intelreleasepicker',
 				labelWidth: 80,
 				width: 240,
@@ -279,8 +275,12 @@
 				}
 			});
 		},
-		_renderCharts: function(){
-			var me = this;
+		_buildCharts: function(){
+			var me = this,
+				calc = Ext.create('FastCfdCalculator', {
+					startDate: me.ReleaseRecord.data.ReleaseStartDate,
+					endDate: me.ReleaseRecord.data.ReleaseDate
+				});
 			
 			if(me.AllSnapshots.length === 0){
 				me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
@@ -288,99 +288,57 @@
 			}
 			
 			/************************************** CHART STUFF *********************************************/
-			me.panel = me.add({
-				xtype: 'container',
-				layout: 'column',
-				width:'100%'
-			});	
-			me.trainPanel = me.panel.add({	
-				xtype: 'container',
-				layout: 'column',
-				columnWidth:1
-			});
-		
-			var calc = Ext.create('FastCfdCalculator', {
-				startDate: me.ReleaseRecord.data.ReleaseStartDate,
-				endDate: me.ReleaseRecord.data.ReleaseDate
-			});
-			
-			me.trainPanel.add({
-				xtype:'panel',
-				html:'',
-				columnWidth:0.16
-			});
-			me.trainPanel.add({
-				xtype:'rallychart',
-				columnWidth:0.66,
-				loadMask:false,
-				chartColors:me._chartColors,
-				chartData: me._updateChartData(calc.runCalculation(me.AllSnapshots)),
-				chartConfig: Ext.Object.merge({
-					chart: {
-						height:400
-					},
-					legend:{
-						borderWidth:0,
-						width:500,
-						itemWidth:100
-					},
-					title: {
-						text: me.TrainRecord.data.Name
-					},
-					subtitle:{
-						text: me.ReleaseRecord.data.Name
-					},
-					xAxis:{
-						tickInterval: me._getConfiguredChartTicks(
-							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
+			var aggregateChartData = me._updateChartData(calc.runCalculation(me.AllSnapshots));
+			datemap = aggregateChartData.datemap;
+			$('#aggregateChart-innerCt').highcharts(Ext.Object.merge(me._defaultChartConfig, {
+				chart: {
+					height:400,
+					events:{
+						load: function(){  }
 					}
-				}, me._defaultChartConfig),
-				listeners:{
-					afterrender: me._resizeWhenRendered.bind(me)
-				}
-			});
-			me.trainPanel.add({
-				xtype:'panel',
-				html:'',
-				columnWidth:0.16
-			});	
-			
+				},
+				legend:{
+					borderWidth:0,
+					width:500,
+					itemWidth:100
+				},
+				title: {
+					text: me.TeamType
+				},
+				subtitle:{
+					text: me.ReleaseRecord.data.Name.split(' ')[0]
+				},
+				xAxis:{
+					categories: aggregateChartData.categories,
+					tickInterval: me._getConfiguredChartTicks(
+						me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
+				},
+				series: aggregateChartData.series
+			}));
+
 			/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
-				return projName.split('-')[1].trim().split(' ')[0].trim() + projName; 
+				return projName.split('-')[1].trim() + projName; 
 			});
 			_.each(sortedProjectNames, function(projectName){
-				me.panel.add({
-					xtype:'rallychart',
-					columnWidth:0.32,
-					loadMask:false,
-					height:360,
-					padding:"20px 0 0 0",
-					chartColors:me._chartColors,
-					chartData: me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),
-					chartConfig: Ext.Object.merge({
-						chart: {
-							height:300
-						},
-						legend: {
-							enabled: false
-						},
-						title: {
-							text: null
-						},
-						subtitle:{
-							text: projectName
-						},
-						xAxis: {
-							tickInterval: me._getConfiguredChartTicks(
-								me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
-						}
-					}, me._defaultChartConfig),
-					listeners:{
-						afterrender: me._resizeWhenRendered.bind(me)
-					}
-				});
+				var scrumChartData = me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),		
+					scrumCharts = $('#scrumCharts-innerCt'),
+					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
+				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
+				$('#' + scrumChartID).highcharts(Ext.Object.merge(me._defaultChartConfig, {
+					chart: { height:300 },
+					legend: { enabled: false },
+					title: { text: null },
+					subtitle:{ text: projectName },
+					xAxis: {
+						categories: scrumChartData.categories,
+						tickInterval: me._getConfiguredChartTicks(
+							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
+					},
+					series: scrumChartData.series
+				}));
 			});
+			me.doLayout();
 		}
 	});
 }());

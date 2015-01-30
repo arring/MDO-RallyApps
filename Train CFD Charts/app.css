@@ -1,0 +1,8 @@
+.app {
+	overflow-x:hidden !important; }
+	
+.scrum-chart {
+	padding-top:20px;
+	height:360px;
+	width:32%;
+	float:left; }

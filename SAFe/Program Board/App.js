@@ -1,8 +1,8 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	var RALLY_MAX_STRING_SIZE = 32768;
-	var console = { log: function(){} }; 
+	console = { log: function(){} }; 
+	RALLY_MAX_STRING_SIZE = 32768;
 	
 	/** this app requires the following custom fields for your workspace:
 		c_TeamCommits on PortfolioItem/Feature, (type: 32 kB)
@@ -132,7 +132,8 @@
 			}]
 		}],
 		minWidth:910, //thats when rally adds a horizontal scrollbar for a pagewide app
-		_prefName: 'intel-SAFe-apps-preference',
+		
+		_userAppsPref: 'intel-SAFe-apps-preference',
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadFeatures: function(){ 

@@ -1,17 +1,6 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/************************* USED FOR WORKSPACE CONFIG *********************************************/
-	Ext.define('IntelSAFeWorkspaceConfigItem', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'TrainProjectOID', type: 'number'},
-			{name: 'TrainName', type: 'string'},
-			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
-			{name: 'PortfolioProjectOID', type:'number'}
-		]
-	});
-	
 	/************************* USED FOR PROGRAMBOARD VIEW *********************************************/
 	Ext.define('IntelVelocity', {
 		extend: 'Ext.data.Model',
