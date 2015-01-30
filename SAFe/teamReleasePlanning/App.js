@@ -4,11 +4,42 @@ Ext.define('CustomApp', {
       'ReleaseQuery'
     ],
     componentCls: 'app',
-    
-    _releasePickerSelected: function(){
-      console.log('I work!');
+
+    _returnBacklogStore: function(){
+      var me = this;
+
+      return Ext.create('Rally.data.wsapi.Store', {
+        model: 'userstory',
+        groupField: 'Feature',
+        groupDir: 'ASC',
+        fetch: ['Feature'],
+        getGroupString: function(record) {
+          var feature = record.get('Feature');
+          return (feature && feature._refObjectName) || 'No feature';
+        },
+        filters: [{
+          property: "Release.Name",
+          value: me.releaseRecord.data.Name
+        }]
+      });
     },
     
+    _releasePickerSelected: function(combo, records){
+      var me = this;
+
+      if(me.releaseRecord.data.Name === records[0].data.Name) return;
+      me.releaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name); 
+      
+      var backlogGrid = Ext.getCmp('backlogGrid');
+
+      console.log(me.releaseRecord);
+      backlogGrid.store.clearFilter(true);
+      backlogGrid.store.filter({
+        property: "Release.Name",
+        value: me.releaseRecord.data.Name
+      });
+    },
+
     launch: function() {
       var me = this;
 
@@ -24,8 +55,11 @@ Ext.define('CustomApp', {
         })
         .then(function(releaseStore){
           me.ReleaseStore = releaseStore;
+          me.releaseRecord = me.ReleaseStore.data.items[1];
+          console.log(me.releaseRecord);
+          console.log(me.releaseRecord.data.Name);
 
-          var storyBacklog = {
+          var storyBacklogGrid = {
             xtype: 'rallygrid',
             columnCfgs: [
               'FormattedID',
@@ -39,7 +73,8 @@ Ext.define('CustomApp', {
             }
           };
 
-          var featureBacklog = {
+          var featureBacklogGrid = {
+            id: 'backlogGrid',
             xtype: 'rallygrid',
             columnCfgs: [
               'FormattedID',
@@ -51,16 +86,7 @@ Ext.define('CustomApp', {
               ftype: 'groupingsummary',
               groupHeaderTpl: '{name} ({rows.length})'
             }],
-            storeConfig: {
-              model: 'userstory',
-              groupField: 'Feature',
-              groupDir: 'ASC',
-              fetch: ['Feature'],
-              getGroupString: function(record) {
-                var feature = record.get('Feature');
-                return (feature && feature._refObjectName) || 'No feature';
-              }
-            }
+            store: me._returnBacklogStore()
           };
 
           var container = Ext.create('Ext.Panel', {
@@ -76,7 +102,7 @@ Ext.define('CustomApp', {
               title: 'Inner Panel Three',
               flex: 1,
               items: [
-                storyBacklog
+                storyBacklogGrid
               ]
             },
             {
@@ -84,7 +110,7 @@ Ext.define('CustomApp', {
               title: 'Inner Panel Two',
               flex: 2,
               items: [
-                featureBacklog
+                featureBacklogGrid
               ]
             },{
               xtype: 'container',
@@ -93,20 +119,23 @@ Ext.define('CustomApp', {
             }]
           });
 
-          me.releaseRecord = me.ReleaseStore.data.items[0];
-
           var releasepicker = {
             xtype:'intelreleasepicker',
             labelWidth: 80,
             width: 200,
             releases: me.ReleaseStore.data.items,
-            currentRelease: me.releaseRecord || me.ReleaseStore.data.items[0],
+            currentRelease: me.releaseRecord,
             listeners: {
-              change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+              change:function(combo, newval, oldval){
+                console.log('change function firing'); 
+                if(newval.length===0){
+                  combo.setValue(oldval);
+                }  
+              },
               select: me._releasePickerSelected.bind(me)
             }
           };
-
+          console.log('Release Picker', releasepicker);
           me.add(releasepicker);
           me.add(container);   
         })
