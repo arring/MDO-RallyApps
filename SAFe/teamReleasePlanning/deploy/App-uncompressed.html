@@ -3,7 +3,7 @@
 <head>
     <title>myfirstapp</title>
 
-    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
     <script type="text/javascript">
@@ -183,7 +183,7 @@
 					Project: 'Project',
 					UserStory: 'HierarchicalRequirement',
 					Feature:'PortfolioItem/Feature'
-					//Milestone:'PortfolioItem/Milestone'
+					// Milestone:'PortfolioItem/Milestone'
 				};
 			_.each(models, function(modelType, modelName){
 				var deferred = Q.defer();
@@ -1743,22 +1743,35 @@
     ],
     componentCls: 'app',
 
-    _returnBacklogStore: function(){
-      var me = this;
+    _clearDragConstraints: function(grid){
+      var gridView = grid.getView();
 
-      return Ext.create('Rally.data.wsapi.Store', {
-        model: 'userstory',
-        groupField: 'Feature',
-        groupDir: 'ASC',
-        fetch: ['Feature'],
-        getGroupString: function(record) {
-          var feature = record.get('Feature');
-          return (feature && feature._refObjectName) || 'No feature';
-        },
-        filters: [{
-          property: "Release.Name",
-          value: me.releaseRecord.data.Name
-        }]
+      var dragPlugin = _.find(gridView.plugins, function(plugin){
+        return plugin.ptype == "rallytreeviewdragdrop";
+      });
+
+      dragPlugin.dragZone.clearConstraints();
+    },
+    
+    _onStoreBuilt: function(store) {
+      var me = this; 
+      return me.add({
+        id: 'backlogGrid',
+        xtype: 'rallytreegrid',
+        store: store,
+        context: me.getContext(),
+        enableEditing: true,
+        shouldShowRowActionsColumn: true,
+        enableBulkEdit: false,
+        enableRanking: true,
+        columnCfgs: [
+          'Name'
+        ],
+        listeners: {
+          viewready: function(grid){
+            me._clearDragConstraints(grid);
+          }
+        }
       });
     },
     
@@ -1769,13 +1782,15 @@
       me.releaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name); 
       
       var backlogGrid = Ext.getCmp('backlogGrid');
+      var treeStore = backlogGrid.getStore();
 
-      console.log(me.releaseRecord);
-      backlogGrid.store.clearFilter(true);
-      backlogGrid.store.filter({
-        property: "Release.Name",
-        value: me.releaseRecord.data.Name
+      treeStore.load({
+        filters: [{
+          property: "Release.Name",
+          value: me.releaseRecord.data.Name
+        }]
       });
+      console.log(treeStore);
     },
 
     launch: function() {
@@ -1793,9 +1808,9 @@
         })
         .then(function(releaseStore){
           me.ReleaseStore = releaseStore;
-          me.releaseRecord = me.ReleaseStore.data.items[1];
-          console.log(me.releaseRecord);
-          console.log(me.releaseRecord.data.Name);
+          me.releaseRecord = me.ReleaseStore.data.items[0];
+          // console.log(me.releaseRecord);
+          // console.log(me.releaseRecord.data.Name);
 
           var storyBacklogGrid = {
             xtype: 'rallygrid',
@@ -1807,75 +1822,79 @@
             enableRanking: true,
             defaultSortToRank: true,
             storeConfig: {
-              model: 'userstory'
+              model: 'userstory',
+              filter: {
+                property: "PortfolioItem",
+                value: null
+              }
             }
           };
 
-          var featureBacklogGrid = {
-            id: 'backlogGrid',
-            xtype: 'rallygrid',
-            columnCfgs: [
-              'FormattedID',
-              'Name',
-              'Iteration'
-            ],
-            context: me.getContext(),
-            features: [{
-              ftype: 'groupingsummary',
-              groupHeaderTpl: '{name} ({rows.length})'
-            }],
-            store: me._returnBacklogStore()
-          };
-
-          var container = Ext.create('Ext.Panel', {
-            title: "HBoxLayout Panel",
-            layout: {
-              type: 'hbox',
-              align: 'stretch'
-            },
-            renderTo: document.body,
-            items: [
-            {
-              xtype: 'container',
-              title: 'Inner Panel Three',
-              flex: 1,
-              items: [
-                storyBacklogGrid
-              ]
-            },
-            {
-              xtype: 'container',
-              title: 'Inner Panel Two',
-              flex: 2,
-              items: [
-                featureBacklogGrid
-              ]
-            },{
-              xtype: 'container',
-              title: 'Inner Panel Three',
-              flex: 1
+          var treestore = Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
+            models: ['PortfolioItem/Feature'],
+            autoLoad: true,
+            enableHierarchy: true,
+            filters: [{
+              property: "Release.Name",
+              value: me.releaseRecord.data.Name
             }]
-          });
+          }).then({
+            success: function(store){
+              var treegrid = me._onStoreBuilt(store);
+              var container = Ext.create('Ext.Panel', {
+                title: "HBoxLayout Panel",
+                layout: {
+                  type: 'hbox',
+                  align: 'stretch'
+                },
+                renderTo: document.body,
+                items: [
+                {
+                  xtype: 'container',
+                  title: 'Inner Panel Three',
+                  flex: 1,
+                  items: [
+                    storyBacklogGrid
+                  ]
+                },
+                {
+                  xtype: 'container',
+                  title: 'Inner Panel Two',
+                  flex: 2,
+                  items: [
+                    treegrid
+                  ]
+                },{
+                  xtype: 'container',
+                  title: 'Inner Panel Three',
+                  flex: 1
+                }]
+              });
 
-          var releasepicker = {
-            xtype:'intelreleasepicker',
-            labelWidth: 80,
-            width: 200,
-            releases: me.ReleaseStore.data.items,
-            currentRelease: me.releaseRecord,
-            listeners: {
-              change:function(combo, newval, oldval){
-                console.log('change function firing'); 
-                if(newval.length===0){
-                  combo.setValue(oldval);
-                }  
-              },
-              select: me._releasePickerSelected.bind(me)
+              var releasepicker = {
+                xtype:'intelreleasepicker',
+                labelWidth: 80,
+                width: 200,
+                releases: me.ReleaseStore.data.items,
+                currentRelease: me.releaseRecord,
+                listeners: {
+                  change:function(combo, newval, oldval){
+                    console.log('change function firing'); 
+                    if(newval.length===0){
+                      combo.setValue(oldval);
+                    }  
+                  },
+                  select: me._releasePickerSelected.bind(me)
+                }
+              };
+              me.add(releasepicker);
+              me.add(container); 
+            },
+            scope: me,
+            failure: function(e){
+              console.log(e);
             }
-          };
-          console.log('Release Picker', releasepicker);
-          me.add(releasepicker);
-          me.add(container);   
+          });
         })
         .fail(
           function(){
