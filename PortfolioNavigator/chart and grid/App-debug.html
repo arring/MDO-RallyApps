@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Portfolio CFD</title>
+    <title>Intel Portfolio Chart And Grid</title>
 
 
     <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.3.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+    <script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
 
     <script type="text/javascript">
         // I am keeping the extra , in there to simplify my code. If someone is actually using an old version of IE to make an app let me know.
@@ -17,19 +19,20 @@
                       "../../lib/mixins/iframe-resize.js",
                       "../../lib/mixins/pretty-alert.js",
                       "../../lib/mixins/intel-workweek.js",
-                      "../../lib/mixins/release-query.js",
+                      "../../lib/mixins/parallel-loader.js",
                       "../../lib/mixins/async-queue.js",
-                      "../../lib/chartstuff/fast-cfd-calculator.js",
-                      "../../lib/chartstuff/chart-updater.js",
+                      "../../lib/mixins/cumulative-flow-chart-mixin.js",
+                      "../../lib/charts/fast-cumulative-flow-calculator.js",
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('Rally.apps.charts.rpm.cfd.CumulativeFlowChartApp', {
-                name:"Portfolio CFD"
+            Rally.launchApp('IntelPortfolioChartAndGrid', {
+                name:"Intel Portfolio Chart And Grid"
             });
         }, true);
     </script>
 
+    <link rel="stylesheet" type="text/css" href="../../lib/css/base.css">
     <link rel="stylesheet" type="text/css" href="app.css">
 </head>
 <body>

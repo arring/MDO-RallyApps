@@ -9,15 +9,14 @@
       "../lib/mixins/window-listener.js",
       "../lib/mixins/iframe-resize.js",
       "../lib/mixins/pretty-alert.js",
-      "../lib/mixins/train-preference-config.js",
       "../lib/components/component-column.js",
       "../lib/overrides/fast-component-column.js",
       "../lib/components/intel-combobox.js",
-      "../lib/overrides/fast-cell-editing.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"
    ],
    "css": [
+      "../lib/css/base.css",
       "app.css"
    ]
 }

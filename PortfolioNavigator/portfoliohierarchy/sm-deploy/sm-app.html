@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy456974";
+	var smAppID = "Portfolio_Hierarchy762322";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy456974";	
+					var smAppID = "Portfolio_Hierarchy762322";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,9 +1421,12 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
-							(function(){
+							/** this extends Rally.app.app. if you want to use it's utility functions, just
+		extend IntelRallyApp instead of Rally.app.App
+	*/
+(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
 	Ext.define('IntelRallyApp', {
@@ -1842,6 +1845,12 @@
 				return Q(store);
 			});
 		},
+		_loadTrainPortfolioProject: function(trainRecord){
+			if(!trainRecord) return Q.reject('Invalid arguments: LTPP');
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0];
+			return me._loadProjectByName(trainName + ' POWG Portfolios');
+		},
 		
 		/********************************************** Load Valid Projects ********************************************/	
 		_addValidProjectsToList: function(projTree, hash){
@@ -1965,7 +1974,6 @@
 					}
 				}
 				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-				console.log('childrenProjects', childrenProjects);
 				return Q(childrenProjects);
 			});	
 		},
@@ -1991,7 +1999,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2004,6 +2012,17 @@
 			{name: 'DateVal', type:'number'}
 		]
 	});
+		
+	/************************* USED FOR WORKSPACE CONFIG *********************************************/
+	Ext.define('TrainConfigItem', {
+		extend: 'Ext.data.Model',
+		fields: [
+			{name: 'TrainProjectOID', type: 'number'},
+			{name: 'TrainName', type: 'string'},
+			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
+			{name: 'PortfolioProjectOID', type:'number'}
+		]
+	});
 }());						}
 					}());
 				</script>
@@ -2012,7 +2031,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2071,7 +2090,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2321,7 +2340,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2361,7 +2380,56 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
+						if(!window[smAppID].stillInIframe){	
+							/** This class is used to save user preferences per project, that can follow the user from app to app **/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('UserAppsPreference', {
+		
+		_userAppsPref: 'intel-user-apps-preference', //this preference can be overridden, unless you want all apps to share prefs
+		
+		_loadAppsPreference: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				filterByUser:true,
+				filterByName:me._userAppsPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me._userAppsPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { projs:{}, refresh:30};}
+					console.log('loaded prefs', appPrefs);
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_saveAppsPreference: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {projs:prefs.projs, refresh:prefs.refresh};
+			s[me._userAppsPref] = JSON.stringify(prefs); 
+			console.log('saving prefs', prefs);
+			Rally.data.PreferenceManager.update({
+				filterByUser: true,
+				filterByName:me._userAppsPref,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		}
+	});
+}());						}
+					}());
+				</script>
+			
+		
+			
+				<script type="text/javascript">
+					(function(){
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2407,7 +2475,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2440,7 +2508,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2453,7 +2521,7 @@
 		],
 		constructor: function(options) {
 			var me = this,
-				app= Rally.getApp("Portfolio_Hierarchy456974");
+				app= Rally.getApp("Portfolio_Hierarchy762322");
 			options = options || {};	
 			options = Ext.merge({
 				displayField:'Name',
@@ -2513,7 +2581,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2565,7 +2633,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2632,23 +2700,23 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy456974";			
+						var smAppID = "Portfolio_Hierarchy762322";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	//var console = { log: function(){} }; // DEBUG!!!!		
+	var console = { log: function(){} };	
 
 	Ext.define('Intel.portfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
 			'Rally.Messageable',
 			'PrettyAlert',
-			'ReleaseQuery'
+			'ReleaseQuery',
+			'UserAppsPreference'
 		],
-		
-		_prefName: 'intel-PortfolioNav',
 		_uid: (__PROJECT_OID__ + '-' + __USER_OID__),
+		_userAppsPref: 'intel-portfolio-nav',
 		
 		layout: {
 			type:'vbox',
@@ -2722,52 +2790,21 @@
 				}
 			}];
 		},
-
-		/************************************************** Preferences FUNCTIONS ***************************************************/	
-		_loadPreferences: function(){ //parse all settings too
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser:true,
-				filterByName: me._prefName,
-				success: function(prefs) {
-					var appPrefs = prefs[me._prefName];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}};}
-					console.log('loaded prefs', appPrefs);
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		_savePreferences: function(prefs){ 
-			var me=this, s = {}, deferred = Q.defer();
-			prefs = {projs: prefs.projs};
-			s[me._prefName] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
-			Rally.data.PreferenceManager.update({
-				filterByUser:true,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
 		
 		/************************************************** Refreshing Data ***************************************************/
 		_refreshTree: function() {
 			var me=this;
 			me.down('#bodyContainer').removeAll();
-			me._loadPortfolioTree();
+			me._buildPortfolioTree();
 		},	
 		_reloadEverything: function(){
 			var me=this;
 			me.setLoading(false);
-			me._loadFilterOnRelease();
-			me._loadReleaseSelector();
-			me._loadFilterOnProject();
-			me._loadFilterOnComplete();
-			me._loadPortfolioTree();
+			me._buildFilterOnRelease();
+			me._buildReleasePicker();
+			me._buildFilterOnProject();
+			me._buildFilterOnComplete();
+			me._buildPortfolioTree();
 		},
 		
 		/************************************************** Launch ***************************************************/	
@@ -2781,30 +2818,34 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return me._loadRandomUserStory(scopeProjectRecord.data._ref);
+					return Q.all([
+						me._loadRandomUserStory(scopeProjectRecord.data._ref)
+							.then(function(userStory){
+								me.HasUserStories = !!userStory;
+								return me._loadTopProject(me.ProjectRecord);
+							})
+							.then(function(topProject){
+								return me._loadAllChildrenProjects(topProject);
+							})
+							.then(function(childProjects){
+								me.ChildProjects = childProjects;
+							}),
+						me._projectInWhichTrain(me.ProjectRecord)
+							.fail(function(error){
+								if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
+							})
+							.then(function(trainRecord){
+								me.TrainRecord = trainRecord;
+							}),
+						me._loadAppsPreference()
+							.then(function(appsPref){		
+								me.AppsPref = appsPref;
+							})
+					]);
 				})
-				.then(function(userStory){
-					me.HasUserStories = !!userStory;
-					return me._loadTopProject(me.ProjectRecord);
-				})
-				.then(function(rootProject){
-					return me._loadAllChildrenProjects(rootProject);
-				})
-				.then(function(childProjects){
-					me.ChildProjects = childProjects;
-					return me._projectInWhichTrain(me.ProjectRecord);
-				})
-				.fail(function(error){
-					if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
-				})
-				.then(function(trainRecord){
-					me.TrainRecord = trainRecord;
-					return me._loadPreferences();
-				})
-				.then(function(appPrefs){		
+				.then(function(){
 					var pid = me.ProjectRecord.data.ObjectID, 
-						prefs = appPrefs.projs[pid] || {};
-					me.AppPrefs = appPrefs;
+						prefs = me.AppsPref.projs[pid] || {};
 					me.PIType = me.getSetting('Type' + me._uid);
 					me.QueryFilter = me.getSetting('QueryFilter' + me._uid);
 					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + me._uid);
@@ -2839,7 +2880,7 @@
 					for(var i=0,len=recs.length; i<len; ++i){
 						me.ReleaseNames.push({ Name: recs[i].data.Name });
 					}
-					me.FilterReleaseName = me.FilterReleaseName || me.ReleaseNames[0].Name;
+					me.FilterReleaseName = me.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
 					me._reloadEverything();
 				})
 				.fail(function(reason){
@@ -2855,9 +2896,9 @@
 				pid = me.ProjectRecord.data.ObjectID;
 			if(me[field] === newValue) return Q();
 			else me[field] = newValue;
-			if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
-			me.AppPrefs.projs[pid][field] = newValue;
-			return me._savePreferences(me.AppPrefs);
+			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			me.AppsPref.projs[pid][field] = newValue;
+			return me._saveAppsPreference(me.AppsPref);
 		},
 		_onReleaseSelected: function(combo, records) {
 			var me=this;
@@ -2866,7 +2907,7 @@
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},				
-		_loadReleaseSelector: function(){
+		_buildReleasePicker: function(){
 			var me=this;
 			me.down('#header_release').add({
 				xtype:'intelfixedcombo',
@@ -2893,7 +2934,7 @@
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnRelease: function(){
+		_buildFilterOnRelease: function(){
 			var me=this;
 			me.down('#header_release').add({
 				xtype: 'rallycheckboxfield',
@@ -2912,7 +2953,7 @@
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnProject: function(){
+		_buildFilterOnProject: function(){
 			var me=this;
 			me.down('#header_project').add({
 				xtype: 'rallycheckboxfield',
@@ -2932,7 +2973,7 @@
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnComplete: function(){
+		_buildFilterOnComplete: function(){
 			var me=this;
 			me.down('#header_complete').add({
 				xtype: 'rallycheckboxfield',
@@ -3029,7 +3070,7 @@
 				filters:filters
 			};
 		},	
-		_loadPortfolioTree: function(){
+		_buildPortfolioTree: function(){
 			var me = this,
 				modelName ='portfolioitem/' + me.PIType,
 				ordinal = (me.PIType==='product' ? 2 : (me.PIType==='milestone' ? 1 : 0));
@@ -3068,11 +3109,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy456974";			
+				var smAppID = "Portfolio_Hierarchy762322";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("Intel.portfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy456974"
+						smAppID: "Portfolio_Hierarchy762322"
 					});
 				}
 			}());

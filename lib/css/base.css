@@ -1,0 +1,3 @@
+.x-grid-cell.intel-editor-cell *,
+.x4-grid-cell.intel-editor-cell *{
+	cursor: pointer !important; }

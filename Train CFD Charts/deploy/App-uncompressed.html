@@ -3,7 +3,7 @@
 <head>
     <title>TrainCFDCharts</title>
 
-    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
     <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.3.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
     <script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
@@ -20,19 +20,94 @@
 		alias: 'widget.intelrallyapp',
 		extend: 'Rally.app.App',
 		
-		/** these are the necessary models to load for the apps. you should call this */
-		_loadModels: function(){
+		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
+		
+		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children'],
+		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem',
+			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+		_releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+		
+		/********************************************** APP CONFIGURATION **************************************/
+		_loadScheduleStates: function(){ 
+			var me=this, deferred = Q.defer();
+			Rally.data.ModelFactory.getModel({
+				type: 'UserStory',
+				success: function(model) {
+					model.getField('ScheduleState').getAllowedValueStore().load({
+						callback: function(records, operation, success) {
+							me.ScheduleStates = _.map(records, function(r){ return r.data.StringValue; });
+							deferred.resolve();
+						}
+					});
+				}
+			});
+			return deferred.promise;
+		},
+		_loadPortfolioItemStatesForEachType: function(){ 
+			var me=this;
+			me.PortfolioItemTypeStates = [];
+			return Q.all(_.map(me.PortfolioItemTypes, function(portfolioType, ordinal){
+				var store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'State',
+					autoLoad:false,
+					limit:Infinity,
+					fetch:['Name', 'Enabled', 'OrderIndex'],
+					filters: [{
+						property: 'TypeDef.Name',
+						value: portfolioType
+					},{
+						property: 'Enabled',
+						value: true
+					}]
+				});
+				return me._reloadStore(store).then(function(store){
+					me.PortfolioItemTypeStates[ordinal] = store.getRange();
+				});
+			}));
+		},
+		_loadPortfolioItemTypes: function(){ 
+			/** loads all the portfolioitem names into sorted array [smallest ordinal --> biggest ordinal] */
+			var me=this,
+				deferred = Q.defer(),
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'TypeDefinition',
+					autoLoad:true,
+					limit:Infinity,
+					fetch:['Ordinal', 'Name'],
+					filters: [{
+						property: 'Parent.Name',
+						value: 'Portfolio Item'
+					},{
+						property: 'Creatable',
+						value: true
+					}],
+					listeners:{
+						load:function(portfolioTypeStore){
+							me.PortfolioItemTypes = _.map(_.sortBy(_.map(portfolioTypeStore.getRange(), 
+								function(item){ return {Name: item.data.Name, Ordinal: item.data.Ordinal}; }),
+								function(item){ return item.Ordinal; }),
+								function(item){ return item.Name; });
+							deferred.resolve();
+						}
+					}
+				});
+			return deferred.promise;
+		},
+		_loadModels: function(){ 
+			/** loads models for project, userstories, and all the portfolio items */
 			var me=this, 
 				promises = [],
 				models = {
 					Project: 'Project',
 					UserStory: 'HierarchicalRequirement',
-					Feature:'PortfolioItem/Feature',
-					Milestone:'PortfolioItem/Milestone'
+					PortfolioItem: 'PortfolioItem'
 				};
+			_.each(me.PortfolioItemTypes, function(name){ models[name] = 'PortfolioItem/' + name; });
 			_.each(models, function(modelType, modelName){
 				var deferred = Q.defer();
-				Rally.data.WsapiModelFactory.getModel({ //load project
+				Rally.data.WsapiModelFactory.getModel({
 					type:modelType, 
 					success: function(loadedModel){ 
 						me[modelName] = loadedModel;
@@ -42,18 +117,77 @@
 				promises.push(deferred.promise);
 			});
 			return Q.all(promises);
-		},	
+		},
+		_loadTrainConfig: function(){
+			/** me.TrainConfig is an array of these objects: 
+				{
+					TrainProjectOID: configItem.TrainProjectOID || 0,
+					TrainName: configItem.TrainName || '',
+					TrainAndPortfolioLocationTheSame: configItem.TrainAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: configItem.PortfolioProjectOID || 0
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace(),
+				filterByName: me._TrainConfigPrefName,
+				success: function(prefs) {
+					var workspaceConfigString = prefs[me._TrainConfigPrefName], trainConfig;
+					try{ trainConfig = JSON.parse(workspaceConfigString); }
+					catch(e){ trainConfig = []; }
+					me.TrainConfig = trainConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_saveTrainConfig: function(trainConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[me._TrainConfigPrefName] = JSON.stringify(trainConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace(),
+				filterByName: me._TrainConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_configureIntelRallyApp: function(){
+			var me=this;
+			return Q.all([
+				me._loadPortfolioItemTypes().then(function(){ 
+					return Q.all([
+						me._loadModels(),
+						me._loadPortfolioItemStatesForEachType()
+					]);
+				}),
+				me._loadTrainConfig(),
+				me._loadScheduleStates()
+			]);
+		},
+				
+		/**************************** Generic store loading with Q wrapper, returns promise *************************************/		
+		_reloadStore: function(store){
+			var deferred = Q.defer();
+			store.load({
+				callback: function(records, operation, success){
+					if(!success) deferred.reject(operation.getError() || 'Could not load data');
+					else deferred.resolve(store);
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/********************************************** LOADING SINGLE MODELS **************************************/	
 		_loadProject: function(oid){ 
 			var me = this, deferred = Q.defer();
-			if(!oid) return Q.resolve();
-			else if(!me.Project){ 
-				return me._loadModels().then(function(){ 
-					return me._loadProject(oid); 
-				});
-			}
+			if(!oid) return Q.reject('Invalid arguments: LP');
+			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.Project.load(oid, {
-					fetch: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
+					fetch: me._projectFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
@@ -63,38 +197,13 @@
 				return deferred.promise;
 			}
 		},	
-		_loadFeature: function(oid, projectRef){ //projectRef is optional
+		_loadUserStory: function(oid, projectRef){
 			var me = this, deferred = Q.defer();
-			if(!oid) return Q.resolve();
-			else if(!me.Feature){ 
-				return me._loadModels().then(function(){ 
-					return me._loadFeature(oid, projectRef); 
-				});
-			}
-			else {
-				me.Feature.load(oid, {
-					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_Risks', 'Project', 'PlannedEndDate', 'Parent'],
-					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: projectRef
-					},
-					callback: deferred.resolve
-				});
-				return deferred.promise;
-			}
-		},	
-		_loadUserStory: function(oid, projectRef){ 
-			var me = this, deferred = Q.defer();
-			if(!oid) return Q.resolve();
-			else if(!me.UserStory){ 
-				return me._loadModels().then(function(){ 
-					return me._loadUserStory(oid, projectRef); 
-				});
-			}
+			if(!oid || !projectRef) return Q.reject('Invalid arguments: LUS');
+			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.UserStory.load(oid, {
-					fetch: ['Name', 'ObjectID', 'Release', 'Project', 'Feature',
-						'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+					fetch: me._userStoryFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: projectRef
@@ -104,59 +213,38 @@
 				return deferred.promise;
 			}
 		},	
-		_loadMilestone: function(oid, projectRef){ 
-			var me = this, deferred = Q.defer();
-			if(!oid) return Q.resolve();
-			else if(!me.Milestone){ 
-				return me._loadModels().then(function(){ 
-					return me._loadMilestone(oid); 
-				});
-			}
+		_loadPortfolioItem: function(oid, ordinal, projectRef){
+			var me = this, deferred = Q.defer(),
+				piName = me.PortfolioItemTypes[ordinal];
+			if(!oid || !projectRef) return Q.reject('Invalid arguments: LPI');
+			else if(!me[piName]) return Q.reject('PortfolioItem ordinal not found: ' + ordinal);
 			else {
-				me.Milestone.load(oid, {
-					fetch: ['ObjectID', 'Parent', 'Name'],
+				me[piName].load(oid, {
+					fetch: me._portfolioItemFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: projectRef
+						
 					},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
 			}
-		},
+		},	
 		
-		/**************************************** SOME UTIL FUNCS ***************************************************/
-		_loadRootProject: function(projectRecord){
-			if(!projectRecord) return Q.reject('Invalid arguments: LRP');
-			var me=this, 
-				n = projectRecord.data.Name;
-			if(n === 'All Scrums' || n === 'All Scrums Sandbox') return Q(projectRecord);
-			else if(!projectRecord.data.Parent) return Q.reject('You do not have viewer access to "All Scrums"!');
+		/**************************************** Train Funcs ***************************************************/
+		_projectInWhichTrain: function(projectRecord){ 
+			/** returns train the projectRecord is in, otherwise null. */
+			if(!projectRecord) return Q();
 			else {
-				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
-					return me._loadRootProject(parentRecord);
-				});
-			}
-		},	
-		_loadTopProject: function(projectRecord){
-			if(!projectRecord) return Q.reject('Invalid arguments: LTP');
-			var me=this, 
-				n = projectRecord.data.Name;
-			if(!projectRecord.data.Parent) return Q(projectRecord);
-			else {
-				return me._loadProject(projectRecord.data.Parent.ObjectID).then(function(parentRecord){
-					return me._loadTopProject(parentRecord);
-				});
-			}
-		},	
-		_projectInWhichTrain: function(projectRecord){ // returns train the projectRecord is in, otherwise null.
-			if(!projectRecord) return Q.reject('Invalid arguments: PIWT');
-			else {
-				var me=this, split = projectRecord.data.Name.split(' ART');
-				if(split.length>1) return Q(projectRecord);
+				var me=this,
+					foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
+						return trainConfig.TrainProjectOID == projectRecord.data.ObjectID; 
+					});
+				if(foundTrainConfig) return Q(projectRecord);
 				else { 
 					var parent = projectRecord.data.Parent;
-					if(!parent) return Q.reject('Project not in a train');
+					if(!parent) return Q();
 					else {
 						return me._loadProject(parent.ObjectID).then(function(parentRecord){
 							return me._projectInWhichTrain(parentRecord);
@@ -164,70 +252,31 @@
 					}
 				}
 			}
-		},	
-		_loadAllTrains: function(rootProjectRecord){
-			if(!rootProjectRecord) return Q.reject('Invalid arguments: LAT');
+		},
+		_loadTrainPortfolioProject: function(trainRecord){
+			if(!trainRecord) return Q.reject('Invalid arguments: ltpp');
 			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'Project',
-					remoteSort:false,
-					limit:Infinity,
-					fetch: ['Name', 'ObjectID'],
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
-					filters:[{
-							property:'Name',
-							operator: 'contains',
-							value: ' ART'
-						},{
-							property: 'Name',
-							operator: (rootProjectRecord.data.Name === 'All Scrums Sandbox' ? 'contains' : '!contains'),
-							value: 'Test'
-						}
-					]
+				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
+					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
 				});
-			return me._reloadStore(store).then(function(store){
-				console.log('AllTrainRecords loaded', store.data.items);
-				return Q(store);
-			});
-		},			
-		_loadRandomUserStory: function(projectRef){ //get the most recent 5 in the project!!
-			if(!projectRef) return Q.reject('Invalid arguments: LRUS');
+			if(!foundTrainConfig) return Q.reject('Project ' + trainRecord.data.Name + ' is not a train!');
+			if(foundTrainConfig.TrainAndPortfolioLocationTheSame) return Q(trainRecord);
+			else return me._loadProject(foundTrainConfig.PortfolioProjectOID);
+		},
+		_getTrainName: function(trainRecord){
+			if(!trainRecord) throw 'Invalid arguments: gtn';
 			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'HierarchicalRequirement',
-					limit:5,
-					pageSize:5,
-					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project: undefined
-					},
-					sorters: [{
-						property: 'CreationDate', 
-						direction:'DESC'
-					}],
-					filters:[{
-						property:'Project',
-						value: projectRef
-					}]
+				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
+					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
 				});
-			return me._reloadStore(store).then(function(store){
-				var records = store.data.items;
-				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
-				else return Q(undefined);
-			});
+			if(!foundTrainConfig) throw 'Project ' + trainRecord.data.Name + ' is not a train!';
+			if(foundTrainConfig.TrainName) return foundTrainConfig.TrainName;
+			else return trainRecord.data.Name;
 		},
 		
-		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ //only pull look at Feature Release if US relese == null
-			/************************* NOTE ***********************************************
-				for Q215 we need to uncomment the below lines for a better user story filter!
-				
-				from: (US.Release == X || (US.Feature.Release ==X))
-				to: (US.Release ==X || (US.Release ==null && US .Feature.Release==X))
-			******************************************************************************/
+		/**************************************** UserStory Funcs ************************************************/
+		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
+			/** only pull look at PortfolioItem Release if US.Release == null */
 			var me=this,
 				twoWeeks = 1000*60*60*24*7*2,
 				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
@@ -241,62 +290,54 @@
 				operator: '>',
 				value: releaseEndPadding
 			})).or(
-				// Ext.create('Rally.data.wsapi.Filter', {
-					// property:'Release.ObjectID',
-					// value: null
-				// }).and(
+				Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.ObjectID',
+					value: null
+				}).and(
 					Ext.create('Rally.data.wsapi.Filter', {
-						property:'Feature.Release.ReleaseStartDate',
+						property:'PortfolioItem.Release.ReleaseStartDate',
 						operator: '<',
 						value: releaseStartPadding
 					}).and(Ext.create('Rally.data.wsapi.Filter', { 
-						property:'Feature.Release.ReleaseDate',
+						property:'PortfolioItem.Release.ReleaseDate',
 						operator: '>',
 						value: releaseEndPadding
 					}))
-				// )
+				)
 			);
 		},
-		_loadRandomUserStoryFromRelease: function(projectRef, releaseName){ //get the most recent 5 in the project for a given releaseName!!
-			if(!projectRef || !releaseName) return Q.reject('Invalid arguments: LRUSFR');
+		_loadRandomUserStory: function(projectRef){
+			if(!projectRef) return Q.reject('Invalid arguments: LRUS');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
-					limit:5,
-					pageSize:5,
-					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					limit:1,
+					pageSize:1,
+					fetch: false,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: undefined
 					},
-					sorters: [{
-						property: 'CreationDate', 
-						direction:'DESC'
-					}],
-					filters:[
-						Ext.create('Rally.data.wsapi.Filter', { property: 'Project', value: projectRef }).and(
-							Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
-							Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.Release.Name', value: releaseName }))
-						)
-					]
+					filters:[{ 
+						property:'Project', 
+						value: projectRef 
+					}]
 				});
-			return me._reloadStore(store).then(function(store){
-				var records = store.data.items;
-				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
-				else return Q(undefined);
-			});
+			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
-		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){ //get the most recent 5 in the project!!
-			/**this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){
+			/**
+				this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
 				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
-				Then 1 of the 5 user stories is randomly selected and returned */
+				Then 1 of the 5 user stories is randomly selected and returned 
+			*/
 			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
 					limit:5,
 					pageSize:5,
-					fetch: ['Name', 'CreationDate', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					fetch: me._userStoryFields,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: undefined
@@ -307,7 +348,7 @@
 					}],
 					filters:[
 						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
-						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+						me.__getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
 			return me._reloadStore(store).then(function(store){
@@ -316,7 +357,7 @@
 				else return Q(undefined);
 			});
 		},
-		_loadUserStoryByFID: function(formattedID, projectRef){ //must supply both argument
+		_loadUserStoryByFID: function(formattedID, projectRef){
 			if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -340,8 +381,185 @@
 				return Q(store.data.items.pop());
 			});
 		},	
-		_loadProjectByName: function(name){
-			if(!name) return Q.reject('Invalid arguments: LPBN');
+		
+		/**************************************** UserStory Funcs ************************************************/
+		_loadPortfolioItemsOfType: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					remoteSort:false,
+					fetch: me._portfolioItemFields,
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me._reloadStore(store);
+		},		
+		_loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
+			if(!portfolioProject || !ordinal) return Q.reject('Invalid arguments: LPIOO');
+			var me=this, type = me.PortfolioItemTypes[ordinal];
+			if(type) return me._loadPortfolioItemsOfType(type);
+			else return Q.reject('Invalid PortfolioItem ordinal');
+		},
+		_portfolioItemTypeToOrdinal: function(type){
+			return this.PortfolioItemTypes.indexOf(type);
+		},
+		_getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
+			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
+		},
+		_getPortfolioItemTypeStateByName: function(portfolioType, stateName){
+			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
+		},
+		
+		/********************************************** Project Funcs ********************************************/	
+		__storeItemsToProjTree: function(projects){
+			var me=this, projTree = {};
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			return projTree;
+		},
+		_loadAllProjects: function(){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me._projectFields,
+					limit:Infinity,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){
+				var map = _.reduce(store.getRange(), function(map, project){
+					map[project.data.ObjectID] = project;
+					return map;
+				}, {});
+				return map;
+			});	
+		},
+		__addProjectsWithTeamMembersToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadProjectsWithTeamMembers: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				projectsWithTeamMembers = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me._projectFields,
+					limit:Infinity,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me.__storeItemsToProjTree(store.getRange());
+					me.__addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
+					return projectsWithTeamMembers;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.TeamMembers.Count > 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},	
+		__allChildProjectToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_loadAllChildrenProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				childrenProjects = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me._projectFields,
+					limit:Infinity,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me.__storeItemsToProjTree(store.getRange());
+					me.__allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+					return childrenProjects;
+				} else {
+					return _.reduce(store.getRange(), function(map, project){
+						map[project.data.ObjectID] = project;
+						return map;
+					}, {});
+				}
+			});
+		},	
+		__allLeafProjectsToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		_loadAllLeafProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				leafProjects = {}, 
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me._projectFields,
+					limit:Infinity,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me.__storeItemsToProjTree(store.getRange());
+					me.__allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+					return leafProjects;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.Children.Count === 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},
+		_loadProjectByName: function(projectName){
+			if(!projectName) return Q.reject('Invalid arguments: LPBN');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Project',
@@ -352,224 +570,168 @@
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					},
-					filters: [
-						{
-							property:'Name',
-							value:name
-						}
-					]
+					filters: [{
+						property:'Name',
+						value:projectName
+					}]
 				});
 			return me._reloadStore(store).then(function(store){
 				return Q(store.data.items.pop());
 			});
 		},
 		
-		/********************************************** FEATURES  ********************************************/
-		_getFeatureFilter: function(trainRecord, releaseRecord){
-			if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
-			var me=this,
-				trainName = trainRecord.data.Name.split(' ART')[0],
-				relSplit = releaseRecord.data.Name.split(' '),
-				coreFilter = Ext.create('Rally.data.wsapi.Filter', {
-					property:'Release.Name',
-					value: releaseRecord.data.Name
-				});
-			trainName = relSplit.length == 2 ? relSplit[1] : trainName; //switches where features are if release is "Qxxx TrainName"
-			if(trainRecord.data.Name == 'Test ART (P&E)'){
-				return Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: 'Test ART (P&E)'
-				}).and(coreFilter);
-			}
-			else {
-				return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
-					property:'Project.Parent.Name',
-					value: trainName + ' POWG Portfolios'
-				}).or(Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: trainName + ' POWG Portfolios'
-				})).and(coreFilter);
-			}
-		},
-		
-		/*************************************************** Products ********************************************/
-		_getProductFilter: function(trainRecord){ //products can be in 2 different levels of the portfolio hierarchy
-			if(!trainRecord) throw 'invalid arguments: GPF';
-			var me=this,
-				trainName = trainRecord.data.Name.split(' ART')[0];
-			if(trainName === 'Test'){
-				return Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: 'Test ART (P&E)'
-				});
-			}
-			else {
-				return Ext.create('Rally.data.wsapi.Filter', {//NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
-					property:'Project.Parent.Name',
-					value: trainName + ' POWG Portfolios'
-				}).or(Ext.create('Rally.data.wsapi.Filter', {
-					property:'Project.Name',
-					value: trainName + ' POWG Portfolios'
-				}));
-			}
-		},	
-		_loadProducts: function(trainRecord){
-			if(!trainRecord) return Q.reject('Invalid arguments: LPROD');
+		/********************************************** Release loading ********************************************/	
+		_loadAllReleases: function(projectRecord){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/Product',
+					model: 'Release',
 					limit:Infinity,
-					remoteSort:false,
-					fetch: ['Name'],
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
-					filters:[me._getProductFilter(trainRecord)]
+						project:null
+					}
 				});
-			return me._reloadStore(store).then(function(store){
-				console.log('Products loaded', store.data.items);
-				return Q(store);
-			});
-		},
-		
-		/********************************************** Load Valid Projects ********************************************/	
-		_addValidProjectsToList: function(projTree, hash){
-			var me=this, 
-				curProj = projTree.ProjectRecord;
-			if(curProj.data.TeamMembers.Count >0) 
-				hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me._addValidProjectsToList(projTree[childProjRef], hash);
-			}
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},	
-		_loadValidProjects: function(rootProjectRecord){ //all projects under root that have team Members
-			if(!rootProjectRecord) return Q.reject('Invalid arguments: LVP');
+		_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
-				validProjects = {}, 
-				projTree = {};
-			var store = Ext.create('Rally.data.wsapi.Store', {
-				model: "Project",
-				fetch: ['Name', 'Parent', 'ObjectID', 'TeamMembers'],
-				limit:Infinity,
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project:null
-				}
-			});
-			return me._reloadStore(store).then(function(store){
-				var projects = store.data.items;
-				for(var i=0, len=projects.length; i<len; ++i){
-					var project = projects[i],
-						thisRef = project.data.ObjectID, 
-						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-					if(!projTree[thisRef]) projTree[thisRef] = {};
-					projTree[thisRef].ProjectRecord = project;
-					if(parentRef){
-						if(!projTree[parentRef]) projTree[parentRef] = {};
-						projTree[parentRef][thisRef] = projTree[thisRef];
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
 					}
-				}
-				me._addValidProjectsToList(projTree[rootProjectRecord.data.ObjectID], validProjects);
-				console.log('valid projects', validProjects);
-				return Q(validProjects);
-			});	
-		},	
-		_allChildProjectToList: function(projTree, hash){
-			var me=this, 
-				curProj = projTree.ProjectRecord;
-			hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me._allChildProjectToList(projTree[childProjRef], hash);
-			}
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		_loadAllChildrenProjects: function(rootProjectRecord){
-			if(!rootProjectRecord) return Q.reject('Invalid arguments: LACP');
+		_loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
-				childrenProjects = {}, 
-				projTree = {};
-			var store = Ext.create('Rally.data.wsapi.Store', {
-				model: "Project",
-				fetch: ['Name', 'Parent', 'ObjectID'],
-				limit:Infinity,
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project:null
-				}
-			});
-			return me._reloadStore(store).then(function(store){
-				var projects = store.data.items;
-				for(var i=0, len=projects.length; i<len; ++i){
-					var project = projects[i],
-						thisRef = project.data.ObjectID, 
-						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-					if(!projTree[thisRef]) projTree[thisRef] = {};
-					projTree[thisRef].ProjectRecord = project;
-					if(parentRef){
-						if(!projTree[parentRef]) projTree[parentRef] = {};
-						projTree[parentRef][thisRef] = projTree[thisRef];
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
 					}
-				}
-				me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-				console.log('childrenProjects', childrenProjects);
-				return Q(childrenProjects);
-			});	
-		},	
-		_allLeafProjectsToList: function(projTree, hash){
-			var me=this, 
-				curProj = projTree.ProjectRecord;
-			if(curProj.data.Children.Count === 0) 
-				hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me._allLeafProjectsToList(projTree[childProjRef], hash);
-			}
-		},	
-		_loadAllLeafProjects: function(rootProjectRecord){
-			if(!rootProjectRecord) return Q.reject('Invalid arguments: LALP');
-			var me=this,
-				childrenProjects = {}, 
-				projTree = {};
-			var store = Ext.create('Rally.data.wsapi.Store', {
-				model: "Project",
-				fetch: ['Name', 'Parent', 'ObjectID', 'Children'],
-				limit:Infinity,
-				context: {
-					workspace: me.getContext().getWorkspace()._ref,
-					project:null
-				}
-			});
-			return me._reloadStore(store).then(function(store){
-				var projects = store.data.items;
-				for(var i=0, len=projects.length; i<len; ++i){
-					var project = projects[i],
-						thisRef = project.data.ObjectID, 
-						parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
-					if(!projTree[thisRef]) projTree[thisRef] = {};
-					projTree[thisRef].ProjectRecord = project;
-					if(parentRef){
-						if(!projTree[parentRef]) projTree[parentRef] = {};
-						projTree[parentRef][thisRef] = projTree[thisRef];
-					}
-				}
-				me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
-				return Q(childrenProjects);
-			});	
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		
-		/********************************************** Generic store loading, returns promise ********************************************/
-		
-		_reloadStore: function(store){
-			var deferred = Q.defer();
-			store.load({
-				callback: function(records, operation, success){
-					if(!success) deferred.reject(operation.getError() || 'Could not load data');
-					else deferred.resolve(store);
-				}
-			});
-			return deferred.promise;
+		_loadReleasesInTheFuture: function(projectRecord){
+			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
+		},
+		_loadReleasesByNameUnderProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					}],
+					context:{
+						project:projectRecord.data._ref,
+						projectScopeDown:true,
+						projectScopeUp:false
+					}
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},	
+		_loadReleaseByNameForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._releaseFields,
+					filters:[{
+						property:'Name',
+						operator:'contains',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		_getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
+			/** gets the most likely release to scope to base on the following order:
+				1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+								to use preferences for this one)
+				2) if we are currently in one of the releases
+				3) the closest release planning date to the current date
+			*/
+			var me=this,
+				d = new Date(),
+				rs = releaseRecords,
+				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+				_.find(rs, function(r){
+					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+				}) ||
+				_.reduce(rs, function(best, r){
+					if(best===null) return r;
+					else {
+						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+					}
+				}, null);
 		}
 	});
 }());
@@ -585,7 +747,7 @@
 		]
 	});
 		
-	/************************* USED FOR WORKSPACE CONFIG *********************************************/
+	/************************* USED FOR WORKSPACE TRAIN CONFIG *********************************************/
 	Ext.define('TrainConfigItem', {
 		extend: 'Ext.data.Model',
 		fields: [
@@ -632,75 +794,15 @@
 		}
 	});
 }());
-                (function(){
+                /** this mixin is used to mess with the environment outside of the iframe that the rally app is put in. */
+(function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	/** resizes the iframe to be a little bigger than the inner contents, so theres no ugly double vertical scroll bar **/
 
 	Ext.define('IframeResize', {
 		requires: ['WindowListener'],
 		
-		/***************** ************* ********* DONT USE THIS STUFF ********************* ************* *********************/
-		
-		/** resizes the iframe to be the height of all the items in it */
-		_applyIframeResizeToContents: function(){ 
-			var w = window, p = w.parent, pd = w.parent.document, l = w.location,
-				iframe = window.frameElement ? Ext.get(window.frameElement) : me.el,
-				ip1 = iframe.parentNode,
-				ip2 = iframe.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode, //this is apparently the one that matters
-				height = 0, next = this.down();
-			while(next){
-				height += next.getHeight() + next.getEl().getMargin('tb')*1 + next.getEl().getPadding('tb')*1;
-				next = next.next();
-			}
-			height += 150;
-			ip1.style.height = height + 'px';
-			ip2.style.height = height + 'px';
-			iframe.style.height = height + 'px';
-		},
-		
-		/** 
-			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-			to that of the contents! Call this if you want the scrollbar to be on the outsize of the app (the window scrollbar)
-		*/
-		_initIframeResizeToContents: function(){
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToContents(); });
-			}
-		},
-			
-		/** 
-			resizes the iframe to be the height of the window. its like rally autoheight app but better 
-		*/
-		_applyIframeResizeToWindow: function(){ 
-			var iframe = window.frameElement ? Ext.get(window.frameElement) : me.el,
-				i = iframe.dom,
-				portlet = iframe.up('.x-portlet'),
-				portalColumn = portlet.up('.x-portal-column'),
-				dashboard = portlet.up('#mydash_portlet');
-			height = window.parent.innerHeight - 70;
-			height -= 200; //~120 on top and 60 on bottom and
-			iframe.style.height = height + 'px';
-			ip1.style.height = height + 'px';
-			height += 30;
-			ip2.style.height = height + 'px';
-		},
-		
-			/** 
-			This attaches a listener to the parent window resize event. When the parent window resizes, this resets the iframe height
-			to that of the window! Call this if you want the scrollbar to be on the inside of the app (NOT the window scrollbar)
-		*/
-		_initIframeResizeToWindow: function(){
-			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._applyIframeResizeToWindow(); });
-			}
-			me._applyIframeResizeToWindow();
-		},
-		
-		/***************** ************* ********* GOOD STUFF BELOW ********************* ************* *********************/		
-		_fixRallyDashboard: function(){ //makes app as large as screen, without the stupid padding/margin
+		_fixRallyDashboard: function(){ 
+			/** makes app as large as screen, without the padding/margin */
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
 				portlet = bottomEl.up('.x-portlet'), 
@@ -742,7 +844,8 @@
 			me._fixRallyDashboard();
 		},
 
-		_disableResizeHandle: function(){ //hides the draggable resize handle from under the app
+		_disableResizeHandle: function(){ 
+			/** hides the draggable resize handle from under the app */
 			var me=this, handle;
 			if(window.frameElement) handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
 			else handle = me.el.up('.x-portlet').down('.x-resizable-handle');
@@ -750,8 +853,7 @@
 				handle.hide();
 				handle.dom.onshow = function(){ if(handle) handle.hide(); };
 			}
-		},
-			
+		},	
 		_initDisableResizeHandle: function(){
 			var me=this;
 			if(me._addWindowEventListener){
@@ -780,29 +882,37 @@
 			return iyOffset<0 ? 0 : iyOffset;
 		},
 		
-		_alert: function(title, str){		
+		_alert: function(title, message){
+			var me=this;
+			message = (typeof message === 'string') ? message : 
+								(message.message ? message.message : 
+								JSON.stringify(message, null, '\t'));
 			if(arguments.length<1) return;
 			if(arguments.length===1){
-				str = title;
+				message = title;
 				title = '';
 			}
-			Ext.MessageBox.alert(title, str).setY(this.__getMessageBoxY());
+			Ext.MessageBox.alert(title, message).setY(me.__getMessageBoxY());
 			setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
 				var x = Ext.MessageBox.down('button');
 				while(x.isHidden()) x = x.nextSibling();
 				x.focus();
-			}, 20);
+			}, 50);
 		},
 		
-		_confirm: function(title, str, fn){
+		_confirm: function(title, message, fn){
+			var me=this;
+			message = (typeof message === 'string') ? message : 
+								(message.message ? message.message : 
+								JSON.stringify(message, null, '\t'));
 			if(arguments.length<2) return;
 			if(arguments.length===2){
-				fn = str;
-				str = title;
+				fn = message;
+				message = title;
 				title = '';
 			}
 			if(typeof fn !== 'function') fn = function(){};
-			Ext.MessageBox.confirm(title, str, fn).setY(this.__getMessageBoxY());
+			Ext.MessageBox.confirm(title, message, fn).setY(me.__getMessageBoxY());
 			setTimeout(function(){
 				var x = Ext.MessageBox.down('button');
 				while(x.isHidden()) x = x.nextSibling();
@@ -896,258 +1006,82 @@
 		}	
 	});
 }());
-                (function(){
-	var Ext = window.Ext4 || window.Ext;
-		
-		/** Mixin functions related to queries, you need to require Q as a dependency in your rally app
-		Q can be found here: https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js
-		most functions return promises that resolve to stores
-	*/
-
-	Ext.define('ReleaseQuery', {
-
-		_loadAllReleases: function(projectRecord){
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[
-					{
-						property:'Project.ObjectID',
-						value: projectRecord.data.ObjectID
-					}
-				],
-				listeners: {
-					load: {
-						fn: function(releaseStore, releaseRecords){
-							console.log('releases loaded:', releaseRecords);
-							deferred.resolve(releaseStore);
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		
-		/** gets releases for this project that have release date >= now. returns promise that resolves to the releaseStore */
-		_loadReleasesInTheFuture: function(projectRecord){
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[
-					{
-						property:'Project.ObjectID',
-						value: projectRecord.data.ObjectID
-					},{
-						property:'ReleaseDate',
-						operator:'>=',
-						value: new Date().toISOString()
-					}
-				],
-				listeners: {
-					load: {
-						fn: function(releaseStore, releaseRecords){
-							console.log('releases loaded:', releaseRecords);
-							deferred.resolve(releaseStore);
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		
-		/** loads this release for each scrum whose name contains the second parament. returns promise with the release Store 
-			the scrums that the releases belong to will have at least 1 team member, and the train's release is not included
-			in the results.
-		**/
-		_loadReleasesWithName: function(releaseName, nameContains){ 
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[
-					{
-						property:'Name', //match the release
-						value: releaseName
-					},{
-						property:'Project.Name', 
-						operator:'contains',
-						value:nameContains
-					},{
-						property:'Project.Children.Name', //has children 
-						operator:'=',
-						value:''
-					},{
-						property:'Project.Name', //but not the train release itsself
-						operator:'!contains',
-						value:' ART'
-					}
-				],
-				listeners: {
-					load: {
-						fn: function(store, records){
-							console.log('releasesWithName loaded:', records);
-							deferred.resolve(store);
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		
-		_loadReleaseByNameForProject: function(releaseName, projectRecord){
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[{
-					property:'Name',
-					value: releaseName
-				},{
-					property:'Project', 
-					value:projectRecord.data._ref
-				}],
-				listeners: {
-					load: {
-						fn: function(store, records){
-							deferred.resolve(records.pop());
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[{
-					property:'Name',
-					operator:'contains',
-					value: releaseName
-				},{
-					property:'Project', 
-					value:projectRecord.data._ref
-				}],
-				listeners: {
-					load: {
-						fn: function(store, records){
-							deferred.resolve(records);
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		
-			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
-		_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
-			var deferred = Q.defer();
-			Ext.create('Rally.data.wsapi.Store',{
-				model: 'Release',
-				limit:Infinity,
-				autoLoad:true,
-				fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
-				context:{
-					workspace: this.getContext().getWorkspace()._ref,
-					project: null
-				},
-				filters:[
-					{
-						property:'Project.ObjectID',
-						value: projectRecord.data.ObjectID
-					},{
-						property:'ReleaseDate',
-						operator:'>=',
-						value: new Date(givenDate).toISOString()
-					}
-				],
-				listeners: {
-					load: {
-						fn: function(releaseStore, releaseRecords){
-							console.log('releases loaded:', releaseRecords);
-							deferred.resolve(releaseStore);
-						},
-						single:true
-					}
-				}
-			});
-			return deferred.promise;
-		},
-		
-		/** gets the most likely release to scope to base on the following order:
-			1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
-							to use preferences for this one)
-			2) if we are in a release
-			3) the closest release planning date to the current date
-		*/
-		_getScopedRelease: function(releaseRecords, projectOID, appPrefs){
-			var me=this,
-				d = new Date(),
-				rs = releaseRecords,
-				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
-			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
-				_.find(rs, function(r){
-					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
-				}) ||
-				_.reduce(rs, function(best, r){
-					if(best===null) return r;
-					else {
-						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
-						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
-					}
-				}, null);
-		}
-	});
-}());
-                /** This is a mixin that updates highchart data after it is run through the lookback calculator 
-	it specifically: (optionally) adds trendlines, zeros out the future numbers, and 
-	adds a datemap from workweeks to actual dates
-*/
+                /** This is a mixin for using highcharts with rally data data after it is run through the lookback calculator */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
+	
+	var ChartsTooltipDatemap = {}; //closure variable that maps the x values to date strings -- per chart
 
-	Ext.define('ChartUpdater', {
+	Ext.define('CumulativeFlowChartMixin', {
 		requires:['IntelWorkweek'],
 
-		_updateChartData: function(data, hideTrends){
+		_defaultCumulativeFlowChartConfig: {
+			chart: {
+				defaultSeriesType: "area",
+				zoomType: "xy"
+			},
+			colors: [
+				'#ABABAB', 
+				'#E57E3A', 
+				'#E5D038', 
+				'#0080FF', 
+				'#3A874F', 
+				'#000000',
+				'#26FF00'
+			],	
+			xAxis: {
+				tickmarkPlacement: "on",
+				title: {
+					text: "Days",
+					margin: 10
+				},
+				labels: {
+					y: 20
+				}
+			},
+			yAxis: {
+				title: {
+					text: "Points"
+				},
+				labels: {
+					x: -5,
+					y: 4
+				}
+			},			
+			tooltip: {
+				formatter: function () {
+					var sum = 0,
+						datemap = ChartsTooltipDatemap[this.series.chart.container.id];
+					for(var i=4; i>= this.series.index; --i) 
+						sum += this.series.chart.series[i].data[this.point.x].y;
+					return "<b>" + this.x + '</b>' + (datemap ? ' (' + datemap[this.point.x] + ')' : '') + 
+						"<br /><b>" + this.series.name + "</b>: " + ((100*this.y>>0)/100) +
+						(this.series.index <=4 ? "<br /><b>Total</b>: " + ((100*sum>>0)/100) : '');
+				}
+			},
+			plotOptions: {
+				series: {
+					marker: {
+						enabled: false,
+						states: {
+							hover: {
+								enabled: true
+							}
+						}
+					},
+					groupPadding: 0.01
+				},
+				area: {
+					stacking: 'normal',
+					lineColor: '#666666',
+					lineWidth: 2,
+					marker: {
+						enabled: false
+					}
+				}
+			}
+		},
+		_updateCumulativeFlowChartData: function(data, hideTrends){
 			var me = this, 
 				now = new Date(),
 				datemap = [];
@@ -1217,6 +1151,121 @@
 			data.datemap = datemap;
 			
 			return data;
+		},
+		_getCumulativeFlowChartTicks: function(startDate, endDate, width){
+			var pixelTickWidth = 40,
+				ticks = width/pixelTickWidth>>0,
+				oneDay = 1000*60*60*24,
+				days = (endDate*1 - startDate*1)/(oneDay*5/7)>>0, //only workdays
+				interval = ((days/ticks>>0)/5>>0)*5;
+			return (interval < 5) ? 5 : interval; //make it weekly at the minimum
+		},
+		_setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
+			ChartsTooltipDatemap[chartContainerId] = datemap;
+		}
+	});
+}());
+                /** use this to load stores that have lots of records. it will load them in parallel instead of serially.
+	what it does is loads 1 page and then based on the totalResultCount it loads the rest of the pages in parallel.
+	
+		for wsapiStore, the config needs to be: {
+			pagesize: <defaults to 200>
+			url:<host:port/path>
+			params: query parameter object with keys and vals
+			model: the instantiated wsapi model (need to load this first)
+		}
+		for lookbackStore, the config needs to be: {
+			pagesize: <defaults to 20000>
+			url:<host:port/path>
+			params: query parameter object with keys and vals
+		}
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('ParallelLoader', { 
+		
+		__parallelLoadData: function(config){
+			var me=this,
+				pagesize = config.pagesize,
+				url = config.url,
+				params = config.params,
+				promises = [],
+				outputItems = [];
+				totalRequestsSent = 1; //1 is the minimum number of requests sent
+			_.times(totalRequestsSent, function(pageNum){
+				var thisDeferred = Q.defer(),
+					thisParams = Ext.merge({}, params);
+				promises.push(thisDeferred.promise);
+				thisParams.start = config.itemOffset + pagesize*pageNum;
+				Ext.Ajax.request({
+					url:url,
+					method:'GET',
+					params: thisParams,
+					success: function(response){
+						var resJSON  = JSON.parse(response.responseText),
+							items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results,
+							totalCount = resJSON.QueryResult ? resJSON.QueryResult.TotalResultCount : resJSON.TotalResultCount,
+							totalPages = (totalCount/pagesize>>0)+(totalCount%pagesize ? 1 : 0);			
+						outputItems = outputItems.concat(items);
+						if(totalRequestsSent < totalPages){
+							var	additionalPromises = [];
+							_.times(totalPages - totalRequestsSent, function(){
+								var nextDeferred = Q.defer(),
+									thisParams = Ext.merge({}, params);
+								additionalPromises.push(nextDeferred.promise);
+								thisParams.start = config.itemOffset + pagesize*totalRequestsSent;
+								++totalRequestsSent;
+								Ext.Ajax.request({
+									url:url,
+									method:'GET',
+									params: thisParams,
+									success: function(response){
+										var resJSON  = JSON.parse(response.responseText),
+											items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;
+										outputItems = outputItems.concat(items);
+										nextDeferred.resolve();
+									},
+									failure: function(response){ nextDeferred.reject(response); }
+								});
+							});
+							Q.all(additionalPromises).then(function(){ thisDeferred.resolve(); });
+						}
+						else thisDeferred.resolve();
+					},
+					failure: function(response){ thisDeferred.reject(response); }
+				});
+			});
+			return Q.all(promises).then(function(){ return outputItems; });
+		},		
+		_parallelLoadWsapiStore: function(config){
+			var me=this;
+			config.itemOffset = 1;
+			config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
+			return me.__parallelLoadData(config).then(function(items){
+				return Ext.create('Rally.data.wsapi.Store', {
+					model: config.model,
+					totalCount: items.length,
+					data: items,
+					load: function(){}
+				});
+			});
+		},
+		_parallelLoadLookbackStore: function(config){
+			var me=this;
+			config.itemOffset = 0;
+			config.pagesize = (config.pagesize > 0 && config.pagesize <= 20000) ? config.pagesize : 20000;
+			return me.__parallelLoadData(config).then(function(items){
+				return Ext.create('Rally.data.lookback.SnapshotStore', {
+					totalCount: items.length,
+					data: items,
+					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
+						extend: 'Rally.data.lookback.SnapshotModel',
+						fields:items.length ? Object.keys(items[0]) : []
+					}),
+					load: function(){}
+				});
+			});
 		}
 	});
 }());
@@ -1226,7 +1275,7 @@
 
 	Ext.define('UserAppsPreference', {
 		
-		_userAppsPref: 'intel-user-apps-preference', //this preference can be overridden, unless you want all apps to share prefs
+		_userAppsPref: 'intel-user-apps-preference', //preference name can be overridden, unless you want all apps to share prefs
 		
 		_loadAppsPreference: function(){
 			var me=this, deferred = Q.defer();
@@ -1236,8 +1285,7 @@
 				success: function(prefs) {
 					var appPrefs = prefs[me._userAppsPref];
 					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}, refresh:30};}
-					console.log('loaded prefs', appPrefs);
+					catch(e){ appPrefs = { projs:{}, refresh:0};}
 					deferred.resolve(appPrefs);
 				},
 				failure: deferred.reject
@@ -1248,7 +1296,6 @@
 			var me=this, s = {}, deferred = Q.defer();
 			prefs = {projs:prefs.projs, refresh:prefs.refresh};
 			s[me._userAppsPref] = JSON.stringify(prefs); 
-			console.log('saving prefs', prefs);
 			Rally.data.PreferenceManager.update({
 				filterByUser: true,
 				filterByName:me._userAppsPref,
@@ -1325,9 +1372,12 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define("FastCfdCalculator", {
-		extend:'Rally.data.lookback.SnapshotStore',	
-		scheduleStates: ['Undefined', 'Defined', 'In-Progress', 'Completed', 'Accepted'],
+	Ext.define("FastCumulativeFlowCalculator", {		
+		constructor:function(options){
+			this.scheduleStates = options.scheduleStates;
+			this.endDate = options.endDate;
+			this.startDate = options.startDate;
+		},
 		
 		_getDates:function(){
 			var dates = [], curDay = this.startDate, day=1000*60*60*24;
@@ -1343,11 +1393,11 @@
 			return Ext.Date.format(date, 'm/d/Y');
 		},
 		
-		_getIndexHelper:function(d,ds){ //binsearches for the closest date to d
-			var curVal = (ds.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
+		_getIndexHelper:function(date, dateArray){ //binsearches for the closest date to 'date'
+			var curVal = (dateArray.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
 			while(curInt !== lastInt){
-				if(ds[curInt]===d) return curInt;
-				else if(ds[curInt]>d) curVal-=div;
+				if(dateArray[curInt]===date) return curInt;
+				else if(dateArray[curInt]>date) curVal-=div;
 				else curVal+=div;
 				div/=2;
 				lastInt = curInt;
@@ -1356,25 +1406,24 @@
 			return curInt;
 		},
 		
-		_getIndexOnOrBefore: function(d, ds){
-			if(ds.length===0) return -1;
-			var pos = this._getIndexHelper(d,ds);
-			if(pos===0) { if(ds[pos] <= d) return pos; else return -1; } //either start of list or everything is after d
-			else if(ds[pos] <= d) return pos;
+		_getIndexOnOrBefore: function(date, dateArray){
+			if(dateArray.length===0) return -1;
+			var pos = this._getIndexHelper(date, dateArray);
+			if(pos===0) { if(dateArray[pos] <= date) return pos; else return -1; } //either start of list or everything is after 'date'
+			else if(dateArray[pos] <= date) return pos;
 			else return pos-1;
 		},
 		
-		_getIndexOnOrAfter: function(d, ds){
-			if(ds.length===0) return -1;
-			var pos = this._getIndexHelper(d,ds);
-			if(pos===ds.length-1) { if(ds[pos] >= d) return pos; else return -1; } //either start of list or everything is after d
-			else if(ds[pos] >= d) return pos;
+		_getIndexOnOrAfter: function(date, dateArray){
+			if(dateArray.length===0) return -1;
+			var pos = this._getIndexHelper(date, dateArray);
+			if(pos===dateArray.length-1) { if(dateArray[pos] >= date) return pos; else return -1; } //either start of list or everything is after 'date'
+			else if(dateArray[pos] >= date) return pos;
 			else return pos+1;
 		},
 		
 		runCalculation:function(items){
-			if(!this.scheduleStates || !this.startDate || !this.endDate) {
-				console.log('invalid constructor config', this); return; }
+			if(!this.scheduleStates || !this.startDate || !this.endDate) throw 'invalid constructor config';
 			var dates = this._getDates(), day=1000*3600*24,
 				dateMapTemplate = _.map(new Array(dates.length), function(){ return 0;}); 
 			var totals = _.reduce(this.scheduleStates, function(map, ss){ 
@@ -1396,36 +1445,32 @@
 			}
 			return {
 				categories:_.map(dates, function(d){ return this._dateToStringDisplay(d); }, this), 
-				series: _.reduce(this.scheduleStates, function(ar, ss){
-					return ar.concat([{name:ss, type:'area', dashStyle:'Solid', data:totals[ss]}]);
+				series: _.reduce(this.scheduleStates, function(outputArray, ss){
+					return outputArray.concat([{name:ss, type:'area', dashStyle:'Solid', data:totals[ss]}]);
 				}, [])
 			};
 		}
 	});
 }());
                 /** this app shows the cumulative flow charts for a train, and the scrums in it
-	it is scoped to a specific release (and optionally) product
+	it is scoped to a specific release (and optionally) top portfolioItem
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	console = { log: function(){} };
 
-	var datemap = []; //closure variable that maps the data points in the grids to the date string
-	
 	Ext.define('TrainCfdCharts', {
 		extend: 'IntelRallyApp',
 		cls:'app',
 		requires:[
-			'FastCfdCalculator'
+			'FastCumulativeFlowCalculator'
 		],
 		mixins:[
 			'WindowListener',
 			'PrettyAlert',
 			'IframeResize',
 			'IntelWorkweek',
-			'ReleaseQuery',
-			'ChartUpdater',
+			'CumulativeFlowChartMixin',
+			'ParallelLoader',
 			'UserAppsPreference'
 		],
 		minWidth:910,
@@ -1451,82 +1496,7 @@
 			width:'100%'
 		}],
 		
-		_userAppsPref: 'intel-ART-CFD',	
-		
-		/********************************************** SOME CONFIG CONSTANTS *******************************************/
-		_chartColors: [
-			'#ABABAB', 
-			'#E57E3A',
-			'#E5D038', 
-			'#0080FF', 
-			'#3A874F', 
-			'#000000',
-			'#26FF00'
-		],		
-		_defaultChartConfig: {
-			chart: {
-				defaultSeriesType: "area",
-				zoomType: "xy"
-			},
-			xAxis: {
-				tickmarkPlacement: "on",
-				title: {
-					text: "Days",
-					margin: 10
-				},
-				labels: {
-					y: 20
-				}
-			},
-			yAxis: {
-				title: {
-					text: "Points"
-				},
-				labels: {
-					x: -5,
-					y: 4
-				}
-			},			
-			tooltip: {
-				formatter: function () {
-					var sum = 0;
-					for(var i=4; i>= this.series.index; --i) 
-						sum += this.series.chart.series[i].data[this.point.x].y;
-					return "<b>" + this.x + '</b> (' + datemap[this.point.x] + ')' + 
-						"<br /><b>" + this.series.name + "</b>: " + this.y +
-						(this.series.index <=4 ? "<br /><b>Total</b>: " + sum : '');
-				}
-			},
-			plotOptions: {
-				series: {
-					marker: {
-						enabled: false,
-						states: {
-							hover: {
-								enabled: true
-							}
-						}
-					},
-					groupPadding: 0.01
-				},
-				area: {
-					stacking: 'normal',
-					lineColor: '#666666',
-					lineWidth: 2,
-					marker: {
-						enabled: false
-					}
-				}
-			}
-		},		
-		_getConfiguredChartTicks: function(startDate, endDate, width){
-			var pixelTickWidth = 40,
-				ticks = width/pixelTickWidth>>0,
-				oneDay = 1000*60*60*24,
-				days = (endDate*1 - startDate*1)/(oneDay*5/7)>>0, //only workdays
-				interval = ((days/ticks>>0)/5>>0)*5;
-			return (interval < 5) ? 5 : interval; //make it weekly at the minimum
-		},
+		_userAppsPref: 'intel-ART-CFD',	//dont share release scope settings with other apps	
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadSnapshotStores: function(){
@@ -1534,72 +1504,160 @@
 				promises = [];		
 			me.AllSnapshots = [];
 			me.TeamStores = {};
-			me.ReleasesWithName.forEach(function(releaseRecord){
-				var deferred = Q.defer();
-				promises.push(deferred.promise);
-				Ext.create('Rally.data.lookback.SnapshotStore', {
-					autoLoad:true,
-					limit: Infinity,
-					context:{ 
+			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
+				var parallelLoaderConfig = {
+					pagesize:20000,
+					url: 'https://rally1.rallydev.com/analytics/v2.0/service/rally/workspace/' + 
+						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+					params: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
-					sort:{_ValidFrom:1},
-					compress:true,
-					find: { 
-						_TypeHierarchy:-51038, 
-						Children:null,
-						PlanEstimate: {$gte:0},
-						Release: releaseRecord.get('ObjectID')
-					},
-					fetch:['ScheduleState', 'PlanEstimate'],
-					hydrate:['ScheduleState', 'PlanEstimate'],
-					listeners: {
-						load: function(store, records){
-							if(records.length > 0){
-								me.TeamStores[releaseRecord.data.Project.Name] = records;
-								me.AllSnapshots = me.AllSnapshots.concat(records);
-							}
-							deferred.resolve();
-						},
-						single:true
+						compress:false, //makes it very slow sometimes
+						pagesize:20000,
+						find: JSON.stringify({ 
+							_TypeHierarchy: 'HierarchicalRequirement',
+							Children:null,
+							PlanEstimate: {$gte:0},
+							Release: releaseRecord.data.ObjectID
+						}),
+						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', 'PortfolioItem', '_ValidFrom', '_ValidTo', 'ObjectID']),
+						hydrate:JSON.stringify(['ScheduleState'])
 					}
-				});
-			});
-			return Q.all(promises).then(function(){ 
-				console.log('all snapshots done', me.AllSnapshots, me.TeamStores);
-			});
+				};
+				return me._parallelLoadLookbackStore(parallelLoaderConfig)
+					.then(function(snapshotStore){ 
+						var records = snapshotStore.getRange();
+						if(records.length > 0){
+							me.TeamStores[releaseRecord.data.Project.Name] = records;
+							me.AllSnapshots = me.AllSnapshots.concat(records);
+						}
+					});
+			}));
 		},				
 		_loadAllChildReleases: function(){ 
-			var me = this,
-				releaseName = me.ReleaseRecord.data.Name,
-				trainName = me.TrainRecord.data.Name.split(' ART')[0];			
-			return me._loadReleasesWithName(releaseName, trainName)
-				.then(function(releaseStore){
-					me.ReleasesWithName = _.filter(releaseStore.getRange(), function(r){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithName = _.filter(releaseRecords, function(r){ 
 						return r.data.Project && r.data.Project.TeamMembers.Count > 0; 
 					});
 				});
 		},
-
+		_getLowestPiItems: function(piDataObject){
+			var me=this;
+			return _.reduce(piDataObject, function(lowestPiOIDsList, nextPiData, nextPiOID){
+				if(nextPiOID === 'Name') return lowestPiOIDsList;
+				if(Object.keys(nextPiData).length ===1) return lowestPiOIDsList.concat([nextPiOID]);
+				else return lowestPiOIDsList.concat(me._getLowestPiItems(nextPiData));
+			}, []);
+		},
+		_loadPortfolioSnapshots: function(){
+			var me = this;
+			
+			me.PortfolioItemMap = {}; //maps lowest Pi ObjectID to highest Pi Name
+			me.TopPortfolioItemNames = [];
+			me.CurrentTopPortfolioItemName = null;
+			
+			return Q.all(_.map(me.PortfolioItemTypes, function(type, index){
+				var parallelLoaderConfig = {
+					pagesize:20000,
+					url: 'https://rally1.rallydev.com/analytics/v2.0/service/rally/workspace/' + 
+						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+					params: {
+						workspace: me.getContext().getWorkspace()._ref,
+						compress:false,
+						pagesize:20000,
+						find: JSON.stringify({ 
+							_TypeHierarchy: 'PortfolioItem/' + type,
+							_ProjectHierarchy: me.TrainPortfolioProject.data.ObjectID,
+							_ValidFrom: {'$gte': new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString()},
+							_ValidTo: {'$lte': new Date(me.ReleaseRecord.data.ReleaseDate).toISOString()}
+						}),
+						fields:JSON.stringify(['Name', 'ObjectID', 'Parent'])
+					}
+				};
+				return me._parallelLoadLookbackStore(parallelLoaderConfig)
+					.then(function(snapshotStore){ 
+						return {store:snapshotStore, type:type, index:index};
+					});
+			}))
+			.then(function(returnValues){
+				var tree = {}, 
+					topPiOIDs = [], 
+					topPiItems = returnValues[returnValues.length-1].store.getRange();
+				returnValues = _.sortBy(returnValues, function(val){ return val.index; }); //ordinal sorting (smallest to largest)
+				_.each(returnValues.reverse(), function(returnValue){
+					_.each(returnValue.store.getRange(), function(item){
+						tree[item.data.ObjectID] = { Name: item.data.Name };
+						if(item.data.Parent){
+							if(tree[item.data.Parent]){
+								tree[item.data.Parent][item.data.ObjectID] = tree[item.data.ObjectID];
+							}
+						}
+					});
+				});
+				_.each(topPiItems, function(topPiItem){
+					var lowestPiOIDs = me._getLowestPiItems(tree[topPiItem.data.ObjectID]),
+						topPiName = topPiItem.data.Name;
+					_.each(lowestPiOIDs, function(lowestPiOID){ me.PortfolioItemMap[lowestPiOID] = topPiName; });
+				});
+				me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.map(topPiItems,
+					function(topPiItem){ return topPiItem.data.Name; })),
+					function(topPiName){ return {Name: topPiName}; }),
+					function(topPiName){ return topPiName.Name; });
+			});
+		},
+		_filterUserStoriesByTopPortfolioItem: function(){
+			var me=this,
+				topPiName = me.CurrentTopPortfolioItemName;
+			if(topPiName===null){
+				me.FilteredAllSnapshots = me.AllSnapshots;
+				me.FilteredTeamStores = me.TeamStores;
+			} else {
+				me.FilteredAllSnapshots = [];
+				me.FilteredTeamStores = {};
+				_.each(me.TeamStores, function(records, teamName){
+					var filteredRecords = _.filter(records, function(record){
+						return me.PortfolioItemMap[record.data.PortfolioItem] == topPiName;
+					});
+					me.FilteredTeamStores[teamName] = filteredRecords;
+					me.FilteredAllSnapshots = me.FilteredAllSnapshots.concat(filteredRecords);
+				});
+			}
+			return Q();
+		},
+		
 		/******************************************************* Reloading ********************************************************/			
 		_hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
 		},	
-		_reloadEverything:function(){
+		_redrawEverything: function(){
 			var me=this;
-			me.setLoading('Loading Stores');	
-			return me._loadAllChildReleases()
-				.then(function(){ return me._loadSnapshotStores(); })
+			me.setLoading('Loading Charts');	
+			return me._filterUserStoriesByTopPortfolioItem()
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
-					me.setLoading('Loading Charts');	
 					if(!me.ReleasePicker) me._buildReleasePicker();
-					//if(!me.ProductPicker) me._buildProductPicker();
+					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
+					me._buildTopPortfolioItemPicker();
 					me._buildCharts();
 					me._hideHighchartsLinks();
 					me.setLoading(false);
 				});
+		},
+		_reloadEverything:function(){ 
+			/** performance NOTE: i tried scoping the user stories to the train instead of loading individually per scrum. 
+					It was really slow. So we have to deal with not being 100% sure that the data is accurate in the CFD 
+					(if a project got closed)
+				*/
+			var me=this;
+			me.setLoading('Loading Stores');	
+			return me._loadAllChildReleases().then(function(){ 
+				return Q.all([
+					me._loadSnapshotStores(),
+					me._loadPortfolioSnapshots()
+				]);
+			})
+			.then(function(){ return me._redrawEverything(); });
 		},
 
 		/******************************************************* LAUNCH ********************************************************/		
@@ -1607,9 +1665,8 @@
 			var me = this;
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
-			Highcharts.setOptions({ colors: me._chartColors });
-			me.setLoading(true);
-			me._loadModels()
+			me.setLoading('Loading Configuration');
+			me._configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
 					return me._loadProject(scopeProject.ObjectID);
@@ -1619,24 +1676,26 @@
 					return Q.all([ //parallel loads
 						me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
 							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID) me.TrainRecord = trainRecord;
+								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
+									me.TrainRecord = trainRecord;
+									return me._loadTrainPortfolioProject(trainRecord);
+								}
 								else return Q.reject('You are not scoped to a train.');
-								me._loadProducts(trainRecord);
 							})
-							.then(function(products){
-								me.Products = products;
+							.then(function(trainPortfolioProject){
+								me.TrainPortfolioProject = trainPortfolioProject;
 							}),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								var twelveWeeks = 1000*60*60*24*12;
+								var twelveWeeks = 1000*60*60*24*7*12;
 								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
-							.then(function(releaseStore){
-								me.ReleaseStore = releaseStore;
-								var currentRelease = me._getScopedRelease(me.ReleaseStore.data.items, me.ProjectRecord.data.ObjectID, me.AppsPref);
+							.then(function(releaseRecords){
+								me.ReleaseRecords = releaseRecords;
+								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
-								else return Q.reject('This train has no releases.');
+								else return Q.reject('This project has no releases.');
 							})
 					]);
 				})
@@ -1648,12 +1707,12 @@
 				.done();
 		},
 		
-		/******************************************************* RENDERING CHARTS ********************************************************/
+		/*************************************************** RENDERING NavBar **************************************************/
 		_releasePickerSelected: function(combo, records){
 			var me=this;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
-			me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);		
+			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);	
 			var pid = me.ProjectRecord.data.ObjectID;		
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
@@ -1672,7 +1731,7 @@
 				xtype:'intelreleasepicker',
 				labelWidth: 80,
 				width: 240,
-				releases: me.ReleaseStore.data.items,
+				releases: me.ReleaseRecords,
 				currentRelease: me.ReleaseRecord,
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
@@ -1680,68 +1739,100 @@
 				}
 			});
 		},
+		_topPortfolioItemPickerSelected: function(combo, records){
+			var me=this, 
+				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
+				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All',
+				value = records[0].data.Name;
+			if((value === null && me.CurrentTopPortfolioItemName===null) || (value === me.CurrentTopPortfolioItemName)) return;
+			if(value === allPiOfTypeLabel) me.CurrentTopPortfolioItemName = null;
+			else me.CurrentTopPortfolioItemName = value;
+			me._redrawEverything();
+		},				
+		_buildTopPortfolioItemPicker: function(){
+			var me=this,
+				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
+				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All';
+			me.TopPortfolioItemPicker = Ext.getCmp('navBar').add({
+				xtype:'intelfixedcombo',
+				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
+				labelWidth: 80,
+				width: 240,
+				store: Ext.create('Ext.data.Store', {
+					fields:['Name'],
+					data: [{Name:allPiOfTypeLabel}].concat(me.TopPortfolioItemNames)
+				}),
+				displayField: 'Name',
+				value: me.CurrentTopPortfolioItemName || allPiOfTypeLabel,
+				listeners: {
+					select: me._topPortfolioItemPickerSelected.bind(me)
+				}
+			});
+		},		
+		
+		/********************************************** RENDERING CHARTS ***********************************************/
 		_buildCharts: function(){
 			var me = this,
-				calc = Ext.create('FastCfdCalculator', {
-					startDate: me.ReleaseRecord.data.ReleaseStartDate,
-					endDate: me.ReleaseRecord.data.ReleaseDate
+				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
+				releaseEnd = me.ReleaseRecord.data.ReleaseDate,
+				calc = Ext.create('FastCumulativeFlowCalculator', {
+					startDate: releaseStart,
+					endDate: releaseEnd,
+					scheduleStates: me.ScheduleStates
 				});
-			
-			if(me.AllSnapshots.length === 0){
-				me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
-				return;
-			}
-			
+
 			/************************************** CHART STUFF *********************************************/
-			var aggregateChartData = me._updateChartData(calc.runCalculation(me.AllSnapshots));
-			datemap = aggregateChartData.datemap;
-			$('#aggregateChart-innerCt').highcharts(Ext.Object.merge(me._defaultChartConfig, {
-				chart: {
-					height:400,
-					events:{
-						load: function(){  }
-					}
-				},
-				legend:{
-					borderWidth:0,
-					width:500,
-					itemWidth:100
-				},
-				title: {
-					text: me.TeamType
-				},
-				subtitle:{
-					text: me.ReleaseRecord.data.Name.split(' ')[0]
-				},
-				xAxis:{
-					categories: aggregateChartData.categories,
-					tickInterval: me._getConfiguredChartTicks(
-						me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.66)
-				},
-				series: aggregateChartData.series
-			}));
+			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots)),
+				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+						chart: { height:400 },
+						legend:{
+							enabled:true,
+							borderWidth:0,
+							width:500,
+							itemWidth:100
+						},
+						title: {
+							text: me._getTrainName(me.TrainRecord)
+						},
+						subtitle:{
+							text: me.ReleaseRecord.data.Name.split(' ')[0] + 
+								(me.CurrentTopPortfolioItemName ? (' (' + me.CurrentTopPortfolioItemName) +')' : '')
+						},
+						xAxis:{
+							categories: aggregateChartData.categories,
+							tickInterval: me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
+						},
+						series: aggregateChartData.series
+					})
+				)[0];
+			me._setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
 
 			/************************************** Scrum CHARTS STUFF *********************************************/	
-			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
-				return projName.split('-')[1].trim() + projName; 
-			});
+			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ 
+					return projName.split('-')[1].trim() + projName; 
+				}),
+				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var scrumChartData = me._updateChartData(calc.runCalculation(me.TeamStores[projectName])),		
+				var scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName])),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				$('#' + scrumChartID).highcharts(Ext.Object.merge(me._defaultChartConfig, {
-					chart: { height:300 },
-					legend: { enabled: false },
-					title: { text: null },
-					subtitle:{ text: projectName },
-					xAxis: {
-						categories: scrumChartData.categories,
-						tickInterval: me._getConfiguredChartTicks(
-							me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.32)
-					},
-					series: scrumChartData.series
-				}));
+				
+				var chartContainersContainer = $('#' + scrumChartID).highcharts(
+					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+						chart: { height:300 },
+						legend: { enabled: false },
+						title: { text: null },
+						subtitle:{ text: projectName },
+						xAxis: {
+							categories: scrumChartData.categories,
+							tickInterval: scrumChartConfiguredChartTicks
+						},
+						series: scrumChartData.series
+					})
+				)[0];
+				me._setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});
 			me.doLayout();
 		}
@@ -1757,6 +1848,13 @@
     </script>
 
 
+    <style type="text/css">
+        .x-grid-cell.intel-editor-cell *,
+.x4-grid-cell.intel-editor-cell * {
+  cursor: pointer !important;
+}
+
+    </style>
     <style type="text/css">
         .app {
   overflow-x: hidden !important;

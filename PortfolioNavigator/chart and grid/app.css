@@ -1,25 +1,15 @@
 .portfolio-cfd-app {
-    width: 100% !important; /* for scrollbar */
-	overflow-y: scroll !important;
-}
+	width: 100% !important;
+	overflow-x:hidden;
+	overflow-y: scroll !important; }
 
-.portfolio-cfd-app .header {
-    border-bottom: 1px dotted #c6c6c6;
-	line-height:1.1em;
-}
+.portfolio-cfd-app .navbar {
+	border-bottom: 1px dotted #c6c6c6;
+	line-height:1.1em; }
 
-.portfolio-cfd-app .rally-help-icon {
-    float: right;
-    padding-left: 1px;
-    border-left: 1px solid #CCC;
-    margin-left: 5px;
-}
+.portfolio-cfd-app .current-project-only {
+	float: left; }
 
-.portfolio-cfd-app .current-project-only-float {
-    float: left;
-}
-
-.portfolio-cfd-app .show-grid-checkbox-only-float {
-    float: left;
-    margin-left: 10px;
-}
+.portfolio-cfd-app .current-project-only-checkbox {
+	float: left;
+	margin-left: 10px; }

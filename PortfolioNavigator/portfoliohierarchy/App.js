@@ -1,19 +1,16 @@
+/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	var console = { log: function(){} };	
-
-	Ext.define('Intel.portfolioHierarchy', {
+	var USER_TOKEN = (__PROJECT_OID__ + '-' + __USER_OID__);
+	
+	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
 			'Rally.Messageable',
 			'PrettyAlert',
-			'ReleaseQuery',
-			'UserAppPreferences'
+			'UserAppsPreference'
 		],
-		_uid: (__PROJECT_OID__ + '-' + __USER_OID__),
-		_prefName: 'intel-portfolio-nav',
-		
 		layout: {
 			type:'vbox',
 			align:'stretch',
@@ -35,144 +32,211 @@
 			xtype:'container',
 			itemId:'bodyContainer'
 		}],
+		
+		_userAppsPref: 'intel-portfolio-nav',
 
 		config: {
 			defaultSettings: (function(){
-				var s = {}, str = (__PROJECT_OID__ + '-' + __USER_OID__);
-				s['Type' + str] = 'product';
-				s['QueryFilter' + str] = '';
-				s['InferPortfolioLocation' + str] = true;
-				s['PortfolioLocation' + str] = __PROJECT_OID__;
+				var s = {};
+				s['Type' + USER_TOKEN] = ''; 
+				s['QueryFilter' + USER_TOKEN] = '';
+				s['InferPortfolioLocation' + USER_TOKEN] = true;
+				s['PortfolioLocation' + USER_TOKEN] = 0;
 				return s;
 			}())
-		},
-				
+		},				
 		getSettingsFields: function() {
-			var str = (__PROJECT_OID__ + '-' + __USER_OID__);
 			return [{
-				name: 'Type' + str,
-				xtype:'combo',
+				name: 'Type' + USER_TOKEN,
+				xtype:'rallycombobox',
 				editable:false,
+				queryFilter:true, //<--- this is a hack, but it works
+				displayField:'Name',
+				valueField:'Name',
+				storeConfig:{
+					xtype:'rallywsapidatastore',
+					model: 'TypeDefinition',
+					limit:Infinity,
+					fetch:['Ordinal', 'Name'],
+					filters: [{
+						property: 'Parent.Name',
+						value: 'Portfolio Item'
+					},{
+						property: 'Creatable',
+						value: true
+					}],
+					sorters: [{
+						property: 'Ordinal',
+						direction: 'DESC'
+					}],
+					context:{
+						workspace:Rally.environment.getContext().getWorkspace()._ref,
+						project:null
+					}
+				},
+				listeners:{
+					added: function(field, form){
+						if(form.down('rallycombobox').value) field.hide();
+						else field.show();
+					}
+				},
 				label: 'Type',
-				store: ['product', 'milestone', 'feature'],
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'QueryFilter' + str,
+				name: 'QueryFilter' + USER_TOKEN,
 				xtype: 'textfield',
 				label: 'Query Filter',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'InferPortfolioLocation' + str,
+				name: 'InferPortfolioLocation' + USER_TOKEN,
 				xtype:'rallycheckboxfield',
 				label: 'Infer Portfolio Location',
 				labelWidth: 120, width:'100%',
 				bubbleEvents: ['change'] 
 			},{
-				name: 'PortfolioLocation' + str,
-				xtype:'intelPIprojectcombo',
+				name: 'PortfolioLocation' + USER_TOKEN,
+				xtype:'rallycombobox',
+				editable:false,
+				queryFilter:true, //<--- this is a hack, but it works
+				displayField:'Name',
+				valueField:'ObjectID',
+				storeConfig: {
+					xtype:'rallywsapidatastore',
+					model: 'Project',
+					limit:Infinity,
+					fetch:['ObjectID', 'Name'],
+					sorters: [{
+						property: 'Name',
+						direction: 'ASC'
+					}],
+					context:{
+						workspace:Rally.environment.getContext().getWorkspace()._ref,
+						project:null
+					}
+				},
 				label: 'Portfolio Location',
 				labelWidth: 120, width:'100%',
 				listeners:{
 					added: function(field, form){
 						if(form.down('rallycheckboxfield').value) field.hide();
-						else field.show();
+						else{
+							field.show();
+							setTimeout(function(){
+								var fieldVal = Rally.getApp().getSetting(field.name);
+								if(fieldVal) field.setValue(fieldVal);
+							}, 50);
+						}
 					}
 				},
 				handlesEvents: {
-					change: function(checkbox, ischecked) {
-						if(ischecked) this.hide();
-						else this.show();
+					change: function(checkbox, isChecked) {
+						var field=this;
+						if(isChecked) field.hide();
+						else{
+							field.show();
+							setTimeout(function(){
+								var fieldVal = Rally.getApp().getSetting(field.name);
+								if(fieldVal) field.setValue(fieldVal);
+							}, 50);
+						}
 					}
 				}
 			}];
 		},
 		
-		/************************************************** Refreshing Data ***************************************************/
+		/********************************************** Refreshing Data ***************************************************/
 		_refreshTree: function() {
 			var me=this;
 			me.down('#bodyContainer').removeAll();
-			me._loadPortfolioTree();
+			me._buildPortfolioTree();
 		},	
 		_reloadEverything: function(){
 			var me=this;
 			me.setLoading(false);
-			me._loadFilterOnRelease();
-			me._loadReleaseSelector();
-			me._loadFilterOnProject();
-			me._loadFilterOnComplete();
-			me._loadPortfolioTree();
+			me._buildFilterOnRelease();
+			me._buildReleasePicker();
+			me._buildFilterOnProject();
+			me._buildFilterOnComplete();
+			me._buildPortfolioTree();
 		},
 		
 		/************************************************** Launch ***************************************************/	
 		launch: function() {
 			var me=this;
-			me.setLoading(true);
-			me._loadModels()
+			me.setLoading('Loading Configuration');
+			me._configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getGlobalContext().getProject();
 					return me._loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return me._loadRandomUserStory(scopeProjectRecord.data._ref);
+					return Q.all([
+						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
+							.then(function(trainRecord){
+								if(trainRecord){
+									me.TrainRecord = trainRecord;
+									return me._loadTrainPortfolioProject(me.TrainRecord)
+										.then(function(trainPortfolioProject){
+											me.TrainPortfolioProject = trainPortfolioProject;
+										});
+								} 
+							}),
+						me._loadAppsPreference() /********* 2 ************/
+							.then(function(appsPref){
+								me.AppsPref = appsPref;
+								var twelveWeeks = 1000*60*60*24*7*12;
+								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+							})
+							.then(function(releaseRecords){		
+								me.ReleaseRecords = releaseRecords;
+								me.ReleaseNames = [];
+								for(var i=0,len=releaseRecords.length; i<len; ++i){
+									me.ReleaseNames.push({ Name: releaseRecords[i].data.Name });
+								}
+							}),
+						me._loadAllProjects() /********* 3 ************/
+							.then(function(projects){
+								me.AllProjects = projects;
+							}),
+						me._loadRandomUserStory(me.ProjectRecord.data._ref) /********* 4 ************/
+							.then(function(userStory){
+								me.HasUserStories = !!userStory;
+							})
+					]);
 				})
-				.then(function(userStory){
-					me.HasUserStories = !!userStory;
-					return me._loadTopProject(me.ProjectRecord);
-				})
-				.then(function(rootProject){
-					return me._loadAllChildrenProjects(rootProject);
-				})
-				.then(function(childProjects){
-					me.ChildProjects = childProjects;
-					return me._projectInWhichTrain(me.ProjectRecord);
-				})
-				.fail(function(error){
-					if(error !== 'Project not in a train') return Q.reject(error); //its ok if its not in a train			
-				})
-				.then(function(trainRecord){
-					me.TrainRecord = trainRecord;
-					return me._loadPreferences();
-				})
-				.then(function(appPrefs){		
+				.then(function(){
 					var pid = me.ProjectRecord.data.ObjectID, 
-						prefs = appPrefs.projs[pid] || {};
-					me.AppPrefs = appPrefs;
-					me.PIType = me.getSetting('Type' + me._uid);
-					me.QueryFilter = me.getSetting('QueryFilter' + me._uid);
-					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + me._uid);
-					me.PortfolioLocation = me.getSetting('PortfolioLocation' + me._uid);
+						prefs = me.AppsPref.projs[pid] || {};
+					me.PIType = me.getSetting('Type' + USER_TOKEN);
+					if(!me.PIType){
+						me.PIType = me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
+						var newSettings = {};
+						newSettings['Type' + USER_TOKEN] = me.PIType;
+						me.updateSettingsValues({settings:newSettings});
+					}
+					me.QueryFilter = me.getSetting('QueryFilter' + USER_TOKEN);
+					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + USER_TOKEN);
+					me.PortfolioLocation = me.getSetting('PortfolioLocation' + USER_TOKEN);
 					me.FilterOnRelease = prefs.FilterOnRelease || false;
-					me.FilterReleaseName = prefs.FilterReleaseName;
+					me.FilterReleaseName = prefs.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
 					me.FilterOnProject = prefs.FilterOnProject || false;
 					me.FilterOnComplete = prefs.FilterOnComplete || false;
-					var name = me.ProjectRecord.data.Name,
-						field = (typeof me.PortfolioLocation === 'number') ? 'ObjectID' : 'Name';
 					if(me.InferPortfolioLocation){
-						if(me.TrainRecord) {
-							var piName = me.TrainRecord.data.Name.split(' ART')[0] + ' POWG Portfolios';
-							me.PortfolioLocation = _.find(me.ChildProjects, function(p){
-								return p.data.Name === piName;
-							});	
-						}
+						if(me.TrainPortfolioProject) me.PortfolioLocation = me.TrainPortfolioProject;
 						else me.PortfolioLocation = me.ProjectRecord;
 					}
 					else {
-						me.PortfolioLocation = _.find(me.ChildProjects, function(p){ 
-							return p.data[field] === me.PortfolioLocation;
-						});
+						if(me.PortfolioLocation){ //if ObjectID is set manually
+							me.PortfolioLocation = _.find(me.AllProjects, function(p){ 
+								return p.data.ObjectID === me.PortfolioLocation; 
+							});
+						}
+						if(!me.PortfolioLocation){
+							return Q.reject('Inferring Portfolio Location. You must set the ' + 
+								'project that the portfolio resides in!');
+						}
 					}
-					if(!me.PortfolioLocation) return Q.reject('Could not find Portfolio Location'); //if portfolios and trians dont share same root project
-					return me._loadAllReleases(me.ProjectRecord);
-				})
-				.then(function(releaseStore){		
-					me.ReleaseStore = releaseStore;
-					me.ReleaseNames = [];
-					var recs = releaseStore.data.items;
-					for(var i=0,len=recs.length; i<len; ++i){
-						me.ReleaseNames.push({ Name: recs[i].data.Name });
-					}
-					me.FilterReleaseName = me.FilterReleaseName || me.ReleaseNames[0].Name;
 					me._reloadEverything();
 				})
 				.fail(function(reason){
@@ -182,30 +246,30 @@
 				.done();
 		},
 
-		/******************************************************** HEADER ITEMS *********************************************/	
+		/*************************************************** HEADER ITEMS *********************************************/	
 		_onPreferenceChanged: function(field, newValue){
 			var me=this,
 				pid = me.ProjectRecord.data.ObjectID;
 			if(me[field] === newValue) return Q();
 			else me[field] = newValue;
-			if(typeof me.AppPrefs.projs[pid] !== 'object') me.AppPrefs.projs[pid] = {};
-			me.AppPrefs.projs[pid][field] = newValue;
-			return me._savePreferences(me.AppPrefs);
+			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			me.AppsPref.projs[pid][field] = newValue;
+			return me._saveAppsPreference(me.AppsPref);
 		},
-		_onReleaseSelected: function(combo, records) {
+		_onReleaseSelected: function(combo, records){
 			var me=this;
 			me._onPreferenceChanged('FilterReleaseName', records[0].data.Name)
 				.then(function(){ if(me.FilterOnRelease) me._refreshTree(); })
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},				
-		_loadReleaseSelector: function(){
+		_buildReleasePicker: function(){
 			var me=this;
 			me.down('#header_release').add({
 				xtype:'intelfixedcombo',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],
-					sorters: [function(o1, o2){ return o1.data.Name < o2.data.Name ? -1 : 1; }],
+					sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
 					data: me.ReleaseNames
 				}),
 				hidden: !me.FilterOnRelease,
@@ -216,7 +280,7 @@
 				}
 			});
 		},		
-		_onFilterOnReleaseChanged: function(checkBox) {
+		_onFilterOnReleaseChanged: function(checkBox){
 			var me=this,
 				value = checkBox.getValue(),
 				box = me.down('#header_release').down('intelfixedcombo');
@@ -226,7 +290,7 @@
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnRelease: function(){
+		_buildFilterOnRelease: function(){
 			var me=this;
 			me.down('#header_release').add({
 				xtype: 'rallycheckboxfield',
@@ -238,14 +302,14 @@
 				}
 			});
 		},		
-		_onFilterOnProjectChanged: function(checkBox) {
+		_onFilterOnProjectChanged: function(checkBox){
 			var me=this;
 			me._onPreferenceChanged('FilterOnProject', checkBox.getValue())
 				.then(function(){ me._refreshTree(); })
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnProject: function(){
+		_buildFilterOnProject: function(){
 			var me=this;
 			me.down('#header_project').add({
 				xtype: 'rallycheckboxfield',
@@ -258,14 +322,14 @@
 				}
 			});
 		},			
-		_onFilterOnCompleteChanged: function(checkBox) {
+		_onFilterOnCompleteChanged: function(checkBox){
 			var me=this;
 			me._onPreferenceChanged('FilterOnComplete', checkBox.getValue())
 				.then(function(){ me._refreshTree(); })
 				.fail(function(reason){ me._alert('ERROR:', reason); })
 				.done();
 		},
-		_loadFilterOnComplete: function(){
+		_buildFilterOnComplete: function(){
 			var me=this;
 			me.down('#header_complete').add({
 				xtype: 'rallycheckboxfield',
@@ -278,21 +342,36 @@
 			});
 		},
 
-		/******************************************************** GRID ITEMS *********************************************/
-		_onTreeItemSelected: function(treeItem) {
+		/******************************************************* GRID ITEMS *********************************************/
+		_onTreeItemSelected: function(treeItem){
 			if(treeItem.xtype === 'fittedportfolioitemtreeitem'){
 				this.publish('portfoliotreeitemselected', treeItem);
 			}
 		},	
-		_getFilterOnCompleteFilter: function(ordinal){
+		_getDummyWsapiFilter: function(){
 			return Ext.create('Rally.data.wsapi.Filter', {
-				property:'State.OrderIndex',
-				operator:'<',
-				value: (ordinal === 0 ? 11 : 4) //finished features are 11-15, milestone/products are 4
-			}).or(Ext.create('Rally.data.wsapi.Filter', {
-				property:'State',
-				value: null
-			}));
+				property: 'ObjectID',
+				operator: '!=',
+				value: 0
+			});
+		},
+		_getFilterOnCompleteFilter: function(ordinal){
+			//the best we can do is filter if state 'Done' or 'Complete(d)' exists
+			var me=this,
+				completeState = me._getPortfolioItemTypeStateByOrdinal(ordinal, 'Done') || 
+					me._getPortfolioItemTypeStateByOrdinal(ordinal, 'Complete') || 
+					me._getPortfolioItemTypeStateByOrdinal(ordinal, 'Completed');
+			if(completeState){
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property:'State.OrderIndex',
+					operator:'<',
+					value: completeState.data.Ordinal
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'State',
+					value: null
+				}));
+			}
+			else return me._getDummyWsapiFilter();
 		},
 		_getFilterOnReleaseFilter: function(){
 			var me=this;
@@ -302,23 +381,16 @@
 			});
 		},
 		_getFilterOnQueryFilter: function(){
-			var me=this;
-			try { return Rally.data.QueryFilter.fromQueryString(me.QueryFilter); }
-			catch(e){ 
-				return Ext.create('Rally.data.wsapi.Filter', {
-					property: 'ObjectID',
-					operator: '!=',
-					value: 0
-				});
-			}
+			try { return Rally.data.QueryFilter.fromQueryString(this.QueryFilter); }
+			catch(e){ return this._getDummyWsapiFilter(); }
 		},	
 		_getParentRecordFilter: function(parentRecord, ordinal){
 			return Ext.create('Rally.data.wsapi.Filter', {
-				property: (ordinal === 0 ? 'Feature' : 'Parent') + '.ObjectID', //only uses right under feature have issue
+				property: (ordinal === 0 ? 'PortfolioItem' : 'Parent') + '.ObjectID', //only uses right under lowest PI have issue
 				value: parentRecord.data.ObjectID
 			});
 		},	
-		_getTopLevelStoreConfig: function(ordinal){ 
+		_getTopLevelStoreConfig: function(ordinal){ //ordinal of this level
 			var me=this, 
 				filters = [];
 			if(me.FilterOnComplete) filters.push(me._getFilterOnCompleteFilter(ordinal));
@@ -334,7 +406,7 @@
 				}
 			};
 		},
-		_getChildLevelStoreConfig: function(tree, parentRecord, isPI, ordinal){ //ordinal/isPI of PARENT item
+		_getChildLevelStoreConfig: function(tree, parentRecord, isPI, ordinal){ //ordinal and isPI of PARENT item
 			var me=this,
 				context= {
 					project: me.PortfolioLocation.data._ref,
@@ -344,13 +416,13 @@
 				filters = [ me._getParentRecordFilter(parentRecord, ordinal)];
 			if(me.FilterOnComplete && isPI && ordinal > 0) filters.push(me._getFilterOnCompleteFilter(ordinal));
 			if(!isPI || ordinal === 0) {
-				if(me.FilterOnProject){
+				if(me.FilterOnProject){ //we want only this project's stories
 					context.project = me.ProjectRecord.data._ref;
 					context.projectScopeDown = false;
 				}
-				else {
-					context.project = undefined;
-					context.projectScopeDown = undefined;
+				else { //we want ALL user stories
+					context.project = null;
+					context.projectScopeDown = false;
 				}
 			} 
 			if(me.FilterOnRelease && isPI && ordinal === 1) filters.push(me._getFilterOnReleaseFilter());
@@ -362,10 +434,10 @@
 				filters:filters
 			};
 		},	
-		_loadPortfolioTree: function(){
+		_buildPortfolioTree: function(){
 			var me = this,
-				modelName ='portfolioitem/' + me.PIType,
-				ordinal = (me.PIType==='product' ? 2 : (me.PIType==='milestone' ? 1 : 0));
+				modelName ='PortfolioItem/' + me.PIType,
+				ordinal = me._portfolioItemTypeToOrdinal(me.PIType);
 
 			me.down('#bodyContainer').add({
 				xtype: 'rallyportfoliotree',
@@ -392,5 +464,4 @@
 			});
 		}
 	});
-	
 }());

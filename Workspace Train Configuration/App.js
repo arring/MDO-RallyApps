@@ -1,9 +1,7 @@
+/** this app is used to configure the trains and portfolio locations in the workspace **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/********************* PRODUCTION *****************/
-	console = { log: function(){} };
-
 	/********************* END PRODUCTION *****************/
 
 	Ext.define('TrainConfiguration', {
@@ -11,8 +9,7 @@
 		mixins:[
 			'WindowListener',
 			'PrettyAlert',
-			'IframeResize',
-			'TrainPreferenceConfig'
+			'IframeResize'
 		],	
 
 		/************************************************** UTIL FUNCS **********************************************/
@@ -33,32 +30,19 @@
 			var me = this;
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
-			me.setLoading(true);
+			me.setLoading('Loading Configuration');
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
 				me.setLoading(false);
 				me._alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
 				return;
 			} 
-			me._loadModels()
-				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
-				})
-				.then(function(scopeProjectRecord){
-					return me._loadTopProject(scopeProjectRecord);
-				})
-				.then(function(topProject){
-					return me._loadAllChildrenProjects(topProject);
-				})
+			me._configureIntelRallyApp()
+				.then(function(){ return me._loadAllProjects(); })
 				.then(function(allProjects){
 					me.AllProjects = allProjects;
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
-					return me._loadTrainConfig();
-				})
-				.then(function(trainConfig){
-					me.TrainConfig = trainConfig;
 					me.setLoading(false);
 					me._renderGrid();
 				})
@@ -105,6 +89,7 @@
 			},{
 				text:'Train Name', 
 				dataIndex:'TrainName',
+				tdCls: 'intel-editor-cell',	
 				flex:1,
 				editor: 'textfield',
 				resizable:false,
@@ -266,7 +251,7 @@
 				scroll:'vertical',
 				columnCfgs: columnCfgs,
 				disableSelection: true,
-				plugins: [ 'fastcellediting' ],
+				plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 1 })],
 				viewConfig:{
 					stripeRows:true,
 					preserveScrollOnRefresh:true
