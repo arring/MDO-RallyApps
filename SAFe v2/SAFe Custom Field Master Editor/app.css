@@ -1,8 +1,12 @@
-.app { background-color: black !important; padding:30px; }
+.custom-field-grid {
+	margin-bottom:10px;
+	border: 2px solid black; }
 
-.header-cls { background-color:white !important; }
-
-.pre-wrap-cell { white-space:pre-wrap !important; }
-
-.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
-.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
+.custom-field-grid .x-panel-header,
+.custom-field-grid .x4-panel-header {
+	font-weight:bold;
+	background-color:rgba(0, 255, 0, 0.4) !important; }
+		
+.custom-field-grid .x-grid-cell-inner,
+.custom-field-grid .x4-grid-cell-inner  {
+	white-space:pre !important; }

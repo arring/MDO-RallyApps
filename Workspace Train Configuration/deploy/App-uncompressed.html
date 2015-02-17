@@ -45,11 +45,11 @@
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 
-			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children'],
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		_releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
-			
+		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
 			var me=this, deferred = Q.defer();
@@ -66,7 +66,29 @@
 			});
 			return deferred.promise;
 		},
-		_loadPortfolioTypes: function(){ 
+		_loadPortfolioItemStatesForEachType: function(){ 
+			var me=this;
+			me.PortfolioItemTypeStates = [];
+			return Q.all(_.map(me.PortfolioItemTypes, function(portfolioType, ordinal){
+				var store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'State',
+					autoLoad:false,
+					limit:Infinity,
+					fetch:['Name', 'Enabled', 'OrderIndex'],
+					filters: [{
+						property: 'TypeDef.Name',
+						value: portfolioType
+					},{
+						property: 'Enabled',
+						value: true
+					}]
+				});
+				return me._reloadStore(store).then(function(store){
+					me.PortfolioItemTypeStates[ordinal] = store.getRange();
+				});
+			}));
+		},
+		_loadPortfolioItemTypes: function(){ 
 			/** loads all the portfolioitem names into sorted array [smallest ordinal --> biggest ordinal] */
 			var me=this,
 				deferred = Q.defer(),
@@ -156,7 +178,12 @@
 		_configureIntelRallyApp: function(){
 			var me=this;
 			return Q.all([
-				me._loadPortfolioTypes().then(function(){ return me._loadModels(); }),
+				me._loadPortfolioItemTypes().then(function(){ 
+					return Q.all([
+						me._loadModels(),
+						me._loadPortfolioItemStatesForEachType()
+					]);
+				}),
 				me._loadTrainConfig(),
 				me._loadScheduleStates()
 			]);
@@ -191,33 +218,31 @@
 				return deferred.promise;
 			}
 		},	
-		_loadUserStory: function(oid, projectRef){
+		_loadUserStory: function(oid, projectRecord){
 			var me = this, deferred = Q.defer();
-			if(!oid || !projectRef) return Q.reject('Invalid arguments: LUS');
+			if(!oid) return Q.reject('Invalid arguments: LUS');
 			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.UserStory.load(oid, {
 					fetch: me._userStoryFields,
 					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: projectRef
+						workspace: projectRecord ? null : me.getContext().getWorkspace()._ref,
+						project: projectRecord ? projectRecord.data._ref : null
 					},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
 			}
 		},	
-		_loadPortfolioItem: function(oid, ordinal, projectRef){
-			var me = this, deferred = Q.defer(),
-				piName = me.PortfolioItemTypes[ordinal];
-			if(!oid || !projectRef) return Q.reject('Invalid arguments: LPI');
-			else if(!me[piName]) return Q.reject('PortfolioItem ordinal not found: ' + ordinal);
+		_loadPortfolioItemByType: function(oid, type){
+			var me = this, deferred = Q.defer();
+			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
 			else {
-				me[piName].load(oid, {
+				me[type].load(oid, {
 					fetch: me._portfolioItemFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: projectRef
+						project: null
 						
 					},
 					callback: deferred.resolve
@@ -225,8 +250,13 @@
 				return deferred.promise;
 			}
 		},	
+		_loadPortfolioItemByOrdinal: function(oid, ordinal){
+			var me = this, deferred = Q.defer(),
+				type = me.PortfolioItemTypes[ordinal];
+			return me._loadPortfolioItemByType(oid, type);
+		},	
 		
-		/**************************************** SOME UTIL FUNCS ***************************************************/
+		/**************************************** Train Funcs ***************************************************/
 		_projectInWhichTrain: function(projectRecord){ 
 			/** returns train the projectRecord is in, otherwise null. */
 			if(!projectRecord) return Q();
@@ -267,6 +297,30 @@
 			if(foundTrainConfig.TrainName) return foundTrainConfig.TrainName;
 			else return trainRecord.data.Name;
 		},
+		_loadAllTrains: function(){
+			var me=this,
+				filter = _.reduce(me.TrainConfig, function(filter, item){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: item.TrainProjectOID });
+					return filter ? filter.or(newFilter) : newFilter;
+				}, null);
+			if(!filter) return Q([]);
+			else {
+				var store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._projectFields,
+					filters:[filter],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+				return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			}
+		},
+		
+		/**************************************** UserStory Funcs ************************************************/
 		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
 			/** only pull look at PortfolioItem Release if US.Release == null */
 			var me=this,
@@ -298,13 +352,27 @@
 				)
 			);
 		},
-		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){
-			/**
-				this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
-				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
-				Then 1 of the 5 user stories is randomly selected and returned 
-			*/
-			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+		_loadRandomUserStory: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LRUS');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					fetch: false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					filters:[{ 
+						property:'Project.ObjectID', 
+						value: projectRecord.data.ObjectID 
+					}]
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
+			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -320,7 +388,7 @@
 						direction:'DESC'
 					}],
 					filters:[
-						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project.ObjectID', value: projectRecord.data.ObjectID }).and(
 						me.__getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
@@ -330,8 +398,8 @@
 				else return Q(undefined);
 			});
 		},
-		_loadUserStoryByFID: function(formattedID, projectRef){
-			if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
+		_loadUserStoryByFID: function(formattedID, projectRecord){
+			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: LUSBFID');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -346,40 +414,21 @@
 						property:'FormattedID',
 						value:formattedID
 					},{
-						property:'Project',
-						value: projectRef
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
 					}]
 				});
 			return me._reloadStore(store).then(function(store){
 				return Q(store.data.items.pop());
 			});
 		},	
-		_loadProjectByName: function(projectName){
-			if(!projectName) return Q.reject('Invalid arguments: LPBN');
+		
+		/**************************************** PortfolioItem Funcs ************************************************/
+		_loadPortfolioItemsOfType: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'Project',
-					limit:1,
-					pageSize:1,
-					fetch: ['Name', 'ObjectID'],
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
-					filters: [{
-						property:'Name',
-						value:projectName
-					}]
-				});
-			return me._reloadStore(store).then(function(store){
-				return Q(store.data.items.pop());
-			});
-		},
-		_loadPortfolioItemsWithName: function(portfolioProject, name){
-			if(!trainRecord || !name) return Q.reject('Invalid arguments: LPROD');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/' + name,
+					model: 'PortfolioItem/' + type,
 					limit:Infinity,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
@@ -391,14 +440,23 @@
 				});
 			return me._reloadStore(store);
 		},		
-		_loadPortfolioItemsWithOrdinal: function(portfolioProject, ordinal){
-			if(!trainRecord || !ordinal) return Q.reject('Invalid arguments: LPROD');
-			var me=this, name = me.PortfolioItemTypes[ordinal];
-			if(name) return me._loadPortfolioItemsWithName(name);
+		_loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
+			if(!portfolioProject || !ordinal) return Q.reject('Invalid arguments: LPIOO');
+			var me=this, type = me.PortfolioItemTypes[ordinal];
+			if(type) return me._loadPortfolioItemsOfType(type);
 			else return Q.reject('Invalid PortfolioItem ordinal');
 		},
-	
-		/********************************************** Project Collection Loading ********************************************/	
+		_portfolioItemTypeToOrdinal: function(type){
+			return this.PortfolioItemTypes.indexOf(type);
+		},
+		_getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
+			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
+		},
+		_getPortfolioItemTypeStateByName: function(portfolioType, stateName){
+			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
+		},
+		
+		/********************************************** Project Funcs ********************************************/	
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -539,6 +597,27 @@
 							return map;
 						}, {});
 				}
+			});
+		},
+		_loadProjectByName: function(projectName){
+			if(!projectName) return Q.reject('Invalid arguments: LPBN');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'ObjectID'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [{
+						property:'Name',
+						value:projectName
+					}]
+				});
+			return me._reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
 			});
 		},
 		

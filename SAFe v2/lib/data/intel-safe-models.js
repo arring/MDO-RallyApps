@@ -21,7 +21,7 @@
 			{name: 'TopPortfolioItemName', type:'string'},
 			{name: 'Commitment', type: 'string'},
 			{name: 'Expected', type: 'boolean'},
-			{name: 'Objective', type:'string'},
+			{name: 'Objective', type:'string'}
 		]
 	});
 	Ext.define('IntelRisk', {
@@ -143,9 +143,9 @@
 	Ext.define('SAFeCustomFieldsEditorModel', {
 		extend: 'Ext.data.Model',
 		fields: [
-			{name: 'FormattedID', type:'string'},
-			{name: 'Name', type:'string'},
-			{name: 'ProjectObjectID', type:'string'},
+			{name: 'ItemFormattedID', type:'string'},
+			{name: 'ItemName', type:'string'},
+			{name: 'ProjectName', type:'string'},
 			{name: 'ReleaseName', type:'string'},
 			{name: 'CustomFieldValue',  type: 'string'}
 		]

@@ -12,6 +12,7 @@
       "../lib/mixins/intel-workweek.js",
       "../lib/mixins/user-apps-preference.js",
       "../lib/mixins/parallel-loader.js",
+      "../lib/mixins/sanity-dashboard-objectid-preference.js",
       "../lib/components/intel-combobox.js",
       "../lib/components/intel-fixed-combobox.js",
       "../lib/components/intel-release-picker.js",

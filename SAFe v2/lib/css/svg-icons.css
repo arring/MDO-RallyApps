@@ -1,0 +1,10 @@
+.icon-container .icon {
+	width: 16px;
+	height: 16px; }
+
+.icon-container {
+	display:flex;
+	align-items: center;
+	justify-content: center; 
+	width: 16px;
+	height: 16px;}

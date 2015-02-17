@@ -61,8 +61,6 @@
 						pagesize:20000,
 						find: JSON.stringify({ 
 							_TypeHierarchy: 'HierarchicalRequirement',
-							Children:null,
-							PlanEstimate: {$gte:0},
 							Release: releaseRecord.data.ObjectID
 						}),
 						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', 'PortfolioItem', '_ValidFrom', '_ValidTo', 'ObjectID']),

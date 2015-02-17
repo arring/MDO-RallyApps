@@ -4,15 +4,17 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
-      "../lib/intel-models.js",
+      "../lib/data/intel-safe-models.js",
+      "../lib/mixins/add-svg-icons.js",
       "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",
       "../../lib/mixins/iframe-resize.js",
       "../../lib/mixins/pretty-alert.js",
       "../../lib/mixins/intel-workweek.js",
-      "../../lib/mixins/release-query.js",
       "../../lib/mixins/async-queue.js",
+      "../../lib/mixins/parallel-loader.js",
+      "../../lib/mixins/user-apps-preference.js",
       "../../lib/components/component-column.js",
       "../../lib/components/intel-combobox.js",
       "../../lib/components/intel-fixed-combobox.js",
@@ -27,7 +29,8 @@
       "App.js"
    ],
    "css": [
-      "../lib/css/grid-icons.css",
+      "../lib/css/svg-icons.css",
+      "../../lib/css/base.css",
       "app.css"
    ]
 }

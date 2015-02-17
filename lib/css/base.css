@@ -1,3 +1,9 @@
 .x-grid-cell.intel-editor-cell *,
-.x4-grid-cell.intel-editor-cell *{
+.x4-grid-cell.intel-editor-cell *,
+.intel-editor-cell {
 	cursor: pointer !important; }
+	
+.fa.fa-md {
+	font-size: 1.05rem;
+	line-height: .75em;
+	vertical-align: -15%; }

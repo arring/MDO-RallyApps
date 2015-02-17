@@ -11,7 +11,8 @@
 			'IframeResize',
 			'IntelWorkweek',
 			'ParallelLoader',
-			'UserAppsPreference'
+			'UserAppsPreference',
+			'SanityDashboardObjectIDPreference'
 		],	
 		minWidth:1100,
 		items:[{ 
@@ -93,16 +94,15 @@
 		},				
 		_getStories: function(){
 			var me=this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query:me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'StartDate', 'EndDate', 'Iteration', 
+						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItemType].join(','),
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'PortfolioItem'].join(','),
 						workspace:me.getContext().getWorkspace()._ref,
 						includePermissions:true
 					}
@@ -964,14 +964,17 @@
 						editor:false
 					},{
 						text: lowestPortfolioItemType,
-						dataIndex: lowestPortfolioItemType,
+						dataIndex: 'PortfolioItem',
 						editor:false
 					}]),
 					side: 'Right',
 					filterFn:function(item){
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(!item.data.Iteration || !item.data[lowestPortfolioItemType]) return false;
-						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate) < new Date(item.data.Iteration.EndDate);
+						if(!item.data.Iteration || !item.data.PortfolioItem || 
+							(!item.data.PortfolioItem.PlannedEndDate && !item.data.PortfolioItem.ActualEndDate) || 
+							!item.data.Iteration.EndDate) return false;
+						return new Date(item.data.PortfolioItem.PlannedEndDate || item.data.PortfolioItem.ActualEndDate) < 
+										new Date(item.data.Iteration.EndDate);
 					}
 				},{
 					showIfLeafProject:true,
