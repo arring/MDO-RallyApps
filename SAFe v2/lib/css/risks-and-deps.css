@@ -1,6 +1,6 @@
 /************************************************ RISKS GRID *****************************************/
 .risks-grid {}
-.x-grid-row .risks-grid-error-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; } /*red*/
+.x-grid-body .x-grid-row .risks-grid-error-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; } /*red*/
 
 /************************************************ DEPENDENCIES GRIDS *****************************************/
 .predecessors-grid {}
@@ -16,25 +16,43 @@
 	line-height:100% !important;
 	font-weight:500 !important; }
 	
-.x-grid-row .predecessor-item-not-supported-cell.x-grid-cell,
-.x-grid-row .successor-not-supported-cell.x-grid-cell { 
+.x-grid-body .x-grid-row .predecessor-item-not-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row .successor-not-supported-cell.x-grid-cell { 
 	background-color:rgba(255, 0, 0, 0.15) !important; }
 
-.x-grid-row-selected .predecessor-item-not-supported-cell.x-grid-cell,
-.x-grid-row-selected .successor-not-supported-cell.x-grid-cell { 
+.x-grid-body .x-grid-row-selected .predecessor-item-not-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row-selected .successor-not-supported-cell.x-grid-cell { 
 	background-color:rgba(255, 0, 0, 0.25) !important; }
 
-.x-grid-row .predecessor-item-supported-cell.x-grid-cell,
-.x-grid-row .successor-supported-cell.x-grid-cell { 
+.x-grid-body .x-grid-row .predecessor-item-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row .successor-supported-cell.x-grid-cell { 
 	background-color:rgba(0, 255, 0, 0.15) !important; }
 	
-.x-grid-row-selected .predecessor-item-supported-cell.x-grid-cell,
-.x-grid-row-selected .successor-supported-cell.x-grid-cell { 
+.x-grid-body .x-grid-row-selected .predecessor-item-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row-selected .successor-supported-cell.x-grid-cell { 
 	background-color:rgba(0, 255, 0, 0.25) !important; }
 
 /************************************************ DUPLICATE RESOLVING MODAL *****************************************/
-.duplicates-modal { padding:5px; }
+.duplicates-modal .grid-group-header {
+	text-decoration: underline;
+	padding-left: 10px;
+	font-size: 1.25rem; }
+
+.duplicates-modal .done-button {
+	margin:10px 0 10px 10px; }
+	
+.duplicates-modal .x-grid-row-selected .x-grid-cell,
+.duplicates-modal .x-grid-row-over .x-grid-cell {
+	background-color: rgba(0,0,0,0) !important; }
 
 .duplicate-risks-grid {}
 .duplicate-predecessors-grid {}
 .duplicate-successors-grid {}
+
+.duplicates-modal .duplicate-risks-grid,
+.duplicates-modal .duplicate-predecessors-grid,
+.duplicates-modal .duplicate-successors-grid{
+	margin:10px 20px 10px 20px; }
+
+.duplicates-modal .x-grid-row-checker {
+	background-image: url(https://rally1.rallydev.com/apps/2.0rc3/rui/resources/css/images/form/radio.gif) !important; }

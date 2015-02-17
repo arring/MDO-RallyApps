@@ -966,11 +966,12 @@
 					modal:true,
 					closable:false,
 					title:'ERROR: Duplicate Risks and/or Dependencies!',
-					overflowY: 'auto',
 					cls:'duplicates-modal',
+					overflowY: 'scroll',
 					resizable: true,
-					height:400,
-					width:900,
+					height:me.getHeight()*0.9>>0,
+					width:Math.min(900, me.getWidth()*0.9>>0),
+					y:5,
 					items: [{
 						xtype:'container',
 						html:'<p>Use the checkboxes to select which of the duplicates you want to keep. ' + 
@@ -978,7 +979,7 @@
 						manageHeight:false
 					}].concat(duplicateRisks.length ? [{
 							xtype:'container',
-							html:'<h2>Duplicate Risks</h2>',
+							html:'<h2 class="grid-group-header">Duplicate Risks</h2>',
 							manageHeight:false
 						}].concat(_.map(duplicateRisks, function(risksOfOneID){
 							return {
@@ -1068,6 +1069,7 @@
 								}),
 								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
 								manageHeight:false,
+								sortableColumns:false,
 								showRowActionsColumn:false,
 								showPagingToolbar:false,
 								enableEditing:false,
@@ -1076,7 +1078,7 @@
 						})
 					) : []).concat(duplicatePredecessors.length ? [{
 							xtype:'container',
-							html:'<h2>Duplicate Predecessors</h2>',
+							html:'<h2 class="grid-group-header">Duplicate Predecessors</h2>',
 							manageHeight:false
 						}].concat(_.map(duplicatePredecessors, function(predecessorsOfOneID){
 							return {
@@ -1221,6 +1223,7 @@
 								}),
 								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
 								manageHeight:false,
+								sortableColumns:false,
 								showRowActionsColumn:false,
 								showPagingToolbar:false,
 								enableEditing:false,
@@ -1229,11 +1232,11 @@
 						})
 					) : []).concat(duplicateSuccessors.length ? [{
 							xtype:'container',
-							html:'<h2>Duplicate Successors</h2>'
+							html:'<h2 class="grid-group-header">Duplicate Successors</h2>'
 						}].concat(_.map(duplicateSuccessors, function(successorsOfOneID){
 							return {
 								xtype:'rallygrid',
-								cls: 'program-board-grid successors-grid rally-grid',
+								cls: 'program-board-grid duplicate-successors-grid rally-grid',
 								columnCfgs: [{	
 									text:'Requested By',
 									dataIndex:'SuccessorProjectObjectID',
@@ -1292,7 +1295,12 @@
 									width:90,
 									resizable:false,
 									draggable:false,
-									editor: false
+									editor: false,
+									renderer: function(val, meta){
+										if(val == 'No') meta.tdCls = 'successor-not-supported-cell';
+										else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
+										return val;
+									}
 								},{
 									text:'Sup #', 
 									dataIndex:'UserStoryFormattedID',
@@ -1322,6 +1330,7 @@
 								}),
 								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
 								manageHeight:false,
+								sortableColumns:false,
 								showRowActionsColumn:false,
 								showPagingToolbar:false,
 								enableEditing:false,
@@ -1330,13 +1339,14 @@
 						})
 					) : []).concat([{
 						xtype:'button',
+						cls:'done-button',
 						text:'Done',
 						handler:function(){
 							var grids = Ext.ComponentQuery.query('rallygrid', modal),
 								riskGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-risks-grid'); }),
 								predecessorGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-predecessors-grid'); }),
 								successorGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-successors-grid'); });
-							
+
 							modal.setLoading('Removing Duplicates');
 							Q.all([
 								Q.all(_.map(riskGrids, function(grid){ 
@@ -1428,7 +1438,7 @@
 								})),
 								Q.all(_.map(successorGrids, function(grid){ //dont edit it's successor userStory 
 									var successorToKeep = grid.getSelectionModel().getSelection()[0],
-										successorsToDelete = _.filter(grid.store.getRange(), function(item){ return item.id != successorToKeep.id; });
+										successorsToDelete = _.filter(grid.store.getRange(), function(item){ return item.id != successorToKeep.id; });		
 									return Q.all(_.map(successorsToDelete, function(successorRecord){
 										var deferred = Q.defer();
 										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
@@ -1436,7 +1446,7 @@
 											me._getOldAndNewUserStoryRecords(successorRecord.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
 													realSuccessorData = me._getRealDependencyData(
-														oldUserStoryRecord, successorRecord.data.DependencyID, 'Successors');											
+														oldUserStoryRecord, successorRecord.data.DependencyID, 'Successors');		
 												if(!realSuccessorData) return;
 												return me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
 											})
@@ -1460,7 +1470,7 @@
 						}
 					}])
 				});
-			modal.show();		
+			setTimeout(function(){ modal.show(); }, 10);
 			return deferred.promise;
 		},
 		
