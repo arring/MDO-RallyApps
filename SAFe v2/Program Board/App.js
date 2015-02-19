@@ -1,7 +1,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	RALLY_MAX_STRING_SIZE = 32768;
+	var RALLY_MAX_STRING_SIZE = 32768;
 
 	Ext.define('ProgramBoard', {
 		extend: 'IntelRallyApp',
@@ -340,31 +340,30 @@
 
 		/**___________________________________ RISKS STUFF ___________________________________**/	
 		_parseRisksFromPortfolioItem: function(portfolioItemRecord){
-			var array = [],
-				projectOID = this.ProjectRecord.data.ObjectID, 
-				risks = this._getRisks(portfolioItemRecord),
-				ObjectID = portfolioItemRecord.data.ObjectID,
-				FormattedID = portfolioItemRecord.data.FormattedID,
+			var me=this,
+				array = [],
+				projectOID = me.ProjectRecord.data.ObjectID, 
+				risksData = me._getRisks(portfolioItemRecord),
+				PortfolioItemObjectID = portfolioItemRecord.data.ObjectID,
+				PortfolioItemFormattedID = portfolioItemRecord.data.FormattedID,
 				PortfolioItemName = portfolioItemRecord.data.Name;
-			if(risks[projectOID]){
-				for(var riskID in risks[projectOID]){
-					var risk = risks[projectOID][riskID];
-					array.push({
-						RiskID: riskID,
-						PortfolioItemObjectID: ObjectID,
-						PortfolioItemFormattedID: FormattedID,
-						PortfolioItemName: PortfolioItemName,
-						Description: risk.Description,
-						Impact: risk.Impact,
-						MitigationPlan: risk.MitigationPlan,
-						Urgency: risk.Urgency,
-						Status: risk.Status,
-						Contact: risk.Contact,
-						Checkpoint: risk.Checkpoint,
-						Edited: false
-					});
-				}
-			}
+			
+			_.each(risksData[projectOID], function(riskData, riskID){
+				array.push({
+					RiskID: riskID,
+					PortfolioItemObjectID: PortfolioItemObjectID,
+					PortfolioItemFormattedID: PortfolioItemFormattedID,
+					PortfolioItemName: PortfolioItemName,
+					Description: riskData.Description,
+					Impact: riskData.Impact,
+					MitigationPlan: riskData.MitigationPlan,
+					Urgency: riskData.Urgency,
+					Status: riskData.Status,
+					Contact: riskData.Contact,
+					Checkpoint: riskData.Checkpoint,
+					Edited: false
+				});
+			});
 			return array;
 		},	
 		_parseRisksData: function(){ 
@@ -375,63 +374,61 @@
 			});
 			return array;
 		},		
-		_spliceRiskFromList: function(riskID, riskList){ 
-			/** removes and returns risk with riskID from the riskList (NOT list of records) */
-			for(var i = 0; i<riskList.length; ++i){
-				if(riskList[i].RiskID == riskID) {
-					return riskList.splice(i, 1)[0];
+		_spliceRiskFromList: function(riskID, risksData){ 
+			/** removes and returns risk with riskID from the risksData (NOT list of records) */
+			for(var i = 0; i<risksData.length; ++i){
+				if(risksData[i].RiskID == riskID) {
+					return risksData.splice(i, 1)[0];
 				}
 			}
 		},	
 		_getRealRiskData: function(oldPortfolioItemRecord, riskID){ 
-			var me = this, realRiskData;
-			if(oldPortfolioItemRecord) realRiskData = me._parseRisksFromPortfolioItem(oldPortfolioItemRecord);
-			else realRiskData = [];
-			return me._spliceRiskFromList(riskID, realRiskData) || null;		
+			var me = this, realRisksData;
+			if(oldPortfolioItemRecord) realRisksData = me._parseRisksFromPortfolioItem(oldPortfolioItemRecord);
+			else realRisksData = [];
+			return me._spliceRiskFromList(riskID, realRisksData) || null;		
 		},
 		
 		/**___________________________________ DEPENDENCIES STUFF ___________________________________**/					
-		_isUserStoryInReleaseTimeframe: function(userStoryRecord, releaseRecord){ 
-			/** some user stories are not themselves in releases **/
-			return (userStoryRecord.data.Release && userStoryRecord.data.Release.Name === releaseRecord.data.Name) || 
-				(!userStoryRecord.data.Release && userStoryRecord.data.PortfolioItem && 
-					userStoryRecord.data.PortfolioItem.Release && userStoryRecord.data.PortfolioItem.Release.Name === releaseRecord.data.Name);
+		_isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
+				(!userStoryRecord.data.Release && ((userStoryRecord.data.PortfolioItem || {}).Release || {}).Name === releaseRecord.data.Name);
 		},	
-		_spliceDependencyFromList: function(dependencyID, dependencyList){ 
-			for(var i = 0; i<dependencyList.length; ++i){
-				if(dependencyList[i].DependencyID == dependencyID) {
-					return dependencyList.splice(i, 1)[0];
+		_spliceDependencyFromList: function(dependencyID, dependenciesData){ 
+			for(var i = 0; i<dependenciesData.length; ++i){
+				if(dependenciesData[i].DependencyID == dependencyID) {
+					return dependenciesData.splice(i, 1)[0];
 				}
 			}
 		},
 		_parseDependenciesFromUserStory: function(userStoryRecord){
 			var me=this,
-				dependencies = me._getDependencies(userStoryRecord), 
-				inputPredecessors = dependencies.Predecessors, 
-				inputSuccessors = dependencies.Successors,
+				predecessorsAndSuccessorsData = me._getDependencies(userStoryRecord), 
+				inputPredecessors = predecessorsAndSuccessorsData.Predecessors, 
+				inputSuccessors = predecessorsAndSuccessorsData.Successors,
 				outputPredecessors = [], 
 				outputSuccessors = [],
 				UserStoryObjectID = userStoryRecord.data.ObjectID,
 				UserStoryFormattedID = userStoryRecord.data.FormattedID,
 				UserStoryName = userStoryRecord.data.Name;
-				
-			if(me._isUserStoryInReleaseTimeframe(userStoryRecord, me.ReleaseRecord)){
-				_.each(inputPredecessors, function(predecessorDependency, dependencyID){
+			
+			if(me._isUserStoryInRelease(userStoryRecord, me.ReleaseRecord)){
+				_.each(inputPredecessors, function(predecessorDependencyData, dependencyID){
 					outputPredecessors.push({
 						DependencyID: dependencyID,
 						UserStoryObjectID: UserStoryObjectID,
 						UserStoryFormattedID: UserStoryFormattedID,
 						UserStoryName: UserStoryName,
-						Description: predecessorDependency.Description,
-						NeededBy: predecessorDependency.NeededBy,
-						Status: predecessorDependency.Status,
-						PredecessorItems: predecessorDependency.PredecessorItems || [], 
-						Edited: false //not in pending edit mode
+						Description: predecessorDependencyData.Description,
+						NeededBy: predecessorDependencyData.NeededBy,
+						Status: predecessorDependencyData.Status,
+						PredecessorItems: predecessorDependencyData.PredecessorItems || [], 
+						Edited: false
 					});
 				});
 			}
-			_.each(inputSuccessors, function(successorDependency, dependencyID){
-				if(successorDependency.Assigned){ //if this was just placed on a random user story, or is assigned to this user story
+			_.each(inputSuccessors, function(successorDependencyData, dependencyID){
+				if(successorDependencyData.Assigned){ //if this was just placed on a random user story, or is assigned to this user story
 					UserStoryFormattedID = userStoryRecord.data.FormattedID;
 					UserStoryName = userStoryRecord.data.Name;
 				} 
@@ -439,38 +436,37 @@
 						
 				outputSuccessors.push({
 					DependencyID: dependencyID,
-					SuccessorUserStoryObjectID: successorDependency.SuccessorUserStoryObjectID,
-					SuccessorProjectObjectID: successorDependency.SuccessorProjectObjectID,
+					SuccessorUserStoryObjectID: successorDependencyData.SuccessorUserStoryObjectID,
+					SuccessorProjectObjectID: successorDependencyData.SuccessorProjectObjectID,
 					UserStoryObjectID: UserStoryObjectID,
 					UserStoryFormattedID: UserStoryFormattedID,
 					UserStoryName: UserStoryName,
-					Description: successorDependency.Description,
-					NeededBy: successorDependency.NeededBy,
-					Supported: successorDependency.Supported,
-					Assigned: successorDependency.Assigned,
-					Edited: false //not in pending edit mode
+					Description: successorDependencyData.Description,
+					NeededBy: successorDependencyData.NeededBy,
+					Supported: successorDependencyData.Supported,
+					Assigned: successorDependencyData.Assigned,
+					Edited: false
 				});
 			});
 			return {Predecessors:outputPredecessors, Successors:outputSuccessors};
 		},
-		_parseDependenciesData: function(userStoriesInRelease){	
+		_parseDependenciesData: function(userStoryList){	
 			var me=this, 
 				predecessors = [], 
 				successors = [];			
 
-			_.each(userStoriesInRelease, function(userStoryRecord){
-				var dependenciesData = me._parseDependenciesFromUserStory(userStoryRecord);
-				predecessors = predecessors.concat(dependenciesData.Predecessors);
-				successors = successors.concat(dependenciesData.Successors);
+			_.each(userStoryList, function(userStoryRecord){
+				var predecessorsAndSuccessorsData = me._parseDependenciesFromUserStory(userStoryRecord);
+				predecessors = predecessors.concat(predecessorsAndSuccessorsData.Predecessors);
+				successors = successors.concat(predecessorsAndSuccessorsData.Successors);
 			});
 			return {Predecessors:predecessors, Successors:successors};
 		},		
 		_getRealDependencyData: function(oldUserStoryRecord, dependencyID, type){ 
-			/** type is 'Predecessors' or 'Successors' */
-			var me = this, realDependencyData;
-			if(oldUserStoryRecord) realDependencyData = me._parseDependenciesFromUserStory(oldUserStoryRecord)[type];
-			else realDependencyData = [];
-			return me._spliceDependencyFromList(dependencyID, realDependencyData) || null;		
+			var me = this, realDependenciesData;
+			if(oldUserStoryRecord) realDependenciesData = me._parseDependenciesFromUserStory(oldUserStoryRecord)[type];
+			else realDependenciesData = [];
+			return me._spliceDependencyFromList(dependencyID, realDependenciesData) || null;		
 		},
 		_hydrateDependencyUserStories: function(dependenciesParsedData){
 			var me=this, 
@@ -615,10 +611,11 @@
 				if(me.CustomRisksStore) me.CustomRisksStore.intelUpdate();
 			}
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
+				/** me.UserStoriesInRelease is needed because some of the stories in me.UserStoryStore could be from other overlapping releases */
 				me.UserStoriesInRelease = _.filter(me.UserStoryStore.getRange(), function(userStoryRecord){ 
-					return me._isUserStoryInReleaseTimeframe(userStoryRecord, me.ReleaseRecord); 
+					return me._isUserStoryInRelease(userStoryRecord, me.ReleaseRecord); 
 				});
-				me.DependenciesParsedData = me._parseDependenciesData(me.UserStoriesInRelease);
+				me.DependenciesParsedData = me._parseDependenciesData(me.UserStoryStore.getRange());
 				promises.push(me._hydrateDependencyUserStories(me.DependenciesParsedData).then(function(dependenciesHydratedUserStories){
 					me.DependenciesHydratedUserStories = dependenciesHydratedUserStories;
 					me._updateUserStoryColumnStores();
@@ -2085,7 +2082,8 @@
 			});
 		},
 		_loadRisksGrid: function(){
-			var me = this;
+			var me = this,
+				defaultRenderer = function(val){ return val || '-'; };		
 			
 			/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
 			me.PortfolioItemFIDStore = Ext.create('Ext.data.Store', {
@@ -2100,8 +2098,6 @@
 			});
 			
 			/****************************** RISKS STUFF  ***********************************************/		
-			function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; } //newer come first
-			
 			me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
 				data: Ext.clone(me.RisksParsedData),
 				autoSync:true,
@@ -2111,7 +2107,7 @@
 					type:'fastsessionproxy',
 					id:'RiskProxy' + Math.random()
 				},
-				sorters: [riskSorter],
+				sorters: [function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }],
 				intelUpdate: function(){
 					var riskStore = me.CustomRisksStore, 
 						riskRecords = riskStore.getRange(),
@@ -2141,8 +2137,6 @@
 					riskStore.resumeEvents();
 				}
 			});
-			
-			var defaultRenderer = function(val){ return val || '-'; };		
 			
 			var filterFID = null, 
 				filterName = null, 
@@ -2465,15 +2459,10 @@
 									me._loadPortfolioItemByOrdinal(riskRecord.data.PortfolioItemObjectID, 0) : null;
 							})
 							.then(function(oldPortfolioItemRecord){							
-								newPortfolioItemRecord = newPortfolioItemRecord || oldPortfolioItemRecord; //if new is same as old
-								return Q(oldPortfolioItemRecord && 
-									(function(){										
-										var oldRealRisksData = me._parseRisksFromPortfolioItem(oldPortfolioItemRecord),
-											oldRealRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, oldRealRisksData);							
-										if(oldRealRiskData && (oldPortfolioItemRecord.data.ObjectID !== newPortfolioItemRecord.data.ObjectID))
-											return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
-									}())
-								);
+								newPortfolioItemRecord = newPortfolioItemRecord || oldPortfolioItemRecord;
+								var oldRealRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);
+								if(oldRealRiskData && (oldPortfolioItemRecord.data.ObjectID !== newPortfolioItemRecord.data.ObjectID))
+									return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
 							})
 							.then(function(){ return me._addRisk(newPortfolioItemRecord, riskRecord.data, me.ProjectRecord, me.RisksParsedData); })
 							.then(function(){
@@ -2482,7 +2471,7 @@
 								riskRecord.set('PortfolioItemObjectID', newPortfolioItemRecord.data.ObjectID);
 								riskRecord.endEdit();
 							})
-							.fail(function(reason){ me._alert('ERROR:', reason || ''); })
+							.fail(function(reason){ me._alert('ERROR:', reason  || ''); })
 							.then(function(){ 
 								unlockFunc();
 								me.RisksGrid.setLoading(false);
@@ -2510,15 +2499,8 @@
 									me._loadPortfolioItemByOrdinal(riskRecord.data.PortfolioItemObjectID, 0) : 
 									null)
 								.then(function(oldPortfolioItemRecord){					
-									return Q(oldPortfolioItemRecord && 
-										(function(){										
-											var riskRecordData = riskRecord.data,
-												oldRealRisksData = me._parseRisksFromPortfolioItem(oldPortfolioItemRecord),
-												oldRealRiskData = me._spliceRiskFromList(riskRecordData.RiskID, oldRealRisksData);							
-											if(oldRealRiskData) 
-												return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
-										}())
-									);
+									var oldRealRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);
+									if(oldRealRiskData) return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
 								})
 								.fail(function(reason){ me._alert('ERROR:', reason || ''); })
 								.then(function(){
@@ -2645,7 +2627,8 @@
 			});	
 		},	
 		_loadDependenciesGrids: function(){
-			var me = this;
+			var me = this,
+				defaultRenderer = function(val){ return val || '-'; };
 			
 			function dependencySorter(o1, o2){ return o1.data.DependencyID > o2.data.DependencyID ? -1 : 1; } //new come first
 			function predecessorItemSorter(o1, o2){ return o1.data.PredecessorItemID > o2.data.PredecessorItemID ? -1 : 1; } //new come first
@@ -2661,8 +2644,8 @@
 				data: _.map(me.UserStoriesInRelease, function(usr){ return {'Name': usr.data.Name }; }),
 				sorters: { property: 'Name' }
 			});
-				
-			/****************************** PREDECESSORS STUFF           ***********************************************/				
+			
+			/****************************** PREDECESSORS STUFF ***********************************************/				
 			me.PrececessorItemStores = {};
 			me.PredecessorItemGrids = {};
 			
@@ -2733,8 +2716,6 @@
 					predecessorStore.resumeEvents();
 				}
 			});
-			
-			var defaultRenderer = function(val){ return val || '-'; };
 
 			var filterPredUserStoryFormattedID = null, 
 				filterPredUserStoryName = null, 
@@ -3632,8 +3613,10 @@
 				sortable:true,
 				renderer: function(userStoryObjectID){
 					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
-					if(userStory) return userStory.data.FormattedID;
-					else return '?';
+					if(userStory){
+						return '<a href="https://rally1.rallydev.com/#/' + userStory.data.Project.ObjectID + 'ud/detail/userstory/' + 
+							userStory.data.ObjectID + '" target="_blank">' + userStory.data.FormattedID + '</a>';
+					} else return '?';
 				},
 				layout:'hbox',
 				items:[{
@@ -3856,10 +3839,12 @@
 					if(!successorRecord.data.UserStoryFormattedID) return '';
 					meta.tdAttr = 'title="' + 'Remove User Story' + '"';
 					window[clickFnName] = function(){
+						successorRecord.beginEdit(true);
 						successorRecord.set('Edited', true);
 						successorRecord.set('Assigned', false);
 						successorRecord.set('UserStoryFormattedID', '');
 						successorRecord.set('UserStoryName', '');
+						successorRecord.endEdit();
 						updateSuccessorFilterOptions();
 					};
 					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-minus"></i></div>';
@@ -3888,6 +3873,7 @@
 				}
 			},{
 				text:'',
+				dataIndex:'Edited',
 				width:24,
 				resizable:false,
 				draggable:false,
@@ -3907,27 +3893,28 @@
 								oldUserStoryRecord, 
 								newUserStoryRecord,
 								realSuccessorData;
-							me._getOldAndNewUserStoryRecords(successorData, me.UserStoriesInRelease).then(function(records){
+							me._getOldAndNewUserStoryRecords(successorData, me.UserStoryStore.getRange()).then(function(records){
 								oldUserStoryRecord = records[0];
 								newUserStoryRecord = records[1];
 								
 								realSuccessorData = me._getRealDependencyData(oldUserStoryRecord, successorData.DependencyID, 'Successors');
 								if(!realSuccessorData) return Q.reject({SuccessorDeletedDependency:true, message:'Successor removed this dependency'});
 								
+								successorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;	
 								successorData.SuccessorUserStoryObjectID = realSuccessorData.SuccessorUserStoryObjectID;
 								
-								var successorProjectRecord = me.ProjectsWithTeamMembers[successorData.SuccessorProjectObjectID];
 								return me._updateSuccessor(
 										newUserStoryRecord, 
 										successorData, 
 										me.ProjectRecord,
 										me.ProjectsWithTeamMembers, 
 										me.ProjectRecord, 
-										me.DependenciesParsedData).then(function(){									
+										me.DependenciesParsedData)
+								.then(function(){							
 									if(oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)
 										return me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
 								})
-								.then(function(){ return me._addSuccessor(newUserStoryRecord, successorData); })
+								.then(function(){ return me._addSuccessor(newUserStoryRecord, successorData, me.ProjectRecord, me.DependenciesParsedData); })
 								.then(function(){ successorRecord.set('Edited', false); });
 							})
 							.fail(function(reason){

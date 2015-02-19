@@ -17,18 +17,22 @@
 	font-weight:500 !important; }
 	
 .x-grid-body .x-grid-row .predecessor-item-not-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row .predecessor-not-supported-cell.x-grid-cell,
 .x-grid-body .x-grid-row .successor-not-supported-cell.x-grid-cell { 
 	background-color:rgba(255, 0, 0, 0.15) !important; }
 
 .x-grid-body .x-grid-row-selected .predecessor-item-not-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row-selected .predecessor-not-supported-cell.x-grid-cell,
 .x-grid-body .x-grid-row-selected .successor-not-supported-cell.x-grid-cell { 
 	background-color:rgba(255, 0, 0, 0.25) !important; }
 
 .x-grid-body .x-grid-row .predecessor-item-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row .predecessor-supported-cell.x-grid-cell ,
 .x-grid-body .x-grid-row .successor-supported-cell.x-grid-cell { 
 	background-color:rgba(0, 255, 0, 0.15) !important; }
 	
 .x-grid-body .x-grid-row-selected .predecessor-item-supported-cell.x-grid-cell,
+.x-grid-body .x-grid-row-selected .predecessor-supported-cell.x-grid-cell,
 .x-grid-body .x-grid-row-selected .successor-supported-cell.x-grid-cell { 
 	background-color:rgba(0, 255, 0, 0.25) !important; }
 

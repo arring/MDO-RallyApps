@@ -152,8 +152,7 @@
 			
 			if(!currentProjectRecord || (userStoryRecord.data.Project.ObjectID === currentProjectRecord.data.ObjectID)){
 				cachedSuccessors = _.filter(cachedSuccessors, function(cachedSuccessor){ 
-					return !(cachedSuccessor.DependencyID === dependencyID && 
-						cachedSuccessor.UserStoryFormattedID === successorData.UserStoryFormattedID); 
+					return cachedSuccessor.DependencyID !== dependencyID; 
 				});
 				dependenciesParsedData.Successors = cachedSuccessors;
 			}
@@ -232,9 +231,8 @@
 			};
 
 			if(!currentProjectRecord || (userStoryRecord.data.Project.ObjectID === currentProjectRecord.data.ObjectID)){
-				cachedSuccessors = _.filter(cachedSuccessors, function(successor){ 
-					return !(successor.DependencyID === dependencyID && 
-						successor.UserStoryFormattedID === successorData.UserStoryFormattedID); 
+				cachedSuccessors = _.filter(cachedSuccessors, function(cachedSuccessor){ 
+					return cachedSuccessor.DependencyID !== dependencyID; 
 				});
 				cachedSuccessors.push(successorData);
 				dependenciesParsedData.Successors = cachedSuccessors;

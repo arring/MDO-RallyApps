@@ -1,34 +1,17 @@
-.x-grid-row .intel-editor-cell {  cursor:pointer !important; }
-.x-grid-row .intel-editor-cell *{ cursor:pointer !important; }
+.risksdeps-grid-header-text { font-size: 13px !important; }
 
-.grey-row .x-grid-cell { background-color:rgba(224, 224, 224, 0.15) !important; }
-.grey-row.x-grid-row-selected .x-grid-cell { background-color:rgba(224, 224, 224, 0.25) !important; }
-.red-row .x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
-.red-row.x-grid-row-selected .x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
-.green-row .x-grid-cell{ background-color:rgba(0, 255, 0, 0.15) !important; }
-.green-row.x-grid-row-selected .x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
-
-
-.x-grid-row .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
-.x-grid-row-selected .red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
-
-.x-grid-row .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.15) !important; }
-.x-grid-row-selected .yellow-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.25) !important; }
-
-/************ dependencies stuff ******************/
-.x-grid-body .x-grid-body { background-color:rgba(0,0,0,0) !important; }
-.rally-grid .x-grid-body { border-top:0 !important; }
-
-.x-grid-row.intel-team-dep-row .x-grid-cell,
-.x-grid-row-hover.intel-team-dep-row.x-grid-cell,
-.x-grid-row-selected.intel-team-dep-row .x-grid-cell { background-color:rgba(0,0,0,0) !important; }
+.risksdeps-hidden-grid-row { display:none !important; }
 	
-.x-grid-row .intel-not-supported-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
-.x-grid-row-selected .intel-not-supported-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+/************************************************ NAVBAR/CONTAINERS *****************************************/
+#navbar { padding:0 10px 0 10px; }
+#releasePicker { margin: 4px 0 0 0; }
+#manualRefreshButton { margin: 5px 0 0 5px; }
 
-.x-grid-row .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
-.x-grid-row-selected .intel-supported-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+/************************************************ RISKS GRID *****************************************/
+.risks-grid { margin:10px 10px 0px 10px; }
 
-.hidden { display:none !important; }
+/************************************************ DEPENDENCIES GRIDS *****************************************/
+.predecessors-grid { margin:40px 10px 0px 10px; }
 
-.rally-grid .x-grid-header-ct .x-box-inner .x-box-inner { border-bottom: none !important; }
+.x-grid-body .x-grid-row .predecessor-hot-urgency-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
+.x-grid-body .x-grid-row-selected .predecessor-hot-urgency-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
