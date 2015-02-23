@@ -1,0 +1,36 @@
+/************************************************ NAVBAR/CONTAINERS *****************************************/
+#navbar { padding:0 10px 0 10px; }
+#releasePicker { margin: 4px 0 0 0; }
+#manualRefreshButton { margin: 5px 0 0 5px; }
+
+.intel-legend-dot {
+	width:12px;
+	height:12px;
+	border-radius:6px;
+	border:1px solid black;
+	display:inline-block;
+	vertical-align:middle; }
+	
+.intel-legend-item {
+	font-size:1em;
+	text-align:right; }
+
+/************************************************ TEAM COMMITS MATRIX STUFF *****************************************/
+.x-grid-header-ct .not-dispositioned-project .x-column-header-inner,
+.x-grid-body .x-grid-row .not-committed-portfolio-item.x-grid-cell { background-color:rgba(255, 0, 0, 0.50) !important; }
+
+.x-grid-header-ct .not-dispositioned-project .x-column-header-inner.x-column-header-over,
+.x-grid-body .x-grid-row-selected .not-committed-portfolio-item.x-grid-cell,
+.x-grid-body .x-grid-row-over .not-committed-portfolio-item.x-grid-cell { 
+	background-image:none !important;
+	background-color:rgba(255, 0, 0, 0.70) !important; }
+
+.matrix-hidden-grid-row { display:none !important; }
+
+.x-column-header-inner .x-column-header-text {
+	white-space: normal !important;
+	line-height: 15px; }
+
+.x-column-header-inner {
+	text-align: center;
+	height:100 !important; }
