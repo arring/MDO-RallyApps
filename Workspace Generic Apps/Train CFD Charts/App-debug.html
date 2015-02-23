@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Sanity Dashboard</title>
+    <title>TrainCFDCharts</title>
 
 
     <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
-    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.js"></script>
-    <script type="text/javascript" src="https://mdoproceffrpt/cdn/highcharts/highcharts-v4.0.4-modified.js"></script>
-    <script type="text/javascript" src="https://code.highcharts.com/modules/heatmap.src.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.3.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+    <script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
 
     <script type="text/javascript">
         Rally.loadScripts(
@@ -19,22 +18,23 @@
                       "../lib/mixins/iframe-resize.js",
                       "../lib/mixins/pretty-alert.js",
                       "../lib/mixins/intel-workweek.js",
-                      "../lib/mixins/user-apps-preference.js",
+                      "../lib/mixins/cumulative-flow-chart-mixin.js",
                       "../lib/mixins/parallel-loader.js",
-                      "../lib/mixins/sanity-dashboard-objectid-preference.js",
-                      "../lib/components/intel-combobox.js",
+                      "../lib/mixins/user-apps-preference.js",
                       "../lib/components/intel-fixed-combobox.js",
                       "../lib/components/intel-release-picker.js",
+                      "../lib/charts/fast-cumulative-flow-calculator.js",
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('SanityDashboard', {
-                name:"Sanity Dashboard"
+            Rally.launchApp('TrainCfdCharts', {
+                name:"TrainCFDCharts"
             });
         }, true);
     </script>
 
 
+    <link rel="stylesheet" type="text/css" href="../lib/css/base.css"/>
     <link rel="stylesheet" type="text/css" href="app.css"/>
 </head>
 <body>

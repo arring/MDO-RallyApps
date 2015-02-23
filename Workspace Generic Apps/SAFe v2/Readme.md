@@ -1,9 +1,6 @@
-SAFe Readme
-===========
+# SAFe Readme
 
-## Workspace Requirements
-
-# These SAFe apps require the following custom fields for your workspace:
+## These SAFe apps require the following custom fields for your workspace:
 
 	- c_MoSCoW on the lowest PortfolioItem (type: String)
 	- c_TeamCommits on the lowest PortfolioItem, (type: Text)
@@ -66,7 +63,7 @@ SAFe Readme
 		}
 	}
 	
-#Extra Instructions
+## Extra Instructions
 
 	- These SAFe apps require that you enter in your trains and portfolios in the 'Workspace Train Config' app before hand
 

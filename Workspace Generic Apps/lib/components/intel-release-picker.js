@@ -5,8 +5,8 @@
 		1: releases (array of release records)
 		2: currentRelease (what to show as initial value
 	*/
-	Ext.define('Intel.form.field.ReleasePicker', {
-		extend: 'Intel.form.field.FixedComboBox',
+	Ext.define('IntelReleasePicker', {
+		extend: 'IntelFixedComboBox',
 		alias: ['widget.intelreleasepicker'],
 		
 		constructor: function(options){

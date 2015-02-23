@@ -894,7 +894,7 @@
 					labelWidth:40,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Name'],				
-						data: _.sortBy(me.TrainNames, function(t){ return t.data.Name; })
+						data: me.TrainNames
 					}),
 					displayField: 'Name',
 					fieldLabel: 'Train:',

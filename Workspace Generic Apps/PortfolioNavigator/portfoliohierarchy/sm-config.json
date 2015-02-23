@@ -12,7 +12,6 @@
 		"../../lib/mixins/user-apps-preference.js",
 		"../../lib/components/intel-combobox.js",
 		"../../lib/components/intel-fixed-combobox.js",
-		"../../lib/components/pi-projectpicker-settings.js",
 		"lib/FittedUserStoryTreeItem.js",
 		"lib/FittedPortfolioItemTreeItem.js",
 		"App.js"

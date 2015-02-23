@@ -24,7 +24,7 @@
 		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
@@ -421,9 +421,9 @@
 			return me._reloadStore(store);
 		},		
 		_loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
-			if(!portfolioProject || !ordinal) return Q.reject('Invalid arguments: LPIOO');
+			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
-			if(type) return me._loadPortfolioItemsOfType(type);
+			if(type) return me._loadPortfolioItemsOfType(portfolioProject, type);
 			else return Q.reject('Invalid PortfolioItem ordinal');
 		},
 		_portfolioItemTypeToOrdinal: function(type){
@@ -819,6 +819,11 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
+	var TOP_BAR_HEIGHT = 40,
+		BOTTOM_BAR_HEIGHT = 24,
+		TITLE_BAR_HEIGHT = 33,
+		IFRAME_HEADER_HEIGHT = 28;
+		
 	Ext.define('IframeResize', {
 		requires: ['WindowListener'],
 		
@@ -827,14 +832,11 @@
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
 				portlet = bottomEl.up('.x-portlet'), 
-				portalColumn = portlet.up('.x-portal-column'), //has huge right margin (we don't explicitly need it here)
 				dashboard = portlet.up('#mydash_portlet'), //has huge padding values
 				titleBar = dashboard.down('.titlebar'), //redundant with app header bar
 				domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
 				innerHeight = window.parent.innerHeight,
 				innerWidth = window.parent.innerWidth;
-				
-			titleBar.dom.style.display = 'none';
 			
 			//adjust widths
 			while(true){
@@ -847,15 +849,21 @@
 			
 			//adjust heights
 			while(true){
-				domNodeH.style.height = (innerHeight - 105) + 'px';
+				domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT)) + 'px';
 				if(domNodeH.classList.contains('x-portlet')) break;
 				domNodeH = domNodeH.parentNode;
 			}
-			dashboard.dom.style.height = (innerHeight - 65) + 'px';
-			portlet.dom.style.height = (innerHeight - 75) + 'px';
+			while(true){
+				domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT)) + 'px';
+				if(domNodeH.id == 'mydash_portlet') break;
+				domNodeH = domNodeH.parentNode;
+			}
+			dashboard.dom.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT)) + 'px';
 			
 			//final touches LOL
 			dashboard.dom.style.padding = "0 2px 0 2px";
+			titleBar.dom.style.padding = "2px";
+			titleBar.dom.style.margin = "0";
 		},		
 		_initFixRallyDashboard: function(){ 
 			var me=this;
@@ -1161,7 +1169,7 @@
 					data: items,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
-						fields:items.length ? Object.keys(items[0]) : []
+						fields: JSON.parse(config.params.fields || "[]")
 					}),
 					load: function(){}
 				});
@@ -1211,7 +1219,7 @@
 	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('Intel.form.field.ComboBox', {
+	Ext.define('IntelComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		
@@ -1245,7 +1253,7 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.form.field.FixedComboBox', {
+	Ext.define('IntelFixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		
@@ -1253,9 +1261,10 @@
 			options = options || {};
 			options = Ext.merge({
 				editable: false,	
-				allowBlank:false,
+				allowBlank:true,
 				queryMode:'local',
 				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					focus: function(combo) {
 						combo.setValue('');
 						combo.expand();
@@ -1273,8 +1282,8 @@
 		1: releases (array of release records)
 		2: currentRelease (what to show as initial value
 	*/
-	Ext.define('Intel.form.field.ReleasePicker', {
-		extend: 'Intel.form.field.FixedComboBox',
+	Ext.define('IntelReleasePicker', {
+		extend: 'IntelFixedComboBox',
 		alias: ['widget.intelreleasepicker'],
 		
 		constructor: function(options){
@@ -2053,7 +2062,7 @@
 					Ext.create('Rally.ui.grid.Grid', {
 						title: getGridTitleLink(gridConfig.data, gridConfig.model),
 						id: gridConfig.id,
-						cls:'grid-unhealthy sanity-grid',
+						cls:'grid-unhealthy sanity-grid rally-grid',
 						columnCfgs: gridConfig.columns,
 						showPagingToolbar: true,
 						showRowActionsColumn: true,
@@ -2332,6 +2341,7 @@
 
         });
     </script>
+
 
 
     <style type="text/css">

@@ -94,7 +94,7 @@
 					data: items,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
-						fields:items.length ? Object.keys(items[0]) : []
+						fields: JSON.parse(config.params.fields || "[]")
 					}),
 					load: function(){}
 				});

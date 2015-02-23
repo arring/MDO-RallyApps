@@ -5,7 +5,7 @@
 	var ChartsTooltipDatemap = {}; //closure variable that maps the x values to date strings -- per chart
 
 	Ext.define('CumulativeFlowChartMixin', {
-		requires:['IntelWorkweek'],
+		requires:['IntelRallyApp', 'IntelWorkweek'],
 
 		_defaultCumulativeFlowChartConfig: {
 			chart: {
@@ -72,6 +72,13 @@
 					}
 				}
 			}
+		},
+		_getCumulativeFlowChartColors: function(){
+			var me=this,
+				colors = me._defaultCumulativeFlowChartConfig.colors,
+				scheduleStates = me.ScheduleStates;
+			if(scheduleStates.length >= 5) return {colors: colors};
+			else return {colors: colors.slice(0, scheduleStates.length).concat(colors.slice(scheduleStates.length + 1))};
 		},
 		_updateCumulativeFlowChartData: function(data, hideTrends){
 			var me = this, 

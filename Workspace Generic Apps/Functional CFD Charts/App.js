@@ -190,10 +190,7 @@
 				width: 240,
 				releases: me.ReleaseRecords,
 				currentRelease: me.ReleaseRecord,
-				listeners: {
-					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._releasePickerSelected.bind(me)
-				}
+				listeners: { select: me._releasePickerSelected.bind(me) }
 			});
 		},
 		
@@ -216,7 +213,7 @@
 			/************************************** Aggregate panel STUFF *********************************************/
 			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots)),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
-					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:400 },
 						legend:{
 							enabled:true,
@@ -251,7 +248,7 @@
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
 				
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
-					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:300 },
 						legend: { enabled: false },
 						title: { text: null },

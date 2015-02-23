@@ -4,7 +4,7 @@
 	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('Intel.form.field.ComboBox', {
+	Ext.define('IntelComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		

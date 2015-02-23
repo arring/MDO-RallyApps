@@ -1,7 +1,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.form.field.FixedComboBox', {
+	Ext.define('IntelFixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		

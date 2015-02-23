@@ -753,7 +753,7 @@
 					Ext.create('Rally.ui.grid.Grid', {
 						title: getGridTitleLink(gridConfig.data, gridConfig.model),
 						id: gridConfig.id,
-						cls:'grid-unhealthy sanity-grid',
+						cls:'grid-unhealthy sanity-grid rally-grid',
 						columnCfgs: gridConfig.columns,
 						showPagingToolbar: true,
 						showRowActionsColumn: true,

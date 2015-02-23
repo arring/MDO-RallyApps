@@ -20,10 +20,10 @@
 		
 		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
 		
-		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 
-			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children'],
-		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem',
+		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
+		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		_releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
 		
@@ -127,7 +127,7 @@
 			*/
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
-				workspace: me.getContext().getWorkspace(),
+				workspace: me.getContext().getWorkspace()._ref,
 				filterByName: me._TrainConfigPrefName,
 				success: function(prefs) {
 					var workspaceConfigString = prefs[me._TrainConfigPrefName], trainConfig;
@@ -144,7 +144,7 @@
 			var me=this, s = {}, deferred = Q.defer();
 			s[me._TrainConfigPrefName] = JSON.stringify(trainConfig); 
 			Rally.data.PreferenceManager.update({
-				workspace: me.getContext().getWorkspace(),
+				workspace: me.getContext().getWorkspace()._ref,
 				filterByName: me._TrainConfigPrefName,
 				settings: s,
 				success: deferred.resolve,
@@ -195,39 +195,42 @@
 				return deferred.promise;
 			}
 		},	
-		_loadUserStory: function(oid, projectRef){
+		_loadUserStory: function(oid, projectRecord){
 			var me = this, deferred = Q.defer();
-			if(!oid || !projectRef) return Q.reject('Invalid arguments: LUS');
+			if(!oid) return Q.reject('Invalid arguments: LUS');
 			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.UserStory.load(oid, {
 					fetch: me._userStoryFields,
 					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: projectRef
+						workspace: projectRecord ? null : me.getContext().getWorkspace()._ref,
+						project: projectRecord ? projectRecord.data._ref : null
 					},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
 			}
 		},	
-		_loadPortfolioItem: function(oid, ordinal, projectRef){
-			var me = this, deferred = Q.defer(),
-				piName = me.PortfolioItemTypes[ordinal];
-			if(!oid || !projectRef) return Q.reject('Invalid arguments: LPI');
-			else if(!me[piName]) return Q.reject('PortfolioItem ordinal not found: ' + ordinal);
+		_loadPortfolioItemByType: function(oid, type){
+			var me = this, deferred = Q.defer();
+			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
 			else {
-				me[piName].load(oid, {
+				me[type].load(oid, {
 					fetch: me._portfolioItemFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: projectRef
+						project: null
 						
 					},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
 			}
+		},	
+		_loadPortfolioItemByOrdinal: function(oid, ordinal){
+			var me = this, deferred = Q.defer(),
+				type = me.PortfolioItemTypes[ordinal];
+			return me._loadPortfolioItemByType(oid, type);
 		},	
 		
 		/**************************************** Train Funcs ***************************************************/
@@ -271,6 +274,28 @@
 			if(foundTrainConfig.TrainName) return foundTrainConfig.TrainName;
 			else return trainRecord.data.Name;
 		},
+		_loadAllTrains: function(){
+			var me=this,
+				filter = _.reduce(me.TrainConfig, function(filter, item){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: item.TrainProjectOID });
+					return filter ? filter.or(newFilter) : newFilter;
+				}, null);
+			if(!filter) return Q([]);
+			else {
+				var store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:Infinity,
+					autoLoad:false,
+					fetch: me._projectFields,
+					filters:[filter],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+				return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			}
+		},
 		
 		/**************************************** UserStory Funcs ************************************************/
 		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
@@ -304,8 +329,8 @@
 				)
 			);
 		},
-		_loadRandomUserStory: function(projectRef){
-			if(!projectRef) return Q.reject('Invalid arguments: LRUS');
+		_loadRandomUserStory: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: LRUS');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -317,19 +342,14 @@
 						project: undefined
 					},
 					filters:[{ 
-						property:'Project', 
-						value: projectRef 
+						property:'Project.ObjectID', 
+						value: projectRecord.data.ObjectID 
 					}]
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
-		_loadRandomUserStoryFromReleaseTimeframe: function(projectRef, releaseRecord){
-			/**
-				this function load the 5 newest user stories that are attached to a release that is 'around the time' of the
-				passed in release record. there is a 2 week shift maximum for the releases to be considered 'around the same time'.
-				Then 1 of the 5 user stories is randomly selected and returned 
-			*/
-			if(!projectRef || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+		_loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
+			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -345,7 +365,7 @@
 						direction:'DESC'
 					}],
 					filters:[
-						Ext.create('Rally.data.wsapi.Filter', { property:'Project', value: projectRef }).and(
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project.ObjectID', value: projectRecord.data.ObjectID }).and(
 						me.__getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
@@ -355,8 +375,8 @@
 				else return Q(undefined);
 			});
 		},
-		_loadUserStoryByFID: function(formattedID, projectRef){
-			if(!formattedID || !projectRef) return Q.reject('Invalid arguments: LUSBFID');
+		_loadUserStoryByFID: function(formattedID, projectRecord){
+			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: LUSBFID');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -371,8 +391,8 @@
 						property:'FormattedID',
 						value:formattedID
 					},{
-						property:'Project',
-						value: projectRef
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
 					}]
 				});
 			return me._reloadStore(store).then(function(store){
@@ -380,7 +400,7 @@
 			});
 		},	
 		
-		/**************************************** UserStory Funcs ************************************************/
+		/**************************************** PortfolioItem Funcs ************************************************/
 		_loadPortfolioItemsOfType: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
@@ -398,9 +418,9 @@
 			return me._reloadStore(store);
 		},		
 		_loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
-			if(!portfolioProject || !ordinal) return Q.reject('Invalid arguments: LPIOO');
+			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
-			if(type) return me._loadPortfolioItemsOfType(type);
+			if(type) return me._loadPortfolioItemsOfType(portfolioProject, type);
 			else return Q.reject('Invalid PortfolioItem ordinal');
 		},
 		_portfolioItemTypeToOrdinal: function(type){
@@ -891,7 +911,7 @@
 	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('Intel.form.field.ComboBox', {
+	Ext.define('IntelComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		
@@ -901,7 +921,7 @@
 				enableKeyEvents:true,
 				queryMode:'local',
 				ignoreNoChange:true,
-				allowBlank:false,
+				allowBlank:true,
 				listeners: {
 					keyup: function(a,b){
 						if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
@@ -925,7 +945,7 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.form.field.FixedComboBox', {
+	Ext.define('IntelFixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		
@@ -933,9 +953,10 @@
 			options = options || {};
 			options = Ext.merge({
 				editable: false,	
-				allowBlank:false,
+				allowBlank:true,
 				queryMode:'local',
 				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					focus: function(combo) {
 						combo.setValue('');
 						combo.expand();
@@ -1067,19 +1088,19 @@
 		},
 		items:[{
 			xtype:'container',
-			itemId:'header_release',
+			id:'headerRelease',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'header_project',
+			id:'headerProject',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'header_complete',
+			id:'headerComplete',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'bodyContainer'
+			id:'bodyContainer'
 		}],
 		
 		_userAppsPref: 'intel-portfolio-nav',
@@ -1248,7 +1269,7 @@
 							.then(function(projects){
 								me.AllProjects = projects;
 							}),
-						me._loadRandomUserStory(me.ProjectRecord.data._ref) /********* 4 ************/
+						me._loadRandomUserStory(me.ProjectRecord) /********* 4 ************/
 							.then(function(userStory){
 								me.HasUserStories = !!userStory;
 							})
@@ -1314,7 +1335,7 @@
 		},				
 		_buildReleasePicker: function(){
 			var me=this;
-			me.down('#header_release').add({
+			Ext.getCmp('headerRelease').add({
 				xtype:'intelfixedcombo',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],
@@ -1324,15 +1345,13 @@
 				hidden: !me.FilterOnRelease,
 				displayField: 'Name',
 				value: me.FilterReleaseName,
-				listeners: {
-					select: me._onReleaseSelected.bind(me)
-				}
+				listeners: { select: me._onReleaseSelected.bind(me) }
 			});
 		},		
 		_onFilterOnReleaseChanged: function(checkBox){
 			var me=this,
 				value = checkBox.getValue(),
-				box = me.down('#header_release').down('intelfixedcombo');
+				box = Ext.getCmp('headerRelease').down('intelfixedcombo');
 			if(value) box.show(); else box.hide();
 			me._onPreferenceChanged('FilterOnRelease', value)
 				.then(function(){ me._refreshTree(); })
@@ -1341,14 +1360,12 @@
 		},
 		_buildFilterOnRelease: function(){
 			var me=this;
-			me.down('#header_release').add({
+			Ext.getCmp('headerRelease').add({
 				xtype: 'rallycheckboxfield',
-				boxLabel: 'Filter Features in Release',
-				padding:'0 4px 0 0',
+				boxLabel: 'Filter ' + me.PortfolioItemTypes[0] + 's in Release',
+				id: 'filterOnReleaseCheckbox',
 				value: me.FilterOnRelease,
-				listeners: {
-					change: me._onFilterOnReleaseChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnReleaseChanged.bind(me) }
 			});
 		},		
 		_onFilterOnProjectChanged: function(checkBox){
@@ -1360,15 +1377,13 @@
 		},
 		_buildFilterOnProject: function(){
 			var me=this;
-			me.down('#header_project').add({
+			Ext.getCmp('headerProject').add({
 				xtype: 'rallycheckboxfield',
 				boxLabel: 'Filter User Stories in Current Project',
-				padding:'0 4px 0 0',
+				id: 'filterOnProjectCheckbox',
 				hidden: !me.HasUserStories,
 				value: me.FilterOnProject,
-				listeners: {
-					change: me._onFilterOnProjectChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnProjectChanged.bind(me) }
 			});
 		},			
 		_onFilterOnCompleteChanged: function(checkBox){
@@ -1380,14 +1395,12 @@
 		},
 		_buildFilterOnComplete: function(){
 			var me=this;
-			me.down('#header_complete').add({
+			Ext.getCmp('headerComplete').add({
 				xtype: 'rallycheckboxfield',
 				boxLabel: 'Hide Completed Items',
 				labelWidth: 170,
 				value: me.FilterOnComplete,
-				listeners: {
-					change: me._onFilterOnCompleteChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnCompleteChanged.bind(me) }
 			});
 		},
 
@@ -1524,6 +1537,7 @@
     </script>
 
 
+
     <style type="text/css">
         .portfolio-hierarchy-app {
   width: 100% !important;
@@ -1553,6 +1567,12 @@
   float: left;
   margin-left: 10px;
   margin-right: 8px;
+}
+#filterOnReleaseCheckbox {
+  padding: 0 4px 0 0;
+}
+#filterOnProjectCheckbox {
+  padding: 0 4px 0 0;
 }
 
     </style>

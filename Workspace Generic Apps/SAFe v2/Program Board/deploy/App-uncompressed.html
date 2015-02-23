@@ -21,7 +21,7 @@
 		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'Release',
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
@@ -1161,7 +1161,7 @@
 					data: items,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
-						fields:items.length ? Object.keys(items[0]) : []
+						fields: JSON.parse(config.params.fields || "[]")
 					}),
 					load: function(){}
 				});
@@ -1782,7 +1782,7 @@
 	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('Intel.form.field.ComboBox', {
+	Ext.define('IntelComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		
@@ -1816,7 +1816,7 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.form.field.FixedComboBox', {
+	Ext.define('IntelFixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		
@@ -1827,6 +1827,7 @@
 				allowBlank:true,
 				queryMode:'local',
 				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					focus: function(combo) {
 						combo.setValue('');
 						combo.expand();
@@ -1844,8 +1845,8 @@
 		1: releases (array of release records)
 		2: currentRelease (what to show as initial value
 	*/
-	Ext.define('Intel.form.field.ReleasePicker', {
-		extend: 'Intel.form.field.FixedComboBox',
+	Ext.define('IntelReleasePicker', {
+		extend: 'IntelFixedComboBox',
 		alias: ['widget.intelreleasepicker'],
 		
 		constructor: function(options){
@@ -2395,7 +2396,7 @@
 
 
 	/************************* USED FOR TEAMCOMMITS VIEW *********************************************/
-	Ext.define('CommitsMatrixFeature', {
+	Ext.define('CommitsMatrixPortfolioItem', {
 		extend: 'Ext.data.Model',
 		fields: [
 			{name: 'PortfolioItemObjectID', type: 'number'},
@@ -3900,7 +3901,7 @@
 					labelWidth:40,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['Name'],				
-						data: _.sortBy(me.TrainNames, function(t){ return t.data.Name; })
+						data: me.TrainNames
 					}),
 					displayField: 'Name',
 					fieldLabel: 'Train:',
@@ -4619,7 +4620,7 @@
 				resizable:false,
 				doSort: function(direction){
 					this.up('grid').getStore().sort({
-						sorterFn: function(item1, item2){  //sort by stories for this team in each feature
+						sorterFn: function(item1, item2){
 							var diff = me._getStoryCount(item1.data.PortfolioItemObjectID) - me._getStoryCount(item2.data.PortfolioItemObjectID);
 							if(diff === 0) return 0;
 							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);

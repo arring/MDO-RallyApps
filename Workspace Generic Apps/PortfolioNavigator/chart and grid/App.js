@@ -19,7 +19,8 @@
 		items: [{
 			xtype: 'container',
 			cls: 'navbar',
-			id: 'navbar'
+			id: 'navbar',
+			layout:'hbox'
 		},{
 			xtype: 'container',
 			id: 'portfolioItemChart',
@@ -212,7 +213,7 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return me._loadRandomUserStory(me.ProjectRecord.data._ref);
+					return me._loadRandomUserStory(me.ProjectRecord);
 				})
 				.then(function(userStory){
 					me.HasUserStories = !!userStory;
@@ -358,7 +359,7 @@
 					}),
 					chartData = me._updateCumulativeFlowChartData(calc.runCalculation(store.getRange())),
 					portfolioItemChart = $('#portfolioItemChart-innerCt').highcharts(
-						Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+						Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 							chart: { height:400 },
 							legend:{
 								enabled:true,

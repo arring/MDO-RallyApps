@@ -1161,7 +1161,7 @@
 					data: items,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
-						fields:items.length ? Object.keys(items[0]) : []
+						fields: JSON.parse(config.params.fields || "[]")
 					}),
 					load: function(){}
 				});
@@ -1746,7 +1746,7 @@
 	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('Intel.form.field.ComboBox', {
+	Ext.define('IntelComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		
@@ -1780,7 +1780,7 @@
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.form.field.FixedComboBox', {
+	Ext.define('IntelFixedComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
 		
@@ -1809,8 +1809,8 @@
 		1: releases (array of release records)
 		2: currentRelease (what to show as initial value
 	*/
-	Ext.define('Intel.form.field.ReleasePicker', {
-		extend: 'Intel.form.field.FixedComboBox',
+	Ext.define('IntelReleasePicker', {
+		extend: 'IntelFixedComboBox',
 		alias: ['widget.intelreleasepicker'],
 		
 		constructor: function(options){
@@ -2639,7 +2639,7 @@
 		},
 		_getCellBackgroundColor: function(config){
 			var me=this;		
-			if(me.ViewMode == 'Normal' || config.totalPoints === 0) return '';
+			if(me.ViewMode == 'Normal' || config.userStories.length === 0) return '';
 			else if(me.ViewMode == '% Done'){
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return 'rgba(' + (255*(1-fractionDone)>>0) + ', ' + (255*fractionDone>>0) + ', 0, 0.5);';
@@ -2649,7 +2649,7 @@
 			var me=this;			
 			if(me.ViewMode == 'Normal') return config.userStories.length;
 			else if(me.ViewMode == '% Done'){
-				if(config.totalPoints === 0) return '-';
+				if(config.userStories.length === 0) return '-';
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return '<span title="' + config.completedPoints + '/' + config.totalPoints + ' Points Completed">' + 
 					(100*fractionDone) + '%</span>';

@@ -252,7 +252,7 @@
 		},
 		_getCellBackgroundColor: function(config){
 			var me=this;		
-			if(me.ViewMode == 'Normal' || config.totalPoints === 0) return '';
+			if(me.ViewMode == 'Normal' || config.userStories.length === 0) return '';
 			else if(me.ViewMode == '% Done'){
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return 'rgba(' + (255*(1-fractionDone)>>0) + ', ' + (255*fractionDone>>0) + ', 0, 0.5);';
@@ -262,7 +262,7 @@
 			var me=this;			
 			if(me.ViewMode == 'Normal') return config.userStories.length;
 			else if(me.ViewMode == '% Done'){
-				if(config.totalPoints === 0) return '-';
+				if(config.userStories.length === 0) return '-';
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return '<span title="' + config.completedPoints + '/' + config.totalPoints + ' Points Completed">' + 
 					(100*fractionDone) + '%</span>';

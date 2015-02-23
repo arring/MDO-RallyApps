@@ -86,69 +86,64 @@
 					});
 				});
 		},
-		_getLowestPiItems: function(piDataObject){
+		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					remoteSort:false,
+					fetch: me._portfolioItemFields,
+					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me._reloadStore(store);
+		},	
+		_loadPortfolioItems: function(){ 
 			var me=this;
-			return _.reduce(piDataObject, function(lowestPiOIDsList, nextPiData, nextPiOID){
-				if(nextPiOID === 'Name') return lowestPiOIDsList;
-				if(Object.keys(nextPiData).length ===1) return lowestPiOIDsList.concat([nextPiOID]);
-				else return lowestPiOIDsList.concat(me._getLowestPiItems(nextPiData));
-			}, []);
-		},
-		_loadPortfolioSnapshots: function(){
-			var me = this;
 			
-			me.PortfolioItemMap = {}; //maps lowest Pi ObjectID to highest Pi Name
+			me.PortfolioItemMap = {}; 
 			me.TopPortfolioItemNames = [];
 			me.CurrentTopPortfolioItemName = null;
 			
-			return Q.all(_.map(me.PortfolioItemTypes, function(type, index){
-				var parallelLoaderConfig = {
-					pagesize:20000,
-					url: 'https://' + window.location.host + '/analytics/v2.0/service/rally/workspace/' + 
-						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-					params: {
-						workspace: me.getContext().getWorkspace()._ref,
-						compress:false,
-						pagesize:20000,
-						find: JSON.stringify({ 
-							_TypeHierarchy: 'PortfolioItem/' + type,
-							_ProjectHierarchy: me.TrainPortfolioProject.data.ObjectID,
-							_ValidFrom: {'$gte': new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString()},
-							_ValidTo: {'$lte': new Date(me.ReleaseRecord.data.ReleaseDate).toISOString()}
-						}),
-						fields:JSON.stringify(['Name', 'ObjectID', 'Parent'])
-					}
-				};
-				return me._parallelLoadLookbackStore(parallelLoaderConfig)
-					.then(function(snapshotStore){ 
-						return {store:snapshotStore, type:type, index:index};
+			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
+						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
+					)
+					.then(function(portfolioStore){
+						return {
+							ordinal: ordinal,
+							store: portfolioStore
+						};
 					});
-			}))
-			.then(function(returnValues){
-				var tree = {}, 
-					topPiOIDs = [], 
-					topPiItems = returnValues[returnValues.length-1].store.getRange();
-				returnValues = _.sortBy(returnValues, function(val){ return val.index; }); //ordinal sorting (smallest to largest)
-				_.each(returnValues.reverse(), function(returnValue){
-					_.each(returnValue.store.getRange(), function(item){
-						tree[item.data.ObjectID] = { Name: item.data.Name };
-						if(item.data.Parent){
-							if(tree[item.data.Parent]){
-								tree[item.data.Parent][item.data.ObjectID] = tree[item.data.ObjectID];
-							}
+				}))
+				.then(function(items){
+					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; }),
+						lowestPortfolioItemStore = orderedPortfolioItemStores[0].store;
+					me.PortfolioItemMap = {};
+					_.each(lowestPortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
+						var ordinal = 0, 
+							parentPortfolioItem = lowPortfolioItem,
+							getParentRecord = function(child, parentList){
+								return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
+							};
+						while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItem){
+							parentPortfolioItem = getParentRecord(parentPortfolioItem, orderedPortfolioItemStores[ordinal+1].store.getRange());
+							++ordinal;
 						}
+						if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItem)
+							me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
 					});
+					
+					me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
+						function(name){ return {Name: name}; }),
+						function(name){ return name.Name; });
 				});
-				_.each(topPiItems, function(topPiItem){
-					var lowestPiOIDs = me._getLowestPiItems(tree[topPiItem.data.ObjectID]),
-						topPiName = topPiItem.data.Name;
-					_.each(lowestPiOIDs, function(lowestPiOID){ me.PortfolioItemMap[lowestPiOID] = topPiName; });
-				});
-				me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.map(topPiItems,
-					function(topPiItem){ return topPiItem.data.Name; })),
-					function(topPiName){ return {Name: topPiName}; }),
-					function(topPiName){ return topPiName.Name; });
-			});
 		},
 		_filterUserStoriesByTopPortfolioItem: function(){
 			var me=this,
@@ -198,7 +193,7 @@
 			return me._loadAllChildReleases().then(function(){ 
 				return Q.all([
 					me._loadSnapshotStores(),
-					me._loadPortfolioSnapshots()
+					me._loadPortfolioItems()
 				]);
 			})
 			.then(function(){ return me._redrawEverything(); });
@@ -277,10 +272,7 @@
 				width: 240,
 				releases: me.ReleaseRecords,
 				currentRelease: me.ReleaseRecord,
-				listeners: {
-					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._releasePickerSelected.bind(me)
-				}
+				listeners: { select: me._releasePickerSelected.bind(me) }
 			});
 		},
 		_topPortfolioItemPickerSelected: function(combo, records){
@@ -308,9 +300,7 @@
 				}),
 				displayField: 'Name',
 				value: me.CurrentTopPortfolioItemName || allPiOfTypeLabel,
-				listeners: {
-					select: me._topPortfolioItemPickerSelected.bind(me)
-				}
+				listeners: { select: me._topPortfolioItemPickerSelected.bind(me) }
 			});
 		},		
 		
@@ -328,7 +318,7 @@
 			/************************************** CHART STUFF *********************************************/
 			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots)),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
-					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:400 },
 						legend:{
 							enabled:true,
@@ -364,7 +354,7 @@
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
 				
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
-					Ext.Object.merge(me._defaultCumulativeFlowChartConfig, {
+					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:300 },
 						legend: { enabled: false },
 						title: { text: null },

@@ -4,6 +4,10 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
+      "https://code.jquery.com/jquery-2.1.1.js",
+      "https://mdoproceffrpt/cdn/highcharts/highcharts-v4.0.4-modified.js",
+      "https://code.highcharts.com/modules/heatmap.src.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "../lib/intel-rally-app.js",
       "../lib/data/intel-models.js",
       "../lib/mixins/window-listener.js",
@@ -16,10 +20,6 @@
       "../lib/components/intel-combobox.js",
       "../lib/components/intel-fixed-combobox.js",
       "../lib/components/intel-release-picker.js",
-      "https://code.jquery.com/jquery-2.1.1.js",
-      "https://mdoproceffrpt/cdn/highcharts/highcharts-v4.0.4-modified.js",
-      "https://code.highcharts.com/modules/heatmap.src.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"
    ],
    "css": [

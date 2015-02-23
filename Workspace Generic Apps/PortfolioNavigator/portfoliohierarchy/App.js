@@ -18,19 +18,19 @@
 		},
 		items:[{
 			xtype:'container',
-			itemId:'header_release',
+			id:'headerRelease',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'header_project',
+			id:'headerProject',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'header_complete',
+			id:'headerComplete',
 			layout:'hbox'
 		},{
 			xtype:'container',
-			itemId:'bodyContainer'
+			id:'bodyContainer'
 		}],
 		
 		_userAppsPref: 'intel-portfolio-nav',
@@ -199,7 +199,7 @@
 							.then(function(projects){
 								me.AllProjects = projects;
 							}),
-						me._loadRandomUserStory(me.ProjectRecord.data._ref) /********* 4 ************/
+						me._loadRandomUserStory(me.ProjectRecord) /********* 4 ************/
 							.then(function(userStory){
 								me.HasUserStories = !!userStory;
 							})
@@ -265,7 +265,7 @@
 		},				
 		_buildReleasePicker: function(){
 			var me=this;
-			me.down('#header_release').add({
+			Ext.getCmp('headerRelease').add({
 				xtype:'intelfixedcombo',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],
@@ -275,15 +275,13 @@
 				hidden: !me.FilterOnRelease,
 				displayField: 'Name',
 				value: me.FilterReleaseName,
-				listeners: {
-					select: me._onReleaseSelected.bind(me)
-				}
+				listeners: { select: me._onReleaseSelected.bind(me) }
 			});
 		},		
 		_onFilterOnReleaseChanged: function(checkBox){
 			var me=this,
 				value = checkBox.getValue(),
-				box = me.down('#header_release').down('intelfixedcombo');
+				box = Ext.getCmp('headerRelease').down('intelfixedcombo');
 			if(value) box.show(); else box.hide();
 			me._onPreferenceChanged('FilterOnRelease', value)
 				.then(function(){ me._refreshTree(); })
@@ -292,14 +290,12 @@
 		},
 		_buildFilterOnRelease: function(){
 			var me=this;
-			me.down('#header_release').add({
+			Ext.getCmp('headerRelease').add({
 				xtype: 'rallycheckboxfield',
-				boxLabel: 'Filter Features in Release',
-				padding:'0 4px 0 0',
+				boxLabel: 'Filter ' + me.PortfolioItemTypes[0] + 's in Release',
+				id: 'filterOnReleaseCheckbox',
 				value: me.FilterOnRelease,
-				listeners: {
-					change: me._onFilterOnReleaseChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnReleaseChanged.bind(me) }
 			});
 		},		
 		_onFilterOnProjectChanged: function(checkBox){
@@ -311,15 +307,13 @@
 		},
 		_buildFilterOnProject: function(){
 			var me=this;
-			me.down('#header_project').add({
+			Ext.getCmp('headerProject').add({
 				xtype: 'rallycheckboxfield',
 				boxLabel: 'Filter User Stories in Current Project',
-				padding:'0 4px 0 0',
+				id: 'filterOnProjectCheckbox',
 				hidden: !me.HasUserStories,
 				value: me.FilterOnProject,
-				listeners: {
-					change: me._onFilterOnProjectChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnProjectChanged.bind(me) }
 			});
 		},			
 		_onFilterOnCompleteChanged: function(checkBox){
@@ -331,14 +325,12 @@
 		},
 		_buildFilterOnComplete: function(){
 			var me=this;
-			me.down('#header_complete').add({
+			Ext.getCmp('headerComplete').add({
 				xtype: 'rallycheckboxfield',
 				boxLabel: 'Hide Completed Items',
 				labelWidth: 170,
 				value: me.FilterOnComplete,
-				listeners: {
-					change: me._onFilterOnCompleteChanged.bind(me)
-				}
+				listeners: { change: me._onFilterOnCompleteChanged.bind(me) }
 			});
 		},
 

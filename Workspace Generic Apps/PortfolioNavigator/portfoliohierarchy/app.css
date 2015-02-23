@@ -26,3 +26,6 @@
 	float: left;
 	margin-left: 10px;
 	margin-right: 8px; }
+	
+#filterOnReleaseCheckbox { padding:0 4px 0 0; }
+#filterOnProjectCheckbox { padding:0 4px 0 0; }
