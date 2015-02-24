@@ -1,4 +1,4 @@
 MDO-RallyApps
 =============
 
-A sweet suite of apps.
+A sweet suite of apps!
