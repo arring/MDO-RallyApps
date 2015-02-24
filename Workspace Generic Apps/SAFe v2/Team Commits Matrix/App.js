@@ -105,17 +105,23 @@
 				});
 		},		
 		_loadUserStories: function(){
-			var me = this;
-			me.MatrixUserStoryBreakdown = {};
-			me.MatrixProjectMap = {};
-			return Q.all(_.map(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
-				var portfolioItemName = portfolioItemRecord.data.Name, 
-					config = {
+			var me = this,
+				newMatrixUserStoryBreakdown = {},
+				newMatrixProjectMap = {};
+			
+			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
+				var config = {
 						model: me.UserStory,
 						url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
 						params: {
 							pagesize:200,
-							query: '(PortfolioItem.ObjectID = "' + portfolioItemRecord.data.ObjectID + '")',
+							query: (_.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
+								var newFilter = Ext.create('Rally.data.wsapi.Filter', {
+									property: 'PortfolioItem.ObjectID',
+									value: portfolioItemRecord.data.ObjectID
+								});
+								return filter ? filter.or(newFilter) : newFilter;
+							}, null) || '').toString(),
 							fetch:['Name', 'ObjectID', 'Project', 'Release', 'Children',
 								'PlanEstimate', 'FormattedID', 'ScheduleState', 'PortfolioItem'].join(','),
 							workspace:me.getContext().getWorkspace()._ref
@@ -123,16 +129,21 @@
 					};
 				return me._parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
-						var projectName = storyRecord.data.Project.Name;		
-						if(!me.MatrixUserStoryBreakdown[projectName]) 
-							me.MatrixUserStoryBreakdown[projectName] = {};
-						if(!me.MatrixUserStoryBreakdown[projectName][portfolioItemName]) 
-							me.MatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
-						me.MatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord);						
-						me.MatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
+						var portfolioItemName = storyRecord.data.PortfolioItem.Name,
+							projectName = storyRecord.data.Project.Name;		
+						if(!newMatrixUserStoryBreakdown[projectName]) 
+							newMatrixUserStoryBreakdown[projectName] = {};
+						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
+							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
+						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord);						
+						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
 					});
 				});
-			}));
+			}))
+			.then(function(){
+				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
+				me.MatrixProjectMap = newMatrixProjectMap;
+			});
 		},		
 			
 		/**___________________________________ TEAM COMMITS STUFF ___________________________________**/	
@@ -336,13 +347,15 @@
 		},
 		_getProjectHeaderCls: function(projectName){
 			var me=this;
-			if(me.ViewMode == 'Normal') return me._isProjectNotFullyDispositioned(projectName) ? ' not-dispositioned-project' : '';
+			if(me.ViewMode == 'Normal'){
+				return me._isProjectNotFullyDispositioned(projectName) ? ' not-dispositioned-project' : ' dispositioned-project';
+			} 
 			else return ''; //should these get green/red/grey/white
 		},
 		_updateGridHeader: function(projectName){
 			var me=this,
 				column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
-				possibleClasses = ['not-dispositioned-project'];
+				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'];
 			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
 			column.el.addCls(me._getProjectHeaderCls(projectName));
 		},
@@ -400,7 +413,6 @@
 				me.PortfolioItemPicker = undefined;
 			}
 			
-			me.UserStoryStore = undefined;
 			me.PortfolioItemStore = undefined;
 			
 			me.MatrixStore = undefined;		
@@ -452,7 +464,7 @@
 		_setRefreshInterval: function(){
 			var me=this;
 			me._clearRefreshInterval();
-			me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 10000);
+			me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 20000);
 		},
 			
 		/**___________________________________ LAUNCH ___________________________________*/	
@@ -736,7 +748,7 @@
 			var defaultColumnCfgs = [{
 				text:'MoSCoW', 
 				dataIndex:'MoSCoW',
-				tdCls: 'intel-editor-cell',	
+				tdCls: 'moscow-cell intel-editor-cell',	
 				width:100,
 				maxHeight:80,
 				editor:{
@@ -767,7 +779,13 @@
 						}
 					});
 				},
-				renderer:function(val, meta){ return val || 'Undefined'; },	
+				renderer:function(val, meta){
+					if(val == 'Must') meta.tdCls += ' must-have';
+					if(val == 'Should') meta.tdCls += ' should-have';
+					if(val == 'Could') meta.tdCls += ' could-have';
+					if(val == 'Won\'t') meta.tdCls += ' wont-have';
+					return val || 'Undefined'; 
+				},	
 				layout:'hbox',
 				items: [{	
 					id:'matrix-moscow-filter',
@@ -948,14 +966,14 @@
 										return me._setTeamCommitsField(portfolioItemRecord, projectName, 'Expected', !tcae.Expected);
 									})
 									.then(function(portfolioItemRecord){
-										var localRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+										var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
 											return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
 										});
-										localRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
+										storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
 										me.MatrixGrid.view.refreshNode(me.MatrixStore.indexOf(matrixRecord));
 									})
 									.fail(function(reason){ me._alert('ERROR', reason || ''); })
-									.then(function(portfolioItemRecord){
+									.then(function(){
 										me.MatrixGrid.setLoading(false);
 										unlockFunc();
 									})
@@ -978,18 +996,37 @@
 						}
 						me.MatrixGrid.setLoading('Saving');
 						
+						_.find(me.PortfolioItemStore.getRange(), function(item){ //set this here temporarily in case intelUpdate gets called while in queue
+							return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+						}).data.c_MoSCoW = value;
+						
 						me._enqueue(function(unlockFunc){
 							me._loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
 								.then(function(portfolioItemRecord){
+									var deferred = Q.defer();
 									portfolioItemRecord.set('c_MoSCoW', value);
 									portfolioItemRecord.save({ 
 										callback:function(record, operation, success){
-											if(!success) me._alert('Failed to modify PortfolioItem: ' + portfolioItemRecord.data.FormattedID);
-											me.MatrixGrid.setLoading(false);
-											unlockFunc();
+											if(!success) deferred.reject('Failed to modify PortfolioItem: ' + portfolioItemRecord.data.FormattedID);					
+											else {
+												var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+													return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+												});
+												storePortfolioItemRecord.data.c_MoSCoW = portfolioItemRecord.data.c_MoSCoW;
+												matrixRecord.data.MoSCoW = portfolioItemRecord.data.c_MoSCoW; //need this in case intelUpdate gets called while in queue
+												me.MatrixGrid.view.refreshNode(me.MatrixStore.indexOf(matrixRecord));
+												deferred.resolve();
+											}
 										}
 									});
-								});
+									return deferred.promise;
+								})
+								.fail(function(reason){ me._alert('ERROR', reason || ''); })
+								.then(function(){
+									me.MatrixGrid.setLoading(false);
+									unlockFunc();
+								})
+								.done();
 						}, 'Queue-Main');	
 					},
 					afterrender: function (grid) {
@@ -1001,7 +1038,7 @@
 							uievent: function (type, view, cell, row, col, e){
 								if((me.ClickMode === 'Details' || me.ClickMode === 'Comment') && type === 'mousedown') {
 									me.setLoading('Waiting');
-									me._enqueue(function(unlockFunc){ //need _enqueue because MatrixUserStoryBreakdown could be null due to an ongoing refresh
+									me._enqueue(function(unlockFunc){ //need enqueue because MatrixUserStoryBreakdown could be null due to an ongoing refresh
 										me.setLoading(false);
 										var matrixRecord = me.MatrixStore.getAt(row),
 											projectName = view.getGridColumns()[col].text,
@@ -1055,10 +1092,10 @@
 													items: [{
 														xtype:'container',
 														layout:'hbox',
-														cls: 'tooltip-inner-container',
+														cls: 'intel-tooltip-inner-container',
 														items:[{
 															xtype:'container',
-															cls: 'tooltip-inner-left-container',
+															cls: 'intel-tooltip-inner-left-container',
 															flex:1,
 															items:[{
 																xtype:'container',
@@ -1066,7 +1103,7 @@
 															}]
 														},{
 															xtype:'button',
-															cls:'tooltip-close',
+															cls:'intel-tooltip-close',
 															text:'X',
 															width:20,
 															handler: function(){ me._clearToolTip(); }
@@ -1095,10 +1132,10 @@
 													items: [{
 														xtype:'container',
 														layout:'hbox',
-														cls: 'tooltip-inner-container',
+														cls: 'intel-tooltip-inner-container',
 														items:[{
 															xtype:'container',
-															cls: 'tooltip-inner-left-container',
+															cls: 'intel-tooltip-inner-left-container',
 															flex:1,
 															items:[{
 																xtype:'container',
@@ -1179,7 +1216,7 @@
 															}]
 														},{
 															xtype:'button',
-															cls:'tooltip-close',
+															cls:'intel-tooltip-close',
 															text:'X',
 															width:20,
 															handler: function(){ me._clearToolTip(); }

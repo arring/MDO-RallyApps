@@ -29,16 +29,16 @@
 	z-index:500;
 }	
 
-.tooltip-close {
+.intel-tooltip-close {
 	padding:0 0 2px 0;
 	font-weight:bold;
 	margin-left: 5px;
 	margin-top: -5px;
 	border-radius:10px; }
 
-.tooltip-inner-container,
-.tooltip-inner-container * {
+.intel-tooltip-inner-container,
+.intel-tooltip-inner-container * {
 	overflow: visible; }
 	
-.tooltip-inner-left-container {
+.intel-tooltip-inner-left-container {
 	overflow: hidden; }

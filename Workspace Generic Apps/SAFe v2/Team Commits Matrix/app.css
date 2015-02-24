@@ -1,7 +1,9 @@
 /************************************************ NAVBAR/CONTAINERS *****************************************/
 #navbar { padding:0 10px 0 10px; }
 #releasePicker { margin: 4px 0 0 0; }
-#manualRefreshButton { margin: 5px 0 0 5px; }
+#modePicker { margin:0; }
+#viewPicker { margin:0; }
+#manualRefreshButton { margin: 5px 0 0 0; }
 
 .intel-legend-dot {
 	width:12px;
@@ -25,6 +27,11 @@
 	background-image:none !important;
 	background-color:rgba(255, 0, 0, 0.70) !important; }
 
+.x-grid-header-ct .dispositioned-project .x-column-header-inner { background-color:rgba(0, 255, 0, 0.50) !important; }
+.x-grid-header-ct .dispositioned-project .x-column-header-inner.x-column-header-over { 
+	background-image:none !important;
+	background-color:rgba(0, 255, 0, 0.70) !important; }
+
 .matrix-hidden-grid-row { display:none !important; }
 
 .x-column-header-inner .x-column-header-text {
@@ -34,3 +41,42 @@
 .x-column-header-inner {
 	text-align: center;
 	height:100 !important; }
+	
+.moscow-cell { padding-left:20px; }
+	
+.must-have {
+	background-image: -o-linear-gradient(left,rgba(0,0,0,0) 85%, rgb(255, 219, 153) 85%) !important;
+	background-image: -moz-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(255, 219, 153) 85%) !important;
+	background-image: -webkit-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(255, 219, 153) 85%) !important;
+	background-image: -ms-linear-gradient(rleft, rgba(0,0,0,0) 85%, rgb(255, 219, 153) 85%) !important;
+	background-image: linear-gradient(to left, rgba(0,0,0,0) 85%, rgb(255, 219, 153) 85%) !important;
+	background-size:100% 20px;
+	background-repeat:no-repeat;
+}
+.should-have {
+	background-image: -o-linear-gradient(left,rgba(0,0,0,0) 85%, rgb(255,165,0) 85%) !important;
+	background-image: -moz-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(255,165,0) 85%) !important;
+	background-image: -webkit-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(255,165,0) 85%) !important;
+	background-image: -ms-linear-gradient(rleft, rgba(0,0,0,0) 85%, rgb(255,165,0) 85%) !important;
+	background-image: linear-gradient(to left, rgba(0,0,0,0) 85%, rgb(255,165,0) 85%) !important;
+	background-size:100% 20px;
+	background-repeat:no-repeat;
+}
+.could-have {
+	background-image: -o-linear-gradient(left,rgba(0,0,0,0) 85%, rgb(204,132,0) 85%) !important;
+	background-image: -moz-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(204,132,0) 85%) !important;
+	background-image: -webkit-linear-gradient(left, rgba(0,0,0,0) 85%, rgb(204,132,0) 85%) !important;
+	background-image: -ms-linear-gradient(rleft, rgba(0,0,0,0) 85%, rgb(204,132,0) 85%) !important;
+	background-image: linear-gradient(to left, rgba(0,0,0,0) 85%, rgb(204,132,0) 85%) !important;
+	background-size:100% 20px;
+	background-repeat:no-repeat;
+}
+.wont-have {
+	background-image: -o-linear-gradient(left,rgba(0,0,0,0) 85%, rgba(255, 0, 0, 0.50) 85%) !important;
+	background-image: -moz-linear-gradient(left, rgba(0,0,0,0) 85%, rgba(255, 0, 0, 0.50) 85%) !important;
+	background-image: -webkit-linear-gradient(left, rgba(0,0,0,0) 85%, rgba(255, 0, 0, 0.50) 85%) !important;
+	background-image: -ms-linear-gradient(rleft, rgba(0,0,0,0) 85%, rgba(255, 0, 0, 0.50) 85%) !important;
+	background-image: linear-gradient(to left, rgba(0,0,0,0) 85%, rgba(255, 0, 0, 0.50) 85%) !important;
+	background-size:100% 20px;
+	background-repeat:no-repeat;
+}

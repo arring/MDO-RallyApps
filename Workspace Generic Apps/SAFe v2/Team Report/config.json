@@ -1,11 +1,10 @@
 {
-   "name": "ART Commit Matrix",
-   "className": "CommitMatrix",
+   "name": "Team Report",
+   "className": "TeamReport",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.3.0/lodash.js",
       "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",
@@ -15,6 +14,7 @@
       "../../lib/mixins/async-queue.js",
       "../../lib/mixins/parallel-loader.js",
       "../../lib/mixins/user-apps-preference.js",
+      "../../lib/mixins/data-integrity-dashboard-objectid-preference.js",
       "../../lib/components/component-column.js",
       "../../lib/components/intel-combobox.js",
       "../../lib/components/intel-fixed-combobox.js",
@@ -26,12 +26,14 @@
       "../../lib/overrides/fast-cell-editing.js",
       "../../lib/overrides/scroll-steady-tableview.js",
       "../lib/data/intel-safe-models.js",
+      "../lib/mixins/risks-lib.js",
+      "../lib/mixins/dependencies-lib.js",
       "App.js"
    ],
    "css": [
       "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
       "../../lib/css/base.css",
-      "../../lib/css/tooltip.css",
+      "../lib/css/risks-and-deps.css",
       "../lib/css/background-colors.css",
       "app.css"
    ]

@@ -24,7 +24,7 @@
 				url = config.url,
 				params = config.params,
 				promises = [],
-				outputItems = [];
+				outputItems = [],
 				totalRequestsSent = 1; //1 is the minimum number of requests sent
 			_.times(totalRequestsSent, function(pageNum){
 				var thisDeferred = Q.defer(),

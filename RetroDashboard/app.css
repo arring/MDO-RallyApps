@@ -1,0 +1,30 @@
+.app {
+     /* Add app styles here */
+}
+
+.chart-wrapper{
+	margin: 10px;
+	padding: 10px;
+}
+.donut-wrapper{
+	/*border: solid red 1px;*/
+	width: 80%;/*change the width percentage to change the size of the donut-wrapper*/
+}
+.chart-with-border{
+	font-weight: bold;
+	font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, sans-serif;
+	z-index: -1 ;
+}
+.chart-with-border2{
+	border: solid green 1px;
+}
+span#retroDonutScopeArrow-outerCt,span#retroDonutCaOriginalArrow-outerCt,span#retroDonutCaFinalArrow-outerCt {
+	 margin-top: 70px; 
+	 margin-left: 220px;
+}
+#retroDonutScopeFooter,#retroDonutCaOriginalFooter,#retroDonutCaFinalFooter {
+	padding-top: 190px;
+	padding-left: 140px;
+	font-weight: bold;
+	font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, sans-serif;
+}
