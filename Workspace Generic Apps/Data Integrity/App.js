@@ -537,7 +537,7 @@
 				});
 			});
 			window[selectScrumFunctionName] = function(value){
-				var scrum = _.find(me.LeafProjects, function(p){ return p.data.Name.split('-')[0].trim() === value; });
+				var scrum = _.find(me.LeafProjects, function(p){ return p.data.Name === value; });
 				if(me.CurrentScrum && scrum.data.ObjectID == me.CurrentScrum.data.ObjectID){
 					me.CurrentScrum = null;
 					me.ScrumPicker.setValue('All');
@@ -563,14 +563,15 @@
 				title: { text: null },
 				xAxis: {
 					categories: _.sortBy(_.map(me.LeafProjects, 
-						function(project){ return project.data.Name.split('-')[0].trim(); }),
+						function(project){ return project.data.Name; }),
 						function(p){ return p; }),
 					labels: {
 						style: { width:100 },
 						formatter: function(){
 							var text = this.value;
 							if(me.CurrentScrum && me.CurrentScrum.data.Name.indexOf(this.value) === 0) 
-								text = '<span class="curscrum">' + this.value + '</span>';
+								text = '<span title="' + this.value + '" class="heatmap-xlabel-text curscrum">' + this.value + '</span>';
+							else text = '<span title="' + this.value + '" class="heatmap-xlabel-text">' + this.value + '</span>';
 							return '<a class="heatmap-xlabel" onclick="' + selectScrumFunctionName + '(\'' + this.value +  '\');">' + text + '</a>';
 						},
 						useHTML:true,

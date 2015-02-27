@@ -1054,8 +1054,8 @@
 				'#E5D038', 
 				'#0080FF', 
 				'#3A874F', 
-				'#000000',
-				'#26FF00'
+				'#26FF00',
+				'#000000'
 			],	
 			xAxis: {
 				tickmarkPlacement: "on",
@@ -1226,7 +1226,7 @@
 				url = config.url,
 				params = config.params,
 				promises = [],
-				outputItems = [];
+				outputItems = [],
 				totalRequestsSent = 1; //1 is the minimum number of requests sent
 			_.times(totalRequestsSent, function(pageNum){
 				var thisDeferred = Q.defer(),
@@ -1833,9 +1833,7 @@
 			me._setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
 
 			/************************************** Scrum CHARTS STUFF *********************************************/	
-			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ 
-					return projName.split('-')[1].trim() + projName; 
-				}),
+			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
 				var scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName])),		

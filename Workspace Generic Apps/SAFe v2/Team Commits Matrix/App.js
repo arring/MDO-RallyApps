@@ -1068,7 +1068,7 @@
 													_.reduce(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || [], function(sum, sr){
 														return sum + (sr.data.Children.Count === 0 ? (sr.data.PlanEstimate || 0) : 0); 
 													}, 0),
-												'<p><b>UserStories: </b><div style="max-height:200px;overflow-y:auto;"><ol>'].join('');
+												'<p><b>UserStories: </b><div style="max-height:100px;overflow-y:auto;"><ol>'].join('');
 											(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || []).forEach(function(sr){
 												panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
 													'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +

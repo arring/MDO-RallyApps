@@ -343,9 +343,7 @@
 			me._setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
 
 			/************************************** Scrum CHARTS STUFF *********************************************/	
-			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ 
-					return projName.split('-')[1].trim() + projName; 
-				}),
+			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
 				var scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName])),		
