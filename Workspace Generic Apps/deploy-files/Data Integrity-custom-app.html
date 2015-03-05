@@ -54,6 +54,7 @@
 					model: 'State',
 					autoLoad:false,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					fetch:['Name', 'Enabled', 'OrderIndex'],
 					filters: [{
 						property: 'TypeDef.Name',
@@ -76,6 +77,7 @@
 					model: 'TypeDefinition',
 					autoLoad:true,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					fetch:['Ordinal', 'Name'],
 					filters: [{
 						property: 'Parent.Name',
@@ -288,6 +290,7 @@
 				var store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Project',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._projectFields,
 					filters:[filter],
@@ -339,6 +342,7 @@
 					model: 'HierarchicalRequirement',
 					limit:1,
 					pageSize:1,
+					disableMetaChangeEvent: true,
 					fetch: false,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -358,6 +362,7 @@
 					model: 'HierarchicalRequirement',
 					limit:5,
 					pageSize:5,
+					disableMetaChangeEvent: true,
 					fetch: me._userStoryFields,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -385,6 +390,7 @@
 					model: 'HierarchicalRequirement',
 					limit:1,
 					pageSize:1,
+					disableMetaChangeEvent: true,
 					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -410,6 +416,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
 					context:{
@@ -458,6 +465,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -488,6 +496,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -524,6 +533,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -559,6 +569,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -587,6 +598,7 @@
 					limit:1,
 					pageSize:1,
 					fetch: ['Name', 'ObjectID'],
+					disableMetaChangeEvent: true,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
@@ -607,6 +619,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -626,6 +639,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -650,6 +664,7 @@
 					model: 'Release',
 					limit:Infinity,
 					autoLoad:false,
+					disableMetaChangeEvent: true,
 					fetch: me._releaseFields,
 					filters:[{
 						property:'ReleaseDate',
@@ -674,6 +689,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -693,6 +709,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -714,6 +731,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -1155,6 +1173,7 @@
 					model: config.model,
 					totalCount: items.length,
 					data: items,
+					disableMetaChangeEvent: true,
 					load: function(){}
 				});
 			});
@@ -1167,6 +1186,7 @@
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
 					totalCount: items.length,
 					data: items,
+					disableMetaChangeEvent: true,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
 						fields: JSON.parse(config.params.fields || "[]")
@@ -1403,6 +1423,7 @@
 		},				
 		_getStories: function(){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
@@ -1411,7 +1432,7 @@
 						query:me._getUserStoryFilter().toString(),
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'PortfolioItem'].join(','),
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
 						workspace:me.getContext().getWorkspace()._ref,
 						includePermissions:true
 					}
@@ -1428,11 +1449,12 @@
 			return releaseNameFilter;
 		},	
 		_getLowestPortfolioItems: function(){
-			var me=this;
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			if(!me.TrainRecord) return Q();
 			var config = {
-				model: me[me.PortfolioItemTypes[0]],
-				url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/' + me.PortfolioItemTypes[0],
+				model: me[lowestPortfolioItem],
+				url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
 				params: {
 					project:me.TrainPortfolioProject.data._ref,
 					projectScopeUp:false,
@@ -1539,7 +1561,7 @@
 										me._loadTrainPortfolioProject(me.TrainRecord)
 											.then(function(trainPortfolioProject){
 												me.TrainPortfolioProject = trainPortfolioProject;
-												var topPortfolioItemType = me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
+												var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
 												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType);
 											})
 											.then(function(topPortfolioItemStore){ 
@@ -2274,16 +2296,16 @@
 						editor:false
 					},{
 						text: lowestPortfolioItemType,
-						dataIndex: 'PortfolioItem',
+						dataIndex: lowestPortfolioItemType,
 						editor:false
 					}]),
 					side: 'Right',
 					filterFn:function(item){
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(!item.data.Iteration || !item.data.PortfolioItem || 
-							(!item.data.PortfolioItem.PlannedEndDate && !item.data.PortfolioItem.ActualEndDate) || 
+						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
+							(!item.data[lowestPortfolioItemType].PlannedEndDate && !item.data[lowestPortfolioItemType].ActualEndDate) || 
 							!item.data.Iteration.EndDate) return false;
-						return new Date(item.data.PortfolioItem.PlannedEndDate || item.data.PortfolioItem.ActualEndDate) < 
+						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate || item.data[lowestPortfolioItemType].ActualEndDate) < 
 										new Date(item.data.Iteration.EndDate);
 					}
 				},{

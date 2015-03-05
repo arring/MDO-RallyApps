@@ -59,6 +59,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
 					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
@@ -104,7 +105,8 @@
 				});
 		},
 		_getUserStoryFilter: function(){
-			var me=this;
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			return Ext.create('Rally.data.wsapi.Filter', {
 				property:'Release.Name',
 				value: me.ReleaseRecord.data.Name
@@ -114,7 +116,7 @@
 					value: null
 				}).and(
 				Ext.create('Rally.data.wsapi.Filter', {
-					property:'PortfolioItem.Release.Name',
+					property: lowestPortfolioItem + '.Release.Name',
 					value: me.ReleaseRecord.data.Name
 				}))
 			);
@@ -122,13 +124,14 @@
 		_loadUserStories: function(){	
 			/** what this function should REALLY do is return the user stories that contribute to this train's portfolio, regardless of project */
 			var me=this, 
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'Release', 'FormattedID', 'PortfolioItem', 'c_Dependencies'].join(','),
+						fetch:['Name', 'ObjectID', 'Project', 'Release', 'FormattedID', lowestPortfolioItem, 'c_Dependencies'].join(','),
 						project:me.TrainRecord.data._ref,
 						projectScopeDown:true,
 						projectScopeUp:false
@@ -196,8 +199,10 @@
 		
 		/**___________________________________ DEPENDENCIES STUFF ___________________________________	**/
 		_isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
-				(!userStoryRecord.data.Release && ((userStoryRecord.data.PortfolioItem || {}).Release || {}).Name === releaseRecord.data.Name);
+				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
 		},	
 		_spliceDependencyFromList: function(dependencyID, dependencyList){ 
 			for(var i = 0; i<dependencyList.length; ++i){
@@ -208,13 +213,14 @@
 		},
 		_parseDependenciesFromUserStory: function(userStoryRecord){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				dependencies = me._getDependencies(userStoryRecord), 
 				inputPredecessors = dependencies.Predecessors, 
 				outputPredecessors = [], 
 				UserStoryObjectID = userStoryRecord.data.ObjectID,
 				UserStoryFormattedID = userStoryRecord.data.FormattedID,
 				UserStoryName = userStoryRecord.data.Name,
-				TopPortfolioItemName = me.PortfolioItemMap[(userStoryRecord.data.PortfolioItem || {}).ObjectID] || '',
+				TopPortfolioItemName = me.PortfolioItemMap[(userStoryRecord.data[lowestPortfolioItem] || {}).ObjectID] || '',
 				ProjectObjectID = (userStoryRecord.data.Project || {}).ObjectID || 0;
 				
 			if(me._isUserStoryInRelease(userStoryRecord, me.ReleaseRecord)){
@@ -385,6 +391,7 @@
 		},	
 		_reloadStores: function(){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				isEditingRisks = me._isEditing(me.CustomRisksStore),
 				isEditingDeps = me._isEditing(me.CustomPredecessorStore),
 				promises = [];
@@ -397,7 +404,7 @@
 					model: 'HierarchicalRequirement',
 					data: _.filter(me.UserStoryStore.getRange(), function(userStory){
 						return _.some(portfolioItems, function(portfolioItem){ 
-							return portfolioItem.data.ObjectID == (userStory.data.PortfolioItem || {}).ObjectID;
+							return portfolioItem.data.ObjectID == (userStory.data[lowestPortfolioItem] || {}).ObjectID;
 						});
 					})
 				});
@@ -1015,6 +1022,7 @@
 				autoSync:true,
 				model:'IntelRiskForTracking',
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'RiskProxy' + Math.random()
@@ -1625,6 +1633,7 @@
 				autoSync:true,
 				model:'IntelPredecessorDependencyForTracking',
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'IntelPredecessorDependencyProxy' + Math.random()
@@ -1942,6 +1951,7 @@
 							data: predecessorItems,
 							autoSync:true,
 							limit:Infinity,
+							disableMetaChangeEvent: true,
 							proxy: {
 								type:'fastsessionproxy',
 								id:'PredecessorItem-' + dependencyID + '-proxy' + Math.random()
@@ -2181,7 +2191,7 @@
 								var userStoryRecord = records[1];
 								return me._addPredecessor(userStoryRecord, predecessorData, null, me.DependenciesParsedData);
 							})
-							.then(function(){ predecessorRecord.set('Edited', true); })
+							.then(function(){ predecessorRecord.set('Edited', false); })
 							.fail(function(reason){ me._alert('ERROR:', reason); })
 							.then(function(){
 								me.PredecessorGrid.setLoading(false);

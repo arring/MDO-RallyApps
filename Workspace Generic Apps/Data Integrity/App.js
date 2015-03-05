@@ -94,6 +94,7 @@
 		},				
 		_getStories: function(){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
@@ -102,7 +103,7 @@
 						query:me._getUserStoryFilter().toString(),
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'PortfolioItem'].join(','),
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
 						workspace:me.getContext().getWorkspace()._ref,
 						includePermissions:true
 					}
@@ -119,11 +120,12 @@
 			return releaseNameFilter;
 		},	
 		_getLowestPortfolioItems: function(){
-			var me=this;
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			if(!me.TrainRecord) return Q();
 			var config = {
-				model: me[me.PortfolioItemTypes[0]],
-				url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/' + me.PortfolioItemTypes[0],
+				model: me[lowestPortfolioItem],
+				url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
 				params: {
 					project:me.TrainPortfolioProject.data._ref,
 					projectScopeUp:false,
@@ -230,7 +232,7 @@
 										me._loadTrainPortfolioProject(me.TrainRecord)
 											.then(function(trainPortfolioProject){
 												me.TrainPortfolioProject = trainPortfolioProject;
-												var topPortfolioItemType = me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
+												var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
 												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType);
 											})
 											.then(function(topPortfolioItemStore){ 
@@ -965,16 +967,16 @@
 						editor:false
 					},{
 						text: lowestPortfolioItemType,
-						dataIndex: 'PortfolioItem',
+						dataIndex: lowestPortfolioItemType,
 						editor:false
 					}]),
 					side: 'Right',
 					filterFn:function(item){
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(!item.data.Iteration || !item.data.PortfolioItem || 
-							(!item.data.PortfolioItem.PlannedEndDate && !item.data.PortfolioItem.ActualEndDate) || 
+						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
+							(!item.data[lowestPortfolioItemType].PlannedEndDate && !item.data[lowestPortfolioItemType].ActualEndDate) || 
 							!item.data.Iteration.EndDate) return false;
-						return new Date(item.data.PortfolioItem.PlannedEndDate || item.data.PortfolioItem.ActualEndDate) < 
+						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate || item.data[lowestPortfolioItemType].ActualEndDate) < 
 										new Date(item.data.Iteration.EndDate);
 					}
 				},{

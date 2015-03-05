@@ -41,6 +41,7 @@
 					model: 'State',
 					autoLoad:false,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					fetch:['Name', 'Enabled', 'OrderIndex'],
 					filters: [{
 						property: 'TypeDef.Name',
@@ -63,6 +64,7 @@
 					model: 'TypeDefinition',
 					autoLoad:true,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					fetch:['Ordinal', 'Name'],
 					filters: [{
 						property: 'Parent.Name',
@@ -275,6 +277,7 @@
 				var store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Project',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._projectFields,
 					filters:[filter],
@@ -326,6 +329,7 @@
 					model: 'HierarchicalRequirement',
 					limit:1,
 					pageSize:1,
+					disableMetaChangeEvent: true,
 					fetch: false,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -345,6 +349,7 @@
 					model: 'HierarchicalRequirement',
 					limit:5,
 					pageSize:5,
+					disableMetaChangeEvent: true,
 					fetch: me._userStoryFields,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -372,6 +377,7 @@
 					model: 'HierarchicalRequirement',
 					limit:1,
 					pageSize:1,
+					disableMetaChangeEvent: true,
 					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -397,6 +403,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
 					context:{
@@ -445,6 +452,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -475,6 +483,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -511,6 +520,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -546,6 +556,7 @@
 					model: "Project",
 					fetch: me._projectFields,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
@@ -574,6 +585,7 @@
 					limit:1,
 					pageSize:1,
 					fetch: ['Name', 'ObjectID'],
+					disableMetaChangeEvent: true,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
@@ -594,6 +606,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -613,6 +626,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -637,6 +651,7 @@
 					model: 'Release',
 					limit:Infinity,
 					autoLoad:false,
+					disableMetaChangeEvent: true,
 					fetch: me._releaseFields,
 					filters:[{
 						property:'ReleaseDate',
@@ -661,6 +676,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -680,6 +696,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{
@@ -701,6 +718,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					autoLoad:false,
 					fetch: me._releaseFields,
 					filters:[{

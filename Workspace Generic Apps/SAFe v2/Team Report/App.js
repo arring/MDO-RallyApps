@@ -77,6 +77,7 @@
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
 					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
@@ -125,10 +126,11 @@
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
-				iterationStore = Ext.create("Rally.data.WsapiDataStore", {
+				iterationStore = Ext.create("Rally.data.wsapi.Store", {
 					model: "Iteration",
 					remoteSort: false,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project", "ObjectID"],
 					context:{
 						project: me.getContext().getProject()._ref,
@@ -152,6 +154,7 @@
 		},
 		_getUserStoryFilter: function(){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
 				releaseStartPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
 				releaseEndPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
@@ -169,11 +172,11 @@
 					value: null
 				}).and(
 					Ext.create('Rally.data.wsapi.Filter', {
-						property: 'PortfolioItem.Release.ReleaseStartDate',
+						property: lowestPortfolioItem + '.Release.ReleaseStartDate',
 						operator: '<',
 						value: releaseStartPadding
 					}).and(Ext.create('Rally.data.wsapi.Filter', { 
-						property: 'PortfolioItem.Release.ReleaseDate',
+						property: lowestPortfolioItem + '.Release.ReleaseDate',
 						operator: '>',
 						value: releaseEndPadding
 					}))
@@ -182,6 +185,7 @@
 		},
 		_loadUserStories: function(){	
 			var me=this, 
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
@@ -190,7 +194,7 @@
 						query: me._getUserStoryFilter().toString(),
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'PortfolioItem', 'c_Dependencies'].join(','),
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'].join(','),
 						project:me.ProjectRecord.data._ref,
 						projectScopeDown:false,
 						projectScopeUp:false
@@ -218,6 +222,7 @@
 		},				
 		_loadExtraDataIntegrityStories: function(){
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
 					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
@@ -226,7 +231,7 @@
 						query:me._getExtraDataIntegrityUserStoriesFilter().toString(),
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'PortfolioItem'].join(','),
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
 						workspace:me.getContext().getWorkspace()._ref,
 						includePermissions:true
 					}
@@ -270,21 +275,23 @@
 		},
 					
 		_getStoryCount: function(portfolioItemObjectID){	
-			var me=this;
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			me._TeamCommitsCountHash = me._TeamCommitsCountHash || {};
 			if(typeof me._TeamCommitsCountHash[portfolioItemObjectID] === 'undefined'){
 				me._TeamCommitsCountHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
-					return sum + (userStory.data.PortfolioItem && userStory.data.PortfolioItem.ObjectID == portfolioItemObjectID)*1;
+					return sum + ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID)*1;
 				}, 0);
 			}
 			return me._TeamCommitsCountHash[portfolioItemObjectID];
 		},
 		_getStoriesEstimate: function(portfolioItemObjectID){	
-			var me=this;
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			me._TeamCommitsEstimateHash = me._TeamCommitsEstimateHash || {};
 			if(typeof me._TeamCommitsEstimateHash[portfolioItemObjectID] === 'undefined'){
 				me._TeamCommitsEstimateHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
-					var isStoryInPortfolioItem = userStory.data.PortfolioItem && userStory.data.PortfolioItem.ObjectID == portfolioItemObjectID;
+					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID);
 					return sum + (isStoryInPortfolioItem ? userStory.data.PlanEstimate : 0)*1;
 				}, 0);
 			}
@@ -293,7 +300,8 @@
 
 		/** __________________________________ Data Integrity STUFF ___________________________________**/
 		_getMiniDataIntegrityStoreData: function(){ 
-			var me = this,
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -329,10 +337,10 @@
 				title: 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){
 					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-					if(!item.data.Iteration || !item.data.PortfolioItem || 
-						(!item.data.PortfolioItem.PlannedEndDate && !item.data.PortfolioItem.ActualEndDate) || 
+					if(!item.data.Iteration || !item.data[lowestPortfolioItem] || 
+						(!item.data[lowestPortfolioItem].PlannedEndDate && !item.data[lowestPortfolioItem].ActualEndDate) || 
 						!item.data.Iteration.EndDate) return false;
-					return new Date(item.data.PortfolioItem.PlannedEndDate || item.data.PortfolioItem.ActualEndDate) < 
+					return new Date(item.data[lowestPortfolioItem].PlannedEndDate || item.data[lowestPortfolioItem].ActualEndDate) < 
 									new Date(item.data.Iteration.EndDate);
 				})
 			}];
@@ -391,8 +399,10 @@
 		
 		/**___________________________________ DEPENDENCIES STUFF ___________________________________**/					
 		_isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
-				(!userStoryRecord.data.Release && ((userStoryRecord.data.PortfolioItem || {}).Release || {}).Name === releaseRecord.data.Name);
+				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
 		},	
 		_spliceDependencyFromList: function(dependencyID, dependenciesData){ 
 			for(var i = 0; i<dependenciesData.length; ++i){
@@ -1501,6 +1511,7 @@
 				model:'IntelTeamCommits',
 				autoSync:true,
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'TeamCommitsProxy' + Math.random()
@@ -1854,6 +1865,7 @@
 				model:'IntelVelocity',
 				autoSync:true,
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'VelocityProxy' + Math.random()
@@ -2104,6 +2116,7 @@
 				autoSync:true,
 				model:'IntelRisk',
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'RiskProxy' + Math.random()
@@ -2655,6 +2668,7 @@
 				autoSync:true,
 				model:'IntelPredecessorDependency',
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				proxy: {
 					type:'fastsessionproxy',
 					id:'IntelPredecessorDependencyProxy' + Math.random()
@@ -2934,6 +2948,7 @@
 							data: predecessorItems,
 							autoSync:true,
 							limit:Infinity,
+							disableMetaChangeEvent: true,
 							proxy: {
 								type:'fastsessionproxy',
 								id:'PredecessorItem-' + dependencyID + '-proxy' + Math.random()
@@ -3446,6 +3461,7 @@
 					id:'IntelSuccessorProxy' + Math.random()
 				},
 				limit:Infinity,
+				disableMetaChangeEvent: true,
 				sorters:[dependencySorter],
 				intelUpdate: function(){
 					var successorStore = me.CustomSuccessorStore,

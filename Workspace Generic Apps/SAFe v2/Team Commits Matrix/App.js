@@ -56,12 +56,13 @@
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
+				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
 					limit:Infinity,
+					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
-						'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
+						'Project', 'PlannedEndDate', 'Parent', 'PortfolioItemType', 'Ordinal'],
 					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
 					context:{
 						project: portfolioProject.data._ref,
@@ -104,8 +105,26 @@
 					});
 				});
 		},		
+		_getUserStoryQueryString: function(portfolioItemRecords){
+			var me=this,
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
+				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
+				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', {
+						property: lowestPortfolioItemType + '.ObjectID',
+						value: portfolioItemRecord.data.ObjectID
+					});
+					return filter ? filter.or(newFilter) : newFilter;
+				}, null);
+			return portfolioItemFilter ? portfolioItemFilter.and(leafFilter).toString() : '';
+		},
 		_loadUserStories: function(){
+			/** note: lets say the lowest portfolioItemType is 'Feature'. If we want to get child user stories under a particular Feature,
+					we must query and fetch using the Feature field on the UserStories, NOT PortfolioItem. PortfolioItem field only applies to the 
+					user Stories directly under the feature
+				*/
 			var me = this,
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
 				newMatrixProjectMap = {};
 			
@@ -115,27 +134,20 @@
 						url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
 						params: {
 							pagesize:200,
-							query: (_.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
-								var newFilter = Ext.create('Rally.data.wsapi.Filter', {
-									property: 'PortfolioItem.ObjectID',
-									value: portfolioItemRecord.data.ObjectID
-								});
-								return filter ? filter.or(newFilter) : newFilter;
-							}, null) || '').toString(),
-							fetch:['Name', 'ObjectID', 'Project', 'Release', 'Children',
-								'PlanEstimate', 'FormattedID', 'ScheduleState', 'PortfolioItem'].join(','),
+							query: me._getUserStoryQueryString(portfolioItemRecords),
+							fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
 							workspace:me.getContext().getWorkspace()._ref
 						}
 					};
 				return me._parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
-						var portfolioItemName = storyRecord.data.PortfolioItem.Name,
+						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
 							projectName = storyRecord.data.Project.Name;		
 						if(!newMatrixUserStoryBreakdown[projectName]) 
 							newMatrixUserStoryBreakdown[projectName] = {};
 						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
 							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
-						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord);						
+						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
 						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
 					});
 				});
@@ -226,16 +238,16 @@
 			return window.parent.getWindowHeight() - actualY;
 		},
 			
-		_getIntersectingUserStories: function(portfolioItemRecord, projectName){
+		_getIntersectingUserStoriesData: function(portfolioItemRecord, projectName){
 			return (this.MatrixUserStoryBreakdown[projectName] || {})[portfolioItemRecord.data.Name] || [];
 		},
-		_getTotalUserStoryPoints: function(userStoryList){
-			return _.reduce(userStoryList, function(sum, userStory){ return sum + (userStory.data.PlanEstimate || 0); }, 0);
+		_getTotalUserStoryPoints: function(userStoriesData){
+			return _.reduce(userStoriesData, function(sum, userStoryData){ return sum + (userStoryData.PlanEstimate || 0); }, 0);
 		},
-		_getCompletedUserStoryPoints: function(userStoryList){
-			return _.reduce(userStoryList, function(sum, userStory){ 
-				return sum + ((userStory.data.ScheduleState == 'Completed' || userStory.data.ScheduleState == 'Accepted') ? 
-					(userStory.data.PlanEstimate || 0) : 0);
+		_getCompletedUserStoryPoints: function(userStoriesData){
+			return _.reduce(userStoriesData, function(sum, userStoryData){ 
+				return sum + ((userStoryData.ScheduleState == 'Completed' || userStoryData.ScheduleState == 'Accepted') ? 
+					(userStoryData.PlanEstimate || 0) : 0);
 			}, 0);
 		},
 					
@@ -263,7 +275,7 @@
 		},
 		_getCellBackgroundColor: function(config){
 			var me=this;		
-			if(me.ViewMode == 'Normal' || config.userStories.length === 0) return '';
+			if(me.ViewMode == 'Normal' || config.userStoriesData.length === 0) return '';
 			else if(me.ViewMode == '% Done'){
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return 'rgba(' + (255*(1-fractionDone)>>0) + ', ' + (255*fractionDone>>0) + ', 0, 0.5);';
@@ -271,9 +283,9 @@
 		},
 		_getCellInnerHTML: function(config){
 			var me=this;			
-			if(me.ViewMode == 'Normal') return config.userStories.length;
+			if(me.ViewMode == 'Normal') return config.userStoriesData.length;
 			else if(me.ViewMode == '% Done'){
-				if(config.userStories.length === 0) return '-';
+				if(config.userStoriesData.length === 0) return '-';
 				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
 				return '<span title="' + config.completedPoints + '/' + config.totalPoints + ' Points Completed">' + 
 					(100*fractionDone) + '%</span>';
@@ -292,11 +304,11 @@
 				tableRowDOM = me.MatrixGrid.view.getNode(rowIndex),
 				td = tableRowDOM.childNodes[columnIndex],
 				teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
-				userStories = me._getIntersectingUserStories(portfolioItemRecord, projectName),
+				userStoriesData = me._getIntersectingUserStoriesData(portfolioItemRecord, projectName),
 				config = {
-					userStories: userStories,
-					completedPoints: (100*me._getCompletedUserStoryPoints(userStories)>>0)/100,
-					totalPoints: (100*me._getTotalUserStoryPoints(userStories)>>0)/100,
+					userStoriesData: userStoriesData,
+					completedPoints: (100*me._getCompletedUserStoryPoints(userStoriesData)>>0)/100,
+					totalPoints: (100*me._getTotalUserStoryPoints(userStoriesData)>>0)/100,
 					expected: teamCommit.Expected || false,
 					ceComment: !!teamCommit.CEComment || false,
 					commitment: teamCommit.Commitment || 'Undecided'
@@ -414,7 +426,6 @@
 			}
 			
 			me.PortfolioItemStore = undefined;
-			
 			me.MatrixStore = undefined;		
 		},
 		_reloadEverything: function(){
@@ -725,6 +736,7 @@
 					type:'fastsessionproxy',
 					id: 'Session-proxy-' + Math.random()
 				},
+				disableMetaChangeEvent: true,
 				intelUpdate: function(){			
 					var projectNames = Object.keys(me.MatrixUserStoryBreakdown).sort();
 					_.each(projectNames, function(projectName){ me._updateGridHeader(projectName); });
@@ -918,11 +930,11 @@
 						var portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ return item.data.ObjectID == obejctID; });
 						if(!portfolioItemRecord) return;
 						var teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
-							userStories = me._getIntersectingUserStories(portfolioItemRecord, projectName),
+							userStoriesData = me._getIntersectingUserStoriesData(portfolioItemRecord, projectName),
 							config = {
-								userStories: userStories,
-								completedPoints: (100*me._getCompletedUserStoryPoints(userStories)>>0)/100,
-								totalPoints: (100*me._getTotalUserStoryPoints(userStories)>>0)/100,
+								userStoriesData: userStoriesData,
+								completedPoints: (100*me._getCompletedUserStoryPoints(userStoriesData)>>0)/100,
+								totalPoints: (100*me._getTotalUserStoryPoints(userStoriesData)>>0)/100,
 								expected: teamCommit.Expected || false,
 								ceComment: !!teamCommit.CEComment || false,
 								commitment: teamCommit.Commitment || 'Undecided'
@@ -1065,15 +1077,15 @@
 												'<p><b>CE Comment:</b> ' + (teamCommit.CEComment || '') + '</p>',
 												'<p><b>Objective:</b> ' + (teamCommit.Objective || '') + '</p>',
 												'<p><b>PlanEstimate: </b>',
-													_.reduce(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || [], function(sum, sr){
-														return sum + (sr.data.Children.Count === 0 ? (sr.data.PlanEstimate || 0) : 0); 
+													_.reduce(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || [], function(sum, storyData){
+														return sum + (storyData.PlanEstimate || 0); 
 													}, 0),
 												'<p><b>UserStories: </b><div style="max-height:100px;overflow-y:auto;"><ol>'].join('');
-											(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || []).forEach(function(sr){
-												panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + sr.data.Project.ObjectID + 
-													'd/detail/userstory/' + sr.data.ObjectID + '" target="_blank">' + sr.data.FormattedID + '</a>:' +
-													'<span title="' + sr.data.Name + '">' + 
-													sr.data.Name.substring(0, 40) + (sr.data.Name.length > 40 ? '...' : '') + '</span></li>';
+											(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || []).forEach(function(storyData){
+												panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + storyData.Project.ObjectID + 
+													'd/detail/userstory/' + storyData.ObjectID + '" target="_blank">' + storyData.FormattedID + '</a>:' +
+													'<span title="' + storyData.Name + '">' + 
+													storyData.Name.substring(0, 40) + (storyData.Name.length > 40 ? '...' : '') + '</span></li>';
 											});
 											panelHTML += '</ol></div>';
 										

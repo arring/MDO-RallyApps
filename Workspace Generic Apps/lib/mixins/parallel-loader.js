@@ -80,6 +80,7 @@
 					model: config.model,
 					totalCount: items.length,
 					data: items,
+					disableMetaChangeEvent: true,
 					load: function(){}
 				});
 			});
@@ -92,6 +93,7 @@
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
 					totalCount: items.length,
 					data: items,
+					disableMetaChangeEvent: true,
 					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 						extend: 'Rally.data.lookback.SnapshotModel',
 						fields: JSON.parse(config.params.fields || "[]")
