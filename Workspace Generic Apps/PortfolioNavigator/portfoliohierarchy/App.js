@@ -210,7 +210,7 @@
 						prefs = me.AppsPref.projs[pid] || {};
 					me.PIType = me.getSetting('Type' + USER_TOKEN);
 					if(!me.PIType){
-						me.PIType = me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
+						me.PIType = me.PortfolioItemTypes[0];
 						var newSettings = {};
 						newSettings['Type' + USER_TOKEN] = me.PIType;
 						me.updateSettingsValues({settings:newSettings});
