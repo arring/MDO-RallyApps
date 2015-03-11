@@ -3233,12 +3233,12 @@
 			}
 			return {Predecessors:outputPredecessors, Successors:[]};
 		},
-		_parseDependenciesData: function(userStoriesInRelease){	
+		_parseDependenciesData: function(userStories){	
 			var me=this, 
 				predecessors = [], 
 				successors = [];			
 
-			_.each(userStoriesInRelease, function(userStoryRecord){
+			_.each(userStories, function(userStoryRecord){
 				var dependenciesData = me._parseDependenciesFromUserStory(userStoryRecord);
 				predecessors = predecessors.concat(dependenciesData.Predecessors);
 				successors = successors.concat(dependenciesData.Successors);
@@ -3388,18 +3388,7 @@
 				promises = [];
 			if(!isEditingRisks) promises.push(me._loadPortfolioItems());
 			if(!isEditingDeps) promises.push(me._loadUserStories());
-			return Q.all(promises).then(function(){
-				//we are filtering the userStories in this train that are in this release and only contributing to this trains portfolio
-				var portfolioItems = me.PortfolioItemStore.getRange();
-				me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
-					model: 'HierarchicalRequirement',
-					data: _.filter(me.UserStoryStore.getRange(), function(userStory){
-						return _.some(portfolioItems, function(portfolioItem){ 
-							return portfolioItem.data.ObjectID == (userStory.data[lowestPortfolioItem] || {}).ObjectID;
-						});
-					})
-				});
-			});
+			return Q.all(promises);
 		},
 		_clearEverything: function(){
 			var me=this;
