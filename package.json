@@ -1,0 +1,29 @@
+{
+  "name": "MDO-RallyApps",
+  "version": "0.0.1",
+  "description": "MDO-RallyApps\r =============",
+  "main": " ",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arring/MDO-RallyApps.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/arring/MDO-RallyApps/issues"
+  },
+  "homepage": "https://github.com/arring/MDO-RallyApps",
+  "dependencies": {
+    "lodash": "^3.6.0",
+    "rally": "^0.2.0",
+    "shelljs": "^0.4.0"
+  },
+  "devDependencies": {
+    "grunt": "^0.4.5",
+    "grunt-contrib-jasmine": "^0.8.2",
+    "grunt-contrib-jshint": "^0.11.1"
+  }
+}

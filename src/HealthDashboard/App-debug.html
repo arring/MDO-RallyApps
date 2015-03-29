@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HealthDashboard</title>
+
+
+    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/async/1.22/async.min.js"></script>
+
+    <script type="text/javascript">
+        Rally.loadScripts(
+                [
+                      "App.js",
+                      "lib/lodash.math.js",
+                ],
+        function() {
+            Rally.launchApp('CustomApp', {
+                name:"HealthDashboard"
+            });
+        }, true);
+    </script>
+
+
+    <link rel="stylesheet" type="text/css" href="app.css"/>
+</head>
+<body>
+</body>
+</html>
