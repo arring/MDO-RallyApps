@@ -54,7 +54,7 @@
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
 				var parallelLoaderConfig = {
 					pagesize:20000,
-					url: 'https://rally1.rallydev.com/analytics/v2.0/service/rally/workspace/' + 
+					url: Rally.environment.getServer().baseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -321,7 +321,8 @@
 				});
 
 			/************************************** Train CHART STUFF *********************************************/
-			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots)),
+			var updateOptions = {trendType:'FromStartAccepted'},
+				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:400 },
@@ -351,7 +352,8 @@
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName])),		
+				var updateOptions = {trendType:'FromStartAccepted'},
+					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');

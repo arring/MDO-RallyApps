@@ -33,6 +33,7 @@
 				Ext.data.JsonP.request({
 					url:url,
 					callbackKey: 'jsonp',
+					timeout: 120000,
 					params: thisParams,
 					success: function(resJSON){
 						var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results,
@@ -50,6 +51,7 @@
 								Ext.data.JsonP.request({
 									url:url,
 									callbackKey: 'jsonp',
+									timeout: 120000,
 									params: thisParams,
 									success: function(resJSON){
 										var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;

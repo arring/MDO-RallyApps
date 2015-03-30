@@ -241,7 +241,8 @@
 
 			if(parentTd){
 				// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-				return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				return this.lastFrameWidth;
 			}
 		},
 		createRenderer: function(renderer) {

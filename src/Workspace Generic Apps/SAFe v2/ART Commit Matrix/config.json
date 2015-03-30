@@ -1,11 +1,10 @@
 {
    "name": "ART Commit Matrix",
-   "className": "CommitMatrix",
+   "className": "ArtCommitMatrix",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.3.0/lodash.js",
       "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",

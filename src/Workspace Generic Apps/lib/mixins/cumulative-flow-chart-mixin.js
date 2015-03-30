@@ -80,31 +80,148 @@
 			if(scheduleStates.length >= 5) return {colors: colors};
 			else return {colors: colors.slice(0, scheduleStates.length).concat(colors.slice(scheduleStates.length + 1))};
 		},
+		_getValidTrendTypes: function(){
+			return [
+				'FromZero', 
+				'FromStartAccepted', 
+				'FromStartWork', 
+				'LastWeek', 
+				'LastSprint', 
+				'LinearRegression', 
+				'LinearRegressionFromStartAccepted',
+				'LinearRegressionFromStartWork'
+			];
+		},
 		__addProjectedTrendline: function(data, options){
 			var me=this,
 				totalPoints = options.totalPoints,
 				trendType = options.trendType,
-				validTypes = ['FromZero', 'FromStartAccepted', 'LastWeek', 'LinearRegression', 'WeightedLinearRegression'];
+				validTypes = me._getValidTrendTypes(),
+				slope, intercept, X, Y, 
+				scheduleStateSeries  = _.filter(data.series, function(s){ return me.ScheduleStates.indexOf(s.name) > -1; }),
+				scheduleStatesSumList = _.times(scheduleStateSeries[0].length, function(n){ 
+					return _.reduce(scheduleStateSeries, function(sum, s){ return sum + (s.data[n] || 0); }, 0);
+				});
+			trendType = _.find(validTypes, function(type){ return type == trendType; }) || validTypes[0];
 				
-			//get projected trendline
+			//initialize projected trendline
 			var topScheduleState = me.ScheduleStates.slice(-1)[0],
-				s = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
-				projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:s.data.slice()},
-				begin=0, 
+				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
+				projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:topScheduleStateSeries.data.slice()},
+				begin=0,
 				end=projectedTrend.data.length-1;
 		
-			for(i=1;i<projectedTrend.data.length;++i)
-				if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
-					begin = i-1; break; }
-			for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
-				if(projectedTrend.data[i]!==0){
-					end = i; break; }
-			ratio = (end===begin) ? 0 : (projectedTrend.data[end] - 0)/(end-begin);
-			projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
-				if(j>=begin) return Math.round(100*(0 + (j-begin)*ratio))/100;
-				else return p; 
-			});
+			if(trendType == 'FromZero'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					return (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+				});	
+			}
+			if(trendType == 'FromStartAccepted'){
+				for(i=1;i<projectedTrend.data.length;++i)
+					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});
+			}
+			if(trendType == 'FromStartWork'){
+				for(i=1;i<scheduleStatesSumList.length;++i)
+					if(scheduleStatesSumList[i]!==null && scheduleStatesSumList[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});
+			}
+			if(trendType == 'LastWeek'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 5 < 0 ? 0 : end - 5);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LastSprint'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 10 < 0 ? 0 : end - 10);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegression'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(0, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(0, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
 
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + j*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegressionFromStartAccepted'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=1;i<projectedTrend.data.length;++i)
+					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegressionFromStartWork'){
+				for(i=1;i<scheduleStatesSumList.length;++i)
+					if(scheduleStatesSumList[i]!==null && scheduleStatesSumList[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			
 			//apply label to correct point if needed IGNORE FIRST POINT!
 			for(i=1,len=projectedTrend.data.length; i<len;++i){
 				if(projectedTrend.data[i] >= totalPoints){
@@ -124,9 +241,12 @@
 			}
 			return projectedTrend;
 		},
-		_updateCumulativeFlowChartData: function(data, hideTrends){
+		_updateCumulativeFlowChartData: function(data, options){
+			_.merge({}, options);
 			var me = this, 
 				now = new Date(),
+				trendType = options.trendType,
+				hideTrends = options.hideTrends,
 				datemap = [];
 
 			//get ideal trendline if release has started
@@ -154,7 +274,7 @@
 			});
 
 			if(!hideTrends){
-				var projectedTrend = me.__addProjectedTrendline(data, {totalPoints: totalPoints});
+				var projectedTrend = me.__addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
 				data.series.push(idealTrend);
 			}		

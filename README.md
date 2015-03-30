@@ -23,4 +23,21 @@ all the files are in the dist folder. just copy and paste into a custom app
 In the test folder at the root directory are the Gruntfile and jasmine 
 template you should use for your projects. Copy/Paste them into your
 project if you want to just worry about writing your tests. 
+
+### NOTES ABOUT DEVELOPING EXTERNALLY:
+
+There are a few reasons why you must develop some apps in rally using the copy/paste
+method. 
+	1) rab run doesn't work when you have "../../<rest of path>" in your config.json file
+		because it ignores the ../../ -- one way around this is to open App-Debug.html 
+		using the file:/// protocol in your browser, which uses the relative links correctly.
+	2) CORS, cookies, and iframes: we have no access to Rally's auth cookies when pointed
+		at localhost, or using the file:/// protocol so we use JSONP for the "Posting" to Rally.
+		This doesn't work for updating Dependencies, Risks, or other Custom Fields that make
+		the GET request URL too long for JSONP. (The POST data gets put in the URL since you 
+		cant make a JSONP GET with a request body.
+	3) Hangman Tokens: Rally's server needs to render the __PROJECT_OID__ and other hangman
+		variables you have in your code
+
+Apps that must be developed within Rally include: all the SAFe Apps, Portfolio Hierarchy
 	

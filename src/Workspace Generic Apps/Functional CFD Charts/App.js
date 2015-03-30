@@ -46,7 +46,7 @@
 		_userAppsPref: 'intel-Func-CFD', //dont share release scope settings with other apps	
 
 		/********************************************************** UTIL FUNC ******************************/
-		_getTeamTypeAndNumber: function(scrumName){
+		_getTeamTypeAndNumber: function(scrumName){ //NOTE this assumes that your teamNames are "<TeamType> <Number> - <TrainName>"
 			var name = scrumName.split('-')[0],
 				teamType = name.split(/\d/)[0],
 				number = (teamType === name ? 1 : name.split(teamType)[1])*1;
@@ -64,7 +64,7 @@
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecords){
 				var parallelLoaderConfig = {
 					pagesize:20000,
-					url: 'https://' + window.location.host + '/analytics/v2.0/service/rally/workspace/' + 
+					url: Rally.environment.getServer().baseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -211,7 +211,8 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots)),
+			var updateOptions = {trendType:'FromStartAccepted'},
+				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 						chart: { height:400 },
@@ -242,7 +243,8 @@
 				}),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName])),		
+				var updateOptions = {trendType:'FromStartAccepted'},
+					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');

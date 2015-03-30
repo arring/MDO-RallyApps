@@ -8,7 +8,7 @@
 	margin:10px 0 0 0;
 	padding:0;
 	width: 98%; 
-	height:440px;
+	height:390px;
 	border: 1px solid #AAA; }
 	
 /*********************************** GRIDS  ****************************/
@@ -96,6 +96,8 @@
 		display:block;
 		overflow:hidden; }
 		
+#heatmap .highcharts-yaxis-labels > span {
+	width:134px !important; }
 .heatmap-ylabel {
 	white-space:normal;
 	width:134px; 

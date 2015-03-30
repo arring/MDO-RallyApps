@@ -74,9 +74,9 @@
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
+				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
-					limit:Infinity,
+					limit: Infinity,
 					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
@@ -608,7 +608,7 @@
 		},
 		_updateGrids: function(){
 			var me=this,
-				promises = [];
+				promises = [],
 				isEditingRisks = me._isEditing(me.CustomRisksStore),
 				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore);
 			if(!me._isEditingVelocity && me.IterationStore && me.UserStoryStore)
@@ -828,7 +828,7 @@
 					if(me.ProjectNotInTrain){
 						var projectOID = me.ProjectRecord.data.ObjectID;
 						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].Train){
-							me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID = me.AppsPref.projs[projectOID].Train; });
+							me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].Train; });
 							if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecords[0];
 						} 
 						else me.TrainRecord = me.AllTrainRecords[0];
@@ -1927,8 +1927,8 @@
 				tooltip:'(Plan Estimate)',
 				tooltipType:'title',
 				renderer:function(realVel, meta, record){
-					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.9) ? ' velocity-grid-warning-cell ' : '');
-					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*1) ? ' velocity-grid-error-cell ' : '');
+					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.8) ? ' velocity-grid-warning-cell ' : '');
+					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*0.9) ? ' velocity-grid-error-cell ' : '');
 					return realVel;
 				}
 			}];		
@@ -1958,8 +1958,8 @@
 								return sum + us.data.PlanEstimate;
 							}, 0);
 						}, 0);
-					meta.tdCls += ((real < planned*0.9) ? ' velocity-grid-warning-cell ' : '');
-					meta.tdCls += ((real*1 === 0 || real*1 > planned) ? ' velocity-grid-error-cell ' : '');
+					meta.tdCls += ((real < planned*0.8) ? ' velocity-grid-warning-cell ' : '');
+					meta.tdCls += ((real === 0 || real > planned*0.9) ? ' velocity-grid-error-cell ' : '');
 					return real;
 				}
 			}];
@@ -2048,8 +2048,8 @@
 						if(val == 'Unsized Stories') meta.tdCls += ' green-bg-cell';
 						if(val == 'Improperly Sized Stories') meta.tdCls += ' aqua-bg-cell';
 						if(val == 'Stories in Release without Iteration') meta.tdCls += ' silver-bg-cell';
-						if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' orange-bg-cell';
-						if(val == 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' lime-bg-cell';
+						if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' teal-bg-cell';
+						if(val == 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' yellow-bg-cell';
 						return val; 
 					}
 				},{

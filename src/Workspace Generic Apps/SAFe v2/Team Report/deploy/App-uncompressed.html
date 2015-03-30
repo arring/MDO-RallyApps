@@ -895,8 +895,10 @@
 			var me=this, handle;
 			if(window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
-				handle.hide();
-				handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				if(handle) {
+					handle.hide();
+					handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				}
 			}
 		},	
 		_initDisableResizeHandle: function(){
@@ -920,8 +922,8 @@
 		__getMessageBoxY: function(){ 
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
-				ph = window.parent.getWindowHeight(), 
-				ps = window.parent.getScrollY(), 
+				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
+				ps = window.frameElement ? window.parent.getScrollY() : window.scrollY,
 				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
 				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
 			return iyOffset<0 ? 0 : iyOffset;
@@ -1504,7 +1506,8 @@
 
 			if(parentTd){
 				// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-				return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				return this.lastFrameWidth;
 			}
 		},
 		createRenderer: function(renderer) {
@@ -1794,6 +1797,7 @@
 		if(Ext.Element.prototype.syncContent && version.toString() === '4.1.0') proto.extVersion = 40101;
 	});
 }());
+
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -3099,9 +3103,9 @@
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
+				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
-					limit:Infinity,
+					limit: Infinity,
 					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: me._portfolioItemFields,
@@ -3633,7 +3637,7 @@
 		},
 		_updateGrids: function(){
 			var me=this,
-				promises = [];
+				promises = [],
 				isEditingRisks = me._isEditing(me.CustomRisksStore),
 				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore);
 			if(!me._isEditingVelocity && me.IterationStore && me.UserStoryStore)
@@ -3853,7 +3857,7 @@
 					if(me.ProjectNotInTrain){
 						var projectOID = me.ProjectRecord.data.ObjectID;
 						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].Train){
-							me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID = me.AppsPref.projs[projectOID].Train; });
+							me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].Train; });
 							if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecords[0];
 						} 
 						else me.TrainRecord = me.AllTrainRecords[0];
@@ -4952,8 +4956,8 @@
 				tooltip:'(Plan Estimate)',
 				tooltipType:'title',
 				renderer:function(realVel, meta, record){
-					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.9) ? ' velocity-grid-warning-cell ' : '');
-					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*1) ? ' velocity-grid-error-cell ' : '');
+					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.8) ? ' velocity-grid-warning-cell ' : '');
+					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*0.9) ? ' velocity-grid-error-cell ' : '');
 					return realVel;
 				}
 			}];		
@@ -4983,8 +4987,8 @@
 								return sum + us.data.PlanEstimate;
 							}, 0);
 						}, 0);
-					meta.tdCls += ((real < planned*0.9) ? ' velocity-grid-warning-cell ' : '');
-					meta.tdCls += ((real*1 === 0 || real*1 > planned) ? ' velocity-grid-error-cell ' : '');
+					meta.tdCls += ((real < planned*0.8) ? ' velocity-grid-warning-cell ' : '');
+					meta.tdCls += ((real === 0 || real > planned*0.9) ? ' velocity-grid-error-cell ' : '');
 					return real;
 				}
 			}];
@@ -5073,8 +5077,8 @@
 						if(val == 'Unsized Stories') meta.tdCls += ' green-bg-cell';
 						if(val == 'Improperly Sized Stories') meta.tdCls += ' aqua-bg-cell';
 						if(val == 'Stories in Release without Iteration') meta.tdCls += ' silver-bg-cell';
-						if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' orange-bg-cell';
-						if(val == 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' lime-bg-cell';
+						if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' teal-bg-cell';
+						if(val == 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' yellow-bg-cell';
 						return val; 
 					}
 				},{
@@ -7085,6 +7089,7 @@
 	});
 }());
 
+
             Rally.launchApp('TeamReport', {
                 name:"Team Report",
 	            parentRepos:""
@@ -7308,11 +7313,11 @@
 .silver-bg-cell {
   background-color: #DDDDDD !important;
 }
-.orange-bg-cell {
-  background-color: #FF851B !important;
+.teal-bg-cell {
+  background-color: #39CCCC !important;
 }
-.lime-bg-cell {
-  background-color: #01FF70 !important;
+.yellow-bg-cell {
+  background-color: #FFDC00 !important;
 }
 .mini-data-integrity-num-cell {
   text-align: center;

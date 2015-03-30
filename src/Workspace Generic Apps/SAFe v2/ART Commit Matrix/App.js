@@ -2,7 +2,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('CommitMatrix', {
+	var VALID_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/;
+	
+	Ext.define('ArtCommitMatrix', {
 		extend: 'IntelRallyApp',
 		mixins:[
 			'WindowListener',
@@ -52,6 +54,117 @@
 		
 		_userAppsPref: 'intel-SAFe-apps-preference',
 
+		/**___________________________________ CONFIG/SETTINGS ___________________________________*/
+		config: {
+			defaultSettings: {
+				'Enable-Groups': false,
+				Groups: ''
+			}
+		},				
+		getSettingsFields: function() {
+			if(!Rally.getApp().getContext().getPermissions().isWorkspaceOrSubscriptionAdmin()) return [];
+			else return [{
+				name: 'Enable-Groups',
+				xtype:'rallycheckboxfield',
+				id: 'EnableGroupsCheckbox',
+				label: 'Enable Column Groupings',
+				labelWidth: 120,
+				bubbleEvents: ['change'] 
+			},{
+				xtype:'container',
+				id: 'GroupingInstructions',
+				html:[
+					'<hr/>',
+					'<div>',
+						'<b>Set The Column Groupings</b>',
+						'<p>Group Columns By keywords. Syntax is:</p>',
+						'<div style="padding-left:5px;">',
+							'<p>GroupName1:keyword1,keyword2,keyword3;</p>',
+							'<p>GroupName2:keyword1,keyword2;</p>',
+							'<p>...</p>',
+						'</div>',
+					'</div>'
+				].join('\n'),
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else field.show();
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue) this.hide();
+							else this.show();
+						}
+					}
+				}
+			},{
+				name: 'Groups',
+				xtype:'textarea',
+				id: 'GroupingTextarea',
+				label: 'Column Groups',
+				labelWidth: 120, width:500, height:150,
+				resizable:true,
+				resizeHandles:'se s e',
+				bubbleEvents: ['change'],
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else field.show();
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue) this.hide();
+							else this.show();
+						}
+					}
+				}
+			},{
+				xtype:'container',
+				id: 'SyntaxNotifier',
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else {
+							field.show();
+							setTimeout(function setInitialColor(){
+								var el = field.getEl(),
+									goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+									badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>',
+									textElContainer = form.down('#GroupingTextarea');
+								if(el && textElContainer && textElContainer.getEl().down('textarea')){
+									if(textElContainer.getEl().down('textarea').getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
+									else el.setHTML(badHTML);
+								}
+								else setTimeout(setInitialColor, 10);
+							}, 0);
+						}
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue){
+								this.hide();
+								return;
+							}
+							else this.show();
+						}
+						var el = this.getEl(),
+							textEl = this.up('form').down('#GroupingTextarea').getEl().down('textarea'),
+							goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+							badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
+						if(textEl.getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
+						else el.setHTML(badHTML);
+					}
+				}
+			}];
+		},
+				
+		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
@@ -126,32 +239,38 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
-				newMatrixProjectMap = {};
+				newMatrixProjectMap = {},
+				portfolioItemCount = me.PortfolioItemStore.getRange().length,
+				portfolioItemPageSize = 20,
+				requestCount = (portfolioItemCount/portfolioItemPageSize>>0) + (portfolioItemCount%portfolioItemPageSize ? 1 : 0);
 			
-			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
-				var config = {
-						model: me.UserStory,
-						url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
-						params: {
-							pagesize:200,
-							query: me._getUserStoryQueryString(portfolioItemRecords),
-							fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
-							workspace:me.getContext().getWorkspace()._ref
-						}
-					};
-				return me._parallelLoadWsapiStore(config).then(function(store){
-					_.each(store.getRange(), function(storyRecord){
-						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
-							projectName = storyRecord.data.Project.Name;		
-						if(!newMatrixUserStoryBreakdown[projectName]) 
-							newMatrixUserStoryBreakdown[projectName] = {};
-						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
-							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
-						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
-						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
+			return Q.all(_.map(_.times(requestCount, 
+				function(n){ return me.PortfolioItemStore.getRange().slice(n*portfolioItemPageSize, (n+1)*portfolioItemPageSize); }), 
+				function(portfolioItemRecords){
+					var config = {
+							model: me.UserStory,
+							url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
+							params: {
+								pagesize:200,
+								query: me._getUserStoryQueryString(portfolioItemRecords),
+								fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
+								workspace:me.getContext().getWorkspace()._ref
+							}
+						};
+					return me._parallelLoadWsapiStore(config).then(function(store){
+						_.each(store.getRange(), function(storyRecord){
+							var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
+								projectName = storyRecord.data.Project.Name;		
+							if(!newMatrixUserStoryBreakdown[projectName]) 
+								newMatrixUserStoryBreakdown[projectName] = {};
+							if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
+								newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
+							newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
+							newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
+						});
 					});
-				});
-			}))
+				})
+			)
 			.then(function(){
 				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
 				me.MatrixProjectMap = newMatrixProjectMap;
@@ -486,6 +605,8 @@
 			me.ViewMode = 'Normal';
 			me._initDisableResizeHandle();
 			me._initFixRallyDashboard();
+			me.EnableColumnGroups = me.getSetting('Enable-Groups');
+			me.ColumnGroups = me.EnableColumnGroups && me.getSetting('Groups').match(VALID_GROUPING_SYNTAX) && me.getSetting('Groups');
 			me._initGridResize();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
@@ -762,7 +883,6 @@
 				dataIndex:'MoSCoW',
 				tdCls: 'moscow-cell intel-editor-cell',	
 				width:100,
-				maxHeight:80,
 				editor:{
 					xtype:'intelfixedcombo',
 					store: Ext.create('Ext.data.Store', {
@@ -830,7 +950,6 @@
 				text:'#', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:50,
-				maxHeight:80,
 				editor:false,
 				sortable:true,
 				resizable:false,
@@ -852,7 +971,6 @@
 				text:me.PortfolioItemTypes[0], 
 				dataIndex:'PortfolioItemName',
 				width:200,
-				maxHeight:80,
 				editor:false,
 				resizable:false,
 				draggable:false,
@@ -867,7 +985,6 @@
 				text: me.PortfolioItemTypes.slice(-1)[0], 
 				dataIndex:'TopPortfolioItemName',
 				width:90,
-				maxHeight:80,
 				editor:false,
 				sortable:true,
 				resizable:false,
@@ -899,7 +1016,6 @@
 				text:'Planned End',
 				dataIndex:'PortfolioItemPlannedEnd',
 				width:60,
-				maxHeight:80,
 				editor:false,
 				resizable:false,
 				draggable:false,
@@ -909,9 +1025,9 @@
 				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-'); }
 			}];
 		
-			var columnCfgs = defaultColumnCfgs.slice();
+			var teamColumnCfgs = [];
 			Object.keys(me.MatrixUserStoryBreakdown).sort().forEach(function(projectName){
-				columnCfgs.push({
+				teamColumnCfgs.push({
 					text: projectName,
 					dataIndex:'PortfolioItemObjectID',
 					tdCls: 'intel-editor-cell',
@@ -945,6 +1061,31 @@
 					}
 				});
 			});
+			if(me.ColumnGroups){
+				var keywordMap = _.reduce(me.ColumnGroups.split(';'), function(map, row){
+					if(!row) return map;
+					var split = row.split(':'),
+						keywords = split[1].trim(),
+						groupName = split[0].trim();
+					_.each(keywords.split(','), function(keyword){ map[keyword.trim()] = groupName; });
+					return map;
+				}, {});
+				teamColumnCfgs = _.map(_.union(_.values(keywordMap)).concat(['OTHER']), function(groupName){
+					return {
+						text: groupName,
+						draggable:false,
+						menuDisabled:true,
+						sortable:false,
+						resizable:false,
+						columns: _.filter(teamColumnCfgs, function(cfg){ 
+							var matchedGroup = _.find(keywordMap, function(groupName, keyword){ return cfg.text.indexOf(keyword) > -1; });
+							if(groupName == 'OTHER') return !matchedGroup;
+							else return matchedGroup == groupName;							
+						})
+					};
+				});
+			}
+			var columnCfgs = defaultColumnCfgs.concat(teamColumnCfgs);
 			
 			me.MatrixGrid = me.add({
 				xtype: 'grid',

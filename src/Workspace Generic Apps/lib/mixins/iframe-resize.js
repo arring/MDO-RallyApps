@@ -63,8 +63,10 @@
 			var me=this, handle;
 			if(window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
-				handle.hide();
-				handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				if(handle) {
+					handle.hide();
+					handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				}
 			}
 		},	
 		_initDisableResizeHandle: function(){

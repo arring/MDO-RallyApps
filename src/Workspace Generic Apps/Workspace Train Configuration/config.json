@@ -4,6 +4,7 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "../lib/data/intel-models.js",
       "../lib/intel-rally-app.js",
       "../lib/mixins/window-listener.js",
@@ -12,7 +13,6 @@
       "../lib/components/component-column.js",
       "../lib/overrides/fast-component-column.js",
       "../lib/components/intel-combobox.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "App.js"
    ],
    "css": [

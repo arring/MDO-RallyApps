@@ -5,7 +5,7 @@
    "sdk": "2.0rc3",
    "javascript": [
       "https://code.jquery.com/jquery-2.1.1.js",
-      "https://mdoproceffrpt/cdn/highcharts/highcharts-v4.0.4-modified.js",
+      "https://code.highcharts.com/highcharts.src.js",
       "https://code.highcharts.com/modules/heatmap.src.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "../lib/intel-rally-app.js",

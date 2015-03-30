@@ -4,11 +4,10 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
-      "../../bower_components/sylvester/sylvester.src.js",
-      "../../bower_components/jquery/dist/jquery.js",
-      "../../bower_components/q/q.js",
-      "../../bower_components/lodash/lodash.js",
-      "../../bower_components/highcharts/highcharts.src.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/sylvester/0.1.3/sylvester.js",
+      "https://code.jquery.com/jquery-2.1.1.js",
+      "https://code.highcharts.com/highcharts.src.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "../lib/intel-rally-app.js",
       "../lib/data/intel-models.js",
       "../lib/mixins/window-listener.js",
@@ -26,12 +25,5 @@
    "css": [
       "../lib/css/base.css",
       "app.css"
-   ],
-   "ignoreJSHint": [
-      "../../bower_components/sylvester/sylvester.src.js",
-      "../../bower_components/jquery/dist/jquery.js",
-      "../../bower_components/q/q.js",
-      "../../bower_components/lodash/lodash.js",
-      "../../bower_components/highcharts/highcharts.src.js"
    ]
 }

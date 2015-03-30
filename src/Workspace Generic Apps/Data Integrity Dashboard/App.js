@@ -56,8 +56,6 @@
 			'#7FDBFF', //AQUA
 			'#DDDDDD', //SILVER
 			'#39CCCC', //TEAL
-			'#FF851B', //ORANGE
-			'#3D9970', //OLIVE
 			'#01FF70', //LIME
 			'#FFDC00', //YELLOW
 			'#0074D9' //BLUE
@@ -97,7 +95,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query:me._getUserStoryFilter().toString(),
@@ -125,7 +123,7 @@
 			if(!me.TrainRecord) return Q();
 			var config = {
 				model: me[lowestPortfolioItem],
-				url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
+				url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
 				params: {
 					project:me.TrainPortfolioProject.data._ref,
 					projectScopeUp:false,
@@ -197,7 +195,10 @@
 		},	
 		_addScrollEventListener: function(){
 			var me=this;
-			me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
+			setTimeout(function addScrollListener(){
+				if(me.getEl()) me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
+				else setTimeout(addScrollListener, 10);
+			}, 0);
 		},
 		
 		/******************************************************* LAUNCH *****************************************************/
@@ -270,6 +271,7 @@
 		_releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+			me._clearToolTip();
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
@@ -299,6 +301,7 @@
 		_scrumPickerSelected: function(combo, records){
 			var me=this, recordName = records[0].data.Name;
 			if((!me.CurrentScrum && recordName == 'All') || (me.CurrentScrum && me.CurrentScrum.data.Name == recordName)) return;
+			me._clearToolTip();
 			if(recordName == 'All') me.CurrentScrum = null;
 			else me.CurrentScrum = _.find(me.LeafProjects, function(p){ return p.data.Name == recordName; });
 			return me._redrawEverything();
@@ -485,7 +488,9 @@
 										me.CurrentScrum = scrum;
 										me.ScrumPicker.setValue(scrum.data.Name);
 										me._redrawEverything()
-											.then(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); })
+											.then(function(){ 
+												setTimeout(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); }, 10);
+											})
 											.done();
 									}
 									else Ext.get(grid.originalConfig.id).scrollIntoView(me.el);
@@ -556,7 +561,7 @@
 			return {       
 				chart: {
 					type: 'heatmap',
-					height:420,
+					height:370,
 					marginTop: 10,
 					marginLeft: 140,
 					marginBottom: 80
@@ -652,7 +657,7 @@
 			}
 			return {
 				chart: {
-					height:420,
+					height:370,
 					marginLeft: -15,
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -881,7 +886,7 @@
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						if(item.data.Children.Count === 0) return false;
 						var pe = item.data.PlanEstimate;
-						return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
+						return pe!==null && pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 					}
 				},{
 					showIfLeafProject:true,
@@ -897,24 +902,6 @@
 					filterFn:function(item){ 
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						return !item.data.Iteration; 
-					}
-				},{
-					showIfLeafProject: true,
-					title: 'Stories in Current Sprint With No Description',
-					id: 'grid-stories-no-description-current-sprint',
-					model: 'UserStory',
-					columns: defaultUserStoryColumns.concat([{
-						text: 'Description',
-						dataIndex: 'Description',
-						tdCls:'editor-cell'
-					}]),
-					side: 'Left',
-					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(!item.data.Iteration) return false;
-						return new Date(item.data.Iteration.StartDate) <= now && 
-							new Date(item.data.Iteration.EndDate) >= now &&
-							!item.data.Description;
 					}
 				},{
 					showIfLeafProject:true,
@@ -978,26 +965,6 @@
 							!item.data.Iteration.EndDate) return false;
 						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate || item.data[lowestPortfolioItemType].ActualEndDate) < 
 										new Date(item.data.Iteration.EndDate);
-					}
-				},{
-					showIfLeafProject:true,
-					title: 'Stories in Current Sprint With No Task',
-					id: 'grid-stories-no-task-current-sprint',
-					model: 'UserStory',
-					columns: defaultUserStoryColumns.concat([{
-						text:'',
-						renderer: function(value, meta, record){
-							return '<a target="_blank" href="https://rally1.rallydev.com/#/' + record.data.Project.ObjectID + 
-								'ud/detail/task/new?WorkProduct=/hierarchicalrequirement/' + record.data.ObjectID + '">Add Task</a>';
-						}
-					}]),
-					side: 'Right',
-					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(!item.data.Iteration) return false;
-						return new Date(item.data.Iteration.StartDate) <= now && 
-							new Date(item.data.Iteration.EndDate) >= now &&
-							item.data.Tasks.Count === 0;
 					}
 				},{
 					showIfLeafProject:false,
