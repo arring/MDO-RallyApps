@@ -27,7 +27,7 @@ module.exports = function(grunt){
 		this.filesSrc.forEach(function(gruntFile){
 			cd(grunt.config('cwd'));
 			var appDir = path.resolve(path.dirname(gruntFile)),
-				appName = require(format('%s/config.json', appDir)).name;
+				appName = require(format('%s/package.json', appDir)).name;
 			echo('JShinting ' + appName);
 			cd(appDir);
 			exec('grunt jshint');
@@ -38,7 +38,7 @@ module.exports = function(grunt){
 		this.filesSrc.forEach(function(gruntFile){
 			cd(grunt.config('cwd'));
 			var appDir = path.resolve(path.dirname(gruntFile)),
-				appName = require(format('%s/config.json', appDir)).name;
+				appName = require(format('%s/package.json', appDir)).name;
 			echo('Testing ' + appName);
 			cd(appDir);
 			exec('grunt jasmine');
@@ -48,6 +48,7 @@ module.exports = function(grunt){
 	grunt.registerTask('build', function(){ 
 		cd(grunt.config('cwd'));
 		exec('node scripts/build');
+		cd(grunt.config('cwd'));
 	});
 	grunt.registerTask('default', ['jshint', 'appsjshint', 'test', 'build']);
 	
@@ -55,7 +56,7 @@ module.exports = function(grunt){
 		this.filesSrc.forEach(function(packageJSON){
 			cd(grunt.config('cwd'));
 			var appDir = path.resolve(path.dirname(packageJSON)),
-				appName = require(format('%s/config.json', appDir)).name;
+				appName = require(path.resolve(packageJSON)).name;
 			echo('Installing ' + appName);
 			cd(appDir);
 			exec('npm install');

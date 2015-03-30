@@ -806,8 +806,8 @@
 		__getMessageBoxY: function(){ 
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
-				ph = window.parent.getWindowHeight(), 
-				ps = window.parent.getScrollY(), 
+				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
+				ps = window.frameElement ? window.parent.getScrollY() : window.scrollY,
 				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
 				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
 			return iyOffset<0 ? 0 : iyOffset;

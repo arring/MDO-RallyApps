@@ -895,8 +895,10 @@
 			var me=this, handle;
 			if(window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
-				handle.hide();
-				handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				if(handle) {
+					handle.hide();
+					handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				}
 			}
 		},	
 		_initDisableResizeHandle: function(){
@@ -920,8 +922,8 @@
 		__getMessageBoxY: function(){ 
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
-				ph = window.parent.getWindowHeight(), 
-				ps = window.parent.getScrollY(), 
+				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
+				ps = window.frameElement ? window.parent.getScrollY() : window.scrollY,
 				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
 				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
 			return iyOffset<0 ? 0 : iyOffset;
@@ -1119,6 +1121,7 @@
 				Ext.data.JsonP.request({
 					url:url,
 					callbackKey: 'jsonp',
+					timeout: 120000,
 					params: thisParams,
 					success: function(resJSON){
 						var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results,
@@ -1136,6 +1139,7 @@
 								Ext.data.JsonP.request({
 									url:url,
 									callbackKey: 'jsonp',
+									timeout: 120000,
 									params: thisParams,
 									success: function(resJSON){
 										var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;
@@ -1468,7 +1472,8 @@
 
 			if(parentTd){
 				// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
-				return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				return this.lastFrameWidth;
 			}
 		},
 		createRenderer: function(renderer) {
@@ -1758,6 +1763,7 @@
 		if(Ext.Element.prototype.syncContent && version.toString() === '4.1.0') proto.extVersion = 40101;
 	});
 }());
+
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
