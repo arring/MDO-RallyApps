@@ -4,7 +4,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('TrainCfdCharts', {
+	Ext.define('TrainCfdCharts', { 
 		extend: 'IntelRallyApp',
 		cls:'app',
 		requires:[
@@ -54,7 +54,7 @@
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
 				var parallelLoaderConfig = {
 					pagesize:20000,
-					url: Rally.environment.getServer().baseUrl + '/analytics/v2.0/service/rally/workspace/' + 
+					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -84,7 +84,7 @@
 			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithName = _.filter(releaseRecords, function(r){ 
-						return r.data.Project && r.data.Project.TeamMembers.Count > 0; 
+						return r.data.Project && r.data.Project.TeamMembers.Count > 0; //ignore projects without teamMembers
 					});
 				});
 		},
@@ -191,7 +191,7 @@
 		_reloadEverything:function(){ 
 			/** performance NOTE: i tried scoping the user stories to the train instead of loading individually per scrum. 
 					It was really slow. So we have to deal with not being 100% sure that the data is accurate in the CFD 
-					(if a project got closed)
+					(if a project got closed, its stories wont show up)
 				*/
 			var me=this;
 			me.setLoading('Loading Stores');	
@@ -321,7 +321,7 @@
 				});
 
 			/************************************** Train CHART STUFF *********************************************/
-			var updateOptions = {trendType:'FromStartAccepted'},
+			var updateOptions = {trendType:'LastSprint'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -352,7 +352,7 @@
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'FromStartAccepted'},
+				var updateOptions = {trendType:'LastSprint'},
 					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);

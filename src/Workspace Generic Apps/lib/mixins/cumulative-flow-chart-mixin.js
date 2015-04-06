@@ -2,7 +2,8 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	var ChartsTooltipDatemap = {}; //closure variable that maps the x values to date strings -- per chart
+	var ChartsTooltipDatemap = {}, //closure variable that maps the x values to date strings -- per chart
+		RSquaredMap = {};
 
 	Ext.define('CumulativeFlowChartMixin', {
 		requires:['IntelRallyApp', 'IntelWorkweek'],
@@ -43,10 +44,12 @@
 			tooltip: {
 				formatter: function () {
 					var sum = 0,
-						datemap = ChartsTooltipDatemap[this.series.chart.container.id];
+						datemap = ChartsTooltipDatemap[this.series.chart.container.id],
+						rSquaredMap = RSquaredMap[this.series.chart.container.id];
 					for(var i=4; i>= this.series.index; --i) 
 						sum += this.series.chart.series[i].data[this.point.x].y;
 					return "<b>" + this.x + '</b>' + (datemap ? ' (' + datemap[this.point.x] + ')' : '') + 
+						((rSquaredMap && rSquaredMap[this.series.index]) ? '<br/><b>R<sup>2</sup> = ' + rSquaredMap[this.series.index].val : '') + 
 						"<br /><b>" + this.series.name + "</b>: " + ((100*this.y>>0)/100) +
 						(this.series.index <=4 ? "<br /><b>Total</b>: " + ((100*sum>>0)/100) : '');
 				}
@@ -57,7 +60,7 @@
 						enabled: false,
 						states: {
 							hover: {
-								enabled: true
+								enabled: true 
 							}
 						}
 					},
@@ -91,6 +94,16 @@
 				'LinearRegressionFromStartAccepted',
 				'LinearRegressionFromStartWork'
 			];
+		},
+		__getRSquared: function(ySeries, fSeries, lastIndex){
+			//using algorithm from http://en.wikipedia.org/wiki/Coefficient_of_determination
+			if(lastIndex <= 0) return 1;
+			var ys = ySeries.data.slice(0, lastIndex),
+				fs = fSeries.data.slice(0, lastIndex),
+				meanY= _.reduce(ys, function(sum, yi){ return sum+(yi|| 0); }, 0)/ys.length,
+				SStot = _.reduce(ys, function(sum, yi){ return sum + Math.pow((yi|| 0)-meanY, 2); }, 0),
+				SSres = _.reduce(fs, function(sum, fi, i){ return sum + Math.pow((ys[i] || 0) - (fi || 0), 2); }, 0);
+			return (1000*(1 - SSres/SStot)>>0)/1000;
 		},
 		__addProjectedTrendline: function(data, options){
 			var me=this,
@@ -147,7 +160,7 @@
 				});
 			}
 			if(trendType == 'LastWeek'){
-				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0) 
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
 				begin = (end - 5 < 0 ? 0 : end - 5);
@@ -173,8 +186,8 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				X = $M(_.map(projectedTrend.data.slice(0, end), function(p, j){ return [1, j]; }));
-				Y = $M(_.map(projectedTrend.data.slice(0, end), function(p){ return p; }));
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
 				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
 				slope = b.elements[1][0];
 				intercept = b.elements[0][0];
@@ -247,8 +260,22 @@
 				now = new Date(),
 				trendType = options.trendType,
 				hideTrends = options.hideTrends,
-				datemap = [];
+				todayIndex = -1,
+				datemap = [],
+				rSquaredMap = [];
 
+			//get the index that is today
+			if(new Date(data.categories[0]) > now) todayIndex = -1;
+			else if(new Date(data.categories[data.categories.length - 1]) < now) todayIndex = data.categories.length;
+			else todayIndex = _.reduce(data.categories, function(savedI, c, i){ 
+				if(new Date(c) > now && savedI === -1) savedI = (i-1);
+				return savedI;
+			}, -1);
+			
+			//get top scheduleState series
+			var topScheduleState = me.ScheduleStates.slice(-1)[0],
+				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; });
+				
 			//get ideal trendline if release has started
 			var totalPoints = (new Date(data.categories[0]) > now ? 0 : 
 					_.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); 
@@ -276,9 +303,11 @@
 			if(!hideTrends){
 				var projectedTrend = me.__addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
+				rSquaredMap[data.series.length-1] = {val: me.__getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		
 			data.datemap = datemap;
+			data.rSquaredMap = rSquaredMap;
 			
 			return data;
 		},
@@ -292,6 +321,9 @@
 		},
 		_setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
 			ChartsTooltipDatemap[chartContainerId] = datemap;
+		},
+		_setCumulativeFlowChartRSquaredMap: function(chartContainerId, rSquaredMap){
+			RSquaredMap[chartContainerId] = rSquaredMap;
 		}
 	});
 }());

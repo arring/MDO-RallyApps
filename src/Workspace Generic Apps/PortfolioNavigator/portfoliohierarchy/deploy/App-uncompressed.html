@@ -3,7 +3,7 @@
 <head>
     <title>Portfolio Hierarchy</title>
 
-    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
 
     <script type="text/javascript">
@@ -156,6 +156,7 @@
 		},
 		_configureIntelRallyApp: function(){
 			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 					return Q.all([
@@ -853,7 +854,10 @@
 	});
 }());
                 /** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute */
+	you do stuff and then you call the callback passed to you so the next function can execute.
+	
+	IT WILL ALWAYS PERFORM YOUR QUEUED FUNCTION WRAPPED IN A setTimeout. 
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -868,7 +872,11 @@
 			if(me.QueueOfFuncs[queueName]){
 				me.QueueOfFuncs[queueName].shift();
 				if(!me.QueueOfFuncs[queueName].length) return;
-				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+				else {
+					setTimeout(function(){
+						me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+					}, 0);
+				}
 			}
 		},
 		
@@ -879,7 +887,9 @@
 			if(typeof callback !== 'function') throw 'ERROR: not a function';
 			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
 				me.QueueOfFuncs[queueName] = [callback];
-				callback.call(me, me._dequeue.bind(me, queueName));
+				setTimeout(function(){
+					callback.call(me, me._dequeue.bind(me, queueName));
+				}, 0);
 			}
 			else me.QueueOfFuncs[queueName].push(callback);
 		}
@@ -1089,9 +1099,10 @@
                 /** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	var USER_TOKEN = (__PROJECT_OID__ + '-' + __USER_OID__);
-	
+
+	var context = Rally.environment.getContext(),
+		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
+
 	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
@@ -1126,16 +1137,16 @@
 		config: {
 			defaultSettings: (function(){
 				var s = {};
-				s['Type' + USER_TOKEN] = ''; 
-				s['QueryFilter' + USER_TOKEN] = '';
-				s['InferPortfolioLocation' + USER_TOKEN] = true;
-				s['PortfolioLocation' + USER_TOKEN] = 0;
+				s['Type' + SETTINGS_TOKEN] = ''; 
+				s['QueryFilter' + SETTINGS_TOKEN] = '';
+				s['InferPortfolioLocation' + SETTINGS_TOKEN] = true;
+				s['PortfolioLocation' + SETTINGS_TOKEN] = 0;
 				return s;
 			}())
 		},				
 		getSettingsFields: function() {
 			return [{
-				name: 'Type' + USER_TOKEN,
+				name: 'Type' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -1171,18 +1182,18 @@
 				label: 'Type',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'QueryFilter' + USER_TOKEN,
+				name: 'QueryFilter' + SETTINGS_TOKEN,
 				xtype: 'textfield',
 				label: 'Query Filter',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'InferPortfolioLocation' + USER_TOKEN,
+				name: 'InferPortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycheckboxfield',
 				label: 'Infer Portfolio Location',
 				labelWidth: 120, width:'100%',
 				bubbleEvents: ['change'] 
 			},{
-				name: 'PortfolioLocation' + USER_TOKEN,
+				name: 'PortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -1296,16 +1307,16 @@
 				.then(function(){
 					var pid = me.ProjectRecord.data.ObjectID, 
 						prefs = me.AppsPref.projs[pid] || {};
-					me.PIType = me.getSetting('Type' + USER_TOKEN);
+					me.PIType = me.getSetting('Type' + SETTINGS_TOKEN);
 					if(!me.PIType){
 						me.PIType = me.PortfolioItemTypes[0];
 						var newSettings = {};
-						newSettings['Type' + USER_TOKEN] = me.PIType;
+						newSettings['Type' + SETTINGS_TOKEN] = me.PIType;
 						me.updateSettingsValues({settings:newSettings});
 					}
-					me.QueryFilter = me.getSetting('QueryFilter' + USER_TOKEN);
-					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + USER_TOKEN);
-					me.PortfolioLocation = me.getSetting('PortfolioLocation' + USER_TOKEN);
+					me.QueryFilter = me.getSetting('QueryFilter' + SETTINGS_TOKEN);
+					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + SETTINGS_TOKEN);
+					me.PortfolioLocation = me.getSetting('PortfolioLocation' + SETTINGS_TOKEN);
 					me.FilterOnRelease = prefs.FilterOnRelease || false;
 					me.FilterReleaseName = prefs.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
 					me.FilterOnProject = prefs.FilterOnProject || false;

@@ -188,7 +188,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
@@ -225,7 +225,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query:me._getExtraDataIntegrityUserStoriesFilter().toString(),
@@ -756,7 +756,7 @@
 		_setRefreshInterval: function(){
 			var me=this;
 			me._clearRefreshInterval();
-			if(me.AppsPref.refresh!=='Off')
+			if(me.AppsPref.refresh && me.AppsPref.refresh!=='Off')
 				me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, me.AppsPref.refresh*1000);
 		},
 		
@@ -806,6 +806,7 @@
 						me._loadAppsPreference() /********* 3 ************/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
+								me.AppsPref.refresh = me.AppsPref.refresh || 30;
 								var twelveWeeks = 1000*60*60*24*7*12;
 								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
@@ -1574,7 +1575,7 @@
 					var portfolioItem = me.PortfolioItemStore.findExactRecord('FormattedID', portfolioItemFormattedID);
 					if(teamCommitsRecord.data.Expected) meta.tdCls += ' manager-expected-cell';
 					if(portfolioItem.data.Project){
-						return '<a href="https://rally1.rallydev.com/#/' + portfolioItem.data.Project.ObjectID + 
+						return '<a href="' + me.BaseUrl + '/#/' + portfolioItem.data.Project.ObjectID + 
 							'd/detail/portfolioitem/' + me.PortfolioItemTypes[0] + '/' + 
 								portfolioItem.data.ObjectID + '" target="_blank">' + portfolioItemFormattedID + '</a>';
 					}
@@ -1896,7 +1897,7 @@
 				renderer:function(iterationName, meta, velocityRecord){
 					var iteration = me.IterationStore.findExactRecord('Name', iterationName);
 					if(iteration.data.Project) {
-						return '<a href="https://rally1.rallydev.com/#/' + iteration.data.Project.ObjectID + 'd/detail/iteration/' + 
+						return '<a href="' + me.BaseUrl + '/#/' + iteration.data.Project.ObjectID + 'd/detail/iteration/' + 
 								iteration.data.ObjectID + '" target="_blank">' + iterationName + '</a>';
 					}
 					else return iterationName;
@@ -2070,7 +2071,7 @@
 					items: [{
 						xtype:'container',
 						html: me.DataIntegrityDashboardObjectID ? 
-							('<a class="mini-data-integrity-header" href="https://rally1.rallydev.com/#/' + me.ProjectRecord.data.ObjectID + 
+							('<a class="mini-data-integrity-header" href="' + me.BaseUrl + '/#/' + me.ProjectRecord.data.ObjectID + 
 								'ud/custom/' + me.DataIntegrityDashboardObjectID + '" target="_blank">DATA INTEGRITY</a>') :
 							'<span class="mini-data-integrity-header">DATA INTEGRITY</a>'
 					}]
@@ -3631,7 +3632,7 @@
 				renderer: function(userStoryObjectID){
 					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
 					if(userStory){
-						return '<a href="https://rally1.rallydev.com/#/' + userStory.data.Project.ObjectID + 'ud/detail/userstory/' + 
+						return '<a href="' + me.BaseUrl + '/#/' + userStory.data.Project.ObjectID + 'ud/detail/userstory/' + 
 							userStory.data.ObjectID + '" target="_blank">' + userStory.data.FormattedID + '</a>';
 					} else return '?';
 				},

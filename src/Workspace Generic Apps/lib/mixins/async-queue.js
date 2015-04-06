@@ -1,5 +1,8 @@
 /** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute */
+	you do stuff and then you call the callback passed to you so the next function can execute.
+	
+	IT WILL ALWAYS PERFORM YOUR QUEUED FUNCTION WRAPPED IN A setTimeout. 
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -14,7 +17,11 @@
 			if(me.QueueOfFuncs[queueName]){
 				me.QueueOfFuncs[queueName].shift();
 				if(!me.QueueOfFuncs[queueName].length) return;
-				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+				else {
+					setTimeout(function(){
+						me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+					}, 0);
+				}
 			}
 		},
 		
@@ -25,7 +32,9 @@
 			if(typeof callback !== 'function') throw 'ERROR: not a function';
 			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
 				me.QueueOfFuncs[queueName] = [callback];
-				callback.call(me, me._dequeue.bind(me, queueName));
+				setTimeout(function(){
+					callback.call(me, me._dequeue.bind(me, queueName));
+				}, 0);
 			}
 			else me.QueueOfFuncs[queueName].push(callback);
 		}

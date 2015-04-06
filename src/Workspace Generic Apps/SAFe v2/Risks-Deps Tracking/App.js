@@ -127,7 +127,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
@@ -368,7 +368,7 @@
 		},
 		_updateGrids: function(){
 			var me=this,
-				promises = [];
+				promises = [],
 				isEditingRisks = me._isEditing(me.CustomRisksStore),
 				isEditingDeps = me._isEditing(me.CustomPredecessorStore);
 			if(!isEditingRisks && me.PortfolioItemStore){
@@ -1283,9 +1283,9 @@
 						fields: ['Urgency'],
 						data:[
 							{Urgency:'Undefined'},
-							{Urgency:'Hot'},
-							{Urgency:'Watch'},
-							{Urgency:'Simmer'}
+							{Urgency:'1-Hot'},
+							{Urgency:'2-Watch'},
+							{Urgency:'3-Simmer'}
 						]
 					}),
 					displayField:'Urgency'
@@ -1294,7 +1294,7 @@
 				draggable:false,
 				sortable:true,
 				renderer:function(val, meta){
-					meta.tdCls += (val==='Hot' ? ' predecessor-hot-urgency-cell' : '');
+					meta.tdCls += (val==='1-Hot' ? ' predecessor-hot-urgency-cell' : '');
 					return val || 'Undefined';
 				},	
 				layout:'hbox',
@@ -1307,9 +1307,9 @@
 						data: [
 							{Urgency: 'All'},
 							{Urgency:'Undefined'},
-							{Urgency:'Hot'},
-							{Urgency:'Watch'},
-							{Urgency:'Simmer'}
+							{Urgency:'1-Hot'},
+							{Urgency:'2-Watch'},
+							{Urgency:'3-Simmer'}
 						]
 					}),
 					displayField: 'Urgency',

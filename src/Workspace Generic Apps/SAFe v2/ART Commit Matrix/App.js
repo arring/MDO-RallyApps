@@ -164,7 +164,6 @@
 			}];
 		},
 				
-		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
@@ -186,37 +185,58 @@
 			return me._reloadStore(store);
 		},	
 		_loadPortfolioItems: function(){ 
-			var me=this;
-			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-					)
-					.then(function(portfolioStore){
-						return {
-							ordinal: ordinal,
-							store: portfolioStore
-						};
-					});
-				}))
-				.then(function(items){
-					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
-					me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
-					me.PortfolioItemMap = {};
-					_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
-						var ordinal = 0, 
-							parentPortfolioItemRecord = lowPortfolioItemRecord,
-							getParentRecord = function(child, parentList){
-								return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
+			var me=this, deferred = Q.defer();
+			me._enqueue(function(done){
+				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+							me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
+							me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
+						)
+						.then(function(portfolioStore){
+							return {
+								ordinal: ordinal,
+								store: portfolioStore
 							};
-						while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord){
-							parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, orderedPortfolioItemStores[ordinal+1].store.getRange());
-							++ordinal;
-						}
-						if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord)
-							me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
-					});
-				});
+						});
+					}))
+					.then(function(items){
+						var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
+						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore();
+						me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
+						
+						//make the mapping of lowest to highest portfolioItems
+						me.PortfolioItemMap = {};
+						_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
+							var ordinal = 0, 
+								parentPortfolioItemRecord = lowPortfolioItemRecord,
+								getParentRecord = function(child, parentList){
+									return _.find(parentList, function(parent){ 
+										return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+									});
+								};
+							while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord){
+								parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, orderedPortfolioItemStores[ordinal+1].store.getRange());
+								++ordinal;
+							}
+							if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+								me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
+						});
+						
+						//destroy the stores, so they get GCed
+						orderedPortfolioItemStores.shift();
+						while(orderedPortfolioItemStores.length) orderedPortfolioItemStores.shift().store.destroyStore();
+						
+						//make a hash of portfolioitem Names
+						me.PortfolioItemNames = _.sortBy(_.map(me.PortfolioItemStore.getRange(), 
+							function(p){ return {Name: p.data.Name}; }),
+							function(p){ return p.Name; });
+						me.PortfolioItemNames = [{Name: 'All ' + me.PortfolioItemTypes.slice(-1).pop()}].concat(me.PortfolioItemNames);
+					})
+					.then(function(){ done(); deferred.resolve();})
+					.fail(function(reason){ done(); deferred.reject(reason); })
+					.done();
+				}, 'PortfolioItemQueue');
+			return deferred.promise;
 		},		
 		_getUserStoryQueryString: function(portfolioItemRecords){
 			var me=this,
@@ -249,7 +269,7 @@
 				function(portfolioItemRecords){
 					var config = {
 							model: me.UserStory,
-							url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
+							url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 							params: {
 								pagesize:200,
 								query: me._getUserStoryQueryString(portfolioItemRecords),
@@ -266,14 +286,22 @@
 							if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
 								newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
 							newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
-							newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID;
+							newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
 						});
+						store.destroyStore();
 					});
 				})
 			)
 			.then(function(){
 				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
 				me.MatrixProjectMap = newMatrixProjectMap;
+						
+					//always show the teams under the train that have teamMembers > 0, even if they are not contributing this release
+				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
+					var projectName = projectRecord.data.Name;
+					if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
+					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
+				});
 			});
 		},		
 			
@@ -405,9 +433,9 @@
 			if(me.ViewMode == 'Normal') return config.userStoriesData.length;
 			else if(me.ViewMode == '% Done'){
 				if(config.userStoriesData.length === 0) return '-';
-				var fractionDone = (100*config.completedPoints/config.totalPoints>>0)/100;
+				var percentDone = (100*config.completedPoints/config.totalPoints>>0);
 				return '<span title="' + config.completedPoints + '/' + config.totalPoints + ' Points Completed">' + 
-					(100*fractionDone) + '%</span>';
+					percentDone + '%</span>';
 			}	
 		},
 		_areColorsTheSame: function(color1, color2){
@@ -483,14 +511,61 @@
 			} 
 			else return ''; //should these get green/red/grey/white
 		},
+		_columnHeaderItem: function(projectName){
+			var me=this;
+			var config = _.reduce(me.MatrixUserStoryBreakdown[projectName], function(sumConfig, userStoriesData){
+				return {
+					userStoriesData: sumConfig.userStoriesData.concat(userStoriesData),
+					completedPoints: sumConfig.completedPoints + (100*me._getCompletedUserStoryPoints(userStoriesData)>>0)/100,
+					totalPoints: sumConfig.totalPoints + (100*me._getTotalUserStoryPoints(userStoriesData)>>0)/100
+				};
+			},{
+				userStoriesData: [],
+				completedPoints: 0,
+				totalPoints: 0
+			});
+			var style = 'style="background-color:' + me._getCellBackgroundColor(config) + '"',
+				innerHTML = me._getCellInnerHTML(config);
+			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
+		},
 		_updateGridHeader: function(projectName){
 			var me=this,
 				column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
-				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'];
+				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
+				shouldHaveItems = me.ViewMode === '% Done';
 			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
+			while(column.el.dom.childNodes.length > 1) column.el.last().remove();
+			if(shouldHaveItems) Ext.DomHelper.append(column.el, me._columnHeaderItem(projectName));
 			column.el.addCls(me._getProjectHeaderCls(projectName));
 		},
 	
+		_updateTotalPercentCell: function(matrixRecord, index){
+			var me=this,
+				portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(piRecord){ 
+					return piRecord.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+				});
+			if(me.ViewMode != '% Done' || !portfolioItemRecord) return;
+			var config = _.reduce(_.sortBy(_.keys(me.MatrixUserStoryBreakdown)), function(sumConfig, projectName){
+				var teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
+					userStoriesData = me._getIntersectingUserStoriesData(portfolioItemRecord, projectName);
+				return {
+					userStoriesData: sumConfig.userStoriesData.concat(userStoriesData),
+					completedPoints: sumConfig.completedPoints + (100*me._getCompletedUserStoryPoints(userStoriesData)>>0)/100,
+					totalPoints: sumConfig.totalPoints + (100*me._getTotalUserStoryPoints(userStoriesData)>>0)/100
+				};
+			},{
+				userStoriesData: [],
+				completedPoints: 0,
+				totalPoints: 0
+			});
+			var style = 'style="background-color:' + me._getCellBackgroundColor(config) + '"',
+				innerHTML = me._getCellInnerHTML(config),
+				td = Ext.get(me.MatrixGrid.getView().lockedView.getNode(index)).last(),
+				div = td.last();
+			td.dom.setAttribute('style', style);
+			div.dom.innerHTML = innerHTML;
+		},
+		
 		_isPortfolioItemNotCommittedOrHasNoStories: function(portfolioItemRecord){
 			var me=this,
 				portfolioItemName = portfolioItemRecord.data.Name,
@@ -512,25 +587,6 @@
 				if(me.MatrixStore) me.MatrixStore.intelUpdate();
 			}
 		},
-		_reloadStores: function(){
-			var me = this;
-			return me._loadPortfolioItems()
-				.then(function(){
-					me.PortfolioItemNames = _.sortBy(_.map(me.PortfolioItemStore.getRange(), 
-						function(p){ return {Name: p.data.Name}; }),
-						function(p){ return p.Name; });
-					me.PortfolioItemNames = [{Name: 'All ' + me.PortfolioItemTypes.slice(-1).pop()}].concat(me.PortfolioItemNames);
-					return me._loadUserStories();
-				})
-				.then(function(){
-					//always show the teams under the train that have teamMembers > 0, even if they are not contributing this release
-					_.each(me.ProjectsWithTeamMembers, function(projectRecord){
-						var projectName = projectRecord.data.Name;
-						if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
-						if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
-					});
-				});
-		},
 		_clearEverything: function(){
 			var me=this;
 			
@@ -539,50 +595,48 @@
 				me.MatrixGrid.up().remove(me.MatrixGrid);
 				me.MatrixGrid = undefined;
 			}
-			if(me.PortfolioItemPicker) {
-				me.PortfolioItemPicker.up().remove(me.PortfolioItemPicker);
-				me.PortfolioItemPicker = undefined;
-			}
-			
-			me.PortfolioItemStore = undefined;
 			me.MatrixStore = undefined;		
 		},
+		_reloadStores: function(){
+			var me = this;
+			return me._loadPortfolioItems().then(function(){ return me._loadUserStories(); });
+		},
+		
 		_reloadEverything: function(){
 			var me=this;
 
 			me.setLoading('Loading Data');
-			me._enqueue(function(unlockFunc){
-				me._clearEverything();
-				if(!me.ReleasePicker){
-					me._loadReleasePicker();
-					me._loadClickModePicker();
-					me._loadViewModePicker();
-					me._loadClearFiltersButton();
-					me._loadMatrixLegend();
-				}				
+			me._enqueue(function(done){
 				me._reloadStores()
+					.then(function(){
+						me._clearEverything();
+						if(!me.ReleasePicker){
+							me._loadReleasePicker();
+							me._loadClickModePicker();
+							me._loadViewModePicker();
+							me._loadClearFiltersButton();
+							me._loadMatrixLegend();
+						}				
+					})
 					.then(function(){ me._updateGrids(); })
 					.then(function(){ me._showGrids(); })
 					.fail(function(reason){ me._alert('ERROR', reason); })
-					.then(function(){
-						me.setLoading(false);
-						unlockFunc();
-					})
+					.then(function(){ me.setLoading(false); done(); })
 					.done();
-			}, 'Queue-Main');
+			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
 		},
 		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
 		_refreshDataFunc: function(){
 			var me=this;
-			me._enqueue(function(unlockFunc){
+			me._enqueue(function(done){
 				me._reloadStores()
 					.then(function(){ me._updateGrids(); })
 					.then(function(){ me._showGrids(); })
-					.fail(function(reason){ me._alert('ERROR', reason || ''); })
-					.then(function(){ unlockFunc(); })
+					.fail(function(reason){ me._alert('ERROR', reason); })
+					.then(function(){ done(); })
 					.done();
-			}, 'Queue-Main');
+			}, 'ReloadAndRefreshQueue');
 		},	
 		_clearRefreshInterval: function(){
 			var me=this;
@@ -594,7 +648,7 @@
 		_setRefreshInterval: function(){
 			var me=this;
 			me._clearRefreshInterval();
-			me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 20000);
+			me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, 25000);
 		},
 			
 		/**___________________________________ LAUNCH ___________________________________*/	
@@ -672,8 +726,6 @@
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
-				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
 		_loadReleasePicker: function(){
@@ -720,7 +772,15 @@
 			if(value === me.ViewMode) return;
 			else me.ViewMode = value;
 			me._clearToolTip();
-			if(me.MatrixStore) me.MatrixStore.intelUpdate();
+			me.setLoading('Please Wait');
+			setTimeout(function(){
+				if(me.MatrixGrid){
+					if(me.ViewMode == '% Done') me.MatrixGrid.columns[5].show();
+					else me.MatrixGrid.columns[5].hide();
+				}
+				if(me.MatrixStore) me.MatrixStore.intelUpdate();
+				me.setLoading(false);
+			}, 0);
 		},				
 		_loadViewModePicker: function(){
 			var me=this;
@@ -859,9 +919,10 @@
 				},
 				disableMetaChangeEvent: true,
 				intelUpdate: function(){			
-					var projectNames = Object.keys(me.MatrixUserStoryBreakdown).sort();
+					var projectNames = _.sortBy(_.keys(me.MatrixUserStoryBreakdown));
 					_.each(projectNames, function(projectName){ me._updateGridHeader(projectName); });
 					_.each(me.MatrixStore.getRange(), function(matrixRecord, rowIndex){
+						me._updateTotalPercentCell(matrixRecord, rowIndex);
 						var refreshWholeRow = false,
 							portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
 								return portfolioItemRecord.data.ObjectID == matrixRecord.data.PortfolioItemObjectID;
@@ -962,7 +1023,7 @@
 						if(me._isPortfolioItemNotCommittedOrHasNoStories(portfolioItemRecord)) meta.tdCls += ' not-committed-portfolio-item';
 					}
 					if(portfolioItemRecord.data.Project){
-						return '<a href="https://rally1.rallydev.com/#/' + portfolioItemRecord.data.Project.ObjectID + 'd/detail/portfolioitem/' + 
+						return '<a href="' + me.BaseUrl + '/#/' + portfolioItemRecord.data.Project.ObjectID + 'd/detail/portfolioitem/' + 
 							me.PortfolioItemTypes[0] + '/' + portfolioItemRecord.data.ObjectID + '" target="_blank">' + formattedID + '</a>';
 					}
 					else return name;
@@ -1023,15 +1084,59 @@
 				locked:true,
 				sortable:true,
 				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-'); }
+			},{
+				text:'Total % Done',
+				dataIndex:'PortfolioItemObjectID',
+				width:50,
+				editor:false,
+				resizable:false,
+				draggable:false,
+				menuDisabled:true,
+				locked:true,
+				sortable:true,
+				hidden: me.ViewMode !== '% Done',
+				doSort: function(direction){
+					var lockedView = me.MatrixGrid.getView().lockedView,
+						store = this.up('grid').getStore();
+					store.sort({
+						sorterFn: function(item1, item2){
+							var p1 = parseInt(Ext.get(lockedView.getNode(store.indexOf(item1))).last().dom.innerText, 10) || 0,
+								p2 = parseInt(Ext.get(lockedView.getNode(store.indexOf(item2))).last().dom.innerText, 10) || 0,
+								diff = p1 - p2;
+							if(diff === 0) return 0;
+							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
+						}
+					});
+				},
+				renderer: function(obejctID, metaData, matrixRecord, row, col){
+					if(me.ViewMode != '% Done') return;
+					var portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ return item.data.ObjectID == obejctID; });
+					if(!portfolioItemRecord) return;
+					var config = _.reduce(_.sortBy(_.keys(me.MatrixUserStoryBreakdown)), function(sumConfig, projectName){
+						var teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
+							userStoriesData = me._getIntersectingUserStoriesData(portfolioItemRecord, projectName);
+						return {
+							userStoriesData: sumConfig.userStoriesData.concat(userStoriesData),
+							completedPoints: sumConfig.completedPoints + (100*me._getCompletedUserStoryPoints(userStoriesData)>>0)/100,
+							totalPoints: sumConfig.totalPoints + (100*me._getTotalUserStoryPoints(userStoriesData)>>0)/100
+						};
+					},{
+						userStoriesData: [],
+						completedPoints: 0,
+						totalPoints: 0
+					});
+					metaData.tdAttr += 'style="background-color:' + me._getCellBackgroundColor(config) + '"';
+					return me._getCellInnerHTML(config);
+				}
 			}];
 		
 			var teamColumnCfgs = [];
-			Object.keys(me.MatrixUserStoryBreakdown).sort().forEach(function(projectName){
+			_.each(_.sortBy(_.keys(me.MatrixUserStoryBreakdown)), function(projectName){
 				teamColumnCfgs.push({
 					text: projectName,
 					dataIndex:'PortfolioItemObjectID',
 					tdCls: 'intel-editor-cell',
-					cls: me._getProjectHeaderCls(projectName),
+					cls: ' matrix-subheader-cell ' + me._getProjectHeaderCls(projectName),
 					width:50,
 					maxHeight:80,
 					tooltip:projectName,
@@ -1112,7 +1217,7 @@
 						if(projectName == 'MoSCoW') return;
 						if(me.ClickMode == 'Flag'){
 							me.MatrixGrid.setLoading('Saving');
-							me._enqueue(function(unlockFunc){
+							me._enqueue(function(done){
 								me._loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
 									.then(function(portfolioItemRecord){
 										var tcae = me._getTeamCommit(portfolioItemRecord, projectName);
@@ -1125,13 +1230,13 @@
 										storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
 										me.MatrixGrid.view.refreshNode(me.MatrixStore.indexOf(matrixRecord));
 									})
-									.fail(function(reason){ me._alert('ERROR', reason || ''); })
+									.fail(function(reason){ me._alert('ERROR', reason); })
 									.then(function(){
 										me.MatrixGrid.setLoading(false);
-										unlockFunc();
+										done();
 									})
 									.done();
-							}, 'Queue-Main');
+							}, 'PortfolioItemQueue'); //Race condition avoided between me.PortfolioItemStore and the User's actions
 						}
 						return false;
 					}, 
@@ -1148,12 +1253,12 @@
 							return;
 						}
 						me.MatrixGrid.setLoading('Saving');
-						
+					
 						_.find(me.PortfolioItemStore.getRange(), function(item){ //set this here temporarily in case intelUpdate gets called while in queue
 							return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
 						}).data.c_MoSCoW = value;
 						
-						me._enqueue(function(unlockFunc){
+						me._enqueue(function(done){
 							me._loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
 								.then(function(portfolioItemRecord){
 									var deferred = Q.defer();
@@ -1174,13 +1279,13 @@
 									});
 									return deferred.promise;
 								})
-								.fail(function(reason){ me._alert('ERROR', reason || ''); })
+								.fail(function(reason){ me._alert('ERROR', reason); })
 								.then(function(){
 									me.MatrixGrid.setLoading(false);
-									unlockFunc();
+									done();
 								})
 								.done();
-						}, 'Queue-Main');	
+							}, 'PortfolioItemQueue'); //Race condition avoided between me.PortfolioItemStore and the User's actions
 					},
 					afterrender: function (grid) {
 						var view = grid.view.normalView; //lockedView and normalView		
@@ -1190,223 +1295,217 @@
 						grid.mon(view, {
 							uievent: function (type, view, cell, row, col, e){
 								if((me.ClickMode === 'Details' || me.ClickMode === 'Comment') && type === 'mousedown') {
-									me.setLoading('Waiting');
-									me._enqueue(function(unlockFunc){ //need enqueue because MatrixUserStoryBreakdown could be null due to an ongoing refresh
-										me.setLoading(false);
-										var matrixRecord = me.MatrixStore.getAt(row),
-											projectName = view.getGridColumns()[col].text,
-											portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
-												return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
-											}),
-											teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
-											oldTooltip = me.tooltip,
-											pos = cell.getBoundingClientRect(),
-											dbs = me._getDistanceFromBottomOfScreen(pos.top),
-											panelWidth = 400;
-										if(oldTooltip) me._clearToolTip();
-										if(oldTooltip && (oldTooltip.row == row && oldTooltip.col == col)){
-											unlockFunc();
-											return;
-										}
-										function moveAndResizePanel(panel){
-											var upsideDown = (dbs < panel.getHeight() + 80);
-											panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
-										}
-										
-										if(me.ClickMode === 'Details'){
-											var panelHTML = [
-												'<p><b>CE Comment:</b> ' + (teamCommit.CEComment || '') + '</p>',
-												'<p><b>Objective:</b> ' + (teamCommit.Objective || '') + '</p>',
-												'<p><b>PlanEstimate: </b>',
-													_.reduce(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || [], function(sum, storyData){
-														return sum + (storyData.PlanEstimate || 0); 
-													}, 0),
-												'<p><b>UserStories: </b><div style="max-height:100px;overflow-y:auto;"><ol>'].join('');
-											(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || []).forEach(function(storyData){
-												panelHTML += '<li><a href="https://rally1.rallydev.com/#/' + storyData.Project.ObjectID + 
-													'd/detail/userstory/' + storyData.ObjectID + '" target="_blank">' + storyData.FormattedID + '</a>:' +
-													'<span title="' + storyData.Name + '">' + 
-													storyData.Name.substring(0, 40) + (storyData.Name.length > 40 ? '...' : '') + '</span></li>';
-											});
-											panelHTML += '</ol></div>';
-										
-											me.tooltip = {
-												row:row,
-												col:col,
-												panel: Ext.widget('container', {
-													floating:true,
-													width: panelWidth,
-													autoScroll:false,
-													id:'MatrixTooltipPanel',
-													cls: 'intel-tooltip',
-													focusOnToFront:false,
-													shadow:false,
-													renderTo:Ext.getBody(),
-													items: [{
-														xtype:'container',
-														layout:'hbox',
-														cls: 'intel-tooltip-inner-container',
-														items:[{
-															xtype:'container',
-															cls: 'intel-tooltip-inner-left-container',
-															flex:1,
-															items:[{
-																xtype:'container',
-																html:panelHTML
-															}]
-														},{
-															xtype:'button',
-															cls:'intel-tooltip-close',
-															text:'X',
-															width:20,
-															handler: function(){ me._clearToolTip(); }
-														}]
-													}],
-													listeners:{
-														afterrender: moveAndResizePanel,
-														afterlayout: moveAndResizePanel
-													}
-												})	
-											};
-										}
-										else {
-											me.tooltip = {
-												row:row,
-												col:col,
-												panel: Ext.widget('container', {
-													floating:true,
-													width: panelWidth,
-													autoScroll:false,
-													id:'MatrixTooltipPanel',
-													cls: 'intel-tooltip',
-													focusOnToFront:false,
-													shadow:false,
-													renderTo:Ext.getBody(),
-													items: [{
-														xtype:'container',
-														layout:'hbox',
-														cls: 'intel-tooltip-inner-container',
-														items:[{
-															xtype:'container',
-															cls: 'intel-tooltip-inner-left-container',
-															flex:1,
-															items:[{
-																xtype:'container',
-																layout:'hbox',
-																items:[{
-																	xtype:'text',
-																	flex:1,
-																	text: 'CE Comment:',
-																	style:'font-weight:bold;'
-																},{
-																	xtype:'checkbox',
-																	width:140,
-																	boxLabel:'CE Expected',
-																	checked:teamCommit.Expected,
-																	handler:function(checkbox, checked){
-																		me.tooltip.panel.setLoading('Saving');
-																		me._enqueue(function(unlockFunc){
-																			me._loadPortfolioItemByOrdinal(portfolioItemRecord.data.ObjectID, 0)
-																				.then(function(portfolioItemRecord){
-																					var tcae = me._getTeamCommit(portfolioItemRecord, projectName);
-																					return me._setTeamCommitsField(portfolioItemRecord, projectName, 'Expected', !tcae.Expected);
-																				})
-																				.then(function(portfolioItemRecord){
-																					var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
-																						return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
-																					});
-																					storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
-																					me.MatrixGrid.view.refreshNode(me.MatrixStore.indexOf(matrixRecord));
-																				})
-																				.fail(function(reason){ me._alert('ERROR', reason || ''); })
-																				.then(function(portfolioItemRecord){
-																					me.tooltip.panel.setLoading(false);
-																					unlockFunc();
-																				})
-																				.done();
-																		}, 'Queue-Main');
-																	}
-																}]
-															},{
-																xtype:'textarea',
-																value: teamCommit.CEComment || '',
-																width:330,
-																id: 'MatrixTooltipPanelTextarea',
-																resizable: {
-																	handles: 's',
-																	minHeight: 80,
-																	maxHeight: 300,
-																	pinned: true
-																}
-															},{
-																xtype:'button',
-																text:'Save',
-																listeners:{
-																	click: function(){
-																		me.tooltip.panel.setLoading('Saving');
-																		me._enqueue(function(unlockFunc){
-																			me._loadPortfolioItemByOrdinal(portfolioItemRecord.data.ObjectID, 0)
-																				.then(function(portfolioItemRecord){ 
-																					var val = Ext.getCmp('MatrixTooltipPanelTextarea').getValue();
-																					return me._setTeamCommitsField(portfolioItemRecord, projectName, 'CEComment', val);
-																				})
-																				.then(function(portfolioItemRecord){
-																					var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
-																						return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
-																					});
-																					storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
-																					me.MatrixGrid.view.refreshNode(row);
-																				})
-																				.fail(function(reason){ me._alert('ERROR', reason || ''); })
-																				.then(function(portfolioItemRecord){
-																					me.tooltip.panel.setLoading(false);
-																					unlockFunc();
-																				})
-																				.done();
-																		}, 'Queue-Main');
-																	}
-																}
-															}]
-														},{
-															xtype:'button',
-															cls:'intel-tooltip-close',
-															text:'X',
-															width:20,
-															handler: function(){ me._clearToolTip(); }
-														}]
-													}],
-													listeners:{
-														afterrender: moveAndResizePanel,
-														afterlayout: moveAndResizePanel
-													}
-												})
-											};
-										}									
-										me.tooltip.triangle = Ext.widget('container', {
-											floating:true,
-											width:0, height:0,
-											focusOnToFront:false,
-											shadow:false,
-											renderTo:Ext.getBody(),
-											listeners:{
-												afterrender: function(panel){
-													setTimeout(function(){
-														var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
-														if(upsideDown) {
-															panel.removeCls('intel-tooltip-triangle');
-															panel.addCls('intel-tooltip-triangle-up');
-															panel.setPosition(pos.left -10, pos.bottom -10);
-														} else {
-															panel.removeCls('intel-tooltip-triangle-up');
-															panel.addCls('intel-tooltip-triangle');
-															panel.setPosition(pos.left -10, pos.top);
-														}
-													}, 10);
-												}
-											}
+									var matrixRecord = me.MatrixStore.getAt(row),
+										projectName = view.getGridColumns()[col].text,
+										portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+											return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+										}),
+										teamCommit = me._getTeamCommit(portfolioItemRecord, projectName),
+										oldTooltip = me.tooltip,
+										pos = cell.getBoundingClientRect(),
+										dbs = me._getDistanceFromBottomOfScreen(pos.top),
+										panelWidth = 400;
+									if(oldTooltip) me._clearToolTip();
+									if(oldTooltip && (oldTooltip.row == row && oldTooltip.col == col)) return;
+									
+									/* jshint -W082 */
+									function moveAndResizePanel(panel){
+										var upsideDown = (dbs < panel.getHeight() + 80);
+										panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
+									}
+									
+									if(me.ClickMode === 'Details'){
+										var panelHTML = [
+											'<p><b>CE Comment:</b> ' + (teamCommit.CEComment || '') + '</p>',
+											'<p><b>Objective:</b> ' + (teamCommit.Objective || '') + '</p>',
+											'<p><b>PlanEstimate: </b>',
+												_.reduce(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || [], function(sum, storyData){
+													return sum + (storyData.PlanEstimate || 0); 
+												}, 0),
+											'<p><b>UserStories: </b><div style="max-height:100px;overflow-y:auto;"><ol>'].join('');
+										(me.MatrixUserStoryBreakdown[projectName][portfolioItemRecord.data.Name] || []).forEach(function(storyData){
+											panelHTML += '<li><a href="' + me.BaseUrl + '/#/' + storyData.Project.ObjectID + 
+												'd/detail/userstory/' + storyData.ObjectID + '" target="_blank">' + storyData.FormattedID + '</a>:' +
+												'<span title="' + storyData.Name + '">' + 
+												storyData.Name.substring(0, 40) + (storyData.Name.length > 40 ? '...' : '') + '</span></li>';
 										});
-										unlockFunc();
-									}, 'Queue-Main');
+										panelHTML += '</ol></div>';
+									
+										me.tooltip = {
+											row:row,
+											col:col,
+											panel: Ext.widget('container', {
+												floating:true,
+												width: panelWidth,
+												autoScroll:false,
+												id:'MatrixTooltipPanel',
+												cls: 'intel-tooltip',
+												focusOnToFront:false,
+												shadow:false,
+												renderTo:Ext.getBody(),
+												items: [{
+													xtype:'container',
+													layout:'hbox',
+													cls: 'intel-tooltip-inner-container',
+													items:[{
+														xtype:'container',
+														cls: 'intel-tooltip-inner-left-container',
+														flex:1,
+														items:[{
+															xtype:'container',
+															html:panelHTML
+														}]
+													},{
+														xtype:'button',
+														cls:'intel-tooltip-close',
+														text:'X',
+														width:20,
+														handler: function(){ me._clearToolTip(); }
+													}]
+												}],
+												listeners:{
+													afterrender: moveAndResizePanel,
+													afterlayout: moveAndResizePanel
+												}
+											})	
+										};
+									}
+									else {
+										me.tooltip = {
+											row:row,
+											col:col,
+											panel: Ext.widget('container', {
+												floating:true,
+												width: panelWidth,
+												autoScroll:false,
+												id:'MatrixTooltipPanel',
+												cls: 'intel-tooltip',
+												focusOnToFront:false,
+												shadow:false,
+												renderTo:Ext.getBody(),
+												items: [{
+													xtype:'container',
+													layout:'hbox',
+													cls: 'intel-tooltip-inner-container',
+													items:[{
+														xtype:'container',
+														cls: 'intel-tooltip-inner-left-container',
+														flex:1,
+														items:[{
+															xtype:'container',
+															layout:'hbox',
+															items:[{
+																xtype:'text',
+																flex:1,
+																text: 'CE Comment:',
+																style:'font-weight:bold;'
+															},{
+																xtype:'checkbox',
+																width:140,
+																boxLabel:'CE Expected',
+																checked:teamCommit.Expected,
+																handler:function(checkbox, checked){
+																	me.tooltip.panel.setLoading('Saving');
+																	me._enqueue(function(done){
+																		me._loadPortfolioItemByOrdinal(portfolioItemRecord.data.ObjectID, 0)
+																			.then(function(portfolioItemRecord){
+																				var tcae = me._getTeamCommit(portfolioItemRecord, projectName);
+																				return me._setTeamCommitsField(portfolioItemRecord, projectName, 'Expected', !tcae.Expected);
+																			})
+																			.then(function(portfolioItemRecord){
+																				var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+																					return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+																				});
+																				storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
+																				me.MatrixGrid.view.refreshNode(me.MatrixStore.indexOf(matrixRecord));
+																			})
+																			.fail(function(reason){ me._alert('ERROR', reason || ''); })
+																			.then(function(portfolioItemRecord){
+																				me.tooltip.panel.setLoading(false);
+																				done();
+																			})
+																			.done();
+																	}, 'PortfolioItemQueue');
+																}
+															}]
+														},{
+															xtype:'textarea',
+															value: teamCommit.CEComment || '',
+															width:330,
+															id: 'MatrixTooltipPanelTextarea',
+															resizable: {
+																handles: 's',
+																minHeight: 80,
+																maxHeight: 300,
+																pinned: true
+															}
+														},{
+															xtype:'button',
+															text:'Save',
+															listeners:{
+																click: function(){
+																	me.tooltip.panel.setLoading('Saving');
+																	me._enqueue(function(done){
+																		me._loadPortfolioItemByOrdinal(portfolioItemRecord.data.ObjectID, 0)
+																			.then(function(portfolioItemRecord){ 
+																				var val = Ext.getCmp('MatrixTooltipPanelTextarea').getValue();
+																				return me._setTeamCommitsField(portfolioItemRecord, projectName, 'CEComment', val);
+																			})
+																			.then(function(portfolioItemRecord){
+																				var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+																					return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+																				});
+																				storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
+																				me.MatrixGrid.view.refreshNode(row);
+																			})
+																			.fail(function(reason){ me._alert('ERROR', reason); })
+																			.then(function(portfolioItemRecord){
+																				me.tooltip.panel.setLoading(false);
+																				done();
+																			})
+																			.done();
+																	}, 'PortfolioItemQueue');
+																}
+															}
+														}]
+													},{
+														xtype:'button',
+														cls:'intel-tooltip-close',
+														text:'X',
+														width:20,
+														handler: function(){ me._clearToolTip(); }
+													}]
+												}],
+												listeners:{
+													afterrender: moveAndResizePanel,
+													afterlayout: moveAndResizePanel
+												}
+											})
+										};
+									}									
+									me.tooltip.triangle = Ext.widget('container', {
+										floating:true,
+										width:0, height:0,
+										focusOnToFront:false,
+										shadow:false,
+										renderTo:Ext.getBody(),
+										listeners:{
+											afterrender: function(panel){
+												setTimeout(function(){
+													var upsideDown = (dbs < Ext.get('MatrixTooltipPanel').getHeight() + 80);
+													if(upsideDown) {
+														panel.removeCls('intel-tooltip-triangle');
+														panel.addCls('intel-tooltip-triangle-up');
+														panel.setPosition(pos.left -10, pos.bottom -10);
+													} else {
+														panel.removeCls('intel-tooltip-triangle-up');
+														panel.addCls('intel-tooltip-triangle');
+														panel.setPosition(pos.left -10, pos.top);
+													}
+												}, 10);
+											}
+										}
+									});
 								}
 							}
 						});

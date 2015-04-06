@@ -156,6 +156,7 @@
 		},
 		_configureIntelRallyApp: function(){
 			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 					return Q.all([
@@ -1054,7 +1055,10 @@
 	});
 }());
                 /** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute */
+	you do stuff and then you call the callback passed to you so the next function can execute.
+	
+	IT WILL ALWAYS PERFORM YOUR QUEUED FUNCTION WRAPPED IN A setTimeout. 
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -1069,7 +1073,11 @@
 			if(me.QueueOfFuncs[queueName]){
 				me.QueueOfFuncs[queueName].shift();
 				if(!me.QueueOfFuncs[queueName].length) return;
-				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+				else {
+					setTimeout(function(){
+						me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+					}, 0);
+				}
 			}
 		},
 		
@@ -1080,7 +1088,9 @@
 			if(typeof callback !== 'function') throw 'ERROR: not a function';
 			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
 				me.QueueOfFuncs[queueName] = [callback];
-				callback.call(me, me._dequeue.bind(me, queueName));
+				setTimeout(function(){
+					callback.call(me, me._dequeue.bind(me, queueName));
+				}, 0);
 			}
 			else me.QueueOfFuncs[queueName].push(callback);
 		}
@@ -3122,7 +3132,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
@@ -3363,7 +3373,7 @@
 		},
 		_updateGrids: function(){
 			var me=this,
-				promises = [];
+				promises = [],
 				isEditingRisks = me._isEditing(me.CustomRisksStore),
 				isEditingDeps = me._isEditing(me.CustomPredecessorStore);
 			if(!isEditingRisks && me.PortfolioItemStore){
@@ -4278,9 +4288,9 @@
 						fields: ['Urgency'],
 						data:[
 							{Urgency:'Undefined'},
-							{Urgency:'Hot'},
-							{Urgency:'Watch'},
-							{Urgency:'Simmer'}
+							{Urgency:'1-Hot'},
+							{Urgency:'2-Watch'},
+							{Urgency:'3-Simmer'}
 						]
 					}),
 					displayField:'Urgency'
@@ -4289,7 +4299,7 @@
 				draggable:false,
 				sortable:true,
 				renderer:function(val, meta){
-					meta.tdCls += (val==='Hot' ? ' predecessor-hot-urgency-cell' : '');
+					meta.tdCls += (val==='1-Hot' ? ' predecessor-hot-urgency-cell' : '');
 					return val || 'Undefined';
 				},	
 				layout:'hbox',
@@ -4302,9 +4312,9 @@
 						data: [
 							{Urgency: 'All'},
 							{Urgency:'Undefined'},
-							{Urgency:'Hot'},
-							{Urgency:'Watch'},
-							{Urgency:'Simmer'}
+							{Urgency:'1-Hot'},
+							{Urgency:'2-Watch'},
+							{Urgency:'3-Simmer'}
 						]
 					}),
 					displayField: 'Urgency',

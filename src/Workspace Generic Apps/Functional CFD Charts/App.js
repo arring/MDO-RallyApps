@@ -64,7 +64,7 @@
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecords){
 				var parallelLoaderConfig = {
 					pagesize:20000,
-					url: Rally.environment.getServer().baseUrl + '/analytics/v2.0/service/rally/workspace/' + 
+					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -211,7 +211,7 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var updateOptions = {trendType:'FromStartAccepted'},
+			var updateOptions = {trendType:'LastSprint'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -243,7 +243,7 @@
 				}),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'FromStartAccepted'},
+				var updateOptions = {trendType:'LastSprint'},
 					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);

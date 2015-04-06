@@ -95,7 +95,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query:me._getUserStoryFilter().toString(),
@@ -123,7 +123,7 @@
 			if(!me.TrainRecord) return Q();
 			var config = {
 				model: me[lowestPortfolioItem],
-				url: Rally.environment.getServer().baseUrl + '/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
+				url: me.BaseUrl + '/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
 				params: {
 					project:me.TrainPortfolioProject.data._ref,
 					projectScopeUp:false,

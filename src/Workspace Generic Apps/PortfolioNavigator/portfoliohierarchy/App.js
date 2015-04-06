@@ -1,9 +1,10 @@
 /** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	var USER_TOKEN = (__PROJECT_OID__ + '-' + __USER_OID__);
-	
+
+	var context = Rally.environment.getContext(),
+		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
+
 	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
@@ -38,16 +39,16 @@
 		config: {
 			defaultSettings: (function(){
 				var s = {};
-				s['Type' + USER_TOKEN] = ''; 
-				s['QueryFilter' + USER_TOKEN] = '';
-				s['InferPortfolioLocation' + USER_TOKEN] = true;
-				s['PortfolioLocation' + USER_TOKEN] = 0;
+				s['Type' + SETTINGS_TOKEN] = ''; 
+				s['QueryFilter' + SETTINGS_TOKEN] = '';
+				s['InferPortfolioLocation' + SETTINGS_TOKEN] = true;
+				s['PortfolioLocation' + SETTINGS_TOKEN] = 0;
 				return s;
 			}())
 		},				
 		getSettingsFields: function() {
 			return [{
-				name: 'Type' + USER_TOKEN,
+				name: 'Type' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -83,18 +84,18 @@
 				label: 'Type',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'QueryFilter' + USER_TOKEN,
+				name: 'QueryFilter' + SETTINGS_TOKEN,
 				xtype: 'textfield',
 				label: 'Query Filter',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'InferPortfolioLocation' + USER_TOKEN,
+				name: 'InferPortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycheckboxfield',
 				label: 'Infer Portfolio Location',
 				labelWidth: 120, width:'100%',
 				bubbleEvents: ['change'] 
 			},{
-				name: 'PortfolioLocation' + USER_TOKEN,
+				name: 'PortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -208,16 +209,16 @@
 				.then(function(){
 					var pid = me.ProjectRecord.data.ObjectID, 
 						prefs = me.AppsPref.projs[pid] || {};
-					me.PIType = me.getSetting('Type' + USER_TOKEN);
+					me.PIType = me.getSetting('Type' + SETTINGS_TOKEN);
 					if(!me.PIType){
 						me.PIType = me.PortfolioItemTypes[0];
 						var newSettings = {};
-						newSettings['Type' + USER_TOKEN] = me.PIType;
+						newSettings['Type' + SETTINGS_TOKEN] = me.PIType;
 						me.updateSettingsValues({settings:newSettings});
 					}
-					me.QueryFilter = me.getSetting('QueryFilter' + USER_TOKEN);
-					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + USER_TOKEN);
-					me.PortfolioLocation = me.getSetting('PortfolioLocation' + USER_TOKEN);
+					me.QueryFilter = me.getSetting('QueryFilter' + SETTINGS_TOKEN);
+					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + SETTINGS_TOKEN);
+					me.PortfolioLocation = me.getSetting('PortfolioLocation' + SETTINGS_TOKEN);
 					me.FilterOnRelease = prefs.FilterOnRelease || false;
 					me.FilterReleaseName = prefs.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
 					me.FilterOnProject = prefs.FilterOnProject || false;

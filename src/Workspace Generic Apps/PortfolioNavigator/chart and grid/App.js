@@ -75,7 +75,7 @@
 				piRecord = me.CurrentPortfolioItem,
 				parallelLoaderConfig = {
 					pagesize:20000,
-					url: 'https://' + window.location.host + '/analytics/v2.0/service/rally/workspace/' + 
+					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -289,7 +289,7 @@
 						dataIndex:'FormattedID',
 						editor:false,
 						renderer: function(v, m ,r){
-							return '<a href="https://rally1.rallydev.com/#/' + r.data.Project.ObjectID + 
+							return '<a href="' + me.BaseUrl + '/#/' + r.data.Project.ObjectID + 
 								'd/detail/userstory/' + r.data.ObjectID + '" target="_blank">' + v + '</a>';
 						}
 					}, 'Name', 'PlanEstimate', {
@@ -304,7 +304,7 @@
 							});
 						},
 						renderer: function(v, m ,r){
-							if(v) return '<a href="https://rally1.rallydev.com/#/' + r.data.Iteration.Project.ObjectID + 
+							if(v) return '<a href="' + me.BaseUrl + '/#/' + r.data.Iteration.Project.ObjectID + 
 								'd/detail/iteration/' + r.data.Iteration.ObjectID + '" target="_blank">' + v.Name + '</a>';
 						}
 					},{
@@ -325,7 +325,7 @@
 						dataIndex: 'DirectChildrenCount',
 						text:'Children',
 						renderer: function(v, m ,r){
-							return '<a href="https://rally1.rallydev.com/#/' + r.data.Project.ObjectID + 
+							return '<a href="' + me.BaseUrl + '/#/' + r.data.Project.ObjectID + 
 								'd/detail/userstory/' + r.data.ObjectID + '/children" target="_blank">' + v + '</a>';
 						}
 					}] : ['FormattedID','Name','Project'],
@@ -357,7 +357,8 @@
 						endDate: me._getChartEndDate(),
 						scheduleStates: me.ScheduleStates
 					}),
-					chartData = me._updateCumulativeFlowChartData(calc.runCalculation(store.getRange())),
+					updateOptions = {trendType:'LastSprint'},		
+					chartData = me._updateCumulativeFlowChartData(calc.runCalculation(store.getRange()), updateOptions),
 					portfolioItemChart = $('#portfolioItemChart-innerCt').highcharts(
 						Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 							chart: { height:400 },

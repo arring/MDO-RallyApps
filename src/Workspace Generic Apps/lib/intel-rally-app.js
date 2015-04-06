@@ -146,6 +146,7 @@
 		},
 		_configureIntelRallyApp: function(){
 			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 					return Q.all([

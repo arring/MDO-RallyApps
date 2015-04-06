@@ -18,6 +18,18 @@
 	text-align:right; }
 
 /************************************************ TEAM COMMITS MATRIX STUFF *****************************************/
+.x-grid-header-ct .matrix-subheader-cell {
+	display:flex;
+	flex-direction:column; }
+	.x-grid-header-ct .matrix-subheader-cell .x-column-header-inner {
+		flex:1; }
+	.x-grid-header-ct .matrix-subheader-cell > .project-percentage-complete {
+		display:block !important;
+		font-size:0.7rem;
+		border-bottom:1px solid black;
+		line-height:20px !important;
+		height:20px !important; }
+		
 .x-grid-header-ct .not-dispositioned-project .x-column-header-inner,
 .x-grid-body .x-grid-row .not-committed-portfolio-item.x-grid-cell { background-color:rgba(255, 0, 0, 0.50) !important; }
 

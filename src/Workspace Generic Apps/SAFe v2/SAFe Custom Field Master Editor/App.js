@@ -153,7 +153,7 @@
 			var me=this, 
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
