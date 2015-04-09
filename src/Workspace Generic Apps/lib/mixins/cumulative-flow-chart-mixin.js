@@ -90,6 +90,7 @@
 				'FromStartWork', 
 				'LastWeek', 
 				'LastSprint', 
+				'Last2Sprints', 
 				'LinearRegression', 
 				'LinearRegressionFromStartAccepted',
 				'LinearRegressionFromStartWork'
@@ -181,6 +182,17 @@
 					return pt < 0 ? 0 : pt;
 				});	
 			}
+			if(trendType == 'Last2Sprints'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 20 < 0 ? 0 : end - 20);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
 			if(trendType == 'LinearRegression'){
 				//(Xt*X)^-1*Xt*Y = b 
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
@@ -236,21 +248,23 @@
 			}
 			
 			//apply label to correct point if needed IGNORE FIRST POINT!
-			for(i=1,len=projectedTrend.data.length; i<len;++i){
-				if(projectedTrend.data[i] >= totalPoints){
-					projectedTrend.data[i] = {
-						color:'red',
-						marker:{
-							enabled:true,
-							lineWidth:4,
-							symbol:'circle',
-							fillColor:'red',
-							lineColor:'red'
-						},
-						y: projectedTrend.data[i]
-					};
-					break;
-				}	
+			if(slope >= 0){
+				for(i=1,len=projectedTrend.data.length; i<len;++i){
+					if(projectedTrend.data[i] >= totalPoints){
+						projectedTrend.data[i] = {
+							color:'red',
+							marker:{
+								enabled:true,
+								lineWidth:4,
+								symbol:'circle',
+								fillColor:'red',
+								lineColor:'red'
+							},
+							y: projectedTrend.data[i]
+						};
+						break;
+					}	
+				}
 			}
 			return projectedTrend;
 		},

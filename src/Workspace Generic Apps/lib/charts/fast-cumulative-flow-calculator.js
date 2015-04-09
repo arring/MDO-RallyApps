@@ -71,7 +71,7 @@
 					iEnd = new Date(item._ValidTo), 
 					state = item.ScheduleState, 
 					pe = item.PlanEstimate;
-				if(!pe || ((iStart/day>>0) === (iEnd/day>>0))) continue; //no need to continue with this one
+				if(!pe || !state || ((iStart/day>>0) === (iEnd/day>>0))) continue; //no need to continue with this one
 				var startIndex = this._getIndexOnOrAfter(iStart, dates), 
 					endIndex = this._getIndexOnOrBefore(iEnd, dates);
 				if(startIndex===-1 || endIndex===-1) continue; //no need to continue here

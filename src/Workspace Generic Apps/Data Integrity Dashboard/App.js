@@ -489,7 +489,11 @@
 										me.ScrumPicker.setValue(scrum.data.Name);
 										me._redrawEverything()
 											.then(function(){ 
-												setTimeout(function(){ Ext.get(grid.originalConfig.id).scrollIntoView(me.el); }, 10);
+												me.setLoading('Loading Grids and Charts');
+												setTimeout(function(){
+													me.setLoading(false);
+													Ext.get(grid.originalConfig.id).scrollIntoView(me.el); }, 
+												10);
 											})
 											.done();
 									}
@@ -945,8 +949,8 @@
 					}
 				},{
 					showIfLeafProject:true,
-					title: 'Stories with End Date past ' + lowestPortfolioItemType + ' End Date',
-					id: 'grid-stories-with-end-past-' + lowestPortfolioItemType + '-end',
+					title: 'Stories Scheduled After ' + lowestPortfolioItemType + ' End Date',
+					id: 'grid-stories-scheduled-after-' + lowestPortfolioItemType + '-end',
 					model: 'UserStory',
 					columns: defaultUserStoryColumns.concat([{
 						text:'Iteration',
@@ -961,10 +965,9 @@
 					filterFn:function(item){
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
-							(!item.data[lowestPortfolioItemType].PlannedEndDate && !item.data[lowestPortfolioItemType].ActualEndDate) || 
-							!item.data.Iteration.EndDate) return false;
-						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate || item.data[lowestPortfolioItemType].ActualEndDate) < 
-										new Date(item.data.Iteration.EndDate);
+							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
+						if(item.data.ScheduleState == 'Accepted') return false;
+						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate) < new Date(item.data.Iteration.StartDate);
 					}
 				},{
 					showIfLeafProject:false,

@@ -1,5 +1,7 @@
 node_modules
 bower_components
 npm-debug.log
+config/rally-apikey
+config/rally-testing-workspaceOID
 scripts/get-project-oids/config.json
 scripts/get-project-oids/output*

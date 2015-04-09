@@ -72,31 +72,63 @@
 		_loadChartStore: function(){	
 			var me = this,
 				grid = Ext.getCmp('grid'),
-				piRecord = me.CurrentPortfolioItem,
-				parallelLoaderConfig = {
-					pagesize:20000,
+				piRecord = me.CurrentPortfolioItem;
+			if(grid){
+				return Q.all(_.map(grid.getSelectionModel().getSelection(), function(record){ //faster to make many requests insteadof using $in
+					var parallelLoaderConfig = {
+						url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
+							me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+						params: {
+							workspace: me.getContext().getWorkspace()._ref,
+							compress:true,
+							find:JSON.stringify({
+								Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? 
+									me.getContext().getProject().ObjectID : 
+									undefined,
+								_ItemHierarchy: record.data.ObjectID,
+								_TypeHierarchy:'HierarchicalRequirement', 
+								Children:null
+							}),
+							fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
+							hydrate:JSON.stringify(['ScheduleState'])
+						}
+					};
+					return me._parallelLoadLookbackStore(parallelLoaderConfig);
+				}))
+				.then(function(stores){
+					var items = _.reduce(stores, function(d, store){ return d.concat(store.getRange()); }, []);
+					return Ext.create('Rally.data.lookback.SnapshotStore', {
+						totalCount: items.length,
+						data: items,
+						disableMetaChangeEvent: true,
+						model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
+							extend: 'Rally.data.lookback.SnapshotModel',
+							fields: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']
+						}),
+						load: function(){}
+					});
+				});
+			} else {
+				var parallelLoaderConfig = {
 					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
-						compress:false, //because sometimes this takes forever
-						pagesize:20000,
+						compress:true,
 						find:JSON.stringify({
-							_ItemHierarchy: grid ? { $in: _.map(grid.getSelectionModel().getSelection(), function(record) { 
-									return record.data.ObjectID; }) 
-								} : piRecord.data.ObjectID,
 							Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? 
 								me.getContext().getProject().ObjectID : 
 								undefined,
+							_ItemHierarchy: piRecord.data.ObjectID,
 							_TypeHierarchy:'HierarchicalRequirement', 
-							Children:null,
-							PlanEstimate: {$gte:0}
+							Children:null
 						}),
 						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
 						hydrate:JSON.stringify(['ScheduleState'])
 					}
 				};
-			return me._parallelLoadLookbackStore(parallelLoaderConfig);
+				return me._parallelLoadLookbackStore(parallelLoaderConfig);
+			}
 		},
 		
 		/********************************* Chart utility funcs *************************************************/

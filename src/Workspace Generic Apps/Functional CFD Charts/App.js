@@ -62,32 +62,33 @@
 			me.TeamStores = {};
 			me.AllSnapshots = [];
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecords){
-				var parallelLoaderConfig = {
-					pagesize:20000,
-					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-					params: {
-						workspace: me.getContext().getWorkspace()._ref,
-						compress:false, //because sometimes this takes forever
-						pagesize:20000,
-						find: JSON.stringify({ 
-							_TypeHierarchy: 'HierarchicalRequirement',
-							Children:null,
-							PlanEstimate: {$gte:0},
-							Release: {$in: _.map(releaseRecords, function(releaseRecord){ return releaseRecord.data.ObjectID; })}
-						}),
-						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
-						hydrate:JSON.stringify(['ScheduleState'])
-					}
-				};
-				return me._parallelLoadLookbackStore(parallelLoaderConfig)
-					.then(function(snapshotStore){ 
-						var records = snapshotStore.getRange();
-						if(records.length > 0){
-							me.TeamStores[releaseRecords[0].data.Project.Name] = records;
-							me.AllSnapshots = me.AllSnapshots.concat(records);
+				return Q.all(_.map(releaseRecords, function(releaseRecord){
+					var parallelLoaderConfig = {
+						url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
+							me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+						params: {
+							workspace: me.getContext().getWorkspace()._ref,
+							compress:true,
+							find: JSON.stringify({ 
+								_TypeHierarchy: 'HierarchicalRequirement',
+								Children:null,
+								Release: releaseRecord.data.ObjectID
+							}),
+							fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
+							hydrate:JSON.stringify(['ScheduleState'])
 						}
-					});
+					};
+					return me._parallelLoadLookbackStore(parallelLoaderConfig)
+						.then(function(snapshotStore){ 
+							var records = snapshotStore.getRange();
+							if(records.length > 0){
+								var teamName = releaseRecords[0].data.Project.Name;
+								if(!me.TeamStores[teamName]) me.TeamStores[teamName] = [];
+								me.TeamStores[teamName] = me.TeamStores[teamName].concat(records);
+								me.AllSnapshots = me.AllSnapshots.concat(records);
+							}
+						});
+				}));
 			}));
 		},
 		_loadAllProjectReleases: function(){ 
@@ -211,7 +212,7 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var updateOptions = {trendType:'LastSprint'},
+			var updateOptions = {trendType:'Last2Sprints'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -243,7 +244,7 @@
 				}),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'LastSprint'},
+				var updateOptions = {trendType:'Last2Sprints'},
 					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);

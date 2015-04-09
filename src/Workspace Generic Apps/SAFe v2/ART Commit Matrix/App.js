@@ -201,7 +201,7 @@
 					}))
 					.then(function(items){
 						var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
-						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore();
+						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
 						me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
 						
 						//make the mapping of lowest to highest portfolioItems
@@ -259,39 +259,33 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
-				newMatrixProjectMap = {},
-				portfolioItemCount = me.PortfolioItemStore.getRange().length,
-				portfolioItemPageSize = 20,
-				requestCount = (portfolioItemCount/portfolioItemPageSize>>0) + (portfolioItemCount%portfolioItemPageSize ? 1 : 0);
-			
-			return Q.all(_.map(_.times(requestCount, 
-				function(n){ return me.PortfolioItemStore.getRange().slice(n*portfolioItemPageSize, (n+1)*portfolioItemPageSize); }), 
-				function(portfolioItemRecords){
-					var config = {
-							model: me.UserStory,
-							url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-							params: {
-								pagesize:200,
-								query: me._getUserStoryQueryString(portfolioItemRecords),
-								fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
-								workspace:me.getContext().getWorkspace()._ref
-							}
-						};
-					return me._parallelLoadWsapiStore(config).then(function(store){
-						_.each(store.getRange(), function(storyRecord){
-							var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
-								projectName = storyRecord.data.Project.Name;		
-							if(!newMatrixUserStoryBreakdown[projectName]) 
-								newMatrixUserStoryBreakdown[projectName] = {};
-							if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
-								newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
-							newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
-							newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
-						});
-						store.destroyStore();
+				newMatrixProjectMap = {};
+				
+			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
+				var config = {
+						model: me.UserStory,
+						url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
+						pagesize:200,
+						params: {
+							query: me._getUserStoryQueryString(portfolioItemRecords),
+							fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
+							workspace:me.getContext().getWorkspace()._ref
+						}
+					};
+				return me._parallelLoadWsapiStore(config).then(function(store){
+					_.each(store.getRange(), function(storyRecord){
+						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
+							projectName = storyRecord.data.Project.Name;		
+						if(!newMatrixUserStoryBreakdown[projectName]) 
+							newMatrixUserStoryBreakdown[projectName] = {};
+						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
+							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
+						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
+						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
 					});
-				})
-			)
+					store.destroyStore();
+				});
+			}))
 			.then(function(){
 				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
 				me.MatrixProjectMap = newMatrixProjectMap;
@@ -854,7 +848,7 @@
 		/************************************************************* RENDER ********************************************************************/
 		_loadMatrixGrid: function(){
 			var me = this,
-				MoSCoWRanks = ['Must', 'Should', 'Could', 'Won\'t', 'Undefined', ''],
+				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''],
 				sortedPortfolioItems = _.sortBy(me.PortfolioItemStore.getRange(), function(p){ return MoSCoWRanks.indexOf(p.data.c_MoSCoW); }),
 				matrixRecords = _.map(sortedPortfolioItems, function(portfolioItemRecord, index){
 					return {
@@ -944,15 +938,17 @@
 				dataIndex:'MoSCoW',
 				tdCls: 'moscow-cell intel-editor-cell',	
 				width:100,
+				tooltip:'Must Have, Should Have, Could Have, Won\'t Have',
+				tooltipType:'title',
 				editor:{
 					xtype:'intelfixedcombo',
 					store: Ext.create('Ext.data.Store', {
 						fields: ['MoSCoW'],
 						data:[
-							{MoSCoW:'Must'},
-							{MoSCoW:'Should'},
-							{MoSCoW:'Could'},
-							{MoSCoW:'Won\'t'},
+							{MoSCoW:'Must Have'},
+							{MoSCoW:'Should Have'},
+							{MoSCoW:'Could Have'},
+							{MoSCoW:'Won\'t Have'},
 							{MoSCoW:'Undefined'}
 						]
 					}),
@@ -973,10 +969,10 @@
 					});
 				},
 				renderer:function(val, meta){
-					if(val == 'Must') meta.tdCls += ' must-have';
-					if(val == 'Should') meta.tdCls += ' should-have';
-					if(val == 'Could') meta.tdCls += ' could-have';
-					if(val == 'Won\'t') meta.tdCls += ' wont-have';
+					if(val == 'Must Have') meta.tdCls += ' must-have';
+					if(val == 'Should Have') meta.tdCls += ' should-have';
+					if(val == 'Could Have') meta.tdCls += ' could-have';
+					if(val == 'Won\'t Have') meta.tdCls += ' wont-have';
 					return val || 'Undefined'; 
 				},	
 				layout:'hbox',
@@ -988,10 +984,10 @@
 						fields:['MoSCoW'],
 						data: [
 							{MoSCoW: 'All'},
-							{MoSCoW:'Must'},
-							{MoSCoW:'Could'},
-							{MoSCoW:'Should'},
-							{MoSCoW:'Won\'t'},
+							{MoSCoW:'Must Have'},
+							{MoSCoW:'Should Have'},
+							{MoSCoW:'Could Have'},
+							{MoSCoW:'Won\'t Have'},
 							{MoSCoW:'Undefined'}
 						]
 					}),

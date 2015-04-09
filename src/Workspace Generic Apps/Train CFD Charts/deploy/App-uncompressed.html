@@ -445,6 +445,7 @@
 		},
 		
 		/********************************************** Project Funcs ********************************************/	
+		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -1149,6 +1150,7 @@
 				'FromStartWork', 
 				'LastWeek', 
 				'LastSprint', 
+				'Last2Sprints', 
 				'LinearRegression', 
 				'LinearRegressionFromStartAccepted',
 				'LinearRegressionFromStartWork'
@@ -1240,6 +1242,17 @@
 					return pt < 0 ? 0 : pt;
 				});	
 			}
+			if(trendType == 'Last2Sprints'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 20 < 0 ? 0 : end - 20);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
 			if(trendType == 'LinearRegression'){
 				//(Xt*X)^-1*Xt*Y = b 
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
@@ -1295,21 +1308,23 @@
 			}
 			
 			//apply label to correct point if needed IGNORE FIRST POINT!
-			for(i=1,len=projectedTrend.data.length; i<len;++i){
-				if(projectedTrend.data[i] >= totalPoints){
-					projectedTrend.data[i] = {
-						color:'red',
-						marker:{
-							enabled:true,
-							lineWidth:4,
-							symbol:'circle',
-							fillColor:'red',
-							lineColor:'red'
-						},
-						y: projectedTrend.data[i]
-					};
-					break;
-				}	
+			if(slope >= 0){
+				for(i=1,len=projectedTrend.data.length; i<len;++i){
+					if(projectedTrend.data[i] >= totalPoints){
+						projectedTrend.data[i] = {
+							color:'red',
+							marker:{
+								enabled:true,
+								lineWidth:4,
+								symbol:'circle',
+								fillColor:'red',
+								lineColor:'red'
+							},
+							y: projectedTrend.data[i]
+						};
+						break;
+					}	
+				}
 			}
 			return projectedTrend;
 		},
@@ -1462,6 +1477,7 @@
 			var me=this;
 			config.itemOffset = 1; //page index starts at 1 for wsapi
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.wsapi.Store', {
 					model: config.model,
@@ -1476,6 +1492,7 @@
 			var me=this;
 			config.itemOffset = 0; //page index starts at 0 for lookback
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 20000) ? config.pagesize : 20000;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
 					totalCount: items.length,
@@ -1659,7 +1676,7 @@
 					iEnd = new Date(item._ValidTo), 
 					state = item.ScheduleState, 
 					pe = item.PlanEstimate;
-				if(!pe || ((iStart/day>>0) === (iEnd/day>>0))) continue; //no need to continue with this one
+				if(!pe || !state || ((iStart/day>>0) === (iEnd/day>>0))) continue; //no need to continue with this one
 				var startIndex = this._getIndexOnOrAfter(iStart, dates), 
 					endIndex = this._getIndexOnOrBefore(iEnd, dates);
 				if(startIndex===-1 || endIndex===-1) continue; //no need to continue here
@@ -1730,15 +1747,13 @@
 			me.TeamStores = {};
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
 				var parallelLoaderConfig = {
-					pagesize:20000,
 					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
-						compress:false, //makes it very slow sometimes
-						pagesize:20000,
+						compress:true,
 						find: JSON.stringify({ 
-							_TypeHierarchy: 'HierarchicalRequirement',  // USE lowestPortfolioItem NOT 'PortfolioItem'!!!!!!!! think child user stories!
+							_TypeHierarchy: 'HierarchicalRequirement',
 							Children: null,
 							Release: releaseRecord.data.ObjectID
 						}),
@@ -1761,7 +1776,7 @@
 			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithName = _.filter(releaseRecords, function(r){ 
-						return r.data.Project && r.data.Project.TeamMembers.Count > 0; 
+						return r.data.Project && r.data.Project.TeamMembers.Count > 0; //ignore projects without teamMembers
 					});
 				});
 		},
@@ -1960,17 +1975,15 @@
 		_topPortfolioItemPickerSelected: function(combo, records){
 			var me=this, 
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
-				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All',
 				value = records[0].data.Name;
 			if((value === null && me.CurrentTopPortfolioItemName===null) || (value === me.CurrentTopPortfolioItemName)) return;
-			if(value === allPiOfTypeLabel) me.CurrentTopPortfolioItemName = null;
+			if(value === 'All Work') me.CurrentTopPortfolioItemName = null;
 			else me.CurrentTopPortfolioItemName = value;
 			me._redrawEverything();
 		},				
 		_buildTopPortfolioItemPicker: function(){
 			var me=this,
-				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
-				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All';
+				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
 			me.TopPortfolioItemPicker = Ext.getCmp('navBar').add({
 				xtype:'intelfixedcombo',
 				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
@@ -1978,10 +1991,10 @@
 				width: 240,
 				store: Ext.create('Ext.data.Store', {
 					fields:['Name'],
-					data: [{Name:allPiOfTypeLabel}].concat(me.TopPortfolioItemNames)
+					data: [{Name:'All Work'}].concat(me.TopPortfolioItemNames)
 				}),
 				displayField: 'Name',
-				value: me.CurrentTopPortfolioItemName || allPiOfTypeLabel,
+				value: me.CurrentTopPortfolioItemName || 'All Work',
 				listeners: { select: me._topPortfolioItemPickerSelected.bind(me) }
 			});
 		},		
@@ -1998,7 +2011,7 @@
 				});
 
 			/************************************** Train CHART STUFF *********************************************/
-			var updateOptions = {trendType:'LastSprint'},
+			var updateOptions = {trendType:'Last2Sprints'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -2029,7 +2042,7 @@
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'LastSprint'},
+				var updateOptions = {trendType:'Last2Sprints'},
 					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);

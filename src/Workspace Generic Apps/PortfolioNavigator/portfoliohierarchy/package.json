@@ -2,17 +2,15 @@
   "name": "PortfolioNavigatorHierarchy",
   "version": "0.0.1",
   "private": true,
-  "directories": {
-    "test": "test"
-  },
-  "scripts": {
-    "test": "grunt jasmine"
-  },
-  "author": "",
+	"author": {
+		"name": "Nick Thorpe"
+	},
+  "contributors": [
+		{
+			"name": "Samuel Steffl",
+			"email": "sammysteffl@gmail.com"
+		}
+	],
   "license": "MIT",
-  "dependencies": {
-    "grunt": "^0.4.5",
-    "grunt-contrib-jasmine": "^0.8.2",
-    "grunt-contrib-jshint": "^0.11.1"
-  }
+  "devDependencies": {}
 }

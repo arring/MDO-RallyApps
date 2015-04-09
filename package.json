@@ -1,16 +1,29 @@
 {
   "name": "MDO-RallyApps",
-  "version": "0.0.1",
-  "description": "MDO-RallyApps\r =============",
-  "main": " ",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "version": "0.0.2",
+  "description": "A Suite of Custom Rally Apps",
   "repository": {
     "type": "git",
     "url": "https://github.com/arring/MDO-RallyApps.git"
   },
-  "author": "",
+  "contributors": [
+    {
+      "name": "Samuel Steffl",
+      "email": "sammysteffl@gmail.com"
+    },
+    {
+      "name": "Sarita Regmi"
+    },
+    {
+      "name": "Allen Ringel"
+    },
+    {
+      "name": "Darius Grudzien"
+    },
+    {
+      "name": "Nick Thorpe"
+    }
+  ],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/arring/MDO-RallyApps/issues"
@@ -23,7 +36,16 @@
   },
   "devDependencies": {
     "grunt": "^0.4.5",
+    "grunt-contrib-clean": "^0.6.0",
+    "grunt-contrib-connect": "^0.10.1",
     "grunt-contrib-jasmine": "^0.8.2",
-    "grunt-contrib-jshint": "^0.11.1"
+    "grunt-contrib-jshint": "^0.11.1",
+    "grunt-jasmine-node": "^0.3.1",
+    "grunt-mkdir": "^0.1.2",
+    "grunt-shell-spawn": "^0.3.2",
+    "grunt-webdriver-jasmine-runner": "^0.3.9",
+    "grunt-webdriver-jasmine2-runner": "^0.3.10",
+    "load-grunt-plugins-from-parent": "0.0.1",
+    "webdriverio": "^2.4.5"
   }
 }

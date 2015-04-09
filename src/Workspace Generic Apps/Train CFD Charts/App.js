@@ -53,15 +53,13 @@
 			me.TeamStores = {};
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
 				var parallelLoaderConfig = {
-					pagesize:20000,
 					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
 					params: {
 						workspace: me.getContext().getWorkspace()._ref,
-						compress:false, //makes it very slow sometimes
-						pagesize:20000,
+						compress:true,
 						find: JSON.stringify({ 
-							_TypeHierarchy: 'HierarchicalRequirement',  // USE lowestPortfolioItem NOT 'PortfolioItem'!!!!!!!! think child user stories!
+							_TypeHierarchy: 'HierarchicalRequirement',
 							Children: null,
 							Release: releaseRecord.data.ObjectID
 						}),
@@ -283,17 +281,15 @@
 		_topPortfolioItemPickerSelected: function(combo, records){
 			var me=this, 
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
-				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All',
 				value = records[0].data.Name;
 			if((value === null && me.CurrentTopPortfolioItemName===null) || (value === me.CurrentTopPortfolioItemName)) return;
-			if(value === allPiOfTypeLabel) me.CurrentTopPortfolioItemName = null;
+			if(value === 'All Work') me.CurrentTopPortfolioItemName = null;
 			else me.CurrentTopPortfolioItemName = value;
 			me._redrawEverything();
 		},				
 		_buildTopPortfolioItemPicker: function(){
 			var me=this,
-				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
-				allPiOfTypeLabel = topPiType ? ('All ' + topPiType + 's') : 'All';
+				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
 			me.TopPortfolioItemPicker = Ext.getCmp('navBar').add({
 				xtype:'intelfixedcombo',
 				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
@@ -301,10 +297,10 @@
 				width: 240,
 				store: Ext.create('Ext.data.Store', {
 					fields:['Name'],
-					data: [{Name:allPiOfTypeLabel}].concat(me.TopPortfolioItemNames)
+					data: [{Name:'All Work'}].concat(me.TopPortfolioItemNames)
 				}),
 				displayField: 'Name',
-				value: me.CurrentTopPortfolioItemName || allPiOfTypeLabel,
+				value: me.CurrentTopPortfolioItemName || 'All Work',
 				listeners: { select: me._topPortfolioItemPickerSelected.bind(me) }
 			});
 		},		
@@ -321,7 +317,7 @@
 				});
 
 			/************************************** Train CHART STUFF *********************************************/
-			var updateOptions = {trendType:'LastSprint'},
+			var updateOptions = {trendType:'Last2Sprints'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -352,7 +348,7 @@
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me._getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'LastSprint'},
+				var updateOptions = {trendType:'Last2Sprints'},
 					scrumChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
