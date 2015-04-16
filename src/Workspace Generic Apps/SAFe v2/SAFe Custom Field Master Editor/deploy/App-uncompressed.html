@@ -156,6 +156,7 @@
 		},
 		_configureIntelRallyApp: function(){
 			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 					return Q.all([
@@ -441,6 +442,7 @@
 		},
 		
 		/********************************************** Project Funcs ********************************************/	
+		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -1054,7 +1056,10 @@
 	});
 }());
                 /** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute */
+	you do stuff and then you call the callback passed to you so the next function can execute.
+	
+	IT WILL ALWAYS PERFORM YOUR QUEUED FUNCTION WRAPPED IN A setTimeout. 
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -1069,7 +1074,11 @@
 			if(me.QueueOfFuncs[queueName]){
 				me.QueueOfFuncs[queueName].shift();
 				if(!me.QueueOfFuncs[queueName].length) return;
-				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+				else {
+					setTimeout(function(){
+						me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+					}, 0);
+				}
 			}
 		},
 		
@@ -1080,7 +1089,9 @@
 			if(typeof callback !== 'function') throw 'ERROR: not a function';
 			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
 				me.QueueOfFuncs[queueName] = [callback];
-				callback.call(me, me._dequeue.bind(me, queueName));
+				setTimeout(function(){
+					callback.call(me, me._dequeue.bind(me, queueName));
+				}, 0);
 			}
 			else me.QueueOfFuncs[queueName].push(callback);
 		}
@@ -1162,6 +1173,7 @@
 			var me=this;
 			config.itemOffset = 1; //page index starts at 1 for wsapi
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.wsapi.Store', {
 					model: config.model,
@@ -1176,6 +1188,7 @@
 			var me=this;
 			config.itemOffset = 0; //page index starts at 0 for lookback
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 20000) ? config.pagesize : 20000;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
 					totalCount: items.length,
@@ -2564,7 +2577,7 @@
 			var me=this, 
 				config = {
 					model: me.UserStory,
-					url: 'https://rally1.rallydev.com/slm/webservice/v2.0/HierarchicalRequirement',
+					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
 					params: {
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),

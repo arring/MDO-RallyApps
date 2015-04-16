@@ -442,6 +442,7 @@
 		},
 		
 		/********************************************** Project Funcs ********************************************/	
+		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -1172,6 +1173,7 @@
 			var me=this;
 			config.itemOffset = 1; //page index starts at 1 for wsapi
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.wsapi.Store', {
 					model: config.model,
@@ -1186,6 +1188,7 @@
 			var me=this;
 			config.itemOffset = 0; //page index starts at 0 for lookback
 			config.pagesize = (config.pagesize > 0 && config.pagesize <= 20000) ? config.pagesize : 20000;
+			config.params.pagesize = config.pagesize;
 			return me.__parallelLoadData(config).then(function(items){
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
 					totalCount: items.length,

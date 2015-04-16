@@ -1,54 +1,48 @@
-var browserName = process.env.BROWSER_NAME || 'phantomjs',
+var util = require('util'),
+	browserName = process.env.BROWSER_NAME || 'phantomjs',
+	USERNAME = process.env.USERNAME,
+	PASSWORD = process.env.PASSWORD,
+	WORKSPACE_OID = process.env.WORKSPACE_OID,
 	E2E_URL = process.env.E2E_URL,
-	webdriverio = require('webdriverio');
+	webdriverio = require('webdriverio'),
+	initTestData = require('../../lib/init-test-data.js');
 	
 if(!E2E_URL) throw new Error('Invalid URL');
+if(!WORKSPACE_OID) throw new Error('Invalid WORKSPACE_OID');
+if(!USERNAME) throw new Error('Invalid USERNAME');
+if(!PASSWORD) throw new Error('Invalid PASSWORD');
+
+jasmine.DEFAULT_TIMEOUT_INTERVAL = 9999999;
 
 describe('Testing User Interactions', function(){
 	var client = {};
-		
-	beforeAll(function(){
-		//workspace init
-		//mock jsonp init
-		//mock ajax init
-		//mock userinteraction init
-	});
 	
-	afterAll(function(){
-		//mock jsonp uninstall
-		//mock ajax uninstall
-		//mock userinteraction uninstall
-	});
+	beforeAll(function(done){ initTestData().then(done); });
 	
-	beforeEach(function(){
+	beforeEach(function(done){
 		client = webdriverio.remote({ desiredCapabilities: { browserName: browserName } });
-		client.init();
-	});
-	
-	it('test it', function(done) {
 		client
-			.url('https://github.com/')
-			.getElementSize('.header-logo-wordmark', function(err, result) {
-				expect(err).toBeFalsy();
-				expect(result.height).toBe(26);
-				expect(result.width).toBe(37);
-			})
-			.getTitle(function(err, title) {
-				expect(err).toBeFalsy();
-				expect(title).toBe('GitHub · Build software better, together.');
-			})
-			.getCssProperty('a[href="/plans"]', 'color', function(err, color){
-				expect(err).toBeFalsy();
-				expect(color).toBe('rgba(65,131,196,1)');
-			})
+			.init()
+			.url('https://rally1.rallydev.com/login/')
+			.setValue('[name="username"]', USERNAME)
+			.setValue('[name="password"]', PASSWORD)
+			.click('#submit')
 			.call(done);
 	});
-
-	afterEach(function(done) {
+	
+	afterEach(function(done){
 		client.end(done);
 	});
-});
-
-// //what do i want to test?
-	// - User interactions (resizing, click on dropdowns, scroll) -- we mock the JSONP and AJAX calls, Mock user interaction
 	
+	it('should search for cookies', function(done){
+		client
+			.url('https://google.com')
+			.setValue('[name="q"]', 'cookies')
+			.isVisible('[value="Google Search"]', function(err, isVisible){
+				if(isVisible) return this.click('[value="Google Search"]');
+				else return this.click('[value="Search"]');
+			})
+			.pause(5000)
+			.call(done);
+	});
+});

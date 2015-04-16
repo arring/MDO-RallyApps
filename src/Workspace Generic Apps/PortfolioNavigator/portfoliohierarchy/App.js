@@ -2,6 +2,13 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
+	// var projectOid = '__PROJECT_OID__';
+	// var userOid = '__USER_OID__';
+	// if(projectOid === '__PROJECT' + '_OID__') {
+			// projectOid = 123456; //well known default for testing
+			// userOid = 234567; //well known default for testing
+	// }
+	// var SETTINGS_TOKEN = projectOid + '-' + userOid;
 	var context = Rally.environment.getContext(),
 		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
 

@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy564228";
+	var smAppID = "Portfolio_Hierarchy639469";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy564228";	
+					var smAppID = "Portfolio_Hierarchy639469";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							/** this extends Rally.app.app. if you want to use it's utility functions, just
 		extend IntelRallyApp instead of Rally.app.App
@@ -1571,6 +1571,7 @@
 		},
 		_configureIntelRallyApp: function(){
 			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 					return Q.all([
@@ -1856,6 +1857,7 @@
 		},
 		
 		/********************************************** Project Funcs ********************************************/	
+		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -2193,7 +2195,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2225,7 +2227,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2292,10 +2294,13 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute */
+	you do stuff and then you call the callback passed to you so the next function can execute.
+	
+	IT WILL ALWAYS PERFORM YOUR QUEUED FUNCTION WRAPPED IN A setTimeout. 
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
@@ -2310,7 +2315,11 @@
 			if(me.QueueOfFuncs[queueName]){
 				me.QueueOfFuncs[queueName].shift();
 				if(!me.QueueOfFuncs[queueName].length) return;
-				else me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+				else {
+					setTimeout(function(){
+						me.QueueOfFuncs[queueName][0].call(me, me._dequeue.bind(me, queueName));
+					}, 0);
+				}
 			}
 		},
 		
@@ -2321,7 +2330,9 @@
 			if(typeof callback !== 'function') throw 'ERROR: not a function';
 			if(!me.QueueOfFuncs[queueName] || !me.QueueOfFuncs[queueName].length){
 				me.QueueOfFuncs[queueName] = [callback];
-				callback.call(me, me._dequeue.bind(me, queueName));
+				setTimeout(function(){
+					callback.call(me, me._dequeue.bind(me, queueName));
+				}, 0);
 			}
 			else me.QueueOfFuncs[queueName].push(callback);
 		}
@@ -2334,7 +2345,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							/** This class is used to save user preferences per project, that can follow the user from app to app **/
 (function(){
@@ -2381,7 +2392,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2427,7 +2438,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2461,7 +2472,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2513,7 +2524,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2580,14 +2591,15 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy564228";			
+						var smAppID = "Portfolio_Hierarchy639469";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	var USER_TOKEN = (__PROJECT_OID__ + '-' + __USER_OID__);
-	
+
+	var context = Rally.environment.getContext(),
+		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
+
 	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
 		mixins: [
@@ -2622,16 +2634,16 @@
 		config: {
 			defaultSettings: (function(){
 				var s = {};
-				s['Type' + USER_TOKEN] = ''; 
-				s['QueryFilter' + USER_TOKEN] = '';
-				s['InferPortfolioLocation' + USER_TOKEN] = true;
-				s['PortfolioLocation' + USER_TOKEN] = 0;
+				s['Type' + SETTINGS_TOKEN] = ''; 
+				s['QueryFilter' + SETTINGS_TOKEN] = '';
+				s['InferPortfolioLocation' + SETTINGS_TOKEN] = true;
+				s['PortfolioLocation' + SETTINGS_TOKEN] = 0;
 				return s;
 			}())
 		},				
 		getSettingsFields: function() {
 			return [{
-				name: 'Type' + USER_TOKEN,
+				name: 'Type' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -2667,18 +2679,18 @@
 				label: 'Type',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'QueryFilter' + USER_TOKEN,
+				name: 'QueryFilter' + SETTINGS_TOKEN,
 				xtype: 'textfield',
 				label: 'Query Filter',
 				labelWidth: 120, width:'100%'
 			},{
-				name: 'InferPortfolioLocation' + USER_TOKEN,
+				name: 'InferPortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycheckboxfield',
 				label: 'Infer Portfolio Location',
 				labelWidth: 120, width:'100%',
 				bubbleEvents: ['change'] 
 			},{
-				name: 'PortfolioLocation' + USER_TOKEN,
+				name: 'PortfolioLocation' + SETTINGS_TOKEN,
 				xtype:'rallycombobox',
 				editable:false,
 				queryFilter:true, //<--- this is a hack, but it works
@@ -2706,7 +2718,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy564228").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy639469").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -2792,16 +2804,16 @@
 				.then(function(){
 					var pid = me.ProjectRecord.data.ObjectID, 
 						prefs = me.AppsPref.projs[pid] || {};
-					me.PIType = me.getSetting('Type' + USER_TOKEN);
+					me.PIType = me.getSetting('Type' + SETTINGS_TOKEN);
 					if(!me.PIType){
 						me.PIType = me.PortfolioItemTypes[0];
 						var newSettings = {};
-						newSettings['Type' + USER_TOKEN] = me.PIType;
+						newSettings['Type' + SETTINGS_TOKEN] = me.PIType;
 						me.updateSettingsValues({settings:newSettings});
 					}
-					me.QueryFilter = me.getSetting('QueryFilter' + USER_TOKEN);
-					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + USER_TOKEN);
-					me.PortfolioLocation = me.getSetting('PortfolioLocation' + USER_TOKEN);
+					me.QueryFilter = me.getSetting('QueryFilter' + SETTINGS_TOKEN);
+					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + SETTINGS_TOKEN);
+					me.PortfolioLocation = me.getSetting('PortfolioLocation' + SETTINGS_TOKEN);
 					me.FilterOnRelease = prefs.FilterOnRelease || false;
 					me.FilterReleaseName = prefs.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
 					me.FilterOnProject = prefs.FilterOnProject || false;
@@ -3048,11 +3060,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy564228";			
+				var smAppID = "Portfolio_Hierarchy639469";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy564228"
+						smAppID: "Portfolio_Hierarchy639469"
 					});
 				}
 			}());

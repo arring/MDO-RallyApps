@@ -166,7 +166,7 @@
 				
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
@@ -242,6 +242,11 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
+				releaseFilter = 
+					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
+						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }).and(
+						Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType+'.Release.Name', value: me.ReleaseRecord.data.Name }))
+					),
 				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', {
 						property: lowestPortfolioItemType + '.ObjectID',
@@ -249,7 +254,7 @@
 					});
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
-			return portfolioItemFilter ? portfolioItemFilter.and(leafFilter).toString() : '';
+			return portfolioItemFilter ? releaseFilter.and(leafFilter).and(portfolioItemFilter).toString() : '';
 		},
 		_loadUserStories: function(){
 			/** note: lets say the lowest portfolioItemType is 'Feature'. If we want to get child user stories under a particular Feature,
@@ -1290,6 +1295,7 @@
 						
 						grid.mon(view, {
 							uievent: function (type, view, cell, row, col, e){
+								var moveAndResizePanel;
 								if((me.ClickMode === 'Details' || me.ClickMode === 'Comment') && type === 'mousedown') {
 									var matrixRecord = me.MatrixStore.getAt(row),
 										projectName = view.getGridColumns()[col].text,
@@ -1305,10 +1311,10 @@
 									if(oldTooltip && (oldTooltip.row == row && oldTooltip.col == col)) return;
 									
 									/* jshint -W082 */
-									function moveAndResizePanel(panel){
+									moveAndResizePanel = function(panel){
 										var upsideDown = (dbs < panel.getHeight() + 80);
 										panel.setPosition(pos.left-panelWidth, (upsideDown ? pos.bottom - panel.getHeight() : pos.top));
-									}
+									};
 									
 									if(me.ClickMode === 'Details'){
 										var panelHTML = [

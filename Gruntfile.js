@@ -56,16 +56,16 @@ module.exports = function(grunt){
 		pkg: grunt.file.readJSON('package.json'),
 		jshint: {
 			base: ['scripts/**/*.js', 'Gruntfile.js'],
-		}
+		},
 		appsjshint: {
 			apps: ['src/**/Gruntfile.js', '!src/**/bower_components/**', '!src/**/node_modules/**']
 		},
 		test:{
 			apps: ['src/**/Gruntfile.js', '!src/**/bower_components/**', '!src/**/node_modules/**']
 		},
-		installApps:{
+		init:{
 			apps: ['src/**/package.json', '!src/**/bower_components/**', '!src/**/node_modules/**']
-		}
+		},
 		shell:{
 			install_selenium_standalone: {
 				command: 'selenium-standalone install',

@@ -12,7 +12,7 @@
 		
 		_fixRallyDashboard: function(){ 
 			/** makes app as large as screen, without the padding/margin */
-			if(window.frameElement){
+			if(window && window.frameElement){
 				var me=this,
 					bottomEl = Ext.get(window.frameElement),
 					portlet = bottomEl.up('.x-portlet'), 
@@ -61,7 +61,7 @@
 		_disableResizeHandle: function(){ 
 			/** hides the draggable resize handle from under the app */
 			var me=this, handle;
-			if(window.frameElement){
+			if(window && window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
 				if(handle) {
 					handle.hide();

@@ -193,7 +193,7 @@
 						pagesize:200,
 						query: me._getUserStoryFilter().toString(),
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
-							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
+							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'DirectChildrenCount',					
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'].join(','),
 						project:me.ProjectRecord.data._ref,
 						projectScopeDown:false,
@@ -280,7 +280,9 @@
 			me._TeamCommitsCountHash = me._TeamCommitsCountHash || {};
 			if(typeof me._TeamCommitsCountHash[portfolioItemObjectID] === 'undefined'){
 				me._TeamCommitsCountHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
-					return sum + ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID)*1;
+					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID),
+						isLeafStory = (userStory.data.DirectChildrenCount === 0);
+					return sum + (isLeafStory && isStoryInPortfolioItem)*1;
 				}, 0);
 			}
 			return me._TeamCommitsCountHash[portfolioItemObjectID];
@@ -291,8 +293,9 @@
 			me._TeamCommitsEstimateHash = me._TeamCommitsEstimateHash || {};
 			if(typeof me._TeamCommitsEstimateHash[portfolioItemObjectID] === 'undefined'){
 				me._TeamCommitsEstimateHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
-					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID);
-					return sum + (isStoryInPortfolioItem ? userStory.data.PlanEstimate : 0)*1;
+					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID),
+						isLeafStory = (userStory.data.DirectChildrenCount === 0);
+					return sum + ((isLeafStory && isStoryInPortfolioItem) ? userStory.data.PlanEstimate : 0)*1;
 				}, 0);
 			}
 			return me._TeamCommitsEstimateHash[portfolioItemObjectID];
@@ -334,14 +337,13 @@
 						new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
 				})
 			},{
-				title: 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date',
-				userStories: _.filter(totalUserStories, function(item){
+				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
+				userStories: _.filter(totalUserStories, function(item){		
 					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 					if(!item.data.Iteration || !item.data[lowestPortfolioItem] || 
-						(!item.data[lowestPortfolioItem].PlannedEndDate && !item.data[lowestPortfolioItem].ActualEndDate) || 
-						!item.data.Iteration.EndDate) return false;
-					return new Date(item.data[lowestPortfolioItem].PlannedEndDate || item.data[lowestPortfolioItem].ActualEndDate) < 
-									new Date(item.data.Iteration.EndDate);
+						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
+					if(item.data.ScheduleState == 'Accepted') return false;
+					return new Date(item.data[lowestPortfolioItem].PlannedEndDate) < new Date(item.data.Iteration.StartDate);
 				})
 			}];
 		},
@@ -1847,6 +1849,7 @@
 		},		
 		_loadVelocityGrid: function() {
 			var me = this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
 					return us.data.Iteration ? us.data.Iteration.Name : '__DELETE__' ; 
 				});
@@ -1857,7 +1860,12 @@
 				return {    
 					Name:iName, 
 					PlannedVelocity: iteration.data.PlannedVelocity || 0,
-					RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) { return sum + us.data.PlanEstimate; }, 0)
+					RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) { 
+						return sum + 
+							(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
+								us.data.PlanEstimate : 
+								0);
+					}, 0)
 				};
 			}), 'Name');
 			
@@ -1956,7 +1964,10 @@
 					var planned = _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0),
 						real = _.reduce(me.IterationStore.getRecords(), function(bigSum, iteration){
 							return bigSum + _.reduce((iterationGroups[iteration.data.Name] || []), function(sum, us) {
-								return sum + us.data.PlanEstimate;
+								return sum + 
+									(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
+										us.data.PlanEstimate : 
+										0);
 							}, 0);
 						}, 0);
 					meta.tdCls += ((real < planned*0.8) ? ' velocity-grid-warning-cell ' : '');
@@ -2050,7 +2061,7 @@
 						if(val == 'Improperly Sized Stories') meta.tdCls += ' aqua-bg-cell';
 						if(val == 'Stories in Release without Iteration') meta.tdCls += ' silver-bg-cell';
 						if(val == 'Stories in Iteration not attached to Release') meta.tdCls += ' teal-bg-cell';
-						if(val == 'Stories with End Date past ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' yellow-bg-cell';
+						if(val == 'Stories Scheduled After ' + me.PortfolioItemTypes[0] + ' End Date') meta.tdCls += ' yellow-bg-cell';
 						return val; 
 					}
 				},{
