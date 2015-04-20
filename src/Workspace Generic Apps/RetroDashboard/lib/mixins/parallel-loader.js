@@ -16,7 +16,6 @@ params: query parameter object with keys and vals
 var Ext = window.Ext4 || window.Ext;
 Ext.define('ParallelLoader', {
     __parallelLoadData: function(config){
-
         var me=this,
         pagesize = config.pagesize,
         url = config.url,
@@ -52,21 +51,24 @@ Ext.define('ParallelLoader', {
                         method:'GET',
                         params: thisParams,
                         success: function(response){
-                            var resJSON  = JSON.parse(response.responseText),
+                         var resJSON  = JSON.parse(response.responseText),
                             items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;
                             outputItems = outputItems.concat(items);
                             nextDeferred.resolve();
                         },
                         failure: function(response){
-							console.log("error",response);
-							nextDeferred.reject(response); }
+                            console.log("error",response);
+                            nextDeferred.reject(response); }
                         });
                     });
                     Q.all(additionalPromises).then(function(){ thisDeferred.resolve(); });
                 }
                 else thisDeferred.resolve();
             },
-            failure: function(response){ thisDeferred.reject(response); }
+            failure: function(response){ 
+            console.log("error in the parallel loader",response);
+            thisDeferred.reject(response); 
+            }
             });
         });
         return Q.all(promises).then(function(){ return outputItems; });
@@ -76,15 +78,14 @@ Ext.define('ParallelLoader', {
         config.itemOffset = 1; //page index starts at 1 for wsapi
         config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
         return me.__parallelLoadData(config).then(function(items){
-
         var featureStore = Ext.create('Rally.data.wsapi.Store', {
             model: config.model,//model has to be an object type 
             totalCount: items.length,
             data: items,
             load: function(){}
             });
-		
-		return featureStore;
+        
+        return featureStore;
         });
     },
     _parallelLoadLookbackStore: function(config){

@@ -811,7 +811,6 @@
 		}
 	});
 }());
-
                 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
@@ -1175,7 +1174,6 @@
 		}
 	});
 }());
-
                 /** This is a mixin that updates highchart data after it is run through the lookback calculator
 	it specifically: (optionally) adds trendlines, zeros out the future numbers, and
 	adds a datemap from workweeks to actual dates
@@ -1318,7 +1316,6 @@ params: query parameter object with keys and vals
 var Ext = window.Ext4 || window.Ext;
 Ext.define('ParallelLoader', {
     __parallelLoadData: function(config){
-
         var me=this,
         pagesize = config.pagesize,
         url = config.url,
@@ -1354,21 +1351,24 @@ Ext.define('ParallelLoader', {
                         method:'GET',
                         params: thisParams,
                         success: function(response){
-                            var resJSON  = JSON.parse(response.responseText),
+                         var resJSON  = JSON.parse(response.responseText),
                             items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;
                             outputItems = outputItems.concat(items);
                             nextDeferred.resolve();
                         },
                         failure: function(response){
-							console.log("error",response);
-							nextDeferred.reject(response); }
+                            console.log("error",response);
+                            nextDeferred.reject(response); }
                         });
                     });
                     Q.all(additionalPromises).then(function(){ thisDeferred.resolve(); });
                 }
                 else thisDeferred.resolve();
             },
-            failure: function(response){ thisDeferred.reject(response); }
+            failure: function(response){ 
+            console.log("error in the parallel loader",response);
+            thisDeferred.reject(response); 
+            }
             });
         });
         return Q.all(promises).then(function(){ return outputItems; });
@@ -1378,15 +1378,14 @@ Ext.define('ParallelLoader', {
         config.itemOffset = 1; //page index starts at 1 for wsapi
         config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
         return me.__parallelLoadData(config).then(function(items){
-
         var featureStore = Ext.create('Rally.data.wsapi.Store', {
             model: config.model,//model has to be an object type 
             totalCount: items.length,
             data: items,
             load: function(){}
             });
-		
-		return featureStore;
+        
+        return featureStore;
         });
     },
     _parallelLoadLookbackStore: function(config){
@@ -1551,7 +1550,788 @@ Ext.define('ParallelLoader', {
 	});
 }());
 
-                    Ext.define('RetroDashboard', {
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/*!
+	 * CTemplate
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/ctemplate
+	 */
+	Ext.define('Skirtle.CTemplate', {
+			extend: 'Ext.XTemplate',
+
+			statics: {
+					AUTO_ID: 0
+			},
+
+			// May need to be increased if components are included deeper in the data object
+			copyDepth: 10,
+
+			// Placeholder element template. Should be changed in tandem with getPlaceholderEl()
+			cTpl: '<p id="ctemplate-{0}-{1}"></p>',
+
+			// Flag
+			isCTemplate: true,
+
+			constructor: function() {
+					var me = this;
+
+					me.callParent(arguments);
+
+					me.id = ++me.statics().AUTO_ID;
+
+					me.reset();
+			},
+
+			/* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
+			 * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
+			 * components.
+			 */
+			copyValues: function(values, depth) {
+					var me = this,
+							id,
+							copy = {},
+							copyDepth = depth || me.copyDepth;
+
+					if (copyDepth === 1) {
+							return values;
+					}
+
+					if (Ext.isArray(values)) {
+							return Ext.Array.map(values, function(value) {
+									return me.copyValues(value, copyDepth - 1);
+							});
+					}
+
+					if (!Ext.isObject(values)) {
+							return values;
+					}
+
+					// This is the key sleight-of-hand that makes the whole thing work
+					if (values.isComponent) {
+							id = values.getId();
+							me.ids.push(id);
+							return Ext.String.format(me.cTpl, id, me.id);
+					}
+
+					Ext.Object.each(values, function(key, value) {
+							// $comp is a special value for a renderTpl that references the current component
+							copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
+					});
+
+					return copy;
+			},
+
+			// Override
+			doInsert: function() {
+					var ret = this.callParent(arguments);
+
+					// There's no guarantee this will succeed so we still need polling as well
+					this.injectComponents();
+
+					return ret;
+			},
+
+			/* We have to resort to polling for component injection as we don't have full control over when the generated HTML
+			 * will be added to the DOM
+			 */
+			doPolling: function(interval) {
+					var me = this;
+
+					me.pollInterval = interval;
+
+					if (me.pollId) {
+							clearTimeout(me.pollId);
+					}
+
+					me.pollId = Ext.defer(me.injectComponents, interval, me);
+			},
+
+			getPlaceholderEl: function(id) {
+					return Ext.get('ctemplate-' + id + '-' + this.id);
+			},
+
+			/* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
+			 * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
+			 * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
+			 * call this method directly as soon as the generated HTML is inserted into the DOM.
+			 */
+			injectComponents: function() {
+					var me = this,
+							ids = me.ids,
+							index = ids.length - 1,
+							id,
+							cmp,
+							placeholderEl;
+
+					// Iterate backwards because we remove some elements in the loop
+					for ( ; index >= 0 ; --index) {
+							id = ids[index];
+							cmp = Ext.getCmp(id);
+							placeholderEl = me.getPlaceholderEl(id);
+
+							if (me.renderComponent(cmp, placeholderEl) || !cmp) {
+									// Either we've successfully done the switch or the component has been destroyed
+									Ext.Array.splice(ids, index, 1);
+
+									if (placeholderEl) {
+											placeholderEl.remove();
+									}
+							}
+					}
+
+					if (ids.length) {
+							// Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
+							me.doPolling(me.pollInterval * 1.5);
+					}
+			},
+
+			// Override
+			overwrite: function(el) {
+					var dom,
+							firstChild,
+							ret;
+
+					/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+					 * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
+					 * but we can guard against the case where all updates come through this template.
+					 */
+					if (Ext.isIE) {
+							dom = Ext.getDom(el);
+							while (dom.firstChild) {
+									dom.removeChild(dom.firstChild);
+							}
+					}
+
+					ret = this.callParent(arguments);
+
+					// There's no guarantee this will succeed so we still need polling as well
+					this.injectComponents();
+
+					return ret;
+			},
+
+			renderComponent: function(cmp, placeholderEl) {
+					if (cmp && placeholderEl) {
+							var parent = placeholderEl.parent();
+
+							if (cmp.rendered) {
+									// Move a component that has been rendered previously
+									cmp.getEl().replace(placeholderEl);
+							}
+							else {
+									cmp.render(parent, placeholderEl);
+							}
+
+							if (Ext.isIE6) {
+									// Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
+									parent.repaint();
+							}
+
+							return true;
+					}
+
+					return false;
+			},
+
+			reset: function() {
+					var me = this;
+
+					// The ids of injected components that haven't yet been rendered
+					me.ids = [];
+
+					if (me.pollId) {
+							clearTimeout(me.pollId);
+							me.pollId = null;
+					}
+			}
+	}, function(ctemplate) {
+			var apply = function() {
+					var me = this,
+							args = Ext.Array.slice(arguments);
+
+					args[0] = me.copyValues(args[0]);
+
+					// As we're returning an HTML string/array we can't actually complete the injection here
+					me.doPolling(10);
+
+					return me.callParent(args);
+			};
+
+			// The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
+			if (ctemplate.prototype.applyOut) {
+					// 4.1+
+					ctemplate.override({
+							applyOut: apply
+					});
+			}
+			else {
+					// 4.0
+					ctemplate.override({
+							applyTemplate: apply
+					});
+
+					ctemplate.createAlias('apply', 'applyTemplate');
+			}
+	});
+
+	/*!
+	 * Component Column
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/component-column
+	 */
+	Ext.define('Skirtle.grid.column.Component', {
+			alias: 'widget.componentcolumn',
+			extend: 'Ext.grid.column.Column',
+			requires: ['Skirtle.CTemplate'],
+
+			// Whether or not to automatically resize the components when the column resizes
+			autoWidthComponents: true,
+
+			// Whether or not to destroy components when they are removed from the DOM
+			componentGC: true,
+
+			// Override the superclass - this must always be true or odd things happen, especially in IE
+			hasCustomRenderer: true,
+
+			// The estimated size of the cell frame. This is updated once there is a cell where it can be measured
+			lastFrameWidth: 12,
+
+			/* Defer durations for updating the component width when a column resizes. Required when a component has an animated
+			 * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
+			 *
+			 * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
+			 */
+			widthUpdateDelay: [10, 400],
+
+			constructor: function(cfg) {
+					var me = this;
+
+					me.callParent(arguments);
+
+					// Array of component ids for both component queries and GC
+					me.compIds = [];
+
+					// We need a dataIndex, even if it doesn't correspond to a real field
+					me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
+
+					me.tpl = me.createTemplate(me.tpl);
+					me.renderer = me.createRenderer(me.renderer);
+
+					me.registerColumnListeners();
+			},
+
+			addRefOwner: function(child) {
+					var me = this,
+							fn = me.refOwnerFn || (me.refOwnerFn = function() {
+									return me;
+							});
+
+					if (me.extVersion < 40200) {
+							// Component queries for ancestors use getBubbleTarget in 4.1 ...
+							child.getBubbleTarget = fn;
+					}
+					else {
+							// ... and getRefOwner in 4.2+
+							child.getRefOwner = fn;
+					}
+			},
+
+			applyTemplate: function(data, value) {
+					if (Ext.isDefined(value)) {
+							data[this.dataIndex] = value;
+					}
+
+					return this.tpl.apply(data);
+			},
+
+			/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+			 * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
+			 * from the DOM just before the grid view is refreshed.
+			 */
+			beforeViewRefresh: function() {
+					if (Ext.isIE) {
+							var ids = this.compIds,
+									index = 0,
+									len = ids.length,
+									item,
+									el,
+									parentEl;
+
+							for ( ; index < len ; index++) {
+									if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
+											parentEl.removeChild(el);
+									}
+							}
+					}
+			},
+
+			calculateFrameWidth: function(component) {
+					var el = component.getEl(),
+							parentDiv = el && el.parent(),
+							// By default the TD has no padding but it is quite common to add some via a tdCls
+							parentTd = parentDiv && parentDiv.parent();
+
+					if (parentTd) {
+							// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
+							return this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+					}
+			},
+
+			createRenderer: function(renderer) {
+					var me = this;
+
+					return function(value, p, record) {
+							var data = Ext.apply({}, record.data, record.getAssociatedData());
+
+							if (renderer) {
+									// Scope must be this, not me
+									value = renderer.apply(this, arguments);
+							}
+
+							// Process the value even with no renderer defined as the record may contain a component config
+							value = me.processValue(value);
+
+							return me.applyTemplate(data, value);
+					};
+			},
+
+			createTemplate: function(tpl) {
+					return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
+			},
+
+			destroyChild: function(child) {
+					child.destroy();
+			},
+
+			getRefItems: function(deep) {
+					var items = this.callParent([deep]),
+							ids = this.compIds,
+							index = 0,
+							len = ids.length,
+							item;
+
+					for ( ; index < len ; index++) {
+				item = Ext.getCmp(ids[index]);
+							if (item) {
+									items.push(item);
+
+									if (deep && item.getRefItems) {
+											items.push.apply(items, item.getRefItems(true));
+									}
+							}
+					}
+
+					return items;
+			},
+
+			onChildAfterRender: function(child) {
+					this.resizeChild(child);
+			},
+
+			onChildBoxReady: function(child) {
+					// Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
+					this.resizeChild(child, false);
+			},
+
+			onChildDestroy: function(child) {
+					Ext.Array.remove(this.compIds, child.getId());
+			},
+
+			onChildResize: function() {
+					this.redoScrollbars();
+			},
+
+			onColumnResize: function(column) {
+					column.resizeAll();
+			},
+
+			onColumnShow: function(column) {
+					column.resizeAll();
+			},
+
+			// This is called in IE 6/7 as the components can still be seen even when a column is hidden
+			onColumnVisibilityChange: function(column) {
+					var items = column.getRefItems(),
+							index = 0,
+							length = items.length,
+							visible = !column.isHidden();
+
+					// In practice this probably won't help but it shouldn't hurt either
+					if(Ext.suspendLayouts) Ext.suspendLayouts();
+
+					for ( ; index < length ; ++index) {
+							items[index].setVisible(visible);
+					}
+
+					if(Ext.resumeLayouts) Ext.resumeLayouts(true);
+			},
+
+			onDestroy: function() {
+					Ext.destroy(this.getRefItems());
+
+					this.callParent();
+			},
+
+			// Override
+			onRender: function() {
+					this.registerViewListeners();
+					this.callParent(arguments);
+			},
+
+			// View has changed, may be a full refresh or just a single row
+			onViewChange: function() {
+					var me = this,
+							tpl = me.tpl;
+
+					// Batch the resizing of child components until after they've all been injected
+					me.suspendResizing();
+
+					if (tpl.isCTemplate) {
+							// No need to wait for the polling, the sooner we inject the less painful it is
+							tpl.injectComponents();
+
+							// If the template picked up other components in the data we can just ignore them, they're not for us
+							tpl.reset();
+					}
+
+					// A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
+					me.redoScrollbars();
+
+					me.resumeResizing();
+					
+					me.performGC();
+			},
+
+			// Component GC, try to stop components leaking
+			performGC: function() {
+					var compIds = this.compIds,
+							index = compIds.length - 1,
+							comp,
+							el;
+
+					for ( ; index >= 0 ; --index) {
+							// Could just assume that the component id is the el id but that seems risky
+							comp = Ext.getCmp(compIds[index]);
+							el = comp && comp.getEl();
+
+							if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
+									// The component is no longer in the DOM
+									if (comp && !comp.isDestroyed) {
+											comp.destroy();
+									}
+							}
+					}
+			},
+
+			processValue: function(value) {
+					var me = this,
+							compIds = me.compIds,
+							id, initialWidth, dom, parent;
+
+					if (Ext.isObject(value) && !value.isComponent && value.xtype) {
+							// Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
+							value = Ext.widget(value.xtype, value);
+					}
+
+					if (value && value.isComponent) {
+							id = value.getId();
+
+							// When the view is refreshed the renderer could return a component that's already in the list
+							if (!Ext.Array.contains(compIds, id)) {
+									compIds.push(id);
+							}
+
+							me.addRefOwner(value);
+							me.registerListeners(value);
+
+							if (value.rendered) {
+									/* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
+									 * The problem occurs when a record value is changed and the components in that same row are being
+									 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
+									 * one row. Unfortunately this nukes the existing components so we need to remove them first.
+									 */
+									if (Ext.isIE) {
+											// TODO: Should this be promoted to CTemplate?
+											dom = value.el.dom;
+											parent = dom.parentNode;
+
+											if (parent) {
+													if (me.extVersion === 40101) {
+															// Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
+															Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
+													}
+
+													// TODO: Removing the element like this could fall foul of Element GC
+													parent.removeChild(dom);
+											}
+									}
+							}
+							else if (me.autoWidthComponents) {
+									/* Set the width to a 'best guess' before the component is rendered to ensure that the component's
+									 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
+									 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
+									 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
+									 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
+									 */
+									initialWidth = me.getWidth() - me.lastFrameWidth;
+
+									// Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
+									initialWidth = initialWidth > 4 ? initialWidth : 4;
+
+									value.setWidth(initialWidth);
+							}
+
+							// Part of the same IE 6/7 hack as onColumnVisibilityChange
+							if ((Ext.isIE6 || Ext.isIE7) && me.isHidden()) {
+									value.hide();
+							}
+					}
+
+					return value;
+			},
+
+			redoScrollbars: function() {
+					var me = this,
+							grid = me.up('tablepanel');
+
+					if (grid) {
+							// The presence of a resizeQueue signifies that we are currently suspended
+							if (me.resizeQueue) {
+									me.redoScrollbarsRequired = true;
+									return;
+							}
+
+							// After components are injected the need for a grid scrollbar may need redetermining
+							if (me.extVersion < 40100) {
+									// 4.0
+									grid.invalidateScroller();
+									grid.determineScrollbars();
+							}
+							else {
+									// 4.1+
+									grid.doLayout();
+							}
+					}
+			},
+
+			registerColumnListeners: function() {
+					var me = this;
+
+					if (me.autoWidthComponents) {
+							// Need to resize children when the column resizes
+							me.on('resize', me.onColumnResize);
+
+							// Need to resize children when the column is shown as they can't be resized correctly while it is hidden
+							me.on('show', me.onColumnShow);
+					}
+
+					if (Ext.isIE6 || Ext.isIE7) {
+							me.on({
+									hide: me.onColumnVisibilityChange,
+									show: me.onColumnVisibilityChange
+							});
+					}
+			},
+
+			registerListeners: function(component) {
+					var me = this;
+
+					// Remove the component from the child list when it is destroyed
+					component.on('destroy', me.onChildDestroy, me);
+
+					if (me.autoWidthComponents) {
+							// Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
+							component.on('afterrender', me.onChildAfterRender, me, {single: true});
+
+							// With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
+							if (me.extVersion >= 40100) {
+									component.on('boxready', me.onChildBoxReady, me, {single: true});
+							}
+					}
+
+					// Need to redo scrollbars when a child resizes
+					component.on('resize', me.onChildResize, me);
+			},
+
+			registerViewListeners: function() {
+					var me = this,
+							view = me.up('tablepanel').getView();
+
+					me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+					me.mon(view, 'refresh', me.onViewChange, me);
+					me.mon(view, 'itemupdate', me.onViewChange, me);
+					me.mon(view, 'itemadd', me.onViewChange, me);
+					me.mon(view, 'itemremove', me.onViewChange, me);
+			},
+
+			resizeAll: function() {
+					var me = this;
+
+					me.suspendResizing();
+					me.resizeQueue = me.getRefItems();
+					me.resumeResizing();
+			},
+
+			resizeChild: function(component, defer) {
+					var me = this,
+							frameWidth,
+							newWidth,
+							oldWidth,
+							resizeQueue;
+
+					if (me.resizingSuspended) {
+							resizeQueue = me.resizeQueue;
+
+							if (!Ext.Array.contains(resizeQueue, component)) {
+									resizeQueue.push(component);
+							}
+
+							return;
+					}
+
+					frameWidth = me.calculateFrameWidth(component);
+
+					// TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
+					if (Ext.isNumber(frameWidth)) {
+							newWidth = me.getWidth() - frameWidth;
+							oldWidth = component.getWidth();
+
+							// Returns true if a resize actually happened
+							if (me.setChildWidth(component, newWidth, oldWidth)) {
+									// Avoid an infinite resizing loop, deferring will only happen once
+									if (defer !== false) {
+											// Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
+											Ext.each(me.widthUpdateDelay, function(delay) {
+													Ext.defer(me.resizeChild, delay, me, [component, false]);
+											});
+									}
+							}
+					}
+			},
+
+			resumeResizing: function() {
+					var me = this,
+							index = 0,
+							resizeQueue = me.resizeQueue,
+							len = resizeQueue.length;
+
+					if (!--me.resizingSuspended) {
+							for ( ; index < len ; ++index) {
+									me.resizeChild(resizeQueue[index]);
+							}
+
+							me.resizeQueue = null;
+
+							if (me.redoScrollbarsRequired) {
+									me.redoScrollbars();
+							}
+					}
+			},
+
+			setChildWidth: function(component, newWidth, oldWidth) {
+					if (oldWidth === newWidth) {
+							return false;
+					}
+
+					component.setWidth(newWidth);
+
+					return true;
+			},
+
+			suspendResizing: function() {
+					var me = this;
+
+					me.resizingSuspended = (me.resizingSuspended || 0) + 1;
+
+					if (!me.resizeQueue) {
+							me.resizeQueue = [];
+					}
+			}
+	}, function(cls) {
+			var proto = cls.prototype,
+					version = Ext.getVersion();
+
+			// ExtJS version detection
+			proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch();
+
+			// 4.1.1 initially reported its version as 4.1.0
+			if (Ext.Element.prototype.syncContent && version.toString() === '4.1.0') {
+					proto.extVersion = 40101;
+			}
+	});
+}());
+                (function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	Ext.define('intel.grid.column.Component.', {
+		alias: 'widget.fastgridcolumn',
+		extend: 'Skirtle.grid.column.Component',
+
+		autoWidthComponents: false,
+
+		componentGC: true,
+
+		hasCustomRenderer: true,
+
+		lastFrameWidth: 12,
+		
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		registerViewListeners: function() {
+			var me = this,
+				view = me.up('tablepanel').getView();
+
+			me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+			me.mon(view, 'refresh', me.onViewChange, me);
+			//me.mon(view, 'itemupdate', me.onViewChange, me); //why are these necessary...
+			//me.mon(view, 'itemadd', me.onViewChange, me);
+			//me.mon(view, 'itemremove', me.onViewChange, me);
+		},
+		onViewChange: function() {
+			var me = this, tpl = me.tpl;
+			me.suspendResizing();
+			if (tpl.isCTemplate) {
+					tpl.injectComponents();
+					tpl.reset();
+			}
+			//me.redoScrollbars();
+			me.resumeResizing();
+			me.performGC();
+		},
+		
+		resumeResizing: function() {
+			var me = this,
+				index = 0,
+				resizeQueue = me.resizeQueue,
+				len = resizeQueue.length;
+			if (!--me.resizingSuspended) {
+				for ( ; index < len ; ++index) {
+						me.resizeChild(resizeQueue[index]);
+				}
+				me.resizeQueue = null;
+				//if (me.redoScrollbarsRequired) {
+				//    me.redoScrollbars();
+				//}
+			}
+		},
+		onChildResize: function() {
+			//this.redoScrollbars();
+		}
+	});
+}());
+                /** this app shows the cumulative flow charts for a train, and scope change for features and user stories 
+    it is scoped to a specific train and its release 
+*/
+(function(){
+    var Ext = window.Ext4 || window.Ext;
+    
+    Ext.define('RetroDashboard', {
         extend: 'IntelRallyApp',
         componentCls: 'app',
         requires: [
@@ -1576,82 +2356,51 @@ Ext.define('ParallelLoader', {
               marginBottom: 240
             },{
              xtype: 'container',//donut container divided later into three donut containers
-             id: 'retroDonutWrapper',
-             cls: 'donut-wrapper',
+             id: 'retroBarChartWrapper',
+             cls: 'barchart-wrapper',
              layout: {
                  type: 'hbox',
                  align:'left'
                  },
              renderTo: document.body,
              items:[{
+                    xtype:'container',
+                    id: 'retroChart',                   
+                    height: 450,
+                    width: '41%'                        
+                },{
                     xtype:'container',//Scope container Wrapper
-                    id : 'retroDonutScopeWrapper',
-                    layout: {
-                            type: 'hbox'
-                            },
-                   flex: 1,//it tries to give all the elements equal width but if not enough it overlaps which we want
-                   items:[{
-                        xtype:'container',
-                        id: 'retroDonutScope',
-                        //cls: 'chart-with-border3',
-                        height: 210
-                        },{
-                        xtype:'container',
-                        id: 'retroDonutScopeArrow'/* ,
-                        cls: 'chart-with-border2', */
-                        },
-                        {
-                        xtype:'container',
-                        id: 'retroDonutScopeFooter'/* ,
-                        cls: 'chart-with-border2' */
-                        }]
+                    id : 'retroBarChartScopeWrapper',
+                    height: 400,
+                    width: '19%'
                 },{
                     xtype:'container',// CA original wrapper 
-                    id: 'retroDonutCaOriginalWrapper',
-                    layout: {
-                            type: 'hbox'
-                            },
-                   flex: 1,//it tries to give all the elements equal width but if not enough it overlaps which we want
-                   items:[{
-                        xtype:'container',
-                        id: 'retroDonutCaOriginal',
-                        //cls: 'chart-with-border3',
-                        height: 210
-                        },{
-                        xtype:'container',
-                        id: 'retroDonutCaOriginalArrow'
-                        //cls: 'chart-with-border2'
-                        },{
-                        xtype:'container',
-                        id: 'retroDonutCaOriginalFooter'
-                        //cls: 'chart-with-border2'
-                        }]
-                },{ xtype:'container',
-                    id: 'retroDonutCaFinalWrapper',//CA final container
-                    layout: {
-                            type: 'hbox'
-                            },
-                   flex: 1,//it tries to give all the elements equal width but if not enough it overlaps which we want
-                   items:[{
-                        xtype:'container',
-                        id: 'retroDonutCaFinal',//donut container
-                        //cls: 'chart-with-border3',
-                        height: 210
-                        },{
-                        xtype:'container',
-                        id: 'retroDonutCaFinalArrow'//arrow container
-                        //cls: 'chart-with-border2'
-                        },{
-                        xtype:'container',
-                        id: 'retroDonutCaFinalFooter'
-                        //cls: 'chart-with-border2'
-                        }]
+                    id: 'retroBarChartCaOriginalWrapper',
+                    height: 400,
+                    width: '19%'
+                },{ 
+                    xtype:'container',
+                    id: 'retroBarChartCaFinalWrapper',
+                    height: 400,
+                    width: '19%'//CA final container
                 }]
+                
+            },{
+                xtype:'container',//legend
+                id:'legend',
+                html:'<div class="legendwrapper"><div class="dtarget"></div><div class="dtargetwrapper">Did not meet Target</div><div class="mtarget"></div><div class="mtargetwrapper">Met Target</div><div class="atarget"></div><div class="mtargetwrapper">A/C = Accept to Commit</div></div>'
+            },{
+                xtype: 'container',
+                id: 'feature_information',
+                cls: 'chart-with-border3'//TODO need to find why I added this 
             },{
                 xtype:'container',
-                id: 'retroChart',
-                marginTop: 40,
-                marginBottom: 240
+                id: 'scopeGridWrapper',
+                items:[{
+                  xtype:'container',
+                  id: 'scopeGrid',
+                  cls: 'scope_grid'//TODO need to find why I added this 
+                }]
             }]
         }],
             /********************************************** SOME CONFIG CONSTANTS *******************************************/
@@ -1689,6 +2438,7 @@ Ext.define('ParallelLoader', {
                 }
             },
             tooltip: {
+                valueDecimals: 2,
                 formatter: function () {
                     var sum = 0;
                     for(var i=4; i>= this.series.index; --i)
@@ -1736,6 +2486,25 @@ Ext.define('ParallelLoader', {
                     }
             });
         },
+        _releasePickerSelected: function(combo, records){
+           var  me = this;
+           if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+              me.setLoading(true);
+              me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ 
+									return rr.data.Name == records[0].data.Name; 
+									});
+              me._workweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate); 
+           var pid = me.ProjectRecord.data.ObjectID; 
+           if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+              me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+              me._saveAppsPreference(me.AppsPref)
+                .then(function(){ return me._reloadEverything(); })
+                .fail(function(reason){
+                  me._alert('ERROR', reason || '');
+                  me.setLoading(false);
+                })
+                .done();
+        },
         _onChangeReleasePicker: function(combo, newval, oldval){
             var me = this;
             if(newval.length===0) combo.setValue(oldval); 
@@ -1744,77 +2513,365 @@ Ext.define('ParallelLoader', {
         _onSelectReleasePicker: function(combo, records){
             var me = this;
             me.ReleaseRecord = me.ReleaseStore.findExactRecord('Name', records[0].data.Name);
-            me._loadChart();
+            me._loadEverything();
         },
         _loadAllChildReleases: function(){
             //debugger;
             var me = this,
-                releaseName = me.ReleaseRecord.data.Name,
-                //get the name of the train as the name is shared between all the child scrums
-                trainName = me.TrainRecord.data.Name.split(' ART')[0];
+                releaseName = me.ReleaseRecord.data.Name;
+            var trainName = me.TrainRecord.data.Name.split(' ART')[0];
                 //mixin release-query.js _loadReleasesWithName
                 return me._loadReleasesWithName(releaseName, trainName)
                 .then(function(releaseStore){
-                    return me.ReleaseWithName = releaseStore;
+                    return me.ReleasesWithName = releaseStore.getRange();
                 });
         },
-        //load all the child releases for 
-        //https://rally1.rallydev.com/analytics/doc/#/manual
-        //Rally lookback API provides the history of the data 
-        //getting the history of user stories for the release selected
+                /****************************************************** DATA STORE METHODS ********************************************************/
         _loadSnapshotStores: function(){
-            //debugger;
-            var me = this,
-                promises = [];
-                me.AllSnapshots = [];
-                //releaseOid = [];
-            me.ReleaseWithName.each(function(f,key){
-                //releaseOid.push(f.data.ObjectID);
-                var deferred = Q.defer();
-                promises.push(deferred.promise);
-            Ext.create('Rally.data.lookback.SnapshotStore', {
-                    autoLoad:true,
-                    limit: Infinity,
-                    context:{
+            var me = this, 
+                promises = [];      
+            me.AllSnapshots = [];
+            me.TeamStores = {};
+			var releaseObjectId ="";
+            var parallelLoaderConfig = {
+                    pagesize:20000,
+                    url: 'https://' + 'rally1.rallydev.com' + '/analytics/v2.0/service/rally/workspace/' + 
+                        me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+                    params: {
                         workspace: me.getContext().getWorkspace()._ref,
-                        project: null
-                    },
-                    sort:{_ValidFrom:1},
-                    compress:true,
-                    find: {
-                        _TypeHierarchy: "HierarchicalRequirement",
-                        Children: null,                         //Release: {$in: releaseOid}
-                        Release: f.data.ObjectID 
-                    },
-                    fetch:['ScheduleState', 'PlanEstimate'],
-                    hydrate:['ScheduleState', 'PlanEstimate'],
-                    listeners: {
-                        load: function(store, records,success){
-                            // console.log(key,f.data.ObjectID,success,records.length);
-                            if(records.length > 0 && success){
-                                me.AllSnapshots = me.AllSnapshots.concat(records);
-                            } 
-                            //TODO revisit this again
-/*                          if(!success){
-                                //sometimes the query fails
-                                //this will reload again when it fails 
-                                var reload = false;
-                                do {
-                                    console.log(reload,"reload");
-                                    reload = me._onloadSnapshotStoresFailure(f.data.ObjectID);
-                                }
-                                while(reload);
-                            } */
-                            deferred.resolve();
-                        },
-                        single:true
+                        compress:true, //makes it very slow sometimes
+                        pagesize:20000,
+                        find:"",
+                        fields:JSON.stringify(['ScheduleState', 'PlanEstimate', 'Feature', '_ValidFrom', '_ValidTo', 'ObjectID']),
+                        hydrate:JSON.stringify(['ScheduleState'])
                     }
-                }); 
-        });
-        return Q.all(promises).then(function(){
-                console.log('all snapshots done');
+                };			
+            return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
+				parallelLoaderConfig.params.find =  JSON.stringify({ 
+                            _TypeHierarchy: 'HierarchicalRequirement',
+                            Release: releaseRecord.data.ObjectID
+                        });
+                return me._parallelLoadLookbackStore(parallelLoaderConfig)
+                    .then(function(snapshotStore){ 
+                        var records = snapshotStore.getRange();
+                        if(records.length > 0){
+                            me.TeamStores[releaseRecord.data.Project.Name] = records;
+                            me.AllSnapshots = me.AllSnapshots.concat(records);
+                        }
+                    });
+            }));
+
+        },  
+		//intel-rally-app has code for switching where features are if release is "Qxxx TrainName"
+		//_getFeatureFilter
+		/********************************************** FEATURES  ********************************************/
+		__getFeatureFilter: function(trainRecord, releaseRecord){
+			if(!trainRecord || !releaseRecord) throw 'invalid arguments: GFF';
+			var me=this,
+				trainName = trainRecord.data.Name.split(' ART')[0],
+				relSplit = releaseRecord.data.Name.split(' '),
+				coreFilter = Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.Name',
+					value: releaseRecord.data.Name
+				});
+
+				return Ext.create('Rally.data.wsapi.Filter', { //NOTE: they should NOT be in the POWG portfolio level, but we will cover that just in case
+					property:'Project.Parent.Name',
+					value: trainName + ' POWG Portfolios'
+				}).or(Ext.create('Rally.data.wsapi.Filter', {
+					property:'Project.Name',
+					value: trainName + ' POWG Portfolios'
+				})).and(coreFilter);
+
+		},
+        _getFeatures: function(){
+           var me=this,
+                config = {
+                    model: me.Feature,
+                    url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/Feature',
+                    params: {
+                        pagesize:200,
+                        query: me.__getFeatureFilter(me.TrainRecord,me.ReleaseRecord).toString(),
+                        fetch:['Name', 'ObjectID', 'Project','FormattedID', 'UserStories'].join(','),
+                        workspace:me.getContext().getWorkspace()._ref,
+                        includePermissions:true
+                    }
+                };
+            //parrallel load mixin 
+            return me._parallelLoadWsapiStore(config).then(function(store){
+                me.FeatureStore = store;
+                return store;
+				
             });
+        
         },
+        _loadUserStoriesforFeatures: function(){
+            var me = this, 
+                promises = [];      
+            me.WsapiUserStoryMap = {};
+
+                var parallelLoaderConfig = {
+                    pagesize:200,
+                    model: me.UserStory,
+                    url: 'https://rally1.rallydev.com/slm/webservice/v2.0/hierarchicalrequirement',
+                    params: {
+                        workspace: me.getContext().getWorkspace()._ref,
+                        compress: true, //makes it very slow sometimes
+                        pagesize:200,
+                        fetch:['ScheduleState', 'PlanEstimate', 'Feature', 'ObjectID'].join(',')
+                    }
+                };			
+            return Q.all(_.map(me.FeatureStore.data.items, function(feature){
+                var featureFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Feature.ObjectID', value: feature.data.ObjectID});				
+				parallelLoaderConfig.params.query = featureFilter.toString();
+				
+					return me._parallelLoadWsapiStore(parallelLoaderConfig)
+							.then(function(snapshotFeatureStore){ 
+							
+								var records = snapshotFeatureStore.getRange();
+								if(records.length > 0){
+									me.WsapiUserStoryMap[feature.data.ObjectID] = records;
+								} 
+							});
+            }));            
+        },
+        _loadPortfolioItem: function(){
+            var me = this;
+			var promises =[];
+			var userSnapshots = me.AllSnapshots;
+			//var AlluserStories = userSnapshots.concat(userStories);
+			var startTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + 1000 * 60 *60 *24*10);
+			var finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1);
+			me.releaseFeatureScope =[];
+			releaseFeatureScope =[];
+			var userSnapshotsFeatureNotAttachedInitial = _.filter(userSnapshots, function (userStorySnapshot){
+						return((new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && new Date(userStorySnapshot.data._ValidTo) > startTargetDate) && (typeof userStorySnapshot.data.Feature ==="undefined" || userStorySnapshot.data.Feature ===""));
+					});
+			var userSnapshotsFeatureNotAttachedFinal = _.filter(userSnapshots, function (userStorySnapshot){
+						return((new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && new Date(userStorySnapshot.data._ValidTo) > finalTargetDate) && (typeof userStorySnapshot.data.Feature ==="undefined" || userStorySnapshot.data.Feature ===""));    
+					});                         
+			//user stories with defined Features 
+			var userSnapshotsFeatureAttachedInitial = _.filter(userSnapshots, function (userStorySnapshot){
+						return((new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && new Date(userStorySnapshot.data._ValidTo) > startTargetDate) && userStorySnapshot.data.Feature > 0);
+					});
+			var userSnapshotsFeatureAttachedFinal = _.filter(userSnapshots, function (userStorySnapshot){
+						return((new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && new Date(userStorySnapshot.data._ValidTo) > finalTargetDate) && userStorySnapshot.data.Feature > 0);
+					});
+		   _.each( me.FeatureStore.data.items,function(feature,key){
+				var featureScope = {};
+				var deferred = Q.defer();
+				promises.push(deferred.promise);
+				//group user story snapshots by snapshot.Feature == feature.ObjectID
+				//defined feature user story snap shot 
+				var ReleaseStartsnapshot =[];
+				var ReleaseFinalSnapshot =[];
+				//using filter and find 
+				var userStoriesForFeature = me.WsapiUserStoryMap[feature.data.ObjectID];
+				
+				//add snapshots for UserStories not in wsapi
+				var startdateStoriesNotCurrentlyInWsapi = _.filter(userSnapshotsFeatureAttachedInitial, function (ss){
+					return(feature.data.ObjectID === ss.data.Feature );
+				});
+				ReleaseStartsnapshot = ReleaseStartsnapshot.concat(startdateStoriesNotCurrentlyInWsapi);
+				
+				var enddateStoriesNotCurrentlyInWsapi = _.filter(userSnapshotsFeatureAttachedFinal, function (ss){
+					return(feature.data.ObjectID ===ss.data.Feature );
+				});
+				ReleaseFinalSnapshot = ReleaseFinalSnapshot.concat(enddateStoriesNotCurrentlyInWsapi);
+
+				_.each(userStoriesForFeature, function(wsapiUserStory){
+					var startdateStoriesCurrentlyInWsapi = _.filter(userSnapshotsFeatureNotAttachedInitial, function (userStorySnapshot){
+						return(userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID);
+					});
+					ReleaseStartsnapshot = ReleaseStartsnapshot.concat(startdateStoriesCurrentlyInWsapi);
+					
+					var enddateStoriesNotCurrentlyInWsapi = _.filter(userSnapshotsFeatureNotAttachedFinal, function (userStorySnapshot){
+						return(userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID);
+					});
+					ReleaseFinalSnapshot = ReleaseFinalSnapshot.concat(enddateStoriesNotCurrentlyInWsapi);
+				});
+
+			   var ReleaseStartsnapshotUnique= _.uniq(ReleaseStartsnapshot,true,function(rs){ return rs.data.ObjectID;});
+			   var ReleaseFinalSnapshotUnique = _.uniq(ReleaseFinalSnapshot,true,function(rs){ return rs.data.ObjectID;});
+
+			   if(ReleaseStartsnapshotUnique.length > 0 || ReleaseFinalSnapshotUnique.length > 0){
+
+				  var startDateAcceptedPoints = _.reduce(ReleaseStartsnapshotUnique, function(sum, item){ 
+													if(item.data.ScheduleState =='Accepted') return sum + item.data.PlanEstimate;
+													else return sum;
+												}, 0),
+					//this is in the release
+
+					 startDateNotAcceptedPoints =_.reduce(ReleaseStartsnapshotUnique, function(sum, item){ 
+													if(item.data.ScheduleState !='Accepted'){
+													return sum + item.data.PlanEstimate;}else{
+														return sum;}
+												}, 0),
+					 startDateTotalPoints = _.reduce(ReleaseStartsnapshotUnique, function(sum, item){ 
+												return sum + item.data.PlanEstimate;
+											}, 0),
+							
+					//to get the % complete at release end
+					//EndtargetDate  = new Date('03/07/2015')
+					//EndReleaseStartsnapshots = _.filter(snapshots, ss._validFrom < targetDate && ss._ValidTo > targetDate)
+					//completedPOints = sum EndReleaseStartsnapshots by PlanEstimate if ScheduleState == 'Completed' || 'Accepted'
+					//totalPoints = sum EndReleaseStartsnapshots by PlanEstimate
+					finalDateAcceptedPoints = _.reduce(ReleaseFinalSnapshotUnique, function(sum, item){ 
+													if(item.data.ScheduleState =='Accepted'){
+													return sum + item.data.PlanEstimate;}else{
+														return sum;}
+												}, 0),
+					finalDateNotAcceptedPoints =_.reduce(ReleaseFinalSnapshotUnique, function(sum, item){ 
+													if(item.data.ScheduleState !='Accepted'){
+													return sum + item.data.PlanEstimate;}else{
+														return sum;}
+												}, 0),
+					finalDatetotalPoints = _.reduce(ReleaseFinalSnapshotUnique, function(sum, item){ 
+												return sum + item.data.PlanEstimate;
+													
+												}, 0);
+				
+				featureScope.completedAtStart = startDateAcceptedPoints / startDateTotalPoints;
+				featureScope.completedAtEnd = finalDateAcceptedPoints / finalDatetotalPoints;
+				if(isFinite(featureScope.completedAtStart) === false) {
+					featureScope.completedAtStart = 0;
+				}
+				if(isFinite(featureScope.completedAtEnd) === false) {
+					featureScope.completedAtEnd = 0;
+				}
+			
+				if(startDateTotalPoints === 0){
+					featureScope.growth = finalDatetotalPoints;							
+				}else{
+				   featureScope.growth = (finalDatetotalPoints - startDateTotalPoints )/ startDateTotalPoints;		
+				}
+		                if(startDateTotalPoints === 0){
+					featureScope.growth = finalDatetotalPoints;							
+				}else{
+				   featureScope.growth = (finalDatetotalPoints - startDateTotalPoints )/ startDateTotalPoints;		
+				}
+				featureScope.intent = startDateTotalPoints.toFixed(0);//startDateNotAcceptedPoints;//plan to do //inital planned 
+				featureScope.actual  = finalDatetotalPoints.toFixed(0); //finalDateNotAcceptedPoints;//acutal done //Points at end of release
+				featureScope.FormattedID = feature.data.FormattedID;
+				featureScope.Name = feature.data.Name;
+				featureScope.ObjectID = feature.data.ObjectID;
+				featureScope.ProjectObjectID = feature.data.Project.ObjectID;
+				feature.state = feature.data.State;
+				releaseFeatureScope = releaseFeatureScope.concat(featureScope);
+			}
+				deferred.resolve();
+		 });
+		
+			me.releaseFeatureScope = releaseFeatureScope;
+			me.InitialTargetDate = [startTargetDate.getMonth() + 1 ,startTargetDate.getDate(),startTargetDate.getFullYear()].join('/');//the month starts from 0 so Jan is 0 
+			me.CompleteFinalTargetDate = [finalTargetDate.getMonth() + 1,finalTargetDate.getDate(),finalTargetDate.getFullYear()].join('/');
+			return Q.all(promises).then(function(){ 
+				return releaseFeatureScope; 
+			});
+        },
+		_buildFeatureGrid: function(){
+			var me = this;
+			var gridstore = Ext.create('Ext.data.Store',{
+								fields:['completedAtStart', 'completedAtEnd','growth','intent','actual','FormattedID','Name','ObjectID','ProjectObjectID','state'],
+								data: me.releaseFeatureScope });
+				Ext.getCmp('scopeGrid').removeAll();
+				
+				Ext.getCmp('scopeGrid').add({
+					xtype: 'rallygrid',
+					id: 'grid',
+					showRowActionsColumn: false,
+					selModel:{
+						ignoreRightMouseSelection:true,
+						checkOnly:true
+					},
+					enableEditing: false,
+					autoScroll: true,
+					height: 500,
+					showPagingToolbar: false,
+					title: 'Scope to release ('+ me.InitialTargetDate + ' - ' + me.CompleteFinalTargetDate + ')',
+					store: gridstore,
+					columnCfgs: [
+							{
+								header: "Features",
+								dataIndex: "Name",
+								flex:4,
+								renderer: function (v, m, r) {
+									return Ext.String.format('<a href="https://rally1.rallydev.com/#/{0}d/detail/portfolioitem/feature/{1}" target="_blank">{2}: </a>{3}', r.data.ProjectObjectID,r.data.ObjectID,r.data.FormattedID,v );
+									}
+							},
+							{
+								header: "% Complete<br/> @ Release Start " + me.InitialTargetDate,
+								dataIndex: "completedAtStart",
+								flex:2,
+								xtype:'fastgridcolumn',
+								tdCls: 'iconCell',
+								resizable:false,
+								draggable:false,
+								renderer: function(v, meta, record){
+									return {
+										xtype:'progressbar',
+										text:[(v* 100).toFixed(2), '%'].join(''),
+										width:'100px',
+										value:v 
+									};										
+								 } 
+							},
+							{
+								header:"% Complete<br/>@ Release End " + me.CompleteFinalTargetDate,
+								dataIndex: "completedAtEnd",
+								flex:2,
+								xtype:'fastgridcolumn',
+								tdCls: 'iconCell',
+								resizable:false,
+								draggable:false,
+								renderer: function(v, meta, record){
+									return {
+										xtype:'progressbar',
+										text:[(v* 100).toFixed(2), '%'].join(''),
+										width:'100px',
+										value:v 
+									};										
+								 } 
+							}, 
+							{
+								header: "Points Planned<br/> @ Release Start " + me.InitialTargetDate,
+								dataIndex: "intent",
+								flex:1
+							}, 
+							{
+								header: "Final Points <br/>@ Release End " + me.CompleteFinalTargetDate,
+								dataIndex: "actual",
+								flex:1
+							}, 
+							{
+								header: "Feature Scope Change",
+								dataIndex: "growth",
+								flex:2,
+								xtype:'fastgridcolumn',
+								tdCls: 'iconCell',
+								resizable:false,
+								draggable:false,
+								renderer: function(v, meta, record){
+									var growthText = "";
+									if(v > 0){
+										growthText = '+' + [(v* 100).toFixed(2), '%'].join('');
+									}else{
+										growthText = [(v* 100).toFixed(2), '%'].join('');
+									}
+								return {
+									xtype:'container',
+									html:growthText
+								};
+							  } 
+							}, 
+							{
+								header: "Feature State",
+								dataIndex: "state",
+								flex:1
+							}
+						]
+				});			
+		},
         _buildCharts: function(){
             var me = this,
             //with the release start and end date the calculator will calculate the work week
@@ -1832,6 +2889,7 @@ Ext.define('ParallelLoader', {
             //uses IntelWorkweek mixin
             var aggregateChartData = me._updateChartData(calc.runCalculation(me.AllSnapshots));
             datemap = aggregateChartData.datemap;
+            
             //debugger;
             //retro dashboard calculation for the doughnut
             //taking sample 7 days before and after the release
@@ -1842,6 +2900,7 @@ Ext.define('ParallelLoader', {
                 total.finalCommit = 0;
                 total.finalAccepted = 0;
                 total.projected = 0;
+                
             _.each(aggregateChartData.series,function(f){
                 if(f.name==="Accepted"){
                     total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
@@ -1872,34 +2931,20 @@ Ext.define('ParallelLoader', {
             aggregateChartData.series.push({
                 colorIndex: 1,
                 symbolIndex: 1,
-                dashStyle: "Solid",
+                dashStyle: "shortdash",
                 color: "red",
                 data:commitDataPlus,
                 name: "Commitment",
                 type: "spline"
             });
-/*          aggregateChartData.series.push({
-                colorIndex: 1,
-                symbolIndex: 1,
-                dashStyle: "Solid",
-                color: "red",
-                data:commitDataMinus,
-                name: "Commitment",
-                type: "spline"
-            }) */
-/*                  //get ideal trendline if release has started
-            _.reduce(aggregateChartData.series, function(sum, s){
-                console.log(sum,s);
-                return sum + (s.data[s.data.length-1] || 0);
-                }, 0) 
-                 */
-            console.log("Aggregate data series",aggregateChartData.series,total.initialCommit);
+
             me.total = total;
             //setting the color of the chart
             Highcharts.setOptions({ colors: me._chartColors });
             var highchartsConfig = {
                 chart: {
                     height:400,
+                    width :680,
                     events:{
                         load: function(){  }
                     }
@@ -1934,313 +2979,224 @@ Ext.define('ParallelLoader', {
                 interval = ((days/ticks>>0)/5>>0)*5;
             return (interval < 5) ? 5 : interval; //make it weekly at the minimum
         },
-        _loadChart: function(){
-            var me = this;
-            me.setLoading('Loading Charts');
-            return me._loadAllChildReleases()
-            .then(function() { return me._loadSnapshotStores(); })
-            .then(function(){ 
-                me._buildCharts(); 
-                me.setLoading(false);})
-            .then (function(){ 
-                me.setLoading(false);
-                me.setLoading('Loading Pie Charts');
-                me._loadDonutChart(); 
-                me._hideHighchartsLinks();
-                me.setLoading(false);
-                me._loadPortfolioItem();
-           })
-           .fail(function(reason){
-                me.setLoading(false);
-                me._alert('ERROR', reason || '');
-                 })
-            .done();            
-        },
-        _loadDonutChart: function(){
-        
-             var me = this;
-             Ext.getCmp('retroDonutWrapper').show();
-             //console.log("highchart config",me.highchartsConfig);
-             //arrow inside the donut
-             //debugger;
-             //destroy the arrow items
-             Ext.getCmp('retroDonutScopeArrow').removeAll();
-             Ext.getCmp('retroDonutCaOriginalArrow').removeAll();
-             Ext.getCmp('retroDonutCaFinalArrow').removeAll();
-             
-            if (me.total.initialCommit === 0 || me.total.finalCommit === 0 ){
-                 $("#retroDonutScope").html(''); 
-                 $("#retroDonutCaOriginal").html('');
-                 $("#retroDonutCaFinal").html('');
-                 me._alert('Note', 'The initial PlanEstimate is zero');
-                 Ext.getCmp('retroDonutWrapper').hide();
-                return;
-            }
-            /******************************************************* Donut settings ********************************************************/
-            var scope = 0,
-                originalCommitRatio = 0,
-                finalCommitRatio = 0;
-            //calculate difference between two data V1 and V2 
-            //Percent difference = ( | ΔV |/ ( ∑V/2) ) * 100 = ( | (V1 - V2) | / ((V1 + V2)/2) ) * 100
-            scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit + me.total.finalCommit )/2)) * 100 ;
-            originalCommitRatio = (me.total.finalAccepted/me.total.initialCommit)* 100 ;
-            finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100 ;
-            //scope data 
-            var drawComponentScope = Ext.create('Ext.draw.Component', {
-                    width: 50,
-                    height:50,
-                    items: [{
-                        type: "path",
-                        path: "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z", //up arrow
-                        //path: "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z",//down arrow 
-                        fill: "green"
-                    }]
-                });
-            //fixing the numbers to be 20 and 80 so that the donut always looks the same
-            //for a static UI
-            var dataseries = [];
-            dataseries.push(new Array('ScopeDelta',20));
-            dataseries.push(new Array('In Scope',80));
-            //center of the donut for 1st pie 
-            //var center =
-            var donutConfig = {
-            chart: {
-                height:200,
-                plotBackgroundColor: '#FFFFFF',
-                plotShadow: false
-            },
-            title: {
-                align: 'left',
-                verticalAlign: 'left',
-                x: 300,
-                y: 20
-            },
-            tooltip: {
-                //pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
-                formatter: function () {
-                        //console.log(this.series.data[this.point.x].x);
-                        //console.log(this.series.data[this.point.x].name);
-                        return  this.series.data[this.point.x].name;
-                        //return this.series.data.dataseries.name;
-                    }
-            },
-            plotOptions: {
-                pie: {
-                    dataLabels: {
-                        enabled: false,//enable true if you want anything in it 
-                        distance: - 20,
-                        formatter: function(){
-                            return Math.round(this.percentage * 100)/100 + '%';//if you want the labels to be in percentage
-                        },
-                        style: {
-                            fontWeight: 'bold',
-                            color: 'black',
-                            textShadow: '0px 1px 2px white'
-                        }
-                    },
-                    showInLegend: false,//show legend true if you want to show the legend
-                    startAngle: 0,
-                    endAngle: 360,
-                    center: ['40%', '60%']//center of the circle, left top of the screen is the origin 
-                }
-            },
-            series: [{
-                type: 'pie',
-                name: 'scope',
-                innerSize: '80%',
-                data: dataseries
-            }]
-        };
-        /******************************************************* Donut 1 ********************************************************/
-        //debugger;
-        //#808080 Initial Commit
-        //#7cb5ec Final Commit 
-        //#3A874F Final Accepted        
-        //scope config
-        donutConfig.title.text = 'Scope <br/>' + scopeDeltaPerc.toFixed(2) + '% <br/>'; //+ me.total.finalCommit.toFixed(2) + ' of ' + me.total.initialCommit.toFixed(2);
-        //debugger;
-        $("#retroDonutScopeFooter").html(me.total.finalCommit.toFixed(2) + ' of ' + me.total.initialCommit.toFixed(2));
-        //Ext.getCmp('retroDonutScopeFooter').add(me.total.finalCommit.toFixed(2) + ' of ' + me.total.initialCommit.toFixed(2));
-        if(scopeDeltaPerc >=0 && scopeDeltaPerc <= 10.99){
-            Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
-            drawComponentScope.items[0].path = "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z";
-            drawComponentScope.items[0].fill ="green";
-        }else{
-            Highcharts.setOptions({ colors: ['#E62E00','#7cb5ec'] });
-            drawComponentScope.items[0].path = "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z";
-            drawComponentScope.items[0].fill ="red";
-        }
-    
-        $("#retroDonutScope").highcharts(donutConfig);
-        Ext.getCmp('retroDonutScopeArrow').add(drawComponentScope);
-        /******************************************************* Donut 2 ********************************************************/
-            //C/A Ratio Original Config
-         var drawComponentOri = Ext.create('Ext.draw.Component', {
-                    width: 50,
-                    height:50,
-                    items: [{
-                        type: "path",
-                        path: "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z", //up arrow
-                        //path: "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z",//down arrow 
-                        fill: "green"
-                    }]
-                });
-        
-        donutConfig.series.data = dataseries;
-        donutConfig.title.text = 'C/A Ratio Original <br/>' + originalCommitRatio.toFixed(2) + '%<br/>'; //+ me.total.finalAccepted.toFixed(2) + ' of ' + me.total.initialCommit.toFixed(2);
-        $("#retroDonutCaOriginalFooter").html(me.total.finalAccepted.toFixed(2) + ' of ' + me.total.initialCommit.toFixed(2));
-        if(originalCommitRatio >= 90){//100 percentage would be all the work completed so plus minus 10 is acceptable
-            Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
-            drawComponentOri.items[0].path = "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z";
-            drawComponentOri.items[0].fill ="green";
-        }else{
-            Highcharts.setOptions({ colors: ['#E62E00','#7cb5ec'] });
-            drawComponentOri.items[0].path = "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z";
-            drawComponentOri.items[0].fill ="red";
-        }
-        $("#retroDonutCaOriginal").highcharts(donutConfig);
-        Ext.getCmp('retroDonutCaOriginalArrow').add(drawComponentOri);
-    /******************************************************* Donut 3 ********************************************************/
-            //C/A Ratio Original Config
-         var drawComponentFinal = Ext.create('Ext.draw.Component', {
-            width: 50,
-            height:50,
-        /*  gradients :[{
-            id: 'gradientId',
-            angle: 45,
-            stops: {
-                0: {
-                    color: '#D90000'
-                },
-                100: {
-                    color: '#FF7373'
-                }
-              }
-            }], */
-            items: [{
-                type: "path",
-                path: "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z", //up arrow
-                //path: "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z",//down arrow 
-                fill: "green"
-            }]
-        });
-        donutConfig.series.data = dataseries;
-        donutConfig.title.text = 'C/A Ratio Final <br/>' + finalCommitRatio.toFixed(2) + '%<br/>';// + me.total.finalAccepted.toFixed(2) + ' of ' + me.total.finalCommit.toFixed(2);
-        $("#retroDonutCaFinalFooter").html(me.total.finalAccepted.toFixed(2) + ' of ' + me.total.finalCommit.toFixed(2));
-        if(finalCommitRatio >= 90){//plus minus 10 is acceptable when 90 percentage is done, only 10% is left which is acceptable 
-            Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
-            drawComponentFinal.items[0].path = "M150 0 L75 200 L225 200 Z" + "M110 200 h 80 v 80 h -80 Z";
-            drawComponentFinal.items[0].fill ="green";
-        }else{
-            Highcharts.setOptions({ colors: ['#E62E00','#7cb5ec'] });
-            drawComponentFinal.items[0].path = "M180 20 h 30 v 50 h -30 Z" + "M160 50 h 70 L195 100 Z";
-            drawComponentFinal.items[0].fill ="red";
-        }
-        $("#retroDonutCaFinal").highcharts(donutConfig);
-        Ext.getCmp('retroDonutCaFinalArrow').add(drawComponentFinal);
-
-        },
         _hideHighchartsLinks: function(){
                 $('.highcharts-container > svg > text:last-child').hide();
         },
-        _getFeatureFilter: function(){          
-            var me = this,
-                releaseName = me.ReleaseRecord.data.Name,
-                releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
-                featureProductFilter = _.reduce(me.Products, function(filter, product){
-                    var thisFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.Parent.ObjectID',  value:product.data.ObjectID });
-                    return filter ? filter.or(thisFilter) : thisFilter;
-                }, null);
-            //console.log("feature product filter",releaseName,releaseNameFilter,featureProductFilter);
-            return featureProductFilter ? releaseNameFilter.and(featureProductFilter) : {property:'ObjectID', value:0};
-            
-        },  
-        _getFeatures: function(){
-            var me=this,
-                config = {
-                    model: me.Feature,
-                    url: 'https://rally1.rallydev.com/slm/webservice/v2.0/PortfolioItem/Feature',
-                    params: {
-                        pagesize:200,
-                        query: me._getFeatureFilter().toString(),
-                        fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-                            'Description', 'FormattedID', 'UserStories'].join(','),
-                        workspace:me.getContext().getWorkspace()._ref,
-                        includePermissions:true
-                    }
-                };
-            //parrallel load mixin 
-            return me._parallelLoadWsapiStore(config).then(function(store){
-                me.FeatureStore = store;
-                return store;
-            });
-        
-        },
-        _loadPortfolioItem: function(){
+        _loadRetroChart: function(){
             var me = this;
+            var scopeDeltaPerc = 0,
+                originalCommitRatio = 0,
+                finalCommitRatio = 0;
+           if(me.AllSnapshots.length === 0 ){
+                me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
+                return;     
+            } 
             
-            me.setLoading('Loading PortfolioItem/Feature');
-            return Q.all([
+            scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit))) * 100;
+            originalCommitRatio = (me.total.finalAccepted/me.total.initialCommit)* 100 ;
+            finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
+                        
+            Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
+            var dataseries = [];
+
+            var chartConfig = {
+                chart: {
+                    type: 'column'
+                },
+                title: {
+                    text: 'Scope'
+                },
+                subtitle: {
+                    text: '4 of 6 '
+                },
+                xAxis: {
+                    categories: ['Original Commit', 'Final Workload'],
+                    tickLength:10
+                },
+                yAxis: {
+                    min: 0,
+                    tickPixelInterval: 50,
+                    title: {
+                        text: 'Total Points'
+                    },
+                    plotLines : [{
+                        name:'maxTarget',
+                        value : 0,
+                        color : '#92d947',
+                        dashStyle : 'shortdash',
+                        width : 2,
+                        zIndex: 5,
+                        label : {
+                             text : 'Acceptable increase (+10%)',
+                            style:{
+                                color:'black',
+                                'text-shadow': '0 1px 0 white'
+                                }
+                        }
+                    }, {
+                        name:'minTarget',
+                        value : 0,
+                        color : '#92d947',
+                        dashStyle : 'shortdash',
+                        zIndex: 5,
+                        width : 2,
+                        label : {
+                            text : 'Acceptable decrease (-10%) ' ,
+                            style:{
+                                color:'black',
+                                'text-shadow': '0 1px 0 white'
+                                }
+                        }
+                    }]
+                },
+		tooltip: {
+		   valueDecimals: 1
+		},
+                plotOptions: {
+                    series: {
+                        stacking: 'normal',
+                        borderWidth: 2,
+                        borderColor: 'white',
+                        shadow: true
+                    },
+                    column: {colorByPoint: true}
+                },
+                series: [{
+                    name: ['Meet Target'],
+                    showInLegend: false,
+                    data: dataseries,
+                    dataLabels: {
+                         enabled: true,
+                         format: '{point.y:,.0f}'//show no decimal points
+                       }
+                }]
+            };
+            //set the max so that all the chart look the same 
+		    var chartMax = [];
+            chartMax.push(me.total.initialCommit,me.total.finalAccepted, me.total.finalCommit);
+            chartConfig.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
+            if (scopeDeltaPerc > 0){
+             chartConfig.title.text = 'Scope Delta: +' + scopeDeltaPerc.toFixed(2) + '%';
+            }
+            else{
+             chartConfig.title.text = 'Scope Delta:' + scopeDeltaPerc.toFixed(2) + '%';
+            }
+            chartConfig.subtitle.text = Math.round(me.total.finalCommit) + ' of ' + Math.round(me.total.initialCommit);
+            dataseries.push(new Array('initialcommit', me.total.initialCommit));
+            dataseries.push(new Array('finalcommit',me.total.finalCommit));
+            chartConfig.series.data = dataseries;
+            chartConfig.yAxis.plotLines[0].value = me.total.initialCommit + (0.1 * me.total.initialCommit);//max target
+            chartConfig.yAxis.plotLines[1].value = me.total.initialCommit - (0.1 * me.total.initialCommit);//min target
+            console.log(chartConfig);
+			//debugger;
+			//scope delta increase and decrease by 10% which is acceptable
+            if(scopeDeltaPerc >= -10.99 && scopeDeltaPerc <= 10.99){
+                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+            }else{
+                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+            }
+            if(scopeDeltaPerc >= 400){
+                chartConfig.yAxis.plotLines[1].label = {                            
+                                text : 'Acceptable decrease (-10%)',
+                                align: 'right',
+                                x: -10,
+                                y: 16 };
+            }
+            $('#retroBarChartScopeWrapper').highcharts(chartConfig);
+
+            //second chart CA orginial 
+            chartConfig.title.text = 'A/C Original:' + originalCommitRatio.toFixed(0) + '%';
+            chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
+            chartConfig.xAxis.categories[1] = 'Final Accepted';
+            chartConfig.yAxis.plotLines[0].label = {                            
+                                text : 'Target >90%',
+                                align: 'center'
+                                };
+            //debugger;
+            //set the yaxis max so that it matches the other 2 charts
+            
+            dataseries.length = 0;
+            dataseries.push(new Array('initialcommit', me.total.initialCommit));
+            dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+            chartConfig.series.data = dataseries;
+            chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.initialCommit);//max target
+            chartConfig.yAxis.plotLines.splice(1,1);
+            if(originalCommitRatio >= 90){//100 percentage would be all the work completed so plus minus 10 is acceptable
+                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+            }else{
+                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+            }
+            $('#retroBarChartCaOriginalWrapper').highcharts(chartConfig);
+            
+            //third chart CA orginial 
+            finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
+            chartConfig.title.text = 'A/C Final:' + finalCommitRatio.toFixed(0) + '%';
+            chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.finalCommit);
+            chartConfig.xAxis.categories[0] = 'Final Workload';
+            chartConfig.xAxis.categories[1] = 'Final Accepted';
+            chartConfig.yAxis.plotLines[0].label = {                            
+                                text : 'Target >90%',
+                                align: 'center'
+                                };
+            dataseries.length = 0;
+            
+            dataseries.push(new Array('finalCommit', me.total.finalCommit));
+            dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+            chartConfig.series.data = dataseries;
+            chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.finalCommit);//max target
+            chartConfig.yAxis.plotLines.splice(1,1);
+            if(finalCommitRatio >= 90){//plus minus 10 is acceptable when 90 percentage is done, only 10% is left which is acceptable 
+                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+            }else{
+                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+            }
+            $('#retroBarChartCaFinalWrapper').highcharts(chartConfig);
+        },
+        _loadEverything: function(){
+            var me = this;
+			var start = new Date();
+            me.setLoading('Loading Charts');
+            //load all the child release to get the user story snap shots
+			//get the features from wsapi
+			 return Q.all([
+                    me._loadAllChildReleases(),
                     me._getFeatures()
                 ])
-                .then(function(store){ console.log(store); })
-                .fail(function(reason){ 
-                console.log("fail",reason);
-                me.setLoading(false);
-                return Q.reject(reason);  })
-                .then(function(){ me.setLoading(false); });
-            
-/*          console.log("Release Name", me.ReleaseWithName);
-            var portfolio = Ext.create('Rally.data.wsapi.Store',{
-                model: 'PortfolioItem/feature',
-                autoLoad: true,
-                context:{
-                        workspace: me.getContext().getWorkspace()._ref,
-                        project: null
-                    },
-                params: {
-                        pagesize:200,
-                        query:me._getFeatureFilter().toString(),
-                        fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-                            'Description', 'FormattedID', 'UserStories'].join(','),
-                        workspace:me.getContext().getWorkspace()._ref,
-                        includePermissions:true
-                    }
-                listeners: {
-                    load: function(store,data,success){
-                        console.log("here");
-                        //console.log("portfolio",data);
-                        
-                        _.each(data,function(f){
-                            /* console.log(f.data);
-                            PercentDoneByStoryCount: 0
-                            PercentDoneByStoryPlanEstimate: 0
-                            PlannedEndDate: nullPlannedStartDate: null
-                            Release: ObjectCreationDate: "2014-01-03T08:25:09.241Z"Name: "Q1_2014" 
-                        });
-                    }
-                }
-                
-            }) */
-        },
-        _buildGrid: function(){
-            
-        },
-        /************************************************** updating/fixing chart data *********************************************/
-    /*  _updateHighchart: function(chart, chartData, dynConf){ //directly manipulate the highchart, avoid the Ext.js highchart extension
-            var wrapper = chart.getChartWrapper(), wc = wrapper.chart, newSeries = chartData.series, y, x;
-            wc.xAxis[0].update({categories:chartData.categories, tickInterval:dynConf.xAxis.tickInterval});
-            wc.setTitle(dynConf.title, dynConf.subtitle);
-            for(var i=0;i<newSeries.length;++i){
-                var newData = newSeries[i].data, oldData=wc.series[i];
-                var oldSerLen = oldData.points.length;
-                var newSerLen = newData.length;
-                oldData.setData(newData, false, true, false);
-            }
-            wc.redraw();
-        }, */
+            .then(function() {  
+			//load all the user story snap shot for release
+			//load all the user stories for the release features
+                return Q.all([
+                    me._loadSnapshotStores(),
+					me._loadUserStoriesforFeatures()
+                ]);
+            })
+            .then(function(){ 
+			//build the chart
+                me._buildCharts(); 
+                me.setLoading(false);})
+            .then (function(){ 
+			//build the retro bar chart 
+                me._loadRetroChart();
+                me._hideHighchartsLinks();
+			//build the store for the retro grid view
+			    return me._loadPortfolioItem()          
+                  .then(function(featurescope){
+			//build the feature scope change grid 
+					me._buildFeatureGrid();
+                    me.setLoading(false);
+                   });
+               })
+            .fail(function(reason){
+                me.setLoading(false);			
+                me._alert('ERROR', reason || '');
+                 })
+            .done();            
+        },   
         launch: function() {
             var me = this;
+            //comes from intel-rally-app.js
+            //loads all the models objects
             me._loadModels()
                     .then(function(){
                         var scopeProject = me.getContext().getProject();
@@ -2270,6 +3226,7 @@ Ext.define('ParallelLoader', {
                                 else {
                                     me.CurrentTeam = me.ProjectRecord;
                                     me._isScopedToTrain = false;
+                                    return Q.reject('You are not scoped to a train.');
                                 }
                             }),
                             me._loadAppsPreference() /******** load stream 2 *****/
@@ -2289,8 +3246,9 @@ Ext.define('ParallelLoader', {
                     })
                     .then(function() { me._buildReleasePicker(); })
                     .then (function(){ 
-                        me._loadChart(); 
+                        me._loadEverything(); 
                         me._hideHighchartsLinks();
+                        //me._loadPortfolioItem();
                         })
                     .fail(function(reason){
                         me.setLoading(false);
@@ -2299,6 +3257,7 @@ Ext.define('ParallelLoader', {
                     .done();
          }
     });
+}());
 
             Rally.launchApp('RetroDashboard', {
                 name:"RetroDashboard",
@@ -2318,10 +3277,18 @@ Ext.define('ParallelLoader', {
   margin: 10px;
   padding: 10px;
 }
-.donut-wrapper {
-  /*border: solid red 1px;*/
-  width: 80%;
+.retrochart-wrapper {
+  clear: both;
+  float: right;
+  /* 	border: solid green 1px; */
   /*change the width percentage to change the size of the donut-wrapper*/
+}
+.barchart-wrapper {
+  margin-top: 20px;
+  border: solid #BFBFBF 2px;
+  width: 100%;
+  /*change the width percentage to change the size of the donut-wrapper
+	background-color:red;*/
 }
 .chart-with-border {
   font-weight: bold;
@@ -2329,21 +3296,101 @@ Ext.define('ParallelLoader', {
   z-index: -1;
 }
 .chart-with-border2 {
-  border: solid green 1px;
+  /* border: solid #92d947 1px; */
+}
+.chart-with-border3 {
+  border: solid #BFBFBF 4px;
+  background-color: green;
 }
 span#retroDonutScopeArrow-outerCt,
 span#retroDonutCaOriginalArrow-outerCt,
 span#retroDonutCaFinalArrow-outerCt {
   margin-top: 70px;
-  margin-left: 220px;
+  margin-left: 60px;
 }
 #retroDonutScopeFooter,
 #retroDonutCaOriginalFooter,
 #retroDonutCaFinalFooter {
   padding-top: 190px;
-  padding-left: 140px;
+  padding-left: 0px;
   font-weight: bold;
   font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, sans-serif;
+}
+.legendwrapper {
+  /* width: 100%;
+	text-align: center;
+	height: 20px;
+	padding-left: 70%;
+	margin-bottom:20px; */
+  float: right;
+  width: 35%;
+  text-align: center;
+  margin-top: -50px;
+}
+.mtargetwrapper {
+  float: left;
+  color: #333333;
+  font-size: 12px;
+  font-weight: bold;
+}
+.mtarget {
+  float: left;
+  background-color: #92D050;
+  height: 12px;
+  width: 16px;
+  margin-left: 50px;
+  margin-right: 3px;
+  margin-top: 3px;
+}
+.atarget {
+  float: left;
+  height: 12px;
+  width: 16px;
+  margin-left: 50px;
+  margin-right: 3px;
+  margin-top: 3px;
+}
+.dtargetwrapper {
+  float: left;
+  color: #333333;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.dtarget {
+  float: left;
+  background-color: #d05052;
+  height: 12px;
+  width: 16px;
+  margin-left: 10px;
+  margin-right: 3px;
+  margin-top: 3px;
+}
+#grid_header_hd {
+  color: #396295;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  fill: #333333;
+}
+/* simple, float it right instead of left */
+.progress-right .progress-bar-r {
+  float: left;
+  border: solid red 1px;
+  height: 20px;
+  text-align: left;
+  background-color: #fc8585;
+  text-shadow: 0 1px 0 #D05052;
+  color: black;
+}
+div.sr-only {
+  border: solid #D05052 1px;
+  float: left;
+  background-color: #D05052;
+  color: white;
+  height: 19px;
+  overflow: visible;
+  /*   direction: rtl; */
 }
 
     </style>

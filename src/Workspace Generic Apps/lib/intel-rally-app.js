@@ -670,6 +670,32 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		_loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: this.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(endDate).toISOString()
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(startDate).toISOString()
+					}]
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},
 		_loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
