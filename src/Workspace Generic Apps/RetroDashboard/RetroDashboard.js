@@ -81,7 +81,9 @@
 			}]
 		}],
       
-		 /****************************************************** RELEASE PICKER ********************************************************/
+		_userAppsPref: 'intel-retro-dashboard',	//dont share release scope settings with other apps	
+		
+		/****************************************************** RELEASE PICKER ********************************************************/
 		_releasePickerSelected: function(combo, records){
 			var me=this;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -114,12 +116,12 @@
 			});
 		},
 		 
-		 /****************************************************** DATA STORE METHODS ********************************************************/
+		/****************************************************** DATA STORE METHODS ********************************************************/
         _loadAllChildReleases: function(){
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name;		
 			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord).then(function(releaseRecords){
-				me.ReleasesWithName = releaseRecords;
+				me.ReleasesWithName = _.filter(releaseRecords, function(r){ return (r.data.Project.TeamMembers || {}).Count; });
 			}); 
         },              
         _loadSnapshotStores: function(){
@@ -143,7 +145,8 @@
             return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
                 parallelLoaderConfig.params.find =  JSON.stringify({ 
 					_TypeHierarchy: 'HierarchicalRequirement',
-					Release: releaseRecord.data.ObjectID
+					Release: releaseRecord.data.ObjectID,
+					Children: null //pull only the children User stories as the snap shot are the children user stories
 				});
                 return me._parallelLoadLookbackStore(parallelLoaderConfig)
 					.then(function(snapshotStore){ 
@@ -185,7 +188,10 @@
 					model: me.UserStory,
 					url: me.BaseUrl + '/slm/webservice/v2.0/hierarchicalrequirement',
 					params: {
-						workspace: me.getContext().getWorkspace()._ref,
+                       // workspace: me.getContext().getWorkspace()._ref, //do this if you want to get UserStories from ALL scrums.
+						project: me.TrainRecord.data._ref,
+						projectScopeDown: true,
+						projectScopeUp: false,
 						compress: true, //makes it very slow sometimes
 						pagesize:200,
 						fetch:['ScheduleState', 'PlanEstimate', lowestPortfolioItemType, 'ObjectID'].join(',')
@@ -197,21 +203,22 @@
                 parallelLoaderConfig.params.query = portfolioItemFilter.toString();
                 
 				return me._parallelLoadWsapiStore(parallelLoaderConfig)
-					.then(function(snapshotPortfolioItemStore){ 
-						me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID] = snapshotPortfolioItemStore.getRange();
+					.then(function(userStoryStore){ 
+						me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID] = userStoryStore.getRange();
 					});
             }));            
         },
         _loadScopeToReleaseStore: function(){
-            var me = this,
-				_10days = 1000 * 60 *60 *24*10,
+			debugger;
+            var me = this;
+			var userStorySnapshots = me.AllSnapshots;
+			var	_10days = 1000 * 60 *60 *24*10,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				userStorySnapshots = me.AllSnapshots,
 				startTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
 				finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1),
-				scopeToReleaseGridRows = [],
+				scopeToReleaseGridRows = [];
 				
-				userStorySnapshotsInitialWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
+			var	userStorySnapshotsInitialWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
 					return new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && new Date(userStorySnapshot.data._ValidTo) > startTargetDate && !userStorySnapshot.data[lowestPortfolioItemType];
 				}),
 				userStorySnapshotsFinalWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
@@ -223,49 +230,44 @@
 				userStorySnapshotsFinalWithPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
 					return new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && !!userStorySnapshot.data[lowestPortfolioItemType];
 				});
-				
+		
            _.each(me.PortfolioItemStore.getRange(), function(portfolioItemRecord,key){
+			  
                 var scopeToReleaseGridRow = {},
-					releaseStartSnapshot =[],
-					releaseFinalSnapshot =[],
+					releaseStartSnapshots =[],
+					releaseFinalSnapshots =[],
 					userStoriesForPortfolioItem = me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID],
 
-					//add snapshots for UserStories not in wsapi
-					startdateStoriesNotCurrentlyInWsapi = _.filter(userStorySnapshotsInitialWithPortfolioItems, function (userStorySnapshot){
+					userStorySnapshotsInitialForPortfolioItem = _.filter(userStorySnapshotsInitialWithPortfolioItems, function (userStorySnapshot){
 						return portfolioItemRecord.data.ObjectID === userStorySnapshot.data[lowestPortfolioItemType];
 					}),
-					enddateStoriesNotCurrentlyInWsapi = _.filter(userStorySnapshotsFinalWithPortfolioItems, function (userStorySnapshot){
+					userStorySnapshotsFinalForPortfolioItem = _.filter(userStorySnapshotsFinalWithPortfolioItems, function (userStorySnapshot){
 						return portfolioItemRecord.data.ObjectID === userStorySnapshot.data[lowestPortfolioItemType];
 					});
 					
-                releaseStartSnapshot = releaseStartSnapshot.concat(startdateStoriesNotCurrentlyInWsapi);
-                releaseFinalSnapshot = releaseFinalSnapshot.concat(enddateStoriesNotCurrentlyInWsapi);
+                releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialForPortfolioItem);
+                releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalForPortfolioItem);
 
                 _.each(userStoriesForPortfolioItem, function(wsapiUserStory){
-                    var startdateStoriesCurrentlyInWsapi = _.filter(userStorySnapshotsInitialWithoutPortfolioItems, function (userStorySnapshot){
+                    var userStorySnapshotsInitialWithoutPortfolioItem = _.filter(userStorySnapshotsInitialWithoutPortfolioItems, function (userStorySnapshot){
 							return userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID;
 						}),
-						enddateStoriesNotCurrentlyInWsapi = _.filter(userStorySnapshotsFinalWithoutPortfolioItems, function (userStorySnapshot){
+						userStorySnapshotsFinalWithoutPortfolioItem = _.filter(userStorySnapshotsFinalWithoutPortfolioItems, function (userStorySnapshot){
 							return userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID;
 						});
-                    releaseStartSnapshot = releaseStartSnapshot.concat(startdateStoriesCurrentlyInWsapi);
-                    releaseFinalSnapshot = releaseFinalSnapshot.concat(enddateStoriesNotCurrentlyInWsapi);
+                    releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialWithoutPortfolioItem);
+                    releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalWithoutPortfolioItem);
                 });
-
-				var releaseStartSnapshotUnique = _.uniq(releaseStartSnapshot,true,function(rs){ return rs.data.ObjectID;});
-				var releaseFinalSnapshotUnique = _.uniq(releaseFinalSnapshot,true,function(rs){ return rs.data.ObjectID;});
-
-				if(releaseStartSnapshotUnique.length > 0 || releaseFinalSnapshotUnique.length > 0){
-					var startDateAcceptedPoints = _.reduce(releaseStartSnapshotUnique, function(sum, item){ 
-							if(item.data.ScheduleState =='Accepted') return parseInt(sum + item.data.PlanEstimate,10);
-							else return parseInt(sum,10);
+				debugger;
+				if(releaseStartSnapshots.length > 0 || releaseFinalSnapshots.length > 0){
+					var startDateAcceptedPoints = _.reduce(releaseStartSnapshots, function(sum, item){ 
+							return sum + (item.data.ScheduleState =='Accepted' ? item.data.PlanEstimate*1 : 0);
 						}, 0),
-						startDateNotAcceptedPoints =_.reduce(releaseStartSnapshotUnique, function(sum, item){ 
-							if(item.data.ScheduleState !='Accepted') return parseInt(sum + item.data.PlanEstimate,10);
-							else return parseInt(sum,10);
+						startDateNotAcceptedPoints =_.reduce(releaseStartSnapshots, function(sum, item){ 
+							return sum + (item.data.ScheduleState !='Accepted' ? item.data.PlanEstimate*1 : 0);
 						}, 0),
-						startDateTotalPoints = _.reduce(releaseStartSnapshotUnique, function(sum, item){ 
-							return parseInt(sum + item.data.PlanEstimate,10);
+						startDateTotalPoints = _.reduce(releaseStartSnapshots, function(sum, item){ 
+							return sum + (item.data.PlanEstimate*1);
 						}, 0),
                             
 						//to get the % complete at release end
@@ -273,16 +275,14 @@
 						//EndreleaseStartSnapshots = _.filter(snapshots, ss._validFrom < targetDate && ss._ValidTo > targetDate)
 						//completedPOints = sum EndreleaseStartSnapshots by PlanEstimate if ScheduleState == 'Completed' || 'Accepted'
 						//totalPoints = sum EndreleaseStartSnapshots by PlanEstimate
-						finalDateAcceptedPoints = _.reduce(releaseFinalSnapshotUnique, function(sum, item){ 
-							if(item.data.ScheduleState =='Accepted') return parseInt(sum + item.data.PlanEstimate,10);
-							else return parseInt(sum,10);
+						finalDateAcceptedPoints = _.reduce(releaseFinalSnapshots, function(sum, item){ 
+							return sum + (item.data.ScheduleState =='Accepted' ? item.data.PlanEstimate*1 : 0);
 						}, 0),
-						finalDateNotAcceptedPoints =_.reduce(releaseFinalSnapshotUnique, function(sum, item){ 
-							if(item.data.ScheduleState !='Accepted') return parseInt(sum + item.data.PlanEstimate,10);
-							else return parseInt(sum,10);
+						finalDateNotAcceptedPoints =_.reduce(releaseFinalSnapshots, function(sum, item){ 
+							return sum + (item.data.ScheduleState !='Accepted' ? item.data.PlanEstimate*1 : 0);
 						}, 0),
-						finalDatetotalPoints = _.reduce(releaseFinalSnapshotUnique, function(sum, item){ 
-							return parseInt(sum + item.data.PlanEstimate,10);
+						finalDatetotalPoints = _.reduce(releaseFinalSnapshots, function(sum, item){ 
+							return sum + (item.data.PlanEstimate*1);
 						}, 0);
                 
 					scopeToReleaseGridRow.completedAtStart = startDateAcceptedPoints / startDateTotalPoints;
@@ -294,11 +294,8 @@
 						scopeToReleaseGridRow.completedAtEnd = 0;
 					}
 				
-					if(startDateTotalPoints === 0){
-						scopeToReleaseGridRow.growth = finalDatetotalPoints;                         
-					}else{
-					   scopeToReleaseGridRow.growth = (finalDatetotalPoints - startDateTotalPoints )/ startDateTotalPoints;      
-					}
+					if(startDateTotalPoints === 0) scopeToReleaseGridRow.growth = finalDatetotalPoints;                  
+					else scopeToReleaseGridRow.growth = (finalDatetotalPoints - startDateTotalPoints )/ startDateTotalPoints;
 					
 					scopeToReleaseGridRow.intent = startDateTotalPoints.toFixed(0);//startDateNotAcceptedPoints;//plan to do //inital planned 
 					scopeToReleaseGridRow.actual  = finalDatetotalPoints.toFixed(0); //finalDateNotAcceptedPoints;//acutal done //Points at end of release
@@ -357,8 +354,8 @@
 							text:[(v* 100).toFixed(2), '%'].join(''),
 							width:'100px',
 							value:v 
-						};                                      
-					 } 
+						};
+					}
 				},{
 					header:"% Complete<br/>@ Release End " + me.CompleteFinalTargetDate,
 					dataIndex: "completedAtEnd",
@@ -405,14 +402,14 @@
 					dataIndex: "state",
 					flex:1
 				}]
-			};
+			});
 		},
         _buildCharts: function(){
             var me = this,
 				calc = Ext.create('FastCumulativeFlowCalculator',{
-				  scheduleStates:me.ScheduleStates,
-				  startDate: me.ReleaseRecord.data.ReleaseStartDate,
-				  endDate: me.ReleaseRecord.data.ReleaseDate
+					scheduleStates:me.ScheduleStates,
+					startDate: me.ReleaseRecord.data.ReleaseStartDate,
+					endDate: me.ReleaseRecord.data.ReleaseDate
 				});
 
             //chart config setting 
@@ -470,7 +467,7 @@
 			});
 
             me.total = total;
-			
+
             $("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
                 chart: {
                     height:400,
@@ -489,7 +486,7 @@
                 },
                 xAxis:{
                     categories: aggregateChartData.categories,
-                    tickInterval: me._getConfiguredChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44)
+                    tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44)
                 },
                 series: aggregateChartData.series
 			}));
@@ -497,18 +494,18 @@
 		_hideHighchartsLinks: function(){
 			$('.highcharts-container > svg > text:last-child').hide();
 		},
-        _loadRetroChart: function(){
+        _buildRetroChart: function(){
 			var me = this,
 				scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit))) * 100,
 				originalCommitRatio = (me.total.finalAccepted/me.total.initialCommit)* 100,
 				finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100,
                 dataseries = [],
-				chartMax = [], //set the max so that all the chart look the same
+				chartMax = []; //set the max so that all the chart look the same
+				Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
 				chartConfig = {
 					chart: {
 						type: 'column'
 					},
-					colors: ['#3A874F','#7cb5ec'],
 					title: {
 						text: 'Scope'
 					},
@@ -659,14 +656,14 @@
 			var me = this;
 			me.setLoading('Loading Data');
 			//load all the child release to get the user story snap shots
-			//get the features from wsapi
+			//get the portfolioItems from wsapi
 			return Q.all([
 				me._loadAllChildReleases(),
 				me._getPortfolioItems()
 			])
 			.then(function() {  
                 //load all the user story snap shot for release
-                //load all the user stories for the release features
+                //load all the user stories for the release portfolioItems
 				return Q.all([
 					me._loadSnapshotStores(),
 					me._loadUserStoriesforPortfolioItems()
@@ -678,7 +675,7 @@
 					return;     
 				} 
 				me._buildCharts(); 
-				me._loadRetroChart();
+				me._buildRetroChart();
 				me._hideHighchartsLinks();
 				me._loadScopeToReleaseStore();
 				me._buildScopeToReleaseGrid();
@@ -687,7 +684,7 @@
 			.fail(function(reason){
 				me.setLoading(false);           
 				me._alert('ERROR', reason || '');
-			 })
+			})
 			.done();   
 	
         },   
