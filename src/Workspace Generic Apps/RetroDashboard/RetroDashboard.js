@@ -2,11 +2,11 @@
 	var Ext = window.Ext4 || window.Ext;
 
 	Ext.define('RetroDashboard', {
-        extend: 'IntelRallyApp',
-        componentCls: 'app',
-        requires: [
+		extend: 'IntelRallyApp',
+		componentCls: 'app',
+		requires: [
 			'FastCumulativeFlowCalculator'
-        ],
+		],
 		mixins: [
 			'PrettyAlert',
 			'UserAppsPreference',
@@ -33,30 +33,30 @@
 				},
 				renderTo: document.body,
 				items:[{
-                    xtype:'container',
-                    id: 'retroChart',                   
-                    height: 450,
-                    width: '44%'                        
-                },{
-                    xtype:'container',//Scope container Wrapper
-                    id : 'retroBarChartScopeWrapper',
-                    height: 400,
-                    width: '18%'
-                },{
-                    xtype:'container',// CA original wrapper 
-                    id: 'retroBarChartCaOriginalWrapper',
-                    height: 400,
-                    width: '18%'
-                },{ 
-                    xtype:'container',
-                    id: 'retroBarChartCaFinalWrapper',
-                    height: 400,
-                    width: '18%'//CA final container
-                }] 
-            },{
-                xtype:'container',//legend
-                id:'legend',
-                html:[
+					xtype:'container',
+					id: 'retroChart',                   
+					height: 450,
+					width: '44%'                        
+				},{
+					xtype:'container',//Scope container Wrapper
+					id : 'retroBarChartScopeWrapper',
+					height: 400,
+					width: '18%'
+				},{
+					xtype:'container',// CA original wrapper 
+					id: 'retroBarChartCaOriginalWrapper',
+					height: 400,
+					width: '18%'
+				},{ 
+					xtype:'container',
+					id: 'retroBarChartCaFinalWrapper',
+					height: 400,
+					width: '18%'//CA final container
+				}] 
+			},{
+				xtype:'container',//legend
+				id:'legend',
+				html:[
 					'<div class="legendwrapper">',
 						'<div class="dtarget"></div>',
 						'<div class="dtargetwrapper">Did not meet Target</div>',
@@ -66,21 +66,21 @@
 						'<div class="mtargetwrapper">A/C = Accept to Commit</div>',
 					'</div>'
 				].join('\n')
-            },{
-                xtype: 'container',
-                id: 'portfolio_item_information',
-                cls: 'chart-with-border3'//TODO need to find why I added this 
-            },{
-                xtype:'container',
-                id: 'scopeGridWrapper',
-                items:[{
+			},{
+				xtype: 'container',
+				id: 'portfolio_item_information',
+				cls: 'chart-with-border3'//TODO need to find why I added this 
+			},{
+				xtype:'container',
+				id: 'scopeGridWrapper',
+				items:[{
 					xtype:'container',
 					id: 'scopeGrid',
 					cls: 'scope_grid'//TODO need to find why I added this 
 				}]
 			}]
 		}],
-      
+			
 		_userAppsPref: 'intel-retro-dashboard',	//dont share release scope settings with other apps	
 		
 		/****************************************************** RELEASE PICKER ********************************************************/
@@ -117,70 +117,109 @@
 		},
 		 
 		/****************************************************** DATA STORE METHODS ********************************************************/
-        _loadAllChildReleases: function(){
-			var me = this,
-				releaseName = me.ReleaseRecord.data.Name;		
-			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord).then(function(releaseRecords){
-				me.ReleasesWithName = _.filter(releaseRecords, function(r){ return (r.data.Project.TeamMembers || {}).Count; });
-			}); 
-        },              
-        _loadSnapshotStores: function(){
-            var me = this, 
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				parallelLoaderConfig = {
-                    pagesize:20000,
-                    url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-                        me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-                    params: {
-                        workspace: me.getContext().getGlobalContext().getWorkspace()._ref,
-                        compress:true, //false makes it very slow sometimes
-                        pagesize:20000,
-                        find:"",
-                        fields:JSON.stringify(['ScheduleState', 'PlanEstimate', lowestPortfolioItemType, '_ValidFrom', '_ValidTo', 'ObjectID']),
-                        hydrate:JSON.stringify(['ScheduleState'])
-                    }
-                };   
-				
-            me.AllSnapshots = [];
-            return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
-                parallelLoaderConfig.params.find =  JSON.stringify({ 
-					_TypeHierarchy: 'HierarchicalRequirement',
-					Release: releaseRecord.data.ObjectID,
-					Children: null //pull only the children User stories as the snap shot are the children user stories
+		_loadAllChildReleases: function(){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+						hash[rr.data.ObjectID] = true;
+						return hash;
+					}, {});
 				});
-                return me._parallelLoadLookbackStore(parallelLoaderConfig)
-					.then(function(snapshotStore){ 
-						me.AllSnapshots = me.AllSnapshots.concat(snapshotStore.getRange());
-					});
-            }));
-
-        },         
-		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					remoteSort:false,
-					fetch: me._portfolioItemFields,
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me._reloadStore(store);
-		},	
-        _getPortfolioItems: function(){
-			var me=this,
+		},            
+		_loadSnapshotStores: function(){
+			var me = this, 
+				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
-			return me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, lowestPortfolioItemType)
-				.then(function(store){
-					me.PortfolioItemStore = store;
+			
+			me.AllSnapshots = [];
+			return Q.all(_.map(me.TrainChildren, function(project){
+				var parallelLoaderConfig = {
+					pagesize:20000,
+					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
+						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
+					params: {
+						workspace: me.getContext().getGlobalContext().getWorkspace()._ref,
+						compress:true,
+						pagesize:20000,
+						find: JSON.stringify({ 
+							_TypeHierarchy: 'HierarchicalRequirement',
+							Children: null,
+							Project: project.data.ObjectID,
+							_ValidFrom: { $lte: releaseEnd },
+							_ValidTo: { $gt: releaseStart }
+						}),
+						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', 'Release', lowestPortfolioItemType, '_ValidFrom', '_ValidTo', 'ObjectID']),
+						hydrate:JSON.stringify(['ScheduleState'])
+					}
+				};   
+				return me._parallelLoadLookbackStore(parallelLoaderConfig)
+					.then(function(snapshotStore){ 
+						//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
+						var records = _.filter(snapshotStore.getRange(), function(snapshot){
+							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName));
+						});
+						
+						//BUG IN LBAPI with duplicates. must workaround it.... POLYFILL thing
+						var tmpRecs = records.slice(),
+							convertDupes = function(dupes){
+								return _.map(_.sortBy(dupes, 
+									function(d){ return new Date(d.data._ValidFrom); }),
+									function(d, i, a){ if(i < a.length-1) d.raw._ValidTo = a[i+1].raw._ValidFrom; return d; });
+							};
+						for(var i=tmpRecs.length-1;i>=0;--i){
+							var dupes = [];
+							for(var j=i-1;j>=0;--j){
+								if(tmpRecs[i].data.ObjectID == tmpRecs[j].data.ObjectID){
+									if(tmpRecs[i].data._ValidTo == tmpRecs[j].data._ValidTo){
+										dupes.push(tmpRecs.splice(j, 1)[0]);
+										--i;
+									}
+								}
+							}
+							if(dupes.length){
+								dupes.push(tmpRecs.splice(i, 1)[0]);
+								tmpRecs = tmpRecs.concat(convertDupes(dupes));
+							}
+						}
+						records = tmpRecs;
+						//END BUG IN LBAPI Polyfill thing
+						
+						me.AllSnapshots = me.AllSnapshots.concat(records);
+					});
+			}));
+		},    
+		_getPortfolioItems: function(){
+			var me=this,
+				releaseName = me.ReleaseRecord.data.Name;
+			
+			me.LowestPortfolioItemsHash = {};
+			me.PortfolioItemsInReleaseStore = null;
+			
+			//NOTE: we are loading ALL lowestPortfolioItems b/c sometimes we run into issues where
+			//userstories in one release are under portfolioItems in another release (probably a user
+			// mistake). And this messes up the numbers in the topPortfolioItem filter box
+			return me._loadPortfolioItemsOfType(me.TrainPortfolioProject, me.PortfolioItemTypes[0])
+				.then(function(portfolioItemStore){
+					var portfolioItemsInRelease = _.filter(portfolioItemStore.getRange(), function(pi){ return (pi.data.Release || {}).Name == releaseName; });
+					me.PortfolioItemsInReleaseStore = Ext.create('Rally.data.wsapi.Store', {
+						model: me[me.PortfolioItemTypes[0]],
+						data: portfolioItemsInRelease,
+						totalCount: portfolioItemsInRelease.length,
+						disableMetaChangeEvent: true,
+						load: function(){}
+					});
+
+					me.LowestPortfolioItemsHash = _.reduce(portfolioItemStore.getRange(), function(hash, r){
+						hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
+						return hash;
+					}, {});
 				});
-        },
-        _loadUserStoriesforPortfolioItems: function(){
+		},
+		_loadUserStoriesforPortfolioItems: function(){
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				parallelLoaderConfig = {
@@ -188,52 +227,57 @@
 					model: me.UserStory,
 					url: me.BaseUrl + '/slm/webservice/v2.0/hierarchicalrequirement',
 					params: {
-                       // workspace: me.getContext().getWorkspace()._ref, //do this if you want to get UserStories from ALL scrums.
 						project: me.TrainRecord.data._ref,
 						projectScopeDown: true,
 						projectScopeUp: false,
-						compress: true, //makes it very slow sometimes
-						pagesize:200,
 						fetch:['ScheduleState', 'PlanEstimate', lowestPortfolioItemType, 'ObjectID'].join(',')
 					}
 				};     
-            me.WsapiUserStoryMap = {};     
-            return Q.all(_.map(me.PortfolioItemStore.data.items, function(portfolioItemRecord){
-                var portfolioItemFilter = Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItemType + '.ObjectID', value: portfolioItemRecord.data.ObjectID});               
-                parallelLoaderConfig.params.query = portfolioItemFilter.toString();
-                
+			me.WsapiUserStoryMap = {};     
+			return Q.all(_.map(me.PortfolioItemsInReleaseStore.data.items, function(portfolioItemRecord){
+				var portfolioItemFilter = Ext.create('Rally.data.wsapi.Filter', { 
+					property: lowestPortfolioItemType + '.ObjectID', 
+					value: portfolioItemRecord.data.ObjectID
+				});               
+				parallelLoaderConfig.params.query = portfolioItemFilter.toString();				
 				return me._parallelLoadWsapiStore(parallelLoaderConfig)
 					.then(function(userStoryStore){ 
 						me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID] = userStoryStore.getRange();
 					});
-            }));            
-        },
-        _loadScopeToReleaseStore: function(){
-			debugger;
-            var me = this;
-			var userStorySnapshots = me.AllSnapshots;
-			var	_10days = 1000 * 60 *60 *24*10,
+			}));            
+		},
+		_loadScopeToReleaseStore: function(){
+			var me = this,
+				userStorySnapshots = me.AllSnapshots,
+				_10days = 1000 * 60 *60 *24*10,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				startTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
 				finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1),
-				scopeToReleaseGridRows = [];
+				scopeToReleaseGridRows = [],
 				
-			var	userStorySnapshotsInitialWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
-					return new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && new Date(userStorySnapshot.data._ValidTo) > startTargetDate && !userStorySnapshot.data[lowestPortfolioItemType];
+				userStorySnapshotsInitialWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
+					return new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && 
+					new Date(userStorySnapshot.data._ValidTo) > startTargetDate && 
+					!userStorySnapshot.data[lowestPortfolioItemType];
 				}),
 				userStorySnapshotsFinalWithoutPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
-					return new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && !userStorySnapshot.data[lowestPortfolioItemType];
+					return new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && 
+					new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && 
+					!userStorySnapshot.data[lowestPortfolioItemType];
 				}),        
 				userStorySnapshotsInitialWithPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
-					return new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && new Date(userStorySnapshot.data._ValidTo) > startTargetDate && !!userStorySnapshot.data[lowestPortfolioItemType];
+					return new Date(userStorySnapshot.data._ValidFrom) < startTargetDate && 
+					new Date(userStorySnapshot.data._ValidTo) > startTargetDate && 
+					!!userStorySnapshot.data[lowestPortfolioItemType];
 				}),
 				userStorySnapshotsFinalWithPortfolioItems = _.filter(userStorySnapshots, function (userStorySnapshot){
-					return new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && !!userStorySnapshot.data[lowestPortfolioItemType];
+					return new Date(userStorySnapshot.data._ValidFrom) < finalTargetDate && 
+					new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && 
+					!!userStorySnapshot.data[lowestPortfolioItemType];
 				});
 		
-           _.each(me.PortfolioItemStore.getRange(), function(portfolioItemRecord,key){
-			  
-                var scopeToReleaseGridRow = {},
+			_.each(me.PortfolioItemsInReleaseStore.getRange(), function(portfolioItemRecord,key){
+				var scopeToReleaseGridRow = {},
 					releaseStartSnapshots =[],
 					releaseFinalSnapshots =[],
 					userStoriesForPortfolioItem = me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID],
@@ -245,20 +289,20 @@
 						return portfolioItemRecord.data.ObjectID === userStorySnapshot.data[lowestPortfolioItemType];
 					});
 					
-                releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialForPortfolioItem);
-                releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalForPortfolioItem);
+				releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialForPortfolioItem);
+				releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalForPortfolioItem);
 
-                _.each(userStoriesForPortfolioItem, function(wsapiUserStory){
-                    var userStorySnapshotsInitialWithoutPortfolioItem = _.filter(userStorySnapshotsInitialWithoutPortfolioItems, function (userStorySnapshot){
+				_.each(userStoriesForPortfolioItem, function(wsapiUserStory){
+					var userStorySnapshotsInitialWithoutPortfolioItem = _.filter(userStorySnapshotsInitialWithoutPortfolioItems, function (userStorySnapshot){
 							return userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID;
 						}),
 						userStorySnapshotsFinalWithoutPortfolioItem = _.filter(userStorySnapshotsFinalWithoutPortfolioItems, function (userStorySnapshot){
 							return userStorySnapshot.data.ObjectID === wsapiUserStory.data.ObjectID;
 						});
-                    releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialWithoutPortfolioItem);
-                    releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalWithoutPortfolioItem);
-                });
-				debugger;
+					releaseStartSnapshots = releaseStartSnapshots.concat(userStorySnapshotsInitialWithoutPortfolioItem);
+					releaseFinalSnapshots = releaseFinalSnapshots.concat(userStorySnapshotsFinalWithoutPortfolioItem);
+				});
+				
 				if(releaseStartSnapshots.length > 0 || releaseFinalSnapshots.length > 0){
 					var startDateAcceptedPoints = _.reduce(releaseStartSnapshots, function(sum, item){ 
 							return sum + (item.data.ScheduleState =='Accepted' ? item.data.PlanEstimate*1 : 0);
@@ -269,7 +313,7 @@
 						startDateTotalPoints = _.reduce(releaseStartSnapshots, function(sum, item){ 
 							return sum + (item.data.PlanEstimate*1);
 						}, 0),
-                            
+														
 						//to get the % complete at release end
 						//EndtargetDate  = new Date('03/07/2015')
 						//EndreleaseStartSnapshots = _.filter(snapshots, ss._validFrom < targetDate && ss._ValidTo > targetDate)
@@ -284,7 +328,7 @@
 						finalDatetotalPoints = _.reduce(releaseFinalSnapshots, function(sum, item){ 
 							return sum + (item.data.PlanEstimate*1);
 						}, 0);
-                
+								
 					scopeToReleaseGridRow.completedAtStart = startDateAcceptedPoints / startDateTotalPoints;
 					scopeToReleaseGridRow.completedAtEnd = finalDateAcceptedPoints / finalDatetotalPoints;
 					if(isFinite(scopeToReleaseGridRow.completedAtStart) === false) {
@@ -307,18 +351,19 @@
 					scopeToReleaseGridRows = scopeToReleaseGridRows.concat(scopeToReleaseGridRow);
 				}
 			});
-        
-            me.InitialTargetDate = [startTargetDate.getMonth() + 1 ,startTargetDate.getDate(),startTargetDate.getFullYear()].join('/');//the month starts from 0 so Jan is 0 
-            me.CompleteFinalTargetDate = [finalTargetDate.getMonth() + 1,finalTargetDate.getDate(),finalTargetDate.getFullYear()].join('/');
-            me.gridstore = Ext.create('Ext.data.Store',{
+				
+			//the month starts from 0 so Jan is 0 
+			me.InitialTargetDate = [startTargetDate.getMonth() + 1 ,startTargetDate.getDate(),startTargetDate.getFullYear()].join('/');
+			me.CompleteFinalTargetDate = [finalTargetDate.getMonth() + 1,finalTargetDate.getDate(),finalTargetDate.getFullYear()].join('/');
+			me.gridstore = Ext.create('Ext.data.Store',{
 				fields:['completedAtStart', 'completedAtEnd','growth','intent','actual','FormattedID','Name','ObjectID','ProjectObjectID','state'],
 				data: scopeToReleaseGridRows 
 			});
-        },
-        _buildScopeToReleaseGrid: function(){
-            var me = this,
+		},
+		_buildScopeToReleaseGrid: function(){
+			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
-            Ext.getCmp('scopeGrid').removeAll(); 
+			Ext.getCmp('scopeGrid').removeAll(); 
 			Ext.getCmp('scopeGrid').add({
 				xtype: 'rallygrid',
 				id: 'grid',
@@ -338,7 +383,8 @@
 					dataIndex: "Name",
 					flex:4,
 					renderer: function(v, m, r) {
-						return Ext.String.format('<a href="{0}/#/{1}d/detail/portfolioitem/{2}/{3}" target="_blank">{4}: </a>{5}', me.BaseUrl, r.data.ProjectObjectID, lowestPortfolioItemType, r.data.ObjectID, r.data.FormattedID, v );
+						return Ext.String.format('<a href="{0}/#/{1}d/detail/portfolioitem/{2}/{3}" target="_blank">{4}: </a>{5}', 
+							me.BaseUrl, r.data.ProjectObjectID, lowestPortfolioItemType, r.data.ObjectID, r.data.FormattedID, v );
 					}
 				},{
 					header: "% Complete<br/> @ Release Start " + me.InitialTargetDate,
@@ -404,18 +450,18 @@
 				}]
 			});
 		},
-        _buildCharts: function(){
-            var me = this,
+		_buildCumulativeFlowChart: function(){
+			var me = this,
 				calc = Ext.create('FastCumulativeFlowCalculator',{
 					scheduleStates:me.ScheduleStates,
 					startDate: me.ReleaseRecord.data.ReleaseStartDate,
 					endDate: me.ReleaseRecord.data.ReleaseDate
 				});
 
-            //chart config setting 
-            //using jquery to use the high charts
-            //uses ChartUpdater mixin
-            //uses IntelWorkweek mixin
+			//chart config setting 
+			//using jquery to use the high charts
+			//uses ChartUpdater mixin
+			//uses IntelWorkweek mixin
 			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), {trendType:'Last2Sprints'}),
 				datemap = aggregateChartData.datemap;
 
@@ -433,24 +479,24 @@
 				if(f.name==="Accepted"){
 					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
 				}
-                //we want to ignore the ideal and the projected from the aggregateChartData
-                if(f.name !="Ideal" && f.name != "Projected"){
-                    //taking sample after 7 days and before 7 days 
-                    total.initialCommit = total.initialCommit + f.data[6];
-                    total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
-                }
-                //if the release is still on going we would like to use the projected data for the final commit
-                if(f.name === "Projected"){
-                    total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
-                }
-            });
-            if(total.finalCommit === 0){
-                total.finalCommit = total.projected;
-                total.finalAccepted = total.projected;
-            }
-            var commitDataPlus =[];
-               // commitDataMinus = [];
-            //adding a line for the initial Commitment projection
+				//we want to ignore the ideal and the projected from the aggregateChartData
+				if(f.name !="Ideal" && f.name != "Projected"){
+						//taking sample after 7 days and before 7 days 
+						total.initialCommit = total.initialCommit + f.data[6];
+						total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
+				}
+				//if the release is still on going we would like to use the projected data for the final commit
+				if(f.name === "Projected"){
+						total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
+				}
+			});
+			if(total.finalCommit === 0){
+				total.finalCommit = total.projected;
+				total.finalAccepted = total.projected;
+			}
+			var commitDataPlus =[];
+			// commitDataMinus = [];
+			//adding a line for the initial Commitment projection
 			_.each(aggregateChartData.categories,function(f,key){
 				commitDataPlus.push(total.initialCommit);
 				//commitDataMinus.push(total.initialCommit - 10);
@@ -466,40 +512,41 @@
 				type: "spline"
 			});
 
-            me.total = total;
+			me.total = total;
 
-            $("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
-                chart: {
-                    height:400,
-                    width :680
-                },
-                legend:{
-                    borderWidth:0,
-                    width:500,
-                    itemWidth:100
-                },
-                title: {
-                    text: me.TrainRecord.data.Name 
-                },
-                subtitle:{
-                    text: me.ReleaseRecord.data.Name.split(' ')[0]
-                },
-                xAxis:{
-                    categories: aggregateChartData.categories,
-                    tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44)
-                },
-                series: aggregateChartData.series
+			$("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
+				chart: {
+					height: 400,
+					width: me.getWidth()*0.42>>0
+				},
+				legend:{
+					borderWidth:0,
+					width:500,
+					itemWidth: me.getWidth()*0.42>>0 - 50
+				},
+				title: {
+					text: me.TrainRecord.data.Name 
+				},
+				subtitle:{
+					text: me.ReleaseRecord.data.Name.split(' ')[0]
+				},
+				xAxis:{
+					categories: aggregateChartData.categories,
+					tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44)
+				},
+				series: aggregateChartData.series
 			}));
-        },  
+			me._setCumulativeFlowChartDatemap($("#retroChart").children()[0].id, datemap);
+		},  
 		_hideHighchartsLinks: function(){
 			$('.highcharts-container > svg > text:last-child').hide();
 		},
-        _buildRetroChart: function(){
+		_buildRetroChart: function(){
 			var me = this,
 				scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit))) * 100,
 				originalCommitRatio = (me.total.finalAccepted/me.total.initialCommit)* 100,
 				finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100,
-                dataseries = [],
+								dataseries = [],
 				chartMax = []; //set the max so that all the chart look the same
 				Highcharts.setOptions({ colors: ['#3A874F','#7cb5ec'] });
 				chartConfig = {
@@ -575,28 +622,28 @@
 					}]
 				};
 				
-            chartMax.push(me.total.initialCommit,me.total.finalAccepted, me.total.finalCommit);
-            chartConfig.yAxis.max = Math.max.apply(null, chartMax);
-            chartConfig.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
-            
-            if(scopeDeltaPerc > 0) chartConfig.title.text = 'Scope Delta: +' + scopeDeltaPerc.toFixed(2) + '%';
+			chartMax.push(me.total.initialCommit,me.total.finalAccepted, me.total.finalCommit);
+			chartConfig.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
+			
+			if(scopeDeltaPerc > 0) chartConfig.title.text = 'Scope Delta: +' + scopeDeltaPerc.toFixed(2) + '%';
 			else chartConfig.title.text = 'Scope Delta:' + scopeDeltaPerc.toFixed(2) + '%';
 			
-            chartConfig.subtitle.text = Math.round(me.total.finalCommit) + ' of ' + Math.round(me.total.initialCommit);
-            dataseries.push(new Array('initialcommit', me.total.initialCommit));
-            dataseries.push(new Array('finalcommit',me.total.finalCommit));
-            chartConfig.series.data = dataseries;
-            chartConfig.yAxis.plotLines[0].value = me.total.initialCommit + (0.1 * me.total.initialCommit); //max target
-            chartConfig.yAxis.plotLines[1].value = me.total.initialCommit - (0.1 * me.total.initialCommit); //min target
+			chartConfig.subtitle.text = Math.round(me.total.finalCommit) + ' of ' + Math.round(me.total.initialCommit);
+			dataseries.push(new Array('initialcommit', me.total.initialCommit));
+			dataseries.push(new Array('finalcommit',me.total.finalCommit));
+			chartConfig.series.data = dataseries;
+			chartConfig.yAxis.plotLines[0].value = me.total.initialCommit + (0.1 * me.total.initialCommit); //max target
+			chartConfig.yAxis.plotLines[1].value = me.total.initialCommit - (0.1 * me.total.initialCommit); //min target
 
-            //scope delta increase and decrease by 10% which is acceptable
-            if(scopeDeltaPerc >= -10.99 && scopeDeltaPerc <= 10.99){
-                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
-            }else{
-                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
-            }
-            if(scopeDeltaPerc >= 400){
-                chartConfig.yAxis.plotLines[1].label = {                            
+			//scope delta increase and decrease by 10% which is acceptable
+			if(scopeDeltaPerc >= -10.99 && scopeDeltaPerc <= 10.99){
+				Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+			} else {
+				Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+			}
+			if(scopeDeltaPerc >= 400){
+				chartConfig.yAxis.plotLines[1].label = {                            
 					text : 'Acceptable decrease (-10%)',
 					align: 'right',
 					x: -10,
@@ -605,54 +652,54 @@
 			}
 			$('#retroBarChartScopeWrapper').highcharts(chartConfig);
 
-            //second chart CA orginial 
-            chartConfig.title.text = 'A/C Original: ' + originalCommitRatio.toFixed(0) + '%';
-            chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
-            chartConfig.xAxis.categories[1] = 'Final Accepted';
-            chartConfig.yAxis.plotLines[0].label = {                            
+			//second chart CA orginial 
+			chartConfig.title.text = 'A/C Original: ' + originalCommitRatio.toFixed(0) + '%';
+			chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
+			chartConfig.xAxis.categories[1] = 'Final Accepted';
+			chartConfig.yAxis.plotLines[0].label = {                            
 				text : 'Target >90%',
 				align: 'center'
 			};
 			
-            //set the yaxis max so that it matches the other 2 charts  
-            dataseries.length = 0;
-            dataseries.push(new Array('initialcommit', me.total.initialCommit));
-            dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
-            chartConfig.series.data = dataseries;
-            chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.initialCommit);//max target
-            chartConfig.yAxis.plotLines.splice(1,1);
-            if(originalCommitRatio >= 90){ //100 percentage would be all the work completed so plus minus 10 is acceptable
-                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
-            }else{
-                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
-            }
-            $('#retroBarChartCaOriginalWrapper').highcharts(chartConfig);
-            
-            //third chart CA orginial 
-            finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
-            chartConfig.title.text = 'A/C Final: ' + finalCommitRatio.toFixed(0) + '%';
-            chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.finalCommit);
-            chartConfig.xAxis.categories[0] = 'Final Workload';
-            chartConfig.xAxis.categories[1] = 'Final Accepted';
-            chartConfig.yAxis.plotLines[0].label = {                            
+			//set the yaxis max so that it matches the other 2 charts  
+			dataseries.length = 0;
+			dataseries.push(new Array('initialcommit', me.total.initialCommit));
+			dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+			chartConfig.series.data = dataseries;
+			chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.initialCommit);//max target
+			chartConfig.yAxis.plotLines.splice(1,1);
+			if(originalCommitRatio >= 90){ //100 percentage would be all the work completed so plus minus 10 is acceptable
+				Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+			} else {
+				Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+			}
+			$('#retroBarChartCaOriginalWrapper').highcharts(chartConfig);
+			
+			//third chart CA orginial 
+			finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
+			chartConfig.title.text = 'A/C Final: ' + finalCommitRatio.toFixed(0) + '%';
+			chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.finalCommit);
+			chartConfig.xAxis.categories[0] = 'Final Workload';
+			chartConfig.xAxis.categories[1] = 'Final Accepted';
+			chartConfig.yAxis.plotLines[0].label = {                            
 				text : 'Target >90%',
 				align: 'center'
 			};
-            dataseries.length = 0;
-            
-            dataseries.push(new Array('finalCommit', me.total.finalCommit));
-            dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
-            chartConfig.series.data = dataseries;
-            chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.finalCommit);//max target
-            chartConfig.yAxis.plotLines.splice(1,1);
-            if(finalCommitRatio >= 90){//plus minus 10 is acceptable when 90 percentage is done, only 10% is left which is acceptable 
-                Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
-            }else{
-                Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
-            }
-            $('#retroBarChartCaFinalWrapper').highcharts(chartConfig);
-        },
-        _reloadEverything: function(){
+			dataseries.length = 0;
+			
+			dataseries.push(new Array('finalCommit', me.total.finalCommit));
+			dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+			chartConfig.series.data = dataseries;
+			chartConfig.yAxis.plotLines[0].value = (0.9 * me.total.finalCommit);//max target
+			chartConfig.yAxis.plotLines.splice(1,1);
+			if(finalCommitRatio >= 90){//plus minus 10 is acceptable when 90 percentage is done, only 10% is left which is acceptable 
+				Highcharts.setOptions({ colors: ['#40d0ed','#92D050'] });
+			}else{
+				Highcharts.setOptions({ colors: ['#40d0ed','#d05052'] });
+			}
+			$('#retroBarChartCaFinalWrapper').highcharts(chartConfig);
+		},
+		_reloadEverything: function(){
 			var me = this;
 			me.setLoading('Loading Data');
 			//load all the child release to get the user story snap shots
@@ -662,8 +709,8 @@
 				me._getPortfolioItems()
 			])
 			.then(function() {  
-                //load all the user story snap shot for release
-                //load all the user stories for the release portfolioItems
+				//load all the user story snap shot for release
+				//load all the user stories for the release portfolioItems
 				return Q.all([
 					me._loadSnapshotStores(),
 					me._loadUserStoriesforPortfolioItems()
@@ -674,7 +721,7 @@
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				} 
-				me._buildCharts(); 
+				me._buildCumulativeFlowChart(); 
 				me._buildRetroChart();
 				me._hideHighchartsLinks();
 				me._loadScopeToReleaseStore();
@@ -686,9 +733,8 @@
 				me._alert('ERROR', reason || '');
 			})
 			.done();   
-	
-        },   
-        launch: function() {
+		},   
+		launch: function() {
 			var me = this;
 			me.setLoading('Loading Configuration');
 			me._configureIntelRallyApp()
@@ -709,6 +755,10 @@
 							})
 							.then(function(trainPortfolioProject){
 								me.TrainPortfolioProject = trainPortfolioProject;
+								return me._loadAllChildrenProjects(me.TrainRecord);
+							})
+							.then(function(scrums){
+								me.TrainChildren = scrums;
 							}),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
@@ -732,6 +782,6 @@
 					me._alert('ERROR', reason || '');
 				})
 				.done();
-         }
-    });
+		}
+	});
 }());

@@ -79,6 +79,32 @@
 							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
 								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName));
 						});
+						
+						//FUCKING BUG IN LBAPI with duplicates. must workaround it.... POLYFILL thing
+						var tmpRecs = records.slice(),
+							convertDupes = function(dupes){
+								return _.map(_.sortBy(dupes, 
+									function(d){ return new Date(d.data._ValidFrom); }),
+									function(d, i, a){ if(i < a.length-1) d.raw._ValidTo = a[i+1].raw._ValidFrom; return d; });
+							};
+						for(var i=tmpRecs.length-1;i>=0;--i){
+							var dupes = [];
+							for(var j=i-1;j>=0;--j){
+								if(tmpRecs[i].data.ObjectID == tmpRecs[j].data.ObjectID){
+									if(tmpRecs[i].data._ValidTo == tmpRecs[j].data._ValidTo){
+										dupes.push(tmpRecs.splice(j, 1)[0]);
+										--i;
+									}
+								}
+							}
+							if(dupes.length){
+								dupes.push(tmpRecs.splice(i, 1)[0]);
+								tmpRecs = tmpRecs.concat(convertDupes(dupes));
+							}
+						}
+						records = tmpRecs;
+						//END FUCKING BUG IN LBAPI Polyfill thing
+						
 						if(records.length > 0){
 							me.TeamStores[project.data.Name] = records;
 							me.AllSnapshots = me.AllSnapshots.concat(records);
@@ -134,6 +160,21 @@
 					}, {});
 				});
 		},
+		_loadAllChildReleases: function(){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+						hash[rr.data.ObjectID] = true;
+						return hash;
+					}, {});
+				});
+		},
+		
+		/******************************************************* Reloading ********************************************************/			
+		_hideHighchartsLinks: function(){ 
+			$('.highcharts-container > svg > text:last-child').hide(); 
+		},	
 		_filterUserStoriesByTopPortfolioItem: function(){
 			var me=this,
 				topPiName = me.CurrentTopPortfolioItemName,
@@ -154,21 +195,6 @@
 			}
 			return Q();
 		},
-		_loadAllChildReleases: function(){ 
-			var me = this, releaseName = me.ReleaseRecord.data.Name;			
-			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
-				.then(function(releaseRecords){
-					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
-						hash[rr.data.ObjectID] = true;
-						return hash;
-					}, {});
-				});
-		},
-		
-		/******************************************************* Reloading ********************************************************/			
-		_hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
-		},	
 		_redrawEverything: function(){
 			var me=this;
 			me.setLoading('Loading Charts');	
@@ -184,10 +210,6 @@
 				});
 		},
 		_reloadEverything:function(){ 
-			/** performance NOTE: i tried scoping the user stories to the train instead of loading individually per scrum. 
-					It was really slow. So we have to deal with not being 100% sure that the data is accurate in the CFD 
-					(if a project got closed, its stories wont show up)
-				*/
 			var me=this;
 			me.setLoading('Loading Stores');	
 			return me._loadAllChildReleases()
@@ -223,7 +245,7 @@
 								return me._loadAllChildrenProjects(me.TrainRecord);
 							})
 							.then(function(scrums){
-								me.TrainChildren = scrums;
+								me.TrainChildren = _.filter(scrums, function(s){ return s.data.Children.Count === 0 && s.data.TeamMembers.Count > 0; });
 							}),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
@@ -367,7 +389,7 @@
 				)[0];
 				me._setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});
-			me.doLayout();
+			me.doLayout(); //or else they don't render initially
 		}
 	});
 }());
