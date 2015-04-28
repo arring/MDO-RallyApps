@@ -46,12 +46,15 @@
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadSnapshotStores: function(){
+			/** NOTE: _ValiTo is non-inclusive, _ValidFrom is inclusive **/
 			var me = this, 
-				promises = [],
+				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			me.AllSnapshots = [];
 			me.TeamStores = {};
-			return Q.all(_.map(me.ReleasesWithName, function(releaseRecord){
+			return Q.all(_.map(me.TrainChildren, function(project){
 				var parallelLoaderConfig = {
 					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
 						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
@@ -61,60 +64,41 @@
 						find: JSON.stringify({ 
 							_TypeHierarchy: 'HierarchicalRequirement',
 							Children: null,
-							Release: releaseRecord.data.ObjectID
+							Project: project.data.ObjectID,
+							_ValidFrom: { $lte: releaseEnd },
+							_ValidTo: { $gt: releaseStart }
 						}),
-						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', lowestPortfolioItem, '_ValidFrom', '_ValidTo', 'ObjectID']),
+						fields:JSON.stringify(['ScheduleState', 'Release', 'PlanEstimate', lowestPortfolioItem, '_ValidFrom', '_ValidTo', 'ObjectID']),
 						hydrate:JSON.stringify(['ScheduleState'])
 					}
 				};
 				return me._parallelLoadLookbackStore(parallelLoaderConfig)
 					.then(function(snapshotStore){ 
-						var records = snapshotStore.getRange();
+						//only keep snapshots where (release.name == releasName || (!release && portfolioItem.Release.Name == releaseName))
+						var records = _.filter(snapshotStore.getRange(), function(snapshot){
+							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName));
+						});
 						if(records.length > 0){
-							me.TeamStores[releaseRecord.data.Project.Name] = records;
+							me.TeamStores[project.data.Name] = records;
 							me.AllSnapshots = me.AllSnapshots.concat(records);
 						}
 					});
 			}));
 		},				
-		_loadAllChildReleases: function(){ 
-			var me = this, releaseName = me.ReleaseRecord.data.Name;			
-			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
-				.then(function(releaseRecords){
-					me.ReleasesWithName = _.filter(releaseRecords, function(r){ 
-						return r.data.Project && r.data.Project.TeamMembers.Count > 0; //ignore projects without teamMembers
-					});
-				});
-		},
-		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					remoteSort:false,
-					fetch: me._portfolioItemFields,
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me._reloadStore(store);
-		},	
 		_loadPortfolioItems: function(){ 
 			var me=this;
 			
+			me.LowestPortfolioItemsHash = {};
 			me.PortfolioItemMap = {}; 
 			me.TopPortfolioItemNames = [];
 			me.CurrentTopPortfolioItemName = null;
 			
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-					)
+				//NOTE: we are loading ALL lowestPortfolioItems b/c sometimes we run into issues where
+				//userstories in one release are under portfolioItems in another release (probably a user
+				// mistake). And this messes up the numbers in the topPortfolioItem filter box
+				return me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type)
 					.then(function(portfolioStore){
 						return {
 							ordinal: ordinal,
@@ -125,7 +109,6 @@
 				.then(function(items){
 					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; }),
 						lowestPortfolioItemStore = orderedPortfolioItemStores[0].store;
-					me.PortfolioItemMap = {};
 					_.each(lowestPortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
 						var ordinal = 0, 
 							parentPortfolioItem = lowPortfolioItem,
@@ -145,6 +128,10 @@
 					me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
 						function(name){ return {Name: name}; }),
 						function(name){ return name.Name; });
+					me.LowestPortfolioItemsHash = _.reduce(lowestPortfolioItemStore.getRange(), function(hash, r){
+						hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
+						return hash;
+					}, {});
 				});
 		},
 		_filterUserStoriesByTopPortfolioItem: function(){
@@ -166,6 +153,16 @@
 				});
 			}
 			return Q();
+		},
+		_loadAllChildReleases: function(){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+						hash[rr.data.ObjectID] = true;
+						return hash;
+					}, {});
+				});
 		},
 		
 		/******************************************************* Reloading ********************************************************/			
@@ -193,13 +190,10 @@
 				*/
 			var me=this;
 			me.setLoading('Loading Stores');	
-			return me._loadAllChildReleases().then(function(){ 
-				return Q.all([
-					me._loadSnapshotStores(),
-					me._loadPortfolioItems()
-				]);
-			})
-			.then(function(){ return me._redrawEverything(); });
+			return me._loadAllChildReleases()
+				.then(function(){ return me._loadPortfolioItems(); })
+				.then(function(){ return me._loadSnapshotStores(); })
+				.then(function(){ return me._redrawEverything(); });
 		},
 
 		/******************************************************* LAUNCH ********************************************************/		
@@ -226,15 +220,19 @@
 							})
 							.then(function(trainPortfolioProject){
 								me.TrainPortfolioProject = trainPortfolioProject;
+								return me._loadAllChildrenProjects(me.TrainRecord);
+							})
+							.then(function(scrums){
+								me.TrainChildren = scrums;
 							}),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								var twelveWeeks = 1000*60*60*24*7*12;
-								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+								var fourteenWeeks = 1000*60*60*24*7*14;
+								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
 							})
 							.then(function(releaseRecords){
-								me.ReleaseRecords = releaseRecords;
+								me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
 								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');

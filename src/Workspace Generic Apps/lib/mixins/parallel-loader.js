@@ -12,6 +12,11 @@
 			url:<host:port/path defaults to standard analytics url. host is window.location.host>
 			params: query parameter object with keys and vals
 		}
+		
+		NOTE: (sam steffl) I am using JSONP instead of AJAX because I use the file:/// protocol. In the future I need to 
+			probably change it to Ajax.GET and use a node server to serve the app. Then I wouldn't run into CORS issues,
+			since CORS issues always happens when using file:/// since Origin header === null. Then JSONp would not be
+			necessary anymore anyways.
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;	

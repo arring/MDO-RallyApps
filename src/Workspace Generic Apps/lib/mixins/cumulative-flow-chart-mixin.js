@@ -329,9 +329,9 @@
 			var pixelTickWidth = 40,
 				ticks = width/pixelTickWidth>>0,
 				oneDay = 1000*60*60*24,
-				days = (endDate*1 - startDate*1)/(oneDay*5/7)>>0, //only workdays
-				interval = ((days/ticks>>0)/5>>0)*5;
-			return (interval < 5) ? 5 : interval; //make it weekly at the minimum
+				days = (endDate*1 - startDate*1)/(oneDay/* *5/7 */)>>0, //NOT only workdays (now includes weekends)
+				interval = ((days/ticks>>0)/7>>0)*7;
+			return (interval < 7) ? 7 : interval; //make it weekly at the minimum
 		},
 		_setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
 			ChartsTooltipDatemap[chartContainerId] = datemap;

@@ -264,7 +264,8 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
-				newMatrixProjectMap = {};
+				newMatrixProjectMap = {},
+				newProjectOIDNameMap = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the train
 				
 			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
 				var config = {
@@ -280,13 +281,15 @@
 				return me._parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
 						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
-							projectName = storyRecord.data.Project.Name;		
+							projectName = storyRecord.data.Project.Name,
+							projectOID = storyRecord.data.Project.ObjectID;		
 						if(!newMatrixUserStoryBreakdown[projectName]) 
 							newMatrixUserStoryBreakdown[projectName] = {};
 						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
 							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
 						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
 						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
+						newProjectOIDNameMap[projectOID] = projectName;
 					});
 					store.destroyStore();
 				});
@@ -294,12 +297,15 @@
 			.then(function(){
 				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
 				me.MatrixProjectMap = newMatrixProjectMap;
+				me.ProjectOIDNameMap = newProjectOIDNameMap;
 						
 					//always show the teams under the train that have teamMembers > 0, even if they are not contributing this release
 				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
-					var projectName = projectRecord.data.Name;
+					var projectName = projectRecord.data.Name,
+						projectOID = projectRecord.data.ObjectID;
 					if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
 					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
+					me.ProjectOIDNameMap[projectOID] = projectName;
 				});
 			});
 		},		
@@ -500,7 +506,7 @@
 			var me=this;
 			return _.some(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
 				var teamCommit = me._getTeamCommit(portfolioItemRecord, projectName);
-				return !teamCommit.Commitment || teamCommit.Commitment == 'Undefined';
+				return !teamCommit.Commitment || teamCommit.Commitment == 'Undecided';
 			});
 		},
 		_getProjectHeaderCls: function(projectName){
@@ -510,7 +516,7 @@
 			} 
 			else return ''; //should these get green/red/grey/white
 		},
-		_columnHeaderItem: function(projectName){
+		_columnHeaderItem: function(projectName){ //the % DONE cell in the header cell when in % DONE viewing mode
 			var me=this;
 			var config = _.reduce(me.MatrixUserStoryBreakdown[projectName], function(sumConfig, userStoriesData){
 				return {
@@ -533,7 +539,7 @@
 				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
 				shouldHaveItems = me.ViewMode === '% Done';
 			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
-			while(column.el.dom.childNodes.length > 1) column.el.last().remove();
+			while(column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
 			if(shouldHaveItems) Ext.DomHelper.append(column.el, me._columnHeaderItem(projectName));
 			column.el.addCls(me._getProjectHeaderCls(projectName));
 		},
@@ -569,7 +575,9 @@
 			var me=this,
 				portfolioItemName = portfolioItemRecord.data.Name,
 				teamCommits = me._getTeamCommits(portfolioItemRecord);
-			return _.some(teamCommits, function(projData, projectOID){ return projData.Commitment == 'Not Committed'; }) || 
+			return _.some(teamCommits, function(projData, projectOID){ 
+				return projData.Commitment == 'Not Committed' && me.ProjectOIDNameMap[projectOID]; 
+			}) || 
 				!_.reduce(me.MatrixUserStoryBreakdown, function(sum, portfolioItemMap){
 					return sum + (portfolioItemMap[portfolioItemName] || []).length;
 				}, 0);

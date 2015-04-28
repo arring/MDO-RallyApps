@@ -16,7 +16,6 @@
 			options.value = options.currentRelease.data.Name;
 			options.store = Ext.create('Ext.data.Store', {
 				fields: ['Name'],
-				sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
 				data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
 			});
 			

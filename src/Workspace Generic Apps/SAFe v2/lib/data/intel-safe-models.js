@@ -14,7 +14,7 @@
 		extend: 'Ext.data.Model',
 		fields: [
 			{name: 'PortfolioItemObjectID', type: 'number'},
-			{name: 'PortfolioItemRank', type: 'number'},
+			{name: 'PortfolioItemMoSCoW', type:'string'},
 			{name: 'PortfolioItemName', type: 'string'},
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},

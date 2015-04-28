@@ -69,11 +69,12 @@
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
-				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
+				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),// this will ONLY get leaf-stories (good)
 				inIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })),
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
 				userStoryProjectFilter;
 			if(!me.TrainRecord) //scoped outside train
 				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { 
@@ -88,7 +89,10 @@
 				}, null);
 			else throw "Train has no Scrums!";
 
-			return userStoryProjectFilter.and(inIterationButNotReleaseFilter.or(releaseNameFilter));
+			return Rally.data.wsapi.Filter.and([
+				userStoryProjectFilter, 
+				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
+			]);
 		},				
 		_getStories: function(){
 			var me=this,
@@ -102,8 +106,7 @@
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
-						workspace:me.getContext().getWorkspace()._ref,
-						includePermissions:true
+						workspace:me.getContext().getWorkspace()._ref
 					}
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -131,8 +134,7 @@
 					pagesize:200,
 					query:me._getLowestPortfolioItemFilter().toString(),
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-						'Description', 'FormattedID', 'UserStories'].join(','),
-					includePermissions:true
+						'Description', 'FormattedID', 'UserStories'].join(',')
 				}
 			};
 			return me._parallelLoadWsapiStore(config).then(function(store){

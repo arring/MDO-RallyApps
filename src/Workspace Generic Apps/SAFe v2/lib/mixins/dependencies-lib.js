@@ -14,8 +14,8 @@
 				try{ dependencies = JSON.parse(atob(dependencyString)); }
 				catch(e) { dependencies = { Predecessors:{}, Successors:{} }; }
 			}		
-			if(!dependencies.Predecessors) dependencies.Predecessors = {};
-			if(!dependencies.Successors) dependencies.Successors = {};
+			if(!dependencies.Predecessors || dependencies.Predecessors.constructor.name != 'Object') dependencies.Predecessors = {};
+			if(!dependencies.Successors || dependencies.Successors.constructor.name != 'Object') dependencies.Successors = {};
 			return dependencies;
 		},	
 		
@@ -282,8 +282,8 @@
 			if(!realPredecessorItemsData.length) addedItemsData = localPredecessorItemsData;
 			else {		
 				Outer:
-				for(var i=localPredecessorItemsData.length-1;i>=0;--i){
-					for(var j=0;j<realPredecessorItemsData.length;++j){
+				for(var i=0;i<localPredecessorItemsData.length;++i){
+					for(var j=realPredecessorItemsData.length-1;j>=0;--j){
 						if(localPredecessorItemsData[i].PredecessorItemID === realPredecessorItemsData[j].PredecessorItemID){
 							updatedItemsData.push(realPredecessorItemsData.splice(j,1)[0]);
 							continue Outer;
@@ -384,8 +384,8 @@
 										predecessorItemData.Assigned = false;
 										
 										updatedSuccessorDependency.UserStoryObjectID = newUserStory.data.ObjectID;
+										updatedSuccessorDependency.UserStoryFormattedID = '';
 										updatedSuccessorDependency.UserStoryName = '';
-										updatedSuccessorDependency.FormattedID = '';
 										updatedSuccessorDependency.Assigned = false;						
 										return me._addSuccessor(newUserStory, updatedSuccessorDependency, currentProjectRecord, dependenciesParsedData); 
 									}
@@ -423,7 +423,7 @@
 								var successorDependency = {
 									DependencyID: predecessorData.DependencyID,
 									SuccessorUserStoryObjectID: predecessorData.UserStoryObjectID,
-									SuccessorProjectObjectID: me.ProjectRecord.data.ObjectID,
+									SuccessorProjectObjectID: successorProjectRecord.data.ObjectID,
 									UserStoryObjectID: userStory.data.ObjectID,
 									UserStoryFormattedID: '',
 									UserStoryName: '',

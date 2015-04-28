@@ -780,7 +780,7 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ // 4 streams
+					return Q.all([ // 5 streams
 						me._loadProjectsWithTeamMembers() /********* 1 ************/
 							.then(function(projectsWithTeamMembers){
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
@@ -796,16 +796,15 @@
 										.then(function(trainPortfolioProject){
 											me.TrainPortfolioProject = trainPortfolioProject;
 										});
-								} else {
-									me.ProjectNotInTrain = true;
-									return me._loadAllTrains()
-										.then(function(trainRecords){
-											me.AllTrainRecords = trainRecords;
-											me.TrainNames = _.map(trainRecords, function(tr){ return {Name: me._getTrainName(tr)}; });
-										});
-								}
+								} 
+								else me.ProjectNotInTrain = true;
 							}),
-						me._loadAppsPreference() /********* 3 ************/
+						me._loadAllTrains() /********* 3 ************/
+							.then(function(trainRecords){
+								me.AllTrainRecords = trainRecords;
+								me.TrainNames = _.map(trainRecords, function(tr){ return {Name: me._getTrainName(tr)}; });
+							}),
+						me._loadAppsPreference() /********* 4 ************/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								me.AppsPref.refresh = me.AppsPref.refresh || 30;
@@ -821,7 +820,7 @@
 								}
 								else return Q.reject('This project has no releases.');
 							}),
-						me._loadDataIntegrityDashboardObjectID() /********* 4 ************/
+						me._loadDataIntegrityDashboardObjectID() /********* 5 ************/
 							.then(function(objectID){
 								me.DataIntegrityDashboardObjectID = objectID;
 							})
@@ -883,12 +882,12 @@
 		_trainPickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me._getTrainName(me.TrainRecord) == records[0].data.Name) return;
-			me.setLoading("Saving Preference");
+			me.setLoading('Loading Data');
 			me.TrainRecord = _.find(me.AllTrainRecords, function(tr){ return me._getTrainName(tr) == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Train = me.TrainRecord.data.ObjectID;
 			Q.all([
-				me._saveAppsPreference(me.AppsPref),
+				(me.ProjectNotInTrain ? me._saveAppsPreference(me.AppsPref) : Q()), //Do not set a preference for scrums in trains
 				me._loadTrainPortfolioProject(me.TrainRecord)
 					.then(function(trainPortfolioProject){
 						me.TrainPortfolioProject = trainPortfolioProject;
@@ -901,24 +900,23 @@
 		},	
 		_loadTrainPicker: function(){
 			var me=this;
-			if(me.ProjectNotInTrain){
-				me.down('#navboxLeft').add({
-					xtype:'intelfixedcombo',
-					width:240,
-					labelWidth:40,
-					store: Ext.create('Ext.data.Store', {
-						fields: ['Name'],				
-						data: me.TrainNames
-					}),
-					displayField: 'Name',
-					fieldLabel: 'Train:',
-					value: me._getTrainName(me.TrainRecord),
-					listeners: {
-						change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-						select: me._trainPickerSelected.bind(me)
-					}
-				});
-			}
+			me.down('#navboxLeft').add({
+				xtype:'intelfixedcombo',
+				id:'trainPicker',
+				width:240,
+				labelWidth:40,
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name'],				
+					data: me.TrainNames
+				}),
+				displayField: 'Name',
+				fieldLabel: 'Train:',
+				value: me._getTrainName(me.TrainRecord),
+				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+					select: me._trainPickerSelected.bind(me)
+				}
+			});
 		},	
 		_refreshComboSelected: function(combo, records){
 			var me=this, rate = records[0].data.Rate;
@@ -1487,18 +1485,19 @@
 		
 		/**___________________________________ RENDER GRIDS ___________________________________*/	
 		_loadTeamCommitsGrid: function(){
-			var me = this;	
+			var me = this,
+				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''];
 			
 			me._TeamCommitsCountHash = {};
 			me._TeamCommitsEstimateHash = {};
 			
 			var customTeamCommitsRecords = _.map(_.sortBy(me.PortfolioItemStore.getRecords(), 
-				function(portfolioItemRecord){ return portfolioItemRecord.data.DragAndDropRank; }),
+				function(portfolioItemRecord){ return MoSCoWRanks.indexOf(portfolioItemRecord.data.c_MoSCoW); }),
 				function(portfolioItemRecord, index){
 					var teamCommit = me._getTeamCommit(portfolioItemRecord);
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
-						PortfolioItemRank: index + 1,
+						PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
 						PortfolioItemName: portfolioItemRecord.data.Name,
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: new Date(portfolioItemRecord.data.PlannedEndDate)*1,
@@ -1534,14 +1533,22 @@
 								teamCommitsRecord.set('Objective', newVal.Objective || '');
 							if(teamCommitsRecord.data.Expected != newVal.Expected)
 								teamCommitsRecord.set('Expected', newVal.Expected);
+							if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
+								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW);
 						}
 					});
 					teamCommitsStore.resumeEvents();
 				}
 			});
 					
-			var filterTopPortfolioItem = null, filterCommitment = null, filterEndDate = null;
+			var filterTopPortfolioItem = null, filterCommitment = null, filterEndDate = null, filterMoSCoW = null;
 			function teamCommitsFilter(teamCommitsRecord){
+				if(filterMoSCoW){
+					if(filterMoSCoW == 'Undefined'){
+							if(teamCommitsRecord.data.PortfolioItemMoSCoW && teamCommitsRecord.data.PortfolioItemMoSCoW != filterMoSCoW) return false;
+					}
+					else if(teamCommitsRecord.data.PortfolioItemMoSCoW != filterMoSCoW) return false;
+				}
 				if(filterTopPortfolioItem &&  teamCommitsRecord.data.TopPortfolioItemName != filterTopPortfolioItem) return false;
 				if(filterCommitment && teamCommitsRecord.data.Commitment != filterCommitment) return false;
 				if(filterEndDate && me._roundDateDownToWeekStart(teamCommitsRecord.data.PortfolioItemPlannedEnd)*1 != filterEndDate) return false;
@@ -1556,15 +1563,57 @@
 			}
 						
 			var columnCfgs = [{
-				text:'#',
-				dataIndex:'PortfolioItemRank',
-				width:30,
+				text:'MoSCoW',
+				dataIndex:'PortfolioItemMoSCoW',
+				tdCls: 'moscow-cell',
+				width:100,
 				editor:false,
 				sortable:true,
 				draggable:false,
 				resizable:false,
-				tooltip: me.PortfolioItemTypes[0] + ' Rank',
-				tooltipType:'title'
+				doSort: function(direction){
+					this.up('grid').getStore().sort({
+						sorterFn: function(item1, item2){
+							var diff = MoSCoWRanks.indexOf(item1.data.PortfolioItemMoSCoW) - MoSCoWRanks.indexOf(item2.data.PortfolioItemMoSCoW);
+							if(diff === 0) return 0;
+							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
+						}
+					});
+				},
+				renderer:function(val, meta){
+					if(val == 'Must Have') meta.tdCls += ' must-have';
+					if(val == 'Should Have') meta.tdCls += ' should-have';
+					if(val == 'Could Have') meta.tdCls += ' could-have';
+					if(val == 'Won\'t Have') meta.tdCls += ' wont-have';
+					return val || 'Undefined'; 
+				},
+				layout:'hbox',
+				items: [{	
+					id:'team-commits-moscow-filter',
+					xtype:'intelfixedcombo',
+					flex:1,
+					store: Ext.create('Ext.data.Store', {
+						fields:['MoSCoW'],
+						data: [
+							{MoSCoW: 'All'},
+							{MoSCoW:'Must Have'},
+							{MoSCoW:'Should Have'},
+							{MoSCoW:'Could Have'},
+							{MoSCoW:'Won\'t Have'},
+							{MoSCoW:'Undefined'}
+						]
+					}),
+					displayField: 'MoSCoW',
+					value:'All',
+					listeners:{
+						focus: function(combo) { combo.expand(); },
+						select: function(combo, selected){
+							if(selected[0].data.MoSCoW == 'All') filterMoSCoW = null; 
+							else filterMoSCoW = selected[0].data.MoSCoW;
+							filterTeamCommitsRowsByFn(teamCommitsFilter);
+						}
+					}
+				}, {xtype:'container', width:5}]		
 			},{
 				text:'ID', 
 				dataIndex:'PortfolioItemFormattedID',
@@ -1772,10 +1821,12 @@
 							width:110,
 							listeners:{
 								click: function(){
+									filterMoSCoW = null;
 									filterTopPortfolioItem = null;
 									filterCommitment = null;
 									filterEndDate = null; 
 									filterTeamCommitsRowsByFn(function(){ return true; });
+									Ext.getCmp('team-commits-moscow-filter').setValue('All');
 									Ext.getCmp('team-commits-top-portfolio-item-filter').setValue('All');
 									Ext.getCmp('team-commits-commitment-filter').setValue('All');
 									Ext.getCmp('team-commits-end-filter').setValue('All');

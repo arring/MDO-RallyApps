@@ -62,3 +62,20 @@ method.
 - Hangman Tokens: Rally's server needs to render the __PROJECT_OID__ and other hangman
 	variables you have in your code. 
 	- FIXED: This is fixed by using Rally.environment.getContext().getProject()
+
+### WSAPI NOTES
+
+- DO NOT USE PROJECTSCOPEDOWN FOR ANYTHING! It does not work correctly. It only gets a handful of items. Its
+	better to first get the Train -> then get the child projects from it (usually by getting all projects and
+	then filtering by ones under the Train Project) -> then create a query with a bunch of (project.ObjectID = ...)
+	OR'ed together. 
+	
+- Sometimes we want to get the stories in a Release. The way I currently Do that is a query similar to this:
+	((Release.Name = X) OR (DirectChildrenCount = 0) AND ((Release.Name = null) AND (Feature.Release.Name = X))).
+	We need the DirectChildrenCount = 0 or else we will double count parent UserStories's PlanEstimates.
+	
+### LOOKBACK NOTES
+
+- When doing lookback queryies for stories, you almost always want just the child stories, so you
+	should add to the find field: Children: null. If you have Release: <releaseOID> already in the find,
+	you dont need to worry about it, since only leaf stories can be tied to a Release.

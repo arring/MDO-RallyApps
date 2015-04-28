@@ -22,7 +22,7 @@
 		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
@@ -160,6 +160,7 @@
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryINRelease false for those who: (release == nulll && portfolioItrem.release.name == me.ReleaseRecord.data.Name)). that is why this line is necessary
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
@@ -1112,6 +1113,11 @@
 			url:<host:port/path defaults to standard analytics url. host is window.location.host>
 			params: query parameter object with keys and vals
 		}
+		
+		NOTE: (sam steffl) I am using JSONP instead of AJAX because I use the file:/// protocol. In the future I need to 
+			probably change it to Ajax.GET and use a node server to serve the app. Then I wouldn't run into CORS issues,
+			since CORS issues always happens when using file:/// since Origin header === null. Then JSONp would not be
+			necessary anymore anyways.
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;	
@@ -1858,7 +1864,6 @@
 			options.value = options.currentRelease.data.Name;
 			options.store = Ext.create('Ext.data.Store', {
 				fields: ['Name'],
-				sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
 				data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
 			});
 			
@@ -2286,7 +2291,7 @@
 		extend: 'Ext.data.Model',
 		fields: [
 			{name: 'PortfolioItemObjectID', type: 'number'},
-			{name: 'PortfolioItemRank', type: 'number'},
+			{name: 'PortfolioItemMoSCoW', type:'string'},
 			{name: 'PortfolioItemName', type: 'string'},
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
@@ -2689,7 +2694,8 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
-				newMatrixProjectMap = {};
+				newMatrixProjectMap = {},
+				newProjectOIDNameMap = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the train
 				
 			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
 				var config = {
@@ -2705,13 +2711,15 @@
 				return me._parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
 						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
-							projectName = storyRecord.data.Project.Name;		
+							projectName = storyRecord.data.Project.Name,
+							projectOID = storyRecord.data.Project.ObjectID;		
 						if(!newMatrixUserStoryBreakdown[projectName]) 
 							newMatrixUserStoryBreakdown[projectName] = {};
 						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
 							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
 						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
 						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
+						newProjectOIDNameMap[projectOID] = projectName;
 					});
 					store.destroyStore();
 				});
@@ -2719,12 +2727,15 @@
 			.then(function(){
 				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
 				me.MatrixProjectMap = newMatrixProjectMap;
+				me.ProjectOIDNameMap = newProjectOIDNameMap;
 						
 					//always show the teams under the train that have teamMembers > 0, even if they are not contributing this release
 				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
-					var projectName = projectRecord.data.Name;
+					var projectName = projectRecord.data.Name,
+						projectOID = projectRecord.data.ObjectID;
 					if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
 					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
+					me.ProjectOIDNameMap[projectOID] = projectName;
 				});
 			});
 		},		
@@ -2925,7 +2936,7 @@
 			var me=this;
 			return _.some(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
 				var teamCommit = me._getTeamCommit(portfolioItemRecord, projectName);
-				return !teamCommit.Commitment || teamCommit.Commitment == 'Undefined';
+				return !teamCommit.Commitment || teamCommit.Commitment == 'Undecided';
 			});
 		},
 		_getProjectHeaderCls: function(projectName){
@@ -2935,7 +2946,7 @@
 			} 
 			else return ''; //should these get green/red/grey/white
 		},
-		_columnHeaderItem: function(projectName){
+		_columnHeaderItem: function(projectName){ //the % DONE cell in the header cell when in % DONE viewing mode
 			var me=this;
 			var config = _.reduce(me.MatrixUserStoryBreakdown[projectName], function(sumConfig, userStoriesData){
 				return {
@@ -2958,7 +2969,7 @@
 				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
 				shouldHaveItems = me.ViewMode === '% Done';
 			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
-			while(column.el.dom.childNodes.length > 1) column.el.last().remove();
+			while(column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
 			if(shouldHaveItems) Ext.DomHelper.append(column.el, me._columnHeaderItem(projectName));
 			column.el.addCls(me._getProjectHeaderCls(projectName));
 		},
@@ -2994,7 +3005,9 @@
 			var me=this,
 				portfolioItemName = portfolioItemRecord.data.Name,
 				teamCommits = me._getTeamCommits(portfolioItemRecord);
-			return _.some(teamCommits, function(projData, projectOID){ return projData.Commitment == 'Not Committed'; }) || 
+			return _.some(teamCommits, function(projData, projectOID){ 
+				return projData.Commitment == 'Not Committed' && me.ProjectOIDNameMap[projectOID]; 
+			}) || 
 				!_.reduce(me.MatrixUserStoryBreakdown, function(sum, portfolioItemMap){
 					return sum + (portfolioItemMap[portfolioItemName] || []).length;
 				}, 0);
@@ -4081,6 +4094,49 @@
     </style>
 
     <style type="text/css">
+        .moscow-cell {
+  padding-left: 20px;
+}
+.must-have {
+  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
+  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
+  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
+  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
+  background-size: 100% 20px;
+  background-repeat: repeat-y;
+}
+.should-have {
+  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
+  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
+  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
+  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
+  background-size: 100% 20px;
+  background-repeat: repeat-y;
+}
+.could-have {
+  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
+  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
+  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
+  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
+  background-size: 100% 20px;
+  background-repeat: repeat-y;
+}
+.wont-have {
+  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
+  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
+  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
+  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
+  background-size: 100% 20px;
+  background-repeat: repeat-y;
+}
+
+    </style>
+
+    <style type="text/css">
         /************************************************ NAVBAR/CONTAINERS *****************************************/
 #navbar {
   padding: 0 10px 0 10px;
@@ -4151,45 +4207,6 @@
 .x-column-header-inner {
   text-align: center;
   height: 100 !important;
-}
-.moscow-cell {
-  padding-left: 20px;
-}
-.must-have {
-  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
-  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
-  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
-  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
-  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #ffdb99 85%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.should-have {
-  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
-  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
-  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
-  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
-  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #ffa500 85%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.could-have {
-  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
-  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
-  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
-  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
-  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, #cc8400 85%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
-}
-.wont-have {
-  background-image: -o-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
-  background-image: -moz-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
-  background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
-  background-image: -ms-linear-gradient(rleft, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
-  background-image: linear-gradient(to left, rgba(0, 0, 0, 0) 85%, rgba(255, 0, 0, 0.5) 85%) !important;
-  background-size: 100% 20px;
-  background-repeat: no-repeat;
 }
 
     </style>

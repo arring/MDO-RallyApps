@@ -33,6 +33,7 @@
       "../../lib/css/base.css",
       "../../lib/css/tooltip.css",
       "../lib/css/background-colors.css",
+      "../lib/css/moscow-cell.css",
       "app.css"
    ]
 }
