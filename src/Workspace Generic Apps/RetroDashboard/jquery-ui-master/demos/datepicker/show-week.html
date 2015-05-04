@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>jQuery UI Datepicker - Show week of the year</title>
+	<link rel="stylesheet" href="../../themes/base/all.css">
+	 <script src="https://code.jquery.com/jquery-2.1.3.js"></script>
+	<script src="../../ui/core.js"></script>
+	<script src="../../ui/widget.js"></script>
+	<script src="../../ui/datepicker.js"></script>
+	<link rel="stylesheet" href="../demos.css">
+	<script>
+
+	$(function() {
+		var me = this,
+			_6days = 1000 * 60 *60 *24*6,
+			datePickerDefaultDate = new Date(new Date('07/05/2014')*1 + _6days);
+		$( "#datepicker" ).datepicker({
+			defaultDate: datePickerDefaultDate,
+			appendText:"(Defaulat sample date is 7 days after the release date)",
+			navigationAsDateFormat:true,
+			showWeek: true,
+			firstDay: 0,
+			renderer: function(){
+				
+			},
+			onSelect: function(value){
+				var me = this;
+				console.log(value);
+			}
+		});
+		$( "#datepicker" ).val( (datePickerDefaultDate.getMonth() + 1) + "/" + datePickerDefaultDate.getDate()+ "/" + datePickerDefaultDate.getFullYear());
+	});
+	</script>
+</head>
+<body>
+
+<p>Date: <input type="text" id="datepicker"></p>
+
+<div class="demo-description">
+<p>The datepicker can show the week of the year. The default calculation follows
+	the ISO 8601 definition: the week starts on Monday, the first week of the year
+	contains the first Thursday of the year. This means that some days from one
+	year may be placed into weeks 'belonging' to another year.</p>
+</div>
+</body>
+</html>
