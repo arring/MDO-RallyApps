@@ -21,9 +21,15 @@
       "../lib/components/component-column.js",
       "../lib/overrides/fast-component-column.js",
       "../lib/charts/fast-cumulative-flow-calculator.js",
+      "jquery-ui-master/ui/core.js",
+      "jquery-ui-master/ui/core.js",
+      "jquery-ui-master/ui/widget.js",
+      "jquery-ui-master/ui/datepicker.js",
       "RetroDashboard.js"
    ],
    "css": [
-      "app.css"
+      "app.css",
+      "jquery-ui-master/themes/base/all.css",
+      "jquery-ui-master/demos/demos.css"
    ]
 }

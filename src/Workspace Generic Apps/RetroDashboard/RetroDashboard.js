@@ -24,6 +24,22 @@
 				marginTop: 40,
 				marginBottom: 240
 			},{
+				xtype: 'container', //outside container has dropdown and the donut container
+				id: 'datePickerWrapper',
+				layout: {
+					type: 'hbox',
+					align:'left'
+				},
+				items:[{
+					xtype: 'textfield',
+					fieldLabel:'Choose Release Start Date',
+					id: 'datepicker',
+					name: 'datepicker'
+				},{
+					xtype:'container',
+					id:'btnDatePicker'
+				}]
+			},{
 				xtype: 'container',//donut container divided later into three donut containers
 				id: 'retroBarChartWrapper',
 				cls: 'barchart-wrapper',
@@ -111,11 +127,42 @@
 				listeners: {
 					change: function(combo, newval, oldval){if(newval.length===0) combo.setValue(oldval); },
 					select: me._releasePickerSelected,
-					scope: me
+					scope: me 
 				}
 			});
 		},
-		 
+		_buildReleasePickerStartDate: function(){
+			var me = this,
+			_6days = 1000 * 60 *60 *24*6,
+			datePickerDefaultDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days);
+			$( "#datepicker-inputEl" ).datepicker({
+				defaultDate: datePickerDefaultDate,
+				appendText:"(Default sample date for data is 7 days after the release date)",
+				navigationAsDateFormat:true,
+				showWeek: true,
+				firstDay: 0,
+				onSelect: function(value){
+					me.datePickerDate = value;
+				}
+			});
+		$( "#datepicker-inputEl" ).val( (datePickerDefaultDate.getMonth() + 1) + "/" + datePickerDefaultDate.getDate()+ "/" + datePickerDefaultDate.getFullYear());
+		Ext.create('Ext.Button', {
+			text: 'Click me',
+			renderTo: "btnDatePicker",
+			handler: function(value) {
+				me.releaseStartDateChanged = true;
+				var date1 = me.ReleaseRecord.data.ReleaseStartDate,
+					date2 = new Date(me.datePickerDate),
+					_1day = 1000 * 60 * 60 * 24 ; 
+				var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
+				//taking sample 7 days before and after the release
+				//data for calculating scope change
+				//commit to accept original and final calculation
+				me.initalAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
+				me._reloadEverything();
+				}
+			});
+		},
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
 			var me = this, releaseName = me.ReleaseRecord.data.Name;			
@@ -126,7 +173,10 @@
 						return hash;
 					}, {});
 				});
-		},            
+		},
+		_findDifferenceinDatesinDays:function(){
+			
+		},
 		_loadSnapshotStores: function(){
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -251,7 +301,10 @@
 				userStorySnapshots = me.AllSnapshots,
 				_10days = 1000 * 60 *60 *24*10,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				startTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
+				date1 = me.ReleaseRecord.data.ReleaseStartDate,
+				date2 = new Date(me.datePickerDate),
+				daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) )),
+				startTargetDate = me.releaseStartDateChanged ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + daysCountDifference): new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
 				finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1),
 				scopeToReleaseGridRows = [],
 				
@@ -466,15 +519,13 @@
 				datemap = aggregateChartData.datemap;
 
 			//retro dashboard calculation
-			//taking sample 7 days before and after the release
-			//data for calculating scope change
-			//commit to accept original and final calculation
+
 			var total = {};
 				total.initialCommit = 0;
 				total.finalCommit = 0;
 				total.finalAccepted = 0;
 				total.projected = 0;
-				
+			
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
 					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
@@ -482,7 +533,8 @@
 				//we want to ignore the ideal and the projected from the aggregateChartData
 				if(f.name !="Ideal" && f.name != "Projected"){
 						//taking sample after 7 days and before 7 days 
-						total.initialCommit = total.initialCommit + f.data[6];
+						//or date from date picker
+						total.initialCommit = total.initialCommit + f.data[me.initalAddedDaysCount];
 						total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
 				}
 				//if the release is still on going we would like to use the projected data for the final commit
@@ -745,7 +797,7 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //parallel loads
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
+						me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
 							.then(function(trainRecord){
 								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
 									me.TrainRecord = trainRecord;
@@ -763,8 +815,14 @@
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								var oneYear = 1000*60*60*24*365,
-									endDate = new Date()*1 + 1000*60*60*24 * 7 * 4;// 4 weeks after today next near future release
+								var today = new Date();
+								var quarter = Math.floor((today.getMonth() + 3) / 3);
+								var year = today.getFullYear();
+								var start = new Date(year,quarter*3-3,1);
+								var endDate = new Date(year,quarter*3,0);
+								var oneYear = 1000*60*60*24*365;/* ,
+									endDate = new Date()*1 + 1000*60*60*24 * 7 * 4;// 4 weeks after today next near future release */
+									debugger;
 								return me._loadReleasesBetweenDates(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
 							})
 							.then(function(releaseRecords){
@@ -775,7 +833,10 @@
 							})
 					]);
 				})
-				.then(function(){ me._buildReleasePicker(); })
+				.then(function(){ 
+					me._buildReleasePicker(); 
+					me._buildReleasePickerStartDate();
+				})
 				.then(function(){ me._reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
