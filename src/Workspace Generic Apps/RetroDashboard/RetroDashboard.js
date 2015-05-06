@@ -158,7 +158,7 @@
 				//taking sample 7 days before and after the release
 				//data for calculating scope change
 				//commit to accept original and final calculation
-				me.initalAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
+				me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
 				me._reloadEverything();
 				}
 			});
@@ -183,9 +183,13 @@
 				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
-			
+				debugger;
+			//if scoped to a scrum but not a train 
+			if (!me._isScopedToTrain){
+				me.LeafProjects = me.CurrentScrum;
+			}
 			me.AllSnapshots = [];
-			return Q.all(_.map(me.TrainChildren, function(project){
+			return Q.all(_.map(me.LeafProjects, function(project){
 				var parallelLoaderConfig = {
 					pagesize:20000,
 					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
@@ -526,20 +530,22 @@
 				total.finalAccepted = 0;
 				total.projected = 0;
 			
+			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount;
+			
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
 					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
 				}
 				//we want to ignore the ideal and the projected from the aggregateChartData
 				if(f.name !="Ideal" && f.name != "Projected"){
-						//taking sample after 7 days and before 7 days 
-						//or date from date picker
-						total.initialCommit = total.initialCommit + f.data[me.initalAddedDaysCount];
-						total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
+					//taking sample after 7 days and before 7 days 
+					//or date from date picker
+					total.initialCommit = total.initialCommit + f.data[me.initialAddedDaysCount];
+					total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
 				}
 				//if the release is still on going we would like to use the projected data for the final commit
 				if(f.name === "Projected"){
-						total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
+					total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
 				}
 			});
 			if(total.finalCommit === 0){
@@ -673,7 +679,6 @@
 						}
 					}]
 				};
-				
 			chartMax.push(me.total.initialCommit,me.total.finalAccepted, me.total.finalCommit);
 			chartConfig.yAxis.max = Math.max.apply(null, chartMax);
 			chartConfig.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
@@ -770,6 +775,7 @@
 			})
 			.then(function(){ 
 				if(me.AllSnapshots.length === 0 ){
+					me.setLoading(false);
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				} 
@@ -788,6 +794,7 @@
 		},   
 		launch: function() {
 			var me = this;
+			debugger;
 			me.setLoading('Loading Configuration');
 			me._configureIntelRallyApp()
 				.then(function(){
@@ -796,22 +803,68 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //parallel loads
-						me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
+					return Q.all([ //two streams
+						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
 							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
+								if(trainRecord){
+									if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
+									else me._isScopedToTrain = true;
 									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(trainRecord);
+									return Q.all([
+										me._loadAllLeafProjects(me.TrainRecord)
+											.then(function(leftProjects){
+												me.LeafProjects = leftProjects;
+												if(me._isScopedToTrain) me.CurrentScrum = null;
+												else {
+													me.CurrentScrum ={};
+													me.CurrentScrum[me.ProjectRecord.data.ObjectID] = me.ProjectRecord;
+												}
+											}),
+										me._loadTrainPortfolioProject(me.TrainRecord)
+											.then(function(trainPortfolioProject){
+												me.TrainPortfolioProject = trainPortfolioProject;
+											//TODO: uncomment if you need to filter on 
+											/* 	var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
+												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType); */
+											})
+/* 											.then(function(topPortfolioItemStore){ 
+												me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
+											}) */
+									]);
+								} else {
+									me.CurrentScrum ={};
+									me.CurrentScrum[me.ProjectRecord.data.ObjectID] = me.ProjectRecord;
+									me._isScopedToTrain = false;
 								}
-								else return Q.reject('You are not scoped to a train.');
-							})
-							.then(function(trainPortfolioProject){
-								me.TrainPortfolioProject = trainPortfolioProject;
-								return me._loadAllChildrenProjects(me.TrainRecord);
-							})
-							.then(function(scrums){
-								me.TrainChildren = scrums;
-							}),
+							}),				
+				// .then(function(scopeProjectRecord){
+					// me.ProjectRecord = scopeProjectRecord;
+					// return Q.all([ //parallel loads
+						// me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
+							// .then(function(trainRecord){
+								// me.TrainRecord = trainRecord;
+								// if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
+									// return me._loadTrainPortfolioProject(trainRecord);
+								// }
+								// //if its not a train set the current scrum 
+								// /* else return Q.reject('You are not scoped to a train.'); */
+								// else{
+									// return me._loadAllLeafProjects() /******** load stream 1 *****/
+									// .then(function(leafProjects){
+										// me.LeafProjects = leafProjects;
+										// if(!me.LeafProjects[me.ProjectRecord.data.ObjectID]) 
+											// return Q.reject('You are not Scoped to a valid Project');
+										// else me.CurrentScrum = me.ProjectRecord;
+									// });
+								// }
+							// })
+							// .then(function(trainPortfolioProject){
+								// me.TrainPortfolioProject = trainPortfolioProject;
+								// return me._loadAllChildrenProjects(me.TrainRecord);
+							// })
+							// .then(function(scrums){
+								// me.TrainChildren = scrums;
+							// }),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
@@ -821,8 +874,7 @@
 								var start = new Date(year,quarter*3-3,1);
 								var endDate = new Date(year,quarter*3,0);
 								var oneYear = 1000*60*60*24*365;/* ,
-									endDate = new Date()*1 + 1000*60*60*24 * 7 * 4;// 4 weeks after today next near future release */
-									debugger;
+								endDate = new Date()*1 + 1000*60*60*24 * 7 * 4;// 4 weeks after today next near future release */
 								return me._loadReleasesBetweenDates(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
 							})
 							.then(function(releaseRecords){
@@ -836,6 +888,7 @@
 				.then(function(){ 
 					me._buildReleasePicker(); 
 					me._buildReleasePickerStartDate();
+					debugger;
 				})
 				.then(function(){ me._reloadEverything(); })
 				.fail(function(reason){
