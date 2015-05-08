@@ -19,11 +19,6 @@
 			id: 'retroWrapper',
 			cls: 'chart-wrapper',
 			items:[{
-				xtype:'container',
-				id: 'retroReleasePicker',
-				marginTop: 40,
-				marginBottom: 240
-			},{
 				xtype: 'container', //outside container has dropdown and the donut container
 				id: 'datePickerWrapper',
 				layout: {
@@ -31,13 +26,37 @@
 					align:'left'
 				},
 				items:[{
-					xtype: 'textfield',
-					fieldLabel:'Choose Release Start Date',
-					id: 'datepicker',
-					name: 'datepicker'
+					xtype:'container',
+					id: 'retroReleasePicker',
+					marginTop: 40,
+					marginBottom: 240
+				},{
+					xtype:'component',
+					id:'cntClickForDateChange',
+					cls:'clickForDateChange',
+					autoEl: {
+						tag: 'a',
+						html: 'Please Click here to change the Release Start Date'
+					},
+					listeners   : {
+					  el : {
+						click: {
+							element: 'el', //bind to the underlying el property on the panel
+							fn: function(){ 
+								Rally.getApp()._buildReleasePickerStartDate();
+							}
+						},
+					}
+					}
 				},{
 					xtype:'container',
-					id:'btnDatePicker'
+					id:'cntDatePickerWrapper',
+					cls:'datePickerWrapper',					
+					width: '20%',
+					layout: {
+						type: 'hbox',
+						align:'left'
+					}					
 				}]
 			},{
 				xtype: 'container',//donut container divided later into three donut containers
@@ -102,6 +121,8 @@
 		/****************************************************** RELEASE PICKER ********************************************************/
 		_releasePickerSelected: function(combo, records){
 			var me=this;
+			Ext.getCmp('cntDatePickerWrapper').removeAll(); 
+			Ext.getCmp('cntClickForDateChange').show();
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
@@ -132,12 +153,23 @@
 			});
 		},
 		_buildReleasePickerStartDate: function(){
-			var me = this,
-			_6days = 1000 * 60 *60 *24*6,
+			Ext.getCmp('cntDatePickerWrapper').removeAll(); 
+			Ext.getCmp('cntClickForDateChange').hide();
+			var me = this;
+			var items =[{
+					xtype: 'textfield',
+					fieldLabel:'Choose Release Start Date',
+					labelWidth: 150,
+					id: 'datepicker'
+				},{
+					xtype:'container',
+					id:'btnDatePicker'
+				}]
+			Ext.getCmp('cntDatePickerWrapper').add(items);
+			var	_6days = 1000 * 60 *60 *24*6,
 			datePickerDefaultDate = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days);
 			$( "#datepicker-inputEl" ).datepicker({
 				defaultDate: datePickerDefaultDate,
-				appendText:"(Default sample date for data is 7 days after the release date)",
 				navigationAsDateFormat:true,
 				showWeek: true,
 				firstDay: 0,
@@ -145,23 +177,29 @@
 					me.datePickerDate = value;
 				}
 			});
-		$( "#datepicker-inputEl" ).val( (datePickerDefaultDate.getMonth() + 1) + "/" + datePickerDefaultDate.getDate()+ "/" + datePickerDefaultDate.getFullYear());
-		Ext.create('Ext.Button', {
-			text: 'Click me',
-			renderTo: "btnDatePicker",
-			handler: function(value) {
-				me.releaseStartDateChanged = true;
-				var date1 = me.ReleaseRecord.data.ReleaseStartDate,
-					date2 = new Date(me.datePickerDate),
-					_1day = 1000 * 60 * 60 * 24 ; 
-				var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
-				//taking sample 7 days before and after the release
-				//data for calculating scope change
-				//commit to accept original and final calculation
-				me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
-				me._reloadEverything();
-				}
-			});
+			
+			var me.datePickerValue = (datePickerDefaultDate.getMonth() + 1) + "/" + datePickerDefaultDate.getDate()+ "/" + datePickerDefaultDate.getFullYear();
+			$( "#datepicker-inputEl" ).val(me.datePickerValue);
+			Ext.create('Ext.Button', {
+				text: 'Update',
+				renderTo: "btnDatePicker",
+				handler: function(value) {
+					me.releaseStartDateChanged = true;
+					var date1 = me.ReleaseRecord.data.ReleaseStartDate,
+						date2 = new Date(me.datePickerDate),
+						_1day = 1000 * 60 * 60 * 24 ; 
+					var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
+					//taking sample 7 days before and after the release
+					//data for calculating scope change
+					//commit to accept original and final calculation
+					me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
+					me._buildCumulativeFlowChart(); 
+					me._buildRetroChart();
+					me._hideHighchartsLinks();
+					me._loadScopeToReleaseStore();
+					me._buildScopeToReleaseGrid();
+					}
+				});
 		},
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
@@ -173,9 +211,6 @@
 						return hash;
 					}, {});
 				});
-		},
-		_findDifferenceinDatesinDays:function(){
-			
 		},
 		_loadSnapshotStores: function(){
 			var me = this, 
@@ -529,8 +564,20 @@
 				total.finalCommit = 0;
 				total.finalAccepted = 0;
 				total.projected = 0;
+				total.ideal = 0;
+			//for shaky date difference calc
+			if(!!(me.initialAddedDaysCount)){
+				while(datemap[me.initialAddedDaysCount] != me.datePickerValue  ){
+					if (datemap[me.initialAddedDaysCount] > me.datePickerValue  ){
+						me.initialAddedDaysCount = me.initialAddedDaysCount - 1;
+					}else if(datemap[me.initialAddedDaysCount] < me.datePickerValue){
+						me.initialAddedDaysCount = me.initialAddedDaysCount + 1;
+					}
+				}		
+			}
 			
-			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount;
+			
+			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount ;
 			
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
@@ -547,10 +594,13 @@
 				if(f.name === "Projected"){
 					total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
 				}
+				if(f.name === "Ideal"){
+					total.ideal = total.ideal + f.data[aggregateChartData.categories.length - 6];
+				}
 			});
 			if(total.finalCommit === 0){
-				total.finalCommit = total.projected;
-				total.finalAccepted = total.projected;
+				total.finalCommit = total.projected > 0 ? total.projected : total.ideal;
+				total.finalAccepted = total.projected > 0 ? total.projected : total.ideal;
 			}
 			var commitDataPlus =[];
 			// commitDataMinus = [];
@@ -712,6 +762,7 @@
 			//second chart CA orginial 
 			chartConfig.title.text = 'A/C Original: ' + originalCommitRatio.toFixed(0) + '%';
 			chartConfig.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
+			chartConfig.xAxis.categories[0] = 'Original Commit'
 			chartConfig.xAxis.categories[1] = 'Final Accepted';
 			chartConfig.yAxis.plotLines[0].label = {                            
 				text : 'Target >90%',
@@ -778,13 +829,14 @@
 					me.setLoading(false);
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
+				}else{
+					me._buildCumulativeFlowChart(); 
+					me._buildRetroChart();
+					me._hideHighchartsLinks();
+					me._loadScopeToReleaseStore();
+					me._buildScopeToReleaseGrid();
+					me.setLoading(false);   					
 				} 
-				me._buildCumulativeFlowChart(); 
-				me._buildRetroChart();
-				me._hideHighchartsLinks();
-				me._loadScopeToReleaseStore();
-				me._buildScopeToReleaseGrid();
-				me.setLoading(false);      
 			})
 			.fail(function(reason){
 				me.setLoading(false);           
@@ -868,14 +920,15 @@
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								var today = new Date();
+/* 								var today = new Date();
 								var quarter = Math.floor((today.getMonth() + 3) / 3);
 								var year = today.getFullYear();
 								var start = new Date(year,quarter*3-3,1);
-								var endDate = new Date(year,quarter*3,0);
+								//var endDate = new Date(year,quarter*3,0); */
 								var oneYear = 1000*60*60*24*365;/* ,
 								endDate = new Date()*1 + 1000*60*60*24 * 7 * 4;// 4 weeks after today next near future release */
-								return me._loadReleasesBetweenDates(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
+								var endDate = new Date();
+								return me._loadReleasesBetweenDatesAndCurrent(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
@@ -887,10 +940,9 @@
 				})
 				.then(function(){ 
 					me._buildReleasePicker(); 
-					me._buildReleasePickerStartDate();
-					debugger;
+					//me._buildReleasePickerStartDate();
 				})
-				.then(function(){ me._reloadEverything(); })
+				.then(function(){  me._reloadEverything();  })
 				.fail(function(reason){
 					me.setLoading(false);
 					me._alert('ERROR', reason || '');
