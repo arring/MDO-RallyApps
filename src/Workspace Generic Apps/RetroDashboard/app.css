@@ -2,6 +2,16 @@
      /* Add app styles here */
 	 
 }
+.clickForDateChange{
+	text-decoration:underline;
+	font-style:italic;
+	cursor: pointer;
+	padding-top: 5px;
+	padding-left: 5px;
+}
+.datePickerWrapper{
+	padding-left: 10px;
+}
 .chart-wrapper{
 	margin: 10px;
 	padding: 10px;
