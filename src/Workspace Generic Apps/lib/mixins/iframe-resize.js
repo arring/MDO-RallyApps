@@ -4,6 +4,7 @@
 
 	var TOP_BAR_HEIGHT = 40,
 		BOTTOM_BAR_HEIGHT = 24,
+		BOTTOM_IFRAME_PADDING = 20,
 		TITLE_BAR_HEIGHT = 33,
 		IFRAME_HEADER_HEIGHT = 28;
 		
@@ -33,7 +34,7 @@
 				
 				//adjust heights
 				while(true){
-					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT)) + 'px';
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING)) + 'px';
 					if(domNodeH.classList.contains('x-portlet')) break;
 					domNodeH = domNodeH.parentNode;
 				}

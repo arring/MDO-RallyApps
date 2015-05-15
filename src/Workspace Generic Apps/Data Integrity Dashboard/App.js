@@ -179,6 +179,19 @@
 					me._getStories(),
 					me._getLowestPortfolioItems()
 				])
+				.then(function(){
+					if(me.LowestPortfolioItemStore){
+						var lowestPortfolioItemType = me.PortfolioItemTypes[0];
+						me.PortfolioUserStoryCount = {};
+						_.each(me.LowestPortfolioItemStore.getRange(), function(portfolioItemRecord){
+							me.PortfolioUserStoryCount[portfolioItemRecord.data.ObjectID] = 0;
+						});
+						_.each(me.UserStoryStore.getRange(), function(userStoryRecord){
+							var portfolioItemObjectID = (userStoryRecord.data[lowestPortfolioItemType] || {}).ObjectID;
+							if(typeof me.PortfolioUserStoryCount[portfolioItemObjectID] == 'number') me.PortfolioUserStoryCount[portfolioItemObjectID]++;
+						});
+					}
+				})
 				.then(function(){ me._redrawEverything(); })
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
@@ -746,21 +759,23 @@
 			window[randFunctionName] = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
 			
 			var getGridTitleLink = function(data, model){
-					var storyNum = data && data.length,
-						storyDen = gridConfig.totalCount,
+					var hasData = !!data,
+						countNum = data && data.length,
+						countDen = gridConfig.totalCount,
 						pointNum = data && (100*_.reduce(data, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100,
 						pointDen = gridConfig.totalPoints,
 						type = (model==='UserStory' ? 'Stories' : lowestPortfolioItemType + 's');
-					return '<span class="data-integrity-grid-header-left">' + 
-						gridConfig.title + (data ? '<br>' : '') + 
-							'<span class="data-integrity-grid-header-stats">' + 
-								(data ? ('<b>' + type + ':</b> ' + storyNum+ '/' + storyDen + ' (' + ((storyNum/storyDen*10000>>0)/100) + '%)') : '') + 
-								((data && model=='UserStory') ? 
-									('<br><b>Points:</b> ' + pointNum+ '/' + pointDen + '  (' + ((pointNum/pointDen*10000>>0)/100) + '%)') : ''
-								) + 
-							'</span>' + 
-						'</span>' + 
-						'<span class="data-integrity-grid-header-top-link"><a onclick="' + randFunctionName + '()">Top</a></span>';
+					return sprintf([
+						'<span class="data-integrity-grid-header-left">',
+							'%s',
+							'<span class="data-integrity-grid-header-stats">%s<br/>%s</span>',
+						'</span>',
+						'<span class="data-integrity-grid-header-top-link"><a onclick="%s()">Top</a></span>'
+					].join(''),
+					gridConfig.title + (hasData ? '<br>' : ''),
+					hasData ? sprintf('<b>%s:</b> %s/%s (%s%%)', type, countNum, countDen, (countNum/countDen*10000>>0)/100) : '',
+					(hasData && model=='UserStory') ? sprintf('<b>Points:</b> %s/%s (%s%%)', pointNum, pointDen, (pointNum/pointDen*10000>>0)/100) : '',
+					randFunctionName);
 				},
 				storeModel = (gridConfig.model == 'UserStory') ? me.UserStoryStore.model : me.LowestPortfolioItemStore.model,
 				grid = Ext.getCmp('grids' + gridConfig.side).add(gridConfig.data.length ? 
@@ -980,7 +995,7 @@
 					side: 'Right',
 					filterFn:function(item){ 
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						return item.data.UserStories.Count === 0; 
+						return !me.PortfolioUserStoryCount[item.data.ObjectID];
 					}
 				}];
 
