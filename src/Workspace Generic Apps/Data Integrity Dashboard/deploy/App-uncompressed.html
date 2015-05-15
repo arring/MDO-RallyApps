@@ -8,6 +8,7 @@
     <script type="text/javascript" src="https://code.highcharts.com/highcharts.src.js"></script>
     <script type="text/javascript" src="https://code.highcharts.com/modules/heatmap.src.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.1/sprintf.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function () {
@@ -162,6 +163,7 @@
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryINRelease false for those who: (release == nulll && portfolioItrem.release.name == me.ReleaseRecord.data.Name)). that is why this line is necessary
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
@@ -683,6 +685,32 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		_loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: this.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(endDate).toISOString()
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(startDate).toISOString()
+					}]
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},
 		_loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
@@ -841,6 +869,7 @@
 
 	var TOP_BAR_HEIGHT = 40,
 		BOTTOM_BAR_HEIGHT = 24,
+		BOTTOM_IFRAME_PADDING = 20,
 		TITLE_BAR_HEIGHT = 33,
 		IFRAME_HEADER_HEIGHT = 28;
 		
@@ -870,7 +899,7 @@
 				
 				//adjust heights
 				while(true){
-					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT)) + 'px';
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING)) + 'px';
 					if(domNodeH.classList.contains('x-portlet')) break;
 					domNodeH = domNodeH.parentNode;
 				}
@@ -1110,6 +1139,11 @@
 			url:<host:port/path defaults to standard analytics url. host is window.location.host>
 			params: query parameter object with keys and vals
 		}
+		
+		NOTE: (sam steffl) I am using JSONP instead of AJAX because I use the file:/// protocol. In the future I need to 
+			probably change it to Ajax.GET and use a node server to serve the app. Then I wouldn't run into CORS issues,
+			since CORS issues always happens when using file:/// since Origin header === null. Then JSONp would not be
+			necessary anymore anyways.
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;	
@@ -1319,7 +1353,6 @@
 			options.value = options.currentRelease.data.Name;
 			options.store = Ext.create('Ext.data.Store', {
 				fields: ['Name'],
-				sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
 				data: _.map(options.releases, function(r){ return {Name: r.data.Name }; })
 			});
 			
@@ -1441,8 +1474,7 @@
 						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
-						workspace:me.getContext().getWorkspace()._ref,
-						includePermissions:true
+						workspace:me.getContext().getWorkspace()._ref
 					}
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -1470,8 +1502,7 @@
 					pagesize:200,
 					query:me._getLowestPortfolioItemFilter().toString(),
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-						'Description', 'FormattedID', 'UserStories'].join(','),
-					includePermissions:true
+						'Description', 'FormattedID', 'UserStories'].join(',')
 				}
 			};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -1516,6 +1547,19 @@
 					me._getStories(),
 					me._getLowestPortfolioItems()
 				])
+				.then(function(){
+					if(me.LowestPortfolioItemStore){
+						var lowestPortfolioItemType = me.PortfolioItemTypes[0];
+						me.PortfolioUserStoryCount = {};
+						_.each(me.LowestPortfolioItemStore.getRange(), function(portfolioItemRecord){
+							me.PortfolioUserStoryCount[portfolioItemRecord.data.ObjectID] = 0;
+						});
+						_.each(me.UserStoryStore.getRange(), function(userStoryRecord){
+							var portfolioItemObjectID = (userStoryRecord.data[lowestPortfolioItemType] || {}).ObjectID;
+							if(typeof me.PortfolioUserStoryCount[portfolioItemObjectID] == 'number') me.PortfolioUserStoryCount[portfolioItemObjectID]++;
+						});
+					}
+				})
 				.then(function(){ me._redrawEverything(); })
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
@@ -2083,21 +2127,23 @@
 			window[randFunctionName] = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
 			
 			var getGridTitleLink = function(data, model){
-					var storyNum = data && data.length,
-						storyDen = gridConfig.totalCount,
+					var hasData = !!data,
+						countNum = data && data.length,
+						countDen = gridConfig.totalCount,
 						pointNum = data && (100*_.reduce(data, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100,
 						pointDen = gridConfig.totalPoints,
 						type = (model==='UserStory' ? 'Stories' : lowestPortfolioItemType + 's');
-					return '<span class="data-integrity-grid-header-left">' + 
-						gridConfig.title + (data ? '<br>' : '') + 
-							'<span class="data-integrity-grid-header-stats">' + 
-								(data ? ('<b>' + type + ':</b> ' + storyNum+ '/' + storyDen + ' (' + ((storyNum/storyDen*10000>>0)/100) + '%)') : '') + 
-								((data && model=='UserStory') ? 
-									('<br><b>Points:</b> ' + pointNum+ '/' + pointDen + '  (' + ((pointNum/pointDen*10000>>0)/100) + '%)') : ''
-								) + 
-							'</span>' + 
-						'</span>' + 
-						'<span class="data-integrity-grid-header-top-link"><a onclick="' + randFunctionName + '()">Top</a></span>';
+					return sprintf([
+						'<span class="data-integrity-grid-header-left">',
+							'%s',
+							'<span class="data-integrity-grid-header-stats">%s<br/>%s</span>',
+						'</span>',
+						'<span class="data-integrity-grid-header-top-link"><a onclick="%s()">Top</a></span>'
+					].join(''),
+					gridConfig.title + (hasData ? '<br>' : ''),
+					hasData ? sprintf('<b>%s:</b> %s/%s (%s%%)', type, countNum, countDen, (countNum/countDen*10000>>0)/100) : '',
+					(hasData && model=='UserStory') ? sprintf('<b>Points:</b> %s/%s (%s%%)', pointNum, pointDen, (pointNum/pointDen*10000>>0)/100) : '',
+					randFunctionName);
 				},
 				storeModel = (gridConfig.model == 'UserStory') ? me.UserStoryStore.model : me.LowestPortfolioItemStore.model,
 				grid = Ext.getCmp('grids' + gridConfig.side).add(gridConfig.data.length ? 
@@ -2317,7 +2363,7 @@
 					side: 'Right',
 					filterFn:function(item){ 
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						return item.data.UserStories.Count === 0; 
+						return !me.PortfolioUserStoryCount[item.data.ObjectID];
 					}
 				}];
 

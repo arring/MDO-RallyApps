@@ -8,6 +8,7 @@
       "https://code.highcharts.com/highcharts.src.js",
       "https://code.highcharts.com/modules/heatmap.src.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.1/sprintf.js",
       "../lib/intel-rally-app.js",
       "../lib/data/intel-models.js",
       "../lib/mixins/window-listener.js",

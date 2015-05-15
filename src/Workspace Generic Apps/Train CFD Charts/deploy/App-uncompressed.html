@@ -1809,12 +1809,14 @@
 				return me._parallelLoadLookbackStore(parallelLoaderConfig)
 					.then(function(snapshotStore){ 
 						//only keep snapshots where (release.name == releasName || (!release && portfolioItem.Release.Name == releaseName))
+						//	AND have length > 0 (another bug in LBAPI!)
 						var records = _.filter(snapshotStore.getRange(), function(snapshot){
 							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName));
+									(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
+								(snapshot.data._ValidFrom != snapshot.data._ValidTo);
 						});
 						
-						//FUCKING BUG IN LBAPI with duplicates. must workaround it.... POLYFILL thing
+						//BUG IN LBAPI with duplicates. must workaround it....
 						var tmpRecs = records.slice(),
 							convertDupes = function(dupes){
 								return _.map(_.sortBy(dupes, 
@@ -1837,7 +1839,7 @@
 							}
 						}
 						records = tmpRecs;
-						//END FUCKING BUG IN LBAPI Polyfill thing
+						//END BUG IN LBAPI Polyfill thing
 						
 						if(records.length > 0){
 							me.TeamStores[project.data.Name] = records;

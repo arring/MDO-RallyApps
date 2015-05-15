@@ -21,7 +21,7 @@
 		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
@@ -159,6 +159,7 @@
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryINRelease false for those who: (release == nulll && portfolioItrem.release.name == me.ReleaseRecord.data.Name)). that is why this line is necessary
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
@@ -680,6 +681,32 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		_loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: this.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(endDate).toISOString()
+					},{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(startDate).toISOString()
+					}]
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},
 		_loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
@@ -1102,7 +1129,7 @@
 	var Ext = window.Ext4 || window.Ext;
 
 	var context = Rally.environment.getContext(),
-		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
+		SETTINGS_TOKEN = context.getProject().ObjectID;
 
 	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
