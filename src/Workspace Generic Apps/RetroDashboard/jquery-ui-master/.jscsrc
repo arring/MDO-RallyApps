@@ -1,9 +1,0 @@
-{
-	"preset": "jquery",
-
-	// disabled until `widget_slice` et al are addressed
-	"requireCamelCaseOrUpperCaseIdentifiers": null,
-
-	// Ref https://github.com/jquery/contribute.jquery.org/issues/80#issuecomment-45253460
-	"maximumLineLength": null
-}

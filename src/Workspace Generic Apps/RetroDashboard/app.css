@@ -2,6 +2,9 @@
      /* Add app styles here */
 	 
 }
+.ulInformation{
+	margin-top:-3px;
+}
 .clickForDateChange{
 	text-decoration:underline;
 	font-style:italic;
@@ -9,12 +12,13 @@
 	padding-top: 5px;
 	padding-left: 5px;
 }
-.datePickerWrapper{
+.cntDatePickerWrapper{
 	padding-left: 10px;
 }
 .chart-wrapper{
-	margin: 10px;
+	margin-top: 10px;
 	padding: 10px;
+	width:100%;
 }
 .retrochart-wrapper{
 	clear:both;
@@ -23,22 +27,9 @@
 	/*change the width percentage to change the size of the donut-wrapper*/
 }
 .barchart-wrapper{
-	margin-top:20px;
 	border: solid #BFBFBF 2px;  
 	width: 100%;/*change the width percentage to change the size of the donut-wrapper
 	background-color:red;*/
-}
-.chart-with-border{
-	font-weight: bold;
-	font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, sans-serif;
-	z-index: -1 ;
-}
-.chart-with-border2{
-	/* border: solid #92d947 1px; */
-}
-.chart-with-border3{
- 	 border: solid #BFBFBF 4px;  
-	 background-color:green;
 }
 span#retroDonutScopeArrow-outerCt,span#retroDonutCaOriginalArrow-outerCt,span#retroDonutCaFinalArrow-outerCt {
 	 margin-top: 70px; 
