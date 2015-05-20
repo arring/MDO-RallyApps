@@ -1,5 +1,18 @@
 /************************************************ NAVBAR/CONTAINERS *****************************************/
-#navbar { padding:0 10px 0 10px; }
+#navbar { padding:0 10px 10px 10px; }
 #releasePicker { margin: 4px 0 0 0; }
 
 /************************************************ RISK SWIMLANE STUFF *****************************************/
+.RiskSwimlaneApp, 
+.RiskSwimlaneApp > div, 
+.RiskSwimlaneApp > div > div {
+	height:100%; }
+	
+.rui-card .rui-card-right-side {
+	display:none; }
+	
+.rui-card .rui-field-label {
+	font-weight:bold; }
+
+.rui-card .rui-field-value {
+	display:inline !important; }

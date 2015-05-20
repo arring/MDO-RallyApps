@@ -85,7 +85,7 @@
 		]
 	});	
 
-	/************************* USED FOR RISKS/DEPS VIEW *********************************************/
+	/************************* USED FOR RISKS/DEPS AND SWIMLANE(RISKS ONLY) VIEW *********************************************/
 
 	Ext.define('IntelRiskForTracking', {
 		extend: 'Ext.data.Model',
@@ -138,7 +138,32 @@
 			{name: 'MoSCoW', type: 'string'}
 		]
 	});
-
+	
+	/************************* USED FOR SWIMLANES VIEW *********************************************/
+	Ext.define('IntelSwimlaneRiskForTracking', {
+		extend: 'Rally.data.Model',							//rally cardboard is heavily tied to wsapi objects so we have to override a lot of stuff...
+		fields: [
+			{name: '_originalRiskData', type:'auto'},
+			{name: 'RiskID', type:'string'},
+			{name: 'Rank', type:'string'},										//idk man
+			{name: 'PortfolioItem #', type: 'string'},
+			{name: 'PortfolioItem Name', type:'string'},
+			{name: 'Project', type:'string'},
+			{name: 'Risk Description', type: 'string'},				//change from Description because Description is a wsapi field... and it causes an error			
+			{name: 'Impact', type: 'string'},	
+			{name: 'MitigationPlan', type: 'string'},
+			{name: 'Urgency', type: 'string', attributeDefinition: {AttributeType:'Dropdown'}}, //add attributeDefinition because rallycardboard looks for this
+			{name: 'Status', type: 'string'},
+			{name: 'Contact', type: 'string'},
+			{name: 'Checkpoint', type: 'string'},
+			{name: 'updatable', type: 'boolean'}	//have to set updatable:true for each record or else they won't be draggable
+		],
+		idField: {name: 'RiskID'},							//so record.getId() works off of the RiskID field
+		idProperty: 'RiskID',										//so sessionstorage proxy works off of the RiskID field
+		isTask: function(){ return false; },		//rallycardboard calls this
+		isSearch: function(){ return false;}		//rallypopoverfactory calls this for some reason
+	});
+	
 	/************************* USED FOR CUSTOM-FIELD EDITOR *********************************************/
 	Ext.define('SAFeCustomFieldsEditorModel', {
 		extend: 'Ext.data.Model',

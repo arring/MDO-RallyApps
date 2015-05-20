@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ART Commit Matrix</title>
+    <title>Risk Swimlane</title>
 
 
-    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0rc3/sdk-debug.js"></script>
+    <script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0/sdk-debug.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.6.0/lodash.js"></script>
 
@@ -15,27 +15,21 @@
                       "../../lib/data/intel-models.js",
                       "../../lib/mixins/window-listener.js",
                       "../../lib/mixins/iframe-resize.js",
+                      "../../lib/mixins/async-queue.js",
                       "../../lib/mixins/pretty-alert.js",
                       "../../lib/mixins/intel-workweek.js",
-                      "../../lib/mixins/async-queue.js",
                       "../../lib/mixins/parallel-loader.js",
                       "../../lib/mixins/user-apps-preference.js",
-                      "../../lib/components/component-column.js",
                       "../../lib/components/intel-combobox.js",
                       "../../lib/components/intel-fixed-combobox.js",
                       "../../lib/components/intel-release-picker.js",
-                      "../../lib/components/intel-textarea.js",
-                      "../../lib/overrides/fast-component-column.js",
-                      "../../lib/overrides/fast-session-proxy.js",
-                      "../../lib/overrides/fast-store.js",
-                      "../../lib/overrides/fast-cell-editing.js",
-                      "../../lib/overrides/scroll-steady-tableview.js",
                       "../lib/data/intel-safe-models.js",
+                      "../lib/mixins/risks-lib.js",
                       "App.js",
                 ],
         function() {
-            Rally.launchApp('ArtCommitMatrix', {
-                name:"ART Commit Matrix"
+            Rally.launchApp('RiskSwimlane', {
+                name:"Risk Swimlane"
             });
         }, true);
     </script>
@@ -43,7 +37,6 @@
     <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css"/>
 
     <link rel="stylesheet" type="text/css" href="../../lib/css/base.css"/>
-    <link rel="stylesheet" type="text/css" href="../../lib/css/tooltip.css"/>
     <link rel="stylesheet" type="text/css" href="../lib/css/background-colors.css"/>
     <link rel="stylesheet" type="text/css" href="../lib/css/moscow-cell.css"/>
     <link rel="stylesheet" type="text/css" href="app.css"/>

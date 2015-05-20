@@ -10,6 +10,7 @@
       "../../lib/data/intel-models.js",
       "../../lib/mixins/window-listener.js",
       "../../lib/mixins/iframe-resize.js",
+      "../../lib/mixins/async-queue.js",
       "../../lib/mixins/pretty-alert.js",
       "../../lib/mixins/intel-workweek.js",
       "../../lib/mixins/parallel-loader.js",
@@ -18,6 +19,7 @@
       "../../lib/components/intel-fixed-combobox.js",
       "../../lib/components/intel-release-picker.js",
       "../lib/data/intel-safe-models.js",
+      "../lib/mixins/risks-lib.js",
       "App.js"
    ],
    "css": [
