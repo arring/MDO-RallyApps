@@ -12,8 +12,18 @@
 	padding-top: 5px;
 	padding-left: 5px;
 }
-.cntDatePickerWrapper{
-	padding-left: 10px;
+.appInfo{
+	float:right;
+	text-align:right;
+	font:bold;
+	font-weight: bold;
+	color: green;
+}
+.rui-triggerfield .icon-calendar {
+  background-image: none;
+  color: #888;
+  font-size: 12px;
+  padding: 3px 3px 5px 4px;
 }
 .chart-wrapper{
 	margin-top: 10px;
@@ -47,10 +57,10 @@ span#retroDonutScopeArrow-outerCt,span#retroDonutCaOriginalArrow-outerCt,span#re
 	height: 20px;
 	padding-left: 70%;
 	margin-bottom:20px; */
+	margin-top:-50px;
 	float: right;
 	width: 35%;
 	text-align: center;
-	margin-top: -50px;
 }
 .mtargetwrapper{
 	float:left;

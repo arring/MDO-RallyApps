@@ -22,13 +22,12 @@
 				xtype: 'container', //outside container has dropdown and the donut container
 				id: 'datePickerWrapper',
 				layout: {
-					type: 'hbox',
-					align:'left'
+					type: 'hbox'
 				},
 				items:[{
 					xtype:'container',
 					id: 'retroReleasePicker',
-					width:'15%',
+					width:'15%'
 				},{
 					xtype:'component',
 					id:'cntClickForDateChange',
@@ -51,26 +50,42 @@
 				},{
 					xtype:'container',
 					id:'cntDatePickerWrapper',
-					cls:'cntDatePickerWrapper',
 					hidden:true,
-					width:'25%',
+					width: '25%',
 					layout: {
 						type: 'hbox',
 						align:'left'
-					}					
-				},{
-					xtype:'container',
-					id:'cntInformation',
-					width:'55%',
-					html:['<ul class ="ulInformation"><li>Scope Delta = (Final Workload - Original Commit) / Original Commit</li>',
-						'<li>A/C Original = Final Accepted / Original Commit</li>',
-						'<li>A/C Final = Final Accepted / Original Commit</li>',
-						'<li>Sample dates are taken 7 days after Release start date and 7 days before the Release end date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
-						'<li>If there are 0 points at Release end date, then the projected data is taken for the sample, and if there is no projected data, ideal data is taken for the sample.</li>',
-						'<li>You can change the Release start date for the selected Release. This will update the sample date for the Release start date.</li></ul>'
-						].join('\n')
+					}		
 				}]
 			},{
+				xtype:'component',
+				id:'cntInformation',
+				cls:'clickForDateChange appInfo',
+				autoEl: {
+					tag: 'a',
+					html: 'Information on Data Calculations'
+				},
+				listeners   : {
+					el : {
+						click: {
+							element: 'el', //bind to the underlying el property on the panel
+							fn: function(){ 
+								var html = ['<ul class ="ulInformation"><li>Scope Delta = (Final Workload - Original Commit) / Original Commit</li>',
+									'<li>A/C Original = Final Accepted / Original Commit</li>',
+									'<li>A/C Final = Final Accepted / Original Commit</li>',
+									'<li>Sample dates are taken 7 days after Release Start Date and 7 days before the Release end date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
+									'<li>If there are 0 points at Release Start Date, then the projected data is taken for the sample, and if there is no projected data, ideal data is taken for the sample.</li>',
+									'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
+									'<li>Final Accepted is the total points for user stories that are accepted at the Release End Date',
+									'<li>Final Workload is the total points for user stories at the Release End Date',
+									'<li>Initial Commit is the total points for user stories at the Release Start Date</ul>'
+									].join('\n');
+								Rally.getApp()._alert('Information on Data Calculations',html);
+							}
+						}
+					}
+				}
+				},{
 				xtype: 'container',//container divided later into three sub containers
 				id: 'retroBarChartWrapper',
 				cls: 'barchart-wrapper',
@@ -106,11 +121,11 @@
 				html:[
 					'<div class="legendwrapper">',
 						'<div class="dtarget"></div>',
-						'<div class="dtargetwrapper">Did not meet Target</div>',
+						'<div class="dtargetwrapper">Did Not Meet Target</div>',
 						'<div class="mtarget"></div>',
 						'<div class="mtargetwrapper">Met Target</div>',
 						'<div class="atarget"></div>',
-						'<div class="mtargetwrapper">A/C = Accept to Commit</div>',
+						'<div class="mtargetwrapper">A/C = Accept To Commit</div>',
 					'</div>'
 				].join('\n')
 			},{
@@ -138,25 +153,12 @@
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			me._reloadEverything();
-/* 			//first time on release change
-			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			//uncomment if you want to pass user preference releases
-			//me.AppsPref.projs[pid] = me.ProjectRecord.data.ObjectID;
-			me._saveAppsPreference(me.AppsPref)
-				.then(function(){return me._reloadEverything();})
-				.fail(function(reason){
-					me._alert('ERROR', reason || '');
-					me.setLoading(false);
-				})
-				.done();  */
 		},
 		_buildReleasePicker: function(){
 			var me = this;
 			me.ReleasePicker = Ext.getCmp('retroReleasePicker').add({
 				xtype: 'intelreleasepicker',//this is a intel component in intel-release-picker.js
-				labelWidth: 80,
-				width: 240,
+				labelWidth: 40,
 				releases: me.ReleaseRecords,
 				currentRelease: me.ReleaseRecord, 
 				listeners: {
@@ -171,16 +173,6 @@
 			Ext.getCmp('cntClickForDateChange').hide();
 			Ext.getCmp('cntDatePickerWrapper').show();
 			var me = this;
-			var items =[{
-				xtype: 'textfield',
-				fieldLabel:'Choose Release Start Date',
-				labelWidth: 150,
-				id: 'datepicker'
-			},{
-				xtype:'container',
-				id:'btnDatePicker'
-			}];
-			Ext.getCmp('cntDatePickerWrapper').add(items);
 			var	_6days = 1000 * 60 *60 *24*6;
 			var datePickerDefaultDate;
 			var rid = me.ReleaseRecord.data.ObjectID;
@@ -189,59 +181,57 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			datePickerDefaultDate = !!(me.AppsPref.projs[pid][rid]) ? new Date(me.AppsPref.projs[pid][rid].ReleaseStartDate):releaseSampleDataDate ;
 			var maxDate = me.ReleaseRecord.data.ReleaseDate > new Date() ? new Date() : me.ReleaseRecord.data.ReleaseDate;
-			$( "#datepicker-inputEl" ).datepicker({
-				defaultDate: datePickerDefaultDate,
-				navigationAsDateFormat:true,
-				minDate: releaseSampleDataDate,
-				maxDate: maxDate,
-				showWeek: true,
-				firstDay: 0
-			});
-			
-			var datePickerDefaultValue = datePickerDefaultDate.toLocaleDateString();
-			$( "#datepicker-inputEl" ).val(datePickerDefaultValue);
-			Ext.create('Ext.Button', {
-				text: 'Update',
-				renderTo: "btnDatePicker",
-				id: "btnUpdateReleaseDate",
-				handler: function(value) {
-					var txtValue = new Date($( "#datepicker-inputEl" ).val()).toLocaleDateString();
-					if(Date.parse(txtValue) >= Date.parse(new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days)) && Date.parse(txtValue) <= Date.parse(maxDate)){
-						//saving the release start date
-						me.AppsPref.projs[pid] = me.AppsPref.projs[pid] || {};
-						me.AppsPref.projs[pid][rid] =  me.AppsPref.projs[pid][rid] || {};
-						me.AppsPref.projs[pid][rid].ReleaseStartDate = txtValue;
-						me._saveAppsPreference(me.AppsPref)
-						.then(function(){ 
-							me.releaseStartDateChanged = true;
-							me.datePickerDate = txtValue;
-							var date1 = me.ReleaseRecord.data.ReleaseStartDate,
-								date2 = new Date(me.datePickerDate),
-								_1day = 1000 * 60 * 60 * 24 ; 
-							var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
-							//taking sample 7 days before and after the release
-							//data for calculating scope change
-							//commit to accept original and final calculation
-							me.setLoading("Loading Data");
-							me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
-							me._buildCumulativeFlowChart(); 
-							me._buildRetroChart();
-							me._hideHighchartsLinks();
-							me._loadScopeToReleaseStore();
-							me._buildScopeToReleaseGrid();
-							me.setLoading(false);
-							})
-						.fail(function(reason){
-						me._alert('ERROR', reason || '');
-						me.setLoading(false);})
-						.done();
-						
-					}else{
-						me._alert("Date Validation Note:","The entered date should be between Release start date(" + releaseSampleDataDate.toLocaleDateString() +") and Release end date("+ maxDate.toLocaleDateString() +").");
-					}
-
-					}
-				});
+			var items = [{
+						xtype: 'rallydatefield',
+						id:'ReleaseDatePicker',
+						fieldLabel: 'Select Release Start Date',
+						labelWidth:140,
+						minValue: releaseSampleDataDate,
+						maxValue: maxDate,
+						value: datePickerDefaultDate,
+						showToday:false
+					},{
+						xtype:'button',
+						text: 'Update',
+						id: "btnUpdateReleaseDate",
+						handler: function() {
+							var txtValue = new Date(Ext.getCmp('ReleaseDatePicker').value).toLocaleDateString();
+							if(Date.parse(txtValue) >= Date.parse(new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days)) && Date.parse(txtValue) <= Date.parse(maxDate)){
+								//saving the release start date
+								me.AppsPref.projs[pid] = me.AppsPref.projs[pid] || {};
+								me.AppsPref.projs[pid][rid] =  me.AppsPref.projs[pid][rid] || {};
+								me.AppsPref.projs[pid][rid].ReleaseStartDate = txtValue;
+								me._saveAppsPreference(me.AppsPref)
+								.then(function(){ 
+									me.releaseStartDateChanged = true;
+									me.datePickerDate = txtValue;
+									var date1 = me.ReleaseRecord.data.ReleaseStartDate,
+										date2 = new Date(me.datePickerDate),
+										_1day = 1000 * 60 * 60 * 24 ; 
+									var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
+									//taking sample 7 days before and after the release
+									//data for calculating scope change
+									//commit to accept original and final calculation
+									me.setLoading("Loading Data");
+									me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
+									me._buildCumulativeFlowChart(); 
+									me._buildRetroChart();
+									me._hideHighchartsLinks();
+									me._loadScopeToReleaseStore();
+									me._buildScopeToReleaseGrid();
+									me.setLoading(false);
+									})
+								.fail(function(reason){
+								me._alert('ERROR', reason || '');
+								me.setLoading(false);})
+								.done();
+								
+							}else{
+								me._alert("Date Validation Note:","The entered date should be between Release start date(" + releaseSampleDataDate.toLocaleDateString() +") and Release end date("+ maxDate.toLocaleDateString() +").");
+							}
+						}
+					}];	
+			Ext.getCmp('cntDatePickerWrapper').add(items); 
 		},
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
@@ -620,7 +610,6 @@
 			
 			
 			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount ;
-			
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
 					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
@@ -762,7 +751,7 @@
 						column: {colorByPoint: true}
 					},
 					series: [{
-						name: ['Meet Target'],
+						name: ['Total'],
 						showInLegend: false,
 						data: dataseries,
 						dataLabels: {
@@ -779,8 +768,8 @@
 			else chartConfig.title.text = 'Scope Delta:' + scopeDeltaPerc.toFixed(2) + '%';
 			
 			chartConfig.subtitle.text = Math.round(me.total.finalCommit) + ' of ' + Math.round(me.total.initialCommit);
-			dataseries.push(new Array('initialcommit', me.total.initialCommit));
-			dataseries.push(new Array('finalcommit',me.total.finalCommit));
+			dataseries.push(new Array('InitialCommit', me.total.initialCommit));
+			dataseries.push(new Array('FinalWorkload',me.total.finalCommit));
 			chartConfig.series.data = dataseries;
 			chartConfig.yAxis.plotLines[0].value = me.total.initialCommit + (0.1 * me.total.initialCommit); //max target
 			chartConfig.yAxis.plotLines[1].value = me.total.initialCommit - (0.1 * me.total.initialCommit); //min target
@@ -866,7 +855,7 @@
 						column: {colorByPoint: true}
 					},
 					series: [{
-						name: ['Meet Target'],
+						name: ['Total'],
 						showInLegend: false,
 						data: dataseries,
 						dataLabels: {
@@ -889,8 +878,8 @@
 			
 			//set the yaxis max so that it matches the other 2 charts  
 			dataseries.length = 0;
-			dataseries.push(new Array('initialcommit', me.total.initialCommit));
-			dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+			dataseries.push(new Array('InitialCommit', me.total.initialCommit));
+			dataseries.push(new Array('FinalAccepted',me.total.finalAccepted));
 			chartConfig2.series.data = dataseries;
 			chartConfig2.yAxis.plotLines[0].value = (0.9 * me.total.initialCommit);//max target
 			chartConfig2.yAxis.plotLines.splice(1,1);
@@ -965,7 +954,7 @@
 						column: {colorByPoint: true}
 					},
 					series: [{
-						name: ['Meet Target'],
+						name: ['Total'],
 						showInLegend: false,
 						data: dataseries,
 						dataLabels: {
@@ -987,8 +976,8 @@
 			};
 			dataseries.length = 0;
 			
-			dataseries.push(new Array('finalCommit', me.total.finalCommit));
-			dataseries.push(new Array('finalaccepted',me.total.finalAccepted));
+			dataseries.push(new Array('FinalCommit', me.total.finalCommit));
+			dataseries.push(new Array('FinalAccepted',me.total.finalAccepted));
 			chartConfig3.series.data = dataseries;
 			chartConfig3.yAxis.plotLines[0].value = (0.9 * me.total.finalCommit);//max target
 			chartConfig3.yAxis.plotLines.splice(1,1);
@@ -1004,7 +993,7 @@
 				rid = me.ReleaseRecord.data.ObjectID,
 				pid = me.ProjectRecord.data.ObjectID;
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.releaseStartDateChanged = (!!(me.AppsPref.projs[pid][rid]))? true : false
+			me.releaseStartDateChanged = (!!(me.AppsPref.projs[pid][rid]))? true : false;
 			if(me.releaseStartDateChanged){
 				me.datePickerDate = me.AppsPref.projs[pid][rid].ReleaseStartDate;
 				var date1 = me.ReleaseRecord.data.ReleaseStartDate,
@@ -1041,13 +1030,13 @@
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				}else{
-					me._buildCumulativeFlowChart(); 
+					me._buildCumulativeFlowChart();
 					me._buildRetroChart();
 					me._hideHighchartsLinks();
 					me._loadScopeToReleaseStore();
 					me._buildScopeToReleaseGrid();
-					me.setLoading(false);   					
-				} 
+					me.setLoading(false);
+				}
 			})
 			.fail(function(reason){
 				me.setLoading(false);           
@@ -1085,13 +1074,7 @@
 										me._loadTrainPortfolioProject(me.TrainRecord)
 											.then(function(trainPortfolioProject){
 												me.TrainPortfolioProject = trainPortfolioProject;
-												//TODO: uncomment if you need to filter on 
-												/* 	var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
-												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType); */
 											})
-/* 											.then(function(topPortfolioItemStore){ 
-												me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
-											}) */
 									]);
 								} else {
 									me.CurrentScrum ={};
@@ -1119,9 +1102,8 @@
 				})
 				.then(function(){ 
 					me._buildReleasePicker(); 
-					//me._buildReleasePickerStartDate();
 				})
-				.then(function(){  /* return me._reloadEverything();   */  })
+				.then(function(){ return me._reloadEverything();  })
 				.fail(function(reason){
 					me.setLoading(false);
 					me._alert('ERROR', reason || '');
