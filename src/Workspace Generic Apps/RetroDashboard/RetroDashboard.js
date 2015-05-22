@@ -309,7 +309,7 @@
 						//END BUG IN LBAPI Polyfill thing
 						
 						me.AllSnapshots = me.AllSnapshots.concat(records);
-					});
+					});	
 			}));
 		},    
 		_getPortfolioItems: function(){
@@ -865,8 +865,8 @@
 					}]
 				};
 			//second chart CA orginial 
-			chartConfig2.yAxis.max = chartConfig.yAxis.max
-		/* 	chartConfig2.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig2.yAxis.max = chartConfig.yAxis.max;
+			/*chartConfig2.yAxis.max = Math.max.apply(null, chartMax);
 			chartConfig2.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20% */
 			chartConfig2.title.text = 'A/C Original: ' + originalCommitRatio.toFixed(0) + '%';
 			chartConfig2.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
@@ -965,8 +965,8 @@
 					}]
 				};
 			finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
-			chartConfig3.yAxis.max = chartConfig.yAxis.max
-/* 			chartConfig3.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig3.yAxis.max = chartConfig.yAxis.max;
+			/*chartConfig3.yAxis.max = Math.max.apply(null, chartMax);
 			chartConfig3.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20% */
 			chartConfig3.title.text = 'A/C Final: ' + finalCommitRatio.toFixed(0) + '%';
 			chartConfig3.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.finalCommit);
@@ -1027,7 +1027,11 @@
 			.then(function(){
 				//check if the release start date is set in preference
 				//if saved in preference load it 
+				me._loadAppsPreference() /******** load stream 2 *****/
+				.then(function(appsPref){
+				me.AppsPref = appsPref;
 				me._loadUserPreferenceReleaseStartDate();
+				})
 			})
 			.then(function(){ 
 				if(me.AllSnapshots.length === 0 ){
@@ -1035,7 +1039,6 @@
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				}else{
-
 					me._loadScopeToReleaseStore();
 					me._buildScopeToReleaseGrid();
 					me.setLoading(false);
