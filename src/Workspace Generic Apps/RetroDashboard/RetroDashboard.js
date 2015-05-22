@@ -63,7 +63,7 @@
 				cls:'clickForDateChange appInfo',
 				autoEl: {
 					tag: 'a',
-					html: 'Information on Data Calculations'
+					html: 'Help <img src="/slm/images/icon_help.gif" alt="Help" title="Help" >'
 				},
 				listeners   : {
 					el : {
@@ -865,8 +865,9 @@
 					}]
 				};
 			//second chart CA orginial 
-			chartConfig2.yAxis.max = Math.max.apply(null, chartMax);
-			chartConfig2.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
+			chartConfig2.yAxis.max = chartConfig.yAxis.max
+		/* 	chartConfig2.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig2.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20% */
 			chartConfig2.title.text = 'A/C Original: ' + originalCommitRatio.toFixed(0) + '%';
 			chartConfig2.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.initialCommit);
 			chartConfig2.xAxis.categories[0] = 'Original Commit';
@@ -964,8 +965,9 @@
 					}]
 				};
 			finalCommitRatio = (me.total.finalAccepted /me.total.finalCommit)* 100;
-			chartConfig3.yAxis.max = Math.max.apply(null, chartMax);
-			chartConfig3.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20%
+			chartConfig3.yAxis.max = chartConfig.yAxis.max
+/* 			chartConfig3.yAxis.max = Math.max.apply(null, chartMax);
+			chartConfig3.yAxis.max = chartConfig.yAxis.max + ((20/100) * chartConfig.yAxis.max);//increasing the number by 20% */
 			chartConfig3.title.text = 'A/C Final: ' + finalCommitRatio.toFixed(0) + '%';
 			chartConfig3.subtitle.text = Math.round(me.total.finalAccepted) + ' of ' + Math.round(me.total.finalCommit);
 			chartConfig3.xAxis.categories[0] = 'Final Workload';
@@ -1009,13 +1011,16 @@
 			//get the portfolioItems from wsapi
 			return Q.all([
 				me._loadAllChildReleases(),
-				me._getPortfolioItems()
+				me._getPortfolioItems(),
+				me._loadSnapshotStores()
 			])
 			.then(function() {  
 				//load all the user story snap shot for release
 				//load all the user stories for the release portfolioItems
+				me._buildCumulativeFlowChart();
+				me._buildRetroChart();
+				me._hideHighchartsLinks();
 				return Q.all([
-					me._loadSnapshotStores(),
 					me._loadUserStoriesforPortfolioItems()
 				]);
 			})
@@ -1030,9 +1035,7 @@
 					me._alert('ERROR', me.TrainRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				}else{
-					me._buildCumulativeFlowChart();
-					me._buildRetroChart();
-					me._hideHighchartsLinks();
+
 					me._loadScopeToReleaseStore();
 					me._buildScopeToReleaseGrid();
 					me.setLoading(false);
@@ -1085,7 +1088,6 @@
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								console.log("appPreference",me.AppsPref);
 								var oneYear = 1000*60*60*24*365;
 								var endDate = new Date();
 								return me._loadReleasesBetweenDatesAndCurrent(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
