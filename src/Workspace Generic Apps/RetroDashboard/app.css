@@ -11,6 +11,10 @@
 	cursor: pointer;
 	padding-top: 5px;
 	padding-left: 5px;
+	margin-left:5px;
+}
+#cntDatePickerWrapper{
+	margin-left:5px;
 }
 .appInfo{
 	float:right;
