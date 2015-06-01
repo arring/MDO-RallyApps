@@ -152,10 +152,12 @@
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
+			debugger;
 			me._reloadEverything();
 		},
 		_buildReleasePicker: function(){
 			var me = this;
+			debugger;
 			me.ReleasePicker = Ext.getCmp('retroReleasePicker').add({
 				xtype: 'intelreleasepicker',//this is a intel component in intel-release-picker.js
 				labelWidth: 40,
@@ -239,14 +241,16 @@
 				me.ReleasesWithNameHash ={};
 			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
 				.then(function(releaseRecords){
-					debugger;
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 						hash[rr.data.ObjectID] = true;
+							console.log("load child release", new Date());
 						return hash;
+					
 					}, {});
 				});
 		},
 		_loadSnapshotStores: function(){
+			debugger;
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
 				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
@@ -281,7 +285,6 @@
 					.then(function(snapshotStore){ 
 						//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 						var records = _.filter(snapshotStore.getRange(), function(snapshot){
-							debugger;
 							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
 								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName));
 						});
@@ -310,7 +313,7 @@
 						}
 						records = tmpRecs;
 						//END BUG IN LBAPI Polyfill thing
-						
+						console.log("load snapshot release", new Date())
 						me.AllSnapshots = me.AllSnapshots.concat(records);
 					});	
 			}));
@@ -1014,9 +1017,12 @@
 			//get the portfolioItems from wsapi
 			return Q.all([
 				me._loadAllChildReleases(),
-				me._getPortfolioItems(),
-				me._loadSnapshotStores()
+				me._getPortfolioItems()
+				
 			])
+			.then(function(){
+				Q.all([me._loadSnapshotStores()])
+			})
 			.then(function() {  
 				//load all the user story snap shot for release
 				//load all the user stories for the release portfolioItems
