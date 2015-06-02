@@ -152,12 +152,10 @@
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			debugger;
 			me._reloadEverything();
 		},
 		_buildReleasePicker: function(){
 			var me = this;
-			debugger;
 			me.ReleasePicker = Ext.getCmp('retroReleasePicker').add({
 				xtype: 'intelreleasepicker',//this is a intel component in intel-release-picker.js
 				labelWidth: 40,
@@ -243,14 +241,12 @@
 				.then(function(releaseRecords){
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 						hash[rr.data.ObjectID] = true;
-							console.log("load child release", new Date());
 						return hash;
 					
 					}, {});
 				});
 		},
 		_loadSnapshotStores: function(){
-			debugger;
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
 				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
@@ -313,7 +309,6 @@
 						}
 						records = tmpRecs;
 						//END BUG IN LBAPI Polyfill thing
-						console.log("load snapshot release", new Date())
 						me.AllSnapshots = me.AllSnapshots.concat(records);
 					});	
 			}));
@@ -1021,7 +1016,7 @@
 				
 			])
 			.then(function(){
-				Q.all([me._loadSnapshotStores()])
+				Q.all(me._loadSnapshotStores())
 			})
 			.then(function() {  
 				//load all the user story snap shot for release
