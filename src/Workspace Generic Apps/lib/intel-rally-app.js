@@ -180,10 +180,7 @@
 			else {
 				me.Project.load(oid, {
 					fetch: me._projectFields,
-					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
+					context: { workspace: me.getContext().getWorkspace()._ref},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
@@ -433,7 +430,11 @@
 		},
 		
 		/********************************************** Project Funcs ********************************************/	
-		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
+		/**
+			NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (another rally bug).
+						The issue is that Rally incorrectly returns a bunch of these projects with no 'Parent' field with sdk 2.0 
+						FIGURE THIS OUT SO WE CAN UPGRADE TO V2.0
+		*/
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){

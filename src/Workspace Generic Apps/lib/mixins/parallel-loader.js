@@ -1,111 +1,69 @@
-/** use this to load stores that have lots of records. it will load them in parallel instead of serially.
-	what it does is loads 1 page and then based on the totalResultCount it loads the rest of the pages in parallel.
-	
-		for wsapiStore, the config needs to be: {
-			pagesize: <defaults to 200>
-			url:<host:port/path>
-			params: query parameter object with keys and vals
-			model: the instantiated wsapi model (need to load this first)
-		}
-		for lookbackStore, the config needs to be: {
-			pagesize: <defaults to 20000>
-			url:<host:port/path defaults to standard analytics url. host is window.location.host>
-			params: query parameter object with keys and vals
-		}
-		
-		NOTE: (sam steffl) I am using JSONP instead of AJAX because I use the file:/// protocol. In the future I need to 
-			probably change it to Ajax.GET and use a node server to serve the app. Then I wouldn't run into CORS issues,
-			since CORS issues always happens when using file:/// since Origin header === null. Then JSONp would not be
-			necessary anymore anyways.
+/** 
+	Use this to load stores that have lots of records. it will load them in parallel instead of serially.
+	what it does is loads 1 page and then based on the totalCount it loads the rest of the pages in parallel.
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;	
 	
-	Ext.define('ParallelLoader', {
-		__parallelLoadData: function(config){
-			var me=this,
-				pagesize = config.pagesize,
-				url = config.url,
-				params = config.params,
-				promises = [],
-				outputItems = [],
-				totalRequestsSent = 1; //1 is the minimum number of requests sent
-			_.times(totalRequestsSent, function(pageNum){
-				var thisDeferred = Q.defer(),
-					thisParams = Ext.merge({}, params);
-				promises.push(thisDeferred.promise);
-				thisParams.start = config.itemOffset + pagesize*pageNum;
-				Ext.data.JsonP.request({
-					url:url,
-					callbackKey: 'jsonp',
-					timeout: 120000,
-					params: thisParams,
-					success: function(resJSON){
-						var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results,
-							totalCount = resJSON.QueryResult ? resJSON.QueryResult.TotalResultCount : resJSON.TotalResultCount,
-							totalPages = (totalCount/pagesize>>0)+(totalCount%pagesize ? 1 : 0);			
-						outputItems = outputItems.concat(items);
-						if(totalRequestsSent < totalPages){
-							var	additionalPromises = [];
-							_.times(totalPages - totalRequestsSent, function(){
-								var nextDeferred = Q.defer(),
-									thisParams = Ext.merge({}, params);
-								additionalPromises.push(nextDeferred.promise);
-								thisParams.start = config.itemOffset + pagesize*totalRequestsSent;
-								++totalRequestsSent;
-								Ext.data.JsonP.request({
-									url:url,
-									callbackKey: 'jsonp',
-									timeout: 120000,
-									params: thisParams,
-									success: function(resJSON){
-										var items = resJSON.QueryResult ? resJSON.QueryResult.Results : resJSON.Results;
-										outputItems = outputItems.concat(items);
-										nextDeferred.resolve();
-									},
-									failure: function(response){ nextDeferred.reject(response); }
-								});
-							});
-							Q.all(additionalPromises).then(function(){ thisDeferred.resolve(); });
-						}
-						else thisDeferred.resolve();
-					},
-					failure: function(response){ thisDeferred.reject(response); }
-				});
-			});
-			return Q.all(promises).then(function(){ return outputItems; });
-		},		
+	Ext.define('ParallelLoader', {		
 		_parallelLoadWsapiStore: function(config){
-			var me=this;
-			config.itemOffset = 1; //page index starts at 1 for wsapi
-			config.pagesize = (config.pagesize > 0 && config.pagesize <= 200) ? config.pagesize : 200;
-			config.params.pagesize = config.pagesize;
-			return me.__parallelLoadData(config).then(function(items){
+			var me=this, data = [], model;
+			function doStoreLoad(page){
+				var deferred = Q.defer(),
+					store = Ext.create('Rally.data.wsapi.Store', _.merge({}, config, {
+						pageSize:200,
+						listeners:{ load: deferred.resolve }
+					}));
+				store.loadPage(page);
+				return deferred.promise;
+			}
+			function makeStore(){
 				return Ext.create('Rally.data.wsapi.Store', {
-					model: config.model,
-					totalCount: items.length,
-					data: items,
+					model: model,
+					totalCount: data.length,
+					data: data,
 					disableMetaChangeEvent: true,
 					load: function(){}
 				});
+			}
+			return doStoreLoad(1).then(function(store){
+				data = data.concat(store.getRange());
+				model = store.model;
+				var pages = (store.totalCount/200>>0 + (store.totalCount%200 ? 0 : 1)) || 1;
+				if(pages === 1) return makeStore();
+				else return Q.all(_.times(pages-1, function(pageNum){
+					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
+				})).then(makeStore);
 			});
 		},
 		_parallelLoadLookbackStore: function(config){
-			var me=this;
-			config.itemOffset = 0; //page index starts at 0 for lookback
-			config.pagesize = (config.pagesize > 0 && config.pagesize <= 20000) ? config.pagesize : 20000;
-			config.params.pagesize = config.pagesize;
-			return me.__parallelLoadData(config).then(function(items){
+			var me=this, data = [], model;
+			function doStoreLoad(page){
+				var deferred = Q.defer(),
+					store = Ext.create('Rally.data.lookback.SnapshotStore', _.merge({}, config, {
+						pageSize:20000,
+						listeners:{ load: deferred.resolve }
+					}));
+				store.loadPage(page);
+				return deferred.promise;
+			}
+			function makeStore(){
 				return Ext.create('Rally.data.lookback.SnapshotStore', {
-					totalCount: items.length,
-					data: items,
+					model: model,
+					totalCount: data.length,
+					data: data,
 					disableMetaChangeEvent: true,
-					model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
-						extend: 'Rally.data.lookback.SnapshotModel',
-						fields: JSON.parse(config.params.fields || "[]")
-					}),
 					load: function(){}
 				});
+			}
+			return doStoreLoad(1).then(function(store){
+				data = data.concat(store.getRange());
+				model = store.model;
+				var pages = (store.totalCount/20000>>0 + (store.totalCount%20000 ? 0 : 1)) || 1;
+				if(pages === 1) return makeStore();
+				else return Q.all(_.times(pages-1, function(pageNum){
+					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
+				})).then(makeStore);
 			});
 		}
 	});

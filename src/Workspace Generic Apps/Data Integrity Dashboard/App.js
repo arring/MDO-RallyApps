@@ -98,16 +98,12 @@
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
-					model: me.UserStory,
-					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-					params: {
-						pagesize:200,
-						query:me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
+					model: 'HierarchicalRequirement',
+					filters: [me._getUserStoryFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
-						workspace:me.getContext().getWorkspace()._ref
-					}
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
+					context:{ workspace:me.getContext().getWorkspace()._ref }
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
@@ -125,16 +121,14 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			if(!me.TrainRecord) return Q();
 			var config = {
-				model: me[lowestPortfolioItem],
-				url: me.BaseUrl + '/slm/webservice/v2.0/PortfolioItem/' + lowestPortfolioItem,
-				params: {
+				model: 'PortfolioItem/' + lowestPortfolioItem,
+				filters: [me._getLowestPortfolioItemFilter()],
+				fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
+					'Description', 'FormattedID', 'UserStories'],
+				context: {
 					project:me.TrainPortfolioProject.data._ref,
 					projectScopeUp:false,
-					projectScopeDown:true,
-					pagesize:200,
-					query:me._getLowestPortfolioItemFilter().toString(),
-					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-						'Description', 'FormattedID', 'UserStories'].join(',')
+					projectScopeDown:true
 				}
 			};
 			return me._parallelLoadWsapiStore(config).then(function(store){
