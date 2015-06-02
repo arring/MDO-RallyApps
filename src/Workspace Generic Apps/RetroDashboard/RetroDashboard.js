@@ -27,12 +27,12 @@
 				items:[{
 					xtype:'container',
 					id: 'retroReleasePicker',
-					width:'15%'
+					width:'240px'
 				},{
 					xtype:'component',
 					id:'cntClickForDateChange',
 					cls:'clickForDateChange',
-					width:'25%',
+					width:'390px',
 					autoEl: {
 						tag: 'a',
 						html: 'Please Click here to change the Release Start Date'
@@ -51,7 +51,7 @@
 					xtype:'container',
 					id:'cntDatePickerWrapper',
 					hidden:true,
-					width: '25%',
+					width: '390px',
 					layout: {
 						type: 'hbox',
 						align:'left'
@@ -70,15 +70,15 @@
 						click: {
 							element: 'el', //bind to the underlying el property on the panel
 							fn: function(){ 
-								var html = ['<ul class ="ulInformation"><li>Scope Delta = (Final Workload - Original Commit) / Original Commit</li>',
-									'<li>A/C Original = Final Accepted / Original Commit</li>',
-									'<li>A/C Final = Final Accepted / Original Commit</li>',
+								var html = ['<ul class ="ulInformation"><li><b>Scope Delta</b> = (Final Workload - Original Commit) / Original Commit</li>',
+									'<li><b>A/C Original</b> = Final Accepted / Original Commit</li>',
+									'<li><b>A/C Final</b> = Final Accepted / Original Commit</li>',
 									'<li>Sample dates are taken 7 days after Release Start Date and 7 days before the Release end date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
 									'<li>If there are 0 points at Release Start Date, then the projected data is taken for the sample, and if there is no projected data, ideal data is taken for the sample.</li>',
 									'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
-									'<li>Final Accepted is the total points for user stories that are accepted at the Release End Date',
-									'<li>Final Workload is the total points for user stories at the Release End Date',
-									'<li>Initial Commit is the total points for user stories at the Release Start Date</ul>'
+									'<li><b>Final Accepted</b> is the total points for user stories that are accepted at the Release End Date',
+									'<li><b>Final Workload</b> is the total points for user stories at the Release End Date',
+									'<li><b>Initial Commit</b> is the total points for user stories at the Release Start Date</ul>'
 									].join('\n');
 								Rally.getApp()._alert('Information on Data Calculations',html);
 							}
@@ -198,6 +198,7 @@
 							var txtValue = new Date(Ext.getCmp('ReleaseDatePicker').value).toLocaleDateString();
 							if(Date.parse(txtValue) >= Date.parse(new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days)) && Date.parse(txtValue) <= Date.parse(maxDate)){
 								//saving the release start date
+								me.setLoading("Loading Data");
 								me.AppsPref.projs[pid] = me.AppsPref.projs[pid] || {};
 								me.AppsPref.projs[pid][rid] =  me.AppsPref.projs[pid][rid] || {};
 								me.AppsPref.projs[pid][rid].ReleaseStartDate = txtValue;
@@ -212,7 +213,6 @@
 									//taking sample 7 days before and after the release
 									//data for calculating scope change
 									//commit to accept original and final calculation
-									me.setLoading("Loading Data");
 									me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
 									me._buildCumulativeFlowChart(); 
 									me._buildRetroChart();
@@ -222,8 +222,8 @@
 									me.setLoading(false);
 									})
 								.fail(function(reason){
-								me._alert('ERROR', reason || '');
-								me.setLoading(false);})
+									me._alert('ERROR', reason || '');
+									me.setLoading(false);})
 								.done();
 								
 							}else{
@@ -235,12 +235,14 @@
 		},
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
-			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			var me = this, releaseName = me.ReleaseRecord.data.Name;	
+				me.ReleasesWithNameHash ={};
 			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 						hash[rr.data.ObjectID] = true;
 						return hash;
+					
 					}, {});
 				});
 		},
@@ -307,7 +309,6 @@
 						}
 						records = tmpRecs;
 						//END BUG IN LBAPI Polyfill thing
-						
 						me.AllSnapshots = me.AllSnapshots.concat(records);
 					});	
 			}));
@@ -1011,9 +1012,12 @@
 			//get the portfolioItems from wsapi
 			return Q.all([
 				me._loadAllChildReleases(),
-				me._getPortfolioItems(),
-				me._loadSnapshotStores()
+				me._getPortfolioItems()
+				
 			])
+			.then(function(){
+				Q.all(me._loadSnapshotStores())
+			})
 			.then(function() {  
 				//load all the user story snap shot for release
 				//load all the user stories for the release portfolioItems
@@ -1031,7 +1035,7 @@
 				.then(function(appsPref){
 				me.AppsPref = appsPref;
 				me._loadUserPreferenceReleaseStartDate();
-				})
+				});
 			})
 			.then(function(){ 
 				if(me.AllSnapshots.length === 0 ){
