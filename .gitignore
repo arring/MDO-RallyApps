@@ -1,6 +1,8 @@
 node_modules
-bower_components
 npm-debug.log
-config/rally-test*
 scripts/get-project-oids/config.json
 scripts/get-project-oids/output*
+deploy/
+App-Debug.html
+
+
