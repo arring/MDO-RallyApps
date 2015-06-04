@@ -1,4 +1,4 @@
-/** this app will probably get buggy if you have projects with the name name or portfolioItems with the same name */
+/** this app will probably get buggy if you have multiple projects with the name name or portfolioItems with the same name */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
@@ -189,20 +189,13 @@
 			me._enqueue(function(done){
 				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-							me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-							me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-						)
-						.then(function(portfolioStore){
-							return {
-								ordinal: ordinal,
-								store: portfolioStore
-							};
-						});
+							me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+							me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+						);
 					}))
-					.then(function(items){
-						var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
+					.then(function(portfolioItemStores){
 						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
-						me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
+						me.PortfolioItemStore = portfolioItemStores[0];
 						
 						//make the mapping of lowest to highest portfolioItems
 						me.PortfolioItemMap = {};
@@ -214,17 +207,17 @@
 										return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
 									});
 								};
-							while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord){
-								parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, orderedPortfolioItemStores[ordinal+1].store.getRange());
+							while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
+								parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
 								++ordinal;
 							}
-							if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+							if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
 								me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
 						});
 						
 						//destroy the stores, so they get GCed
-						orderedPortfolioItemStores.shift();
-						while(orderedPortfolioItemStores.length) orderedPortfolioItemStores.shift().store.destroyStore();
+						portfolioItemStores.shift();
+						while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
 						
 						//make a hash of portfolioitem Names
 						me.PortfolioItemNames = _.sortBy(_.map(me.PortfolioItemStore.getRange(), 
@@ -238,7 +231,7 @@
 				}, 'PortfolioItemQueue');
 			return deferred.promise;
 		},		
-		_getUserStoryQueryString: function(portfolioItemRecords){
+		_getUserStoryQuery: function(portfolioItemRecords){
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
@@ -254,7 +247,7 @@
 					});
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
-			return portfolioItemFilter ? releaseFilter.and(leafFilter).and(portfolioItemFilter).toString() : '';
+			return portfolioItemFilter ? releaseFilter.and(leafFilter).and(portfolioItemFilter) : null;
 		},
 		_loadUserStories: function(){
 			/** note: lets say the lowest portfolioItemType is 'Feature'. If we want to get child user stories under a particular Feature,
@@ -265,17 +258,17 @@
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				newMatrixUserStoryBreakdown = {},
 				newMatrixProjectMap = {},
-				newProjectOIDNameMap = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the train
+				newProjectOIDNameMap = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group
 				
 			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
-				var config = {
-						model: me.UserStory,
-						url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-						pagesize:200,
-						params: {
-							query: me._getUserStoryQueryString(portfolioItemRecords),
-							fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType].join(','),
-							workspace:me.getContext().getWorkspace()._ref
+				var filter = me._getUserStoryQuery(portfolioItemRecords),
+					config = {
+						model: 'HierarchicalRequirement',
+						filters: filter ? [filter] : [],
+						fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType],
+						scope: {
+							workspace:me.getContext().getWorkspace()._ref,
+							project: null
 						}
 					};
 				return me._parallelLoadWsapiStore(config).then(function(store){
@@ -299,7 +292,7 @@
 				me.MatrixProjectMap = newMatrixProjectMap;
 				me.ProjectOIDNameMap = newProjectOIDNameMap;
 						
-					//always show the teams under the train that have teamMembers > 0, even if they are not contributing this release
+					//always show the teams under the scrum-group that have teamMembers > 0, even if they are not contributing this release
 				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
 					var projectName = projectRecord.data.Name,
 						projectOID = projectRecord.data.ObjectID;
@@ -682,17 +675,17 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //3 streams
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ********/
-							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											if(!trainPortfolioProject) return Q.reject('Invalid portfolio location');
-											me.TrainPortfolioProject = trainPortfolioProject;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ********/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
-								else return Q.reject('You are not scoped to a train');
+								else return Q.reject('You are not scoped to a valid project');
 							}),
 						me._loadAppsPreference() /********* 2 ********/
 							.then(function(appsPref){

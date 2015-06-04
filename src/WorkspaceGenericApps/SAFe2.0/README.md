@@ -7,7 +7,7 @@
 	- c_Risks on the lowest PortfolioItem, (type: Text)
 	- c_Dependencies on HierarchicalRequirement, (type: Text)
 	
-	c_MoSCoW: (Undefined|Must|Should|Could|Won't)
+	c_MoSCoW: (Undefined|Must Have|Should Have|Could Have|Won't Have)
 	
 	c_TeamCommits:
 	{
@@ -65,6 +65,6 @@
 	
 ## Extra Instructions
 
-	- These SAFe apps require that you enter in your trains and portfolios in the 'Workspace Train Config' app before hand
+	- These SAFe apps require that you enter in your trains and portfolios in the 'Scrum Group Portfolio Config' app before hand
 
 	- You need to give everyone editor access to their portfolio projects and projects they have to depend on

@@ -54,7 +54,7 @@
 			
 		/**___________________________________ DATA STORE METHODS ___________________________________*/
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
@@ -74,20 +74,13 @@
 		_loadPortfolioItems: function(){ 
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-					)
-					.then(function(portfolioStore){
-						return {
-							ordinal: ordinal,
-							store: portfolioStore
-						};
-					});
+					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+						me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+					);
 				}))
-				.then(function(items){
-					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
-					me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
+				.then(function(portfolioItemStores){
+					me.PortfolioItemStore = portfolioItemStores[0];
 					me.PortfolioItemMap = {};
 					_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
 						var ordinal = 0, 
@@ -95,11 +88,11 @@
 							getParentRecord = function(child, parentList){
 								return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
 							};
-						while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItem){
-							parentPortfolioItem = getParentRecord(parentPortfolioItem, orderedPortfolioItemStores[ordinal+1].store.getRange());
+						while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
+							parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
 							++ordinal;
 						}
-						if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItem)
+						if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
 							me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
 					});
 				});
@@ -122,17 +115,15 @@
 			);
 		},
 		_loadUserStories: function(){	
-			/** what this function should REALLY do is return the user stories that contribute to this train's portfolio, regardless of project */
+			/** what this function should REALLY do is return the user stories that contribute to this scrum group's portfolio, regardless of project */
 			var me=this, 
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
-					model: me.UserStory,
-					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-					params: {
-						pagesize:200,
-						query: me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'Release', 'FormattedID', lowestPortfolioItem, 'c_Dependencies'].join(','),
-						project:me.TrainRecord.data._ref,
+					model:'HierarchicalRequirement',
+					filters: [me._getUserStoryFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'Release', 'FormattedID', lowestPortfolioItem, 'c_Dependencies'],
+					scope: {
+						project:me.ScrumGroupRootRecord.data._ref,
 						projectScopeDown:true,
 						projectScopeUp:false
 					}
@@ -434,7 +425,7 @@
 					.then(function(){ return me._updateGrids(); })
 					.then(function(){ return me._checkForDuplicates(); })
 					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){	me._alert('ERROR', reason || ''); })
+					.fail(function(reason){	me._alert('ERROR', reason); })
 					.then(function(){
 						unlockFunc();
 						me.setLoading(false); 
@@ -466,7 +457,7 @@
 					.then(function(){ return me._updateGrids(); })
 					.then(function(){ return me._checkForDuplicates(); })
 					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){ me._alert('ERROR', reason || ''); })
+					.fail(function(reason){ me._alert('ERROR', reason); })
 					.then(function(){ 
 						unlockFunc();
 						me._removeLoadingMasks();
@@ -499,16 +490,16 @@
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
 								me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
 							}),
-						me._projectInWhichTrain(me.ProjectRecord) /********* 2 ************/
-							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											me.TrainPortfolioProject = trainPortfolioProject;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 2 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
-								else return Q.reject('You are not scoped to a train');
+								else return Q.reject('You are not scoped to a valid project!');
 							}),
 						me._loadAppsPreference() /********* 3 ************/
 							.then(function(appsPref){
@@ -530,7 +521,7 @@
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -546,7 +537,7 @@
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
+				.fail(function(reason){ me._alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
@@ -1524,7 +1515,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:200,
-						text: me._getTrainName(me.TrainRecord) + " RISKS"
+						text: me._getScrumGroupName(me.ScrumGroupRootRecord) + " RISKS"
 					},{
 						xtype:'container',
 						flex:1000,
@@ -2131,7 +2122,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:400,
-						text: me._getTrainName(me.TrainRecord) + " DEPENDENCIES"
+						text: me._getScrumGroupName(me.ScrumGroupRootRecord) + " DEPENDENCIES"
 					},{
 						xtype:'container',
 						flex:1000,

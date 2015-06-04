@@ -5,7 +5,7 @@
 /************************************************ NAVBAR/CONTAINERS *****************************************/
 #navbar { padding:0 10px 0 10px; }
 #releasePicker { margin: 4px 0 0 0; }
-#trainPicker { margin: 4px 0 0 5px; }
+#scrumGroupPicker { margin: 4px 0 0 5px; }
 #manualRefreshButton { margin: 5px 0 0 5px; }
 
 #tcVelBox { padding:0 10px 0 10px; }

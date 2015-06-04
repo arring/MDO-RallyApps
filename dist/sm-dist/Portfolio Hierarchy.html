@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy639469";
+	var smAppID = "Portfolio_Hierarchy892831";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy639469";	
+					var smAppID = "Portfolio_Hierarchy892831";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							/** this extends Rally.app.app. if you want to use it's utility functions, just
 		extend IntelRallyApp instead of Rally.app.App
@@ -1429,14 +1429,29 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
+	//increase timeouts to 2 minutes since rally can be slow sometimes
+	var timeout = 120000;
+	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
+	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
+	
+	//rally's built-in jsonpproxy does not handle timeouts
+	Ext.override(Rally.sdk.data.lookback.JsonPProxy, {
+		setException: function(operation, response){
+			var error = operation.getError() || {};
+			operation.setException(Ext.apply(error, {
+				errors:(response || {}).Errors || []
+			}));
+		}
+	});
+				
 	Ext.define('IntelRallyApp', {
 		alias: 'widget.intelrallyapp',
 		extend: 'Rally.app.App',
 		
-		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
+		_ScrumGroupConfigPrefName: 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release',
+		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
 		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
@@ -1533,36 +1548,38 @@
 			});
 			return Q.all(promises);
 		},
-		_loadTrainConfig: function(){
-			/** me.TrainConfig is an array of these objects: 
+		_loadScrumGroupConfig: function(){
+			/** scrum-groups are groups of scrums that share the same portfolio. The group of scrums may or may not be a train */
+			/** me.ScrumGroupConfig is an array of these objects: 
 				{
-					TrainProjectOID: configItem.TrainProjectOID || 0,
-					TrainName: configItem.TrainName || '',
-					TrainAndPortfolioLocationTheSame: configItem.TrainAndPortfolioLocationTheSame ? true : false,
-					PortfolioProjectOID: configItem.PortfolioProjectOID || 0
+					ScrumGroupRootProjectOID: configItem.ScrumGroupRootProjectOID || 0,
+					ScrumGroupName: configItem.ScrumGroupName || '',
+					ScrumGroupAndPortfolioLocationTheSame: configItem.ScrumGroupAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: configItem.PortfolioProjectOID || 0,
+					IsTrain: configItem.IsTrain ? true : false
 				}
 			*/
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._TrainConfigPrefName,
+				filterByName: me._ScrumGroupConfigPrefName,
 				success: function(prefs) {
-					var workspaceConfigString = prefs[me._TrainConfigPrefName], trainConfig;
-					try{ trainConfig = JSON.parse(workspaceConfigString); }
-					catch(e){ trainConfig = []; }
-					me.TrainConfig = trainConfig;
+					var configString = prefs[me._ScrumGroupConfigPrefName], scrumGroupConfig;
+					try{ scrumGroupConfig = JSON.parse(configString); }
+					catch(e){ scrumGroupConfig = []; }
+					me.ScrumGroupConfig = scrumGroupConfig;
 					deferred.resolve();
 				},
 				failure: deferred.reject
 			});
 			return deferred.promise;
 		},
-		_saveTrainConfig: function(trainConfig){
+		_saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
-			s[me._TrainConfigPrefName] = JSON.stringify(trainConfig); 
+			s[me._ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._TrainConfigPrefName,
+				filterByName: me._ScrumGroupConfigPrefName,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
@@ -1574,12 +1591,13 @@
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
 					]);
 				}),
-				me._loadTrainConfig(),
+				me._loadScrumGroupConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -1604,7 +1622,7 @@
 			else {
 				me.Project.load(oid, {
 					fetch: me._projectFields,
-					context: {
+					context: { 
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					},
@@ -1638,7 +1656,6 @@
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
-						
 					},
 					callback: deferred.resolve
 				});
@@ -1651,51 +1668,51 @@
 			return me._loadPortfolioItemByType(oid, type);
 		},	
 		
-		/**************************************** Train Funcs ***************************************************/
-		_projectInWhichTrain: function(projectRecord){ 
-			/** returns train the projectRecord is in, otherwise null. */
+		/**************************************** ScrumGroup Funcs ***************************************************/
+		_projectInWhichScrumGroup: function(projectRecord){ 
+			/** returns scrumgroup the projectRecord is in, otherwise null. */
 			if(!projectRecord) return Q();
 			else {
 				var me=this,
-					foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-						return trainConfig.TrainProjectOID == projectRecord.data.ObjectID; 
+					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
 					});
-				if(foundTrainConfig) return Q(projectRecord);
+				if(foundScrumGroupConfig) return Q(projectRecord);
 				else { 
 					var parent = projectRecord.data.Parent;
 					if(!parent) return Q();
 					else {
 						return me._loadProject(parent.ObjectID).then(function(parentRecord){
-							return me._projectInWhichTrain(parentRecord);
+							return me._projectInWhichScrumGroup(parentRecord);
 						});
 					}
 				}
 			}
 		},
-		_loadTrainPortfolioProject: function(trainRecord){
-			if(!trainRecord) return Q.reject('Invalid arguments: ltpp');
+		_loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: _loadScrumGroupPortfolioProject');
 			var me=this,
-				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
 				});
-			if(!foundTrainConfig) return Q.reject('Project ' + trainRecord.data.Name + ' is not a train!');
-			if(foundTrainConfig.TrainAndPortfolioLocationTheSame) return Q(trainRecord);
-			else return me._loadProject(foundTrainConfig.PortfolioProjectOID);
+			if(!foundScrumGroupConfig) return Q.reject('Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum group!');
+			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
+			else return me._loadProject(foundScrumGroupConfig.PortfolioProjectOID);
 		},
-		_getTrainName: function(trainRecord){
-			if(!trainRecord) throw 'Invalid arguments: gtn';
+		_getScrumGroupName: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: _getScrumGroupName';
 			var me=this,
-				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
 				});
-			if(!foundTrainConfig) throw 'Project ' + trainRecord.data.Name + ' is not a train!';
-			if(foundTrainConfig.TrainName) return foundTrainConfig.TrainName;
-			else return trainRecord.data.Name;
+			if(!foundScrumGroupConfig) throw 'Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum-group!';
+			if(foundScrumGroupConfig.ScrumGroupName) return foundScrumGroupConfig.ScrumGroupName;
+			else return scrumGroupRootProjectRecord.data.Name;
 		},
-		_loadAllTrains: function(){
+		_loadAllScrumGroups: function(){
 			var me=this,
-				filter = _.reduce(me.TrainConfig, function(filter, item){
-					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: item.TrainProjectOID });
+				filter = _.reduce(me.ScrumGroupConfig, function(filter, scrumGroupConfig){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: scrumGroupConfig.ScrumGroupRootProjectOID });
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
 			if(!filter) return Q([]);
@@ -1720,6 +1737,7 @@
 		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
 			/** only pull look at PortfolioItem Release if US.Release == null */
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
 				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
 				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
@@ -1737,11 +1755,11 @@
 					value: null
 				}).and(
 					Ext.create('Rally.data.wsapi.Filter', {
-						property:'PortfolioItem.Release.ReleaseStartDate',
+						property: lowestPortfolioItem + '.Release.ReleaseStartDate',
 						operator: '<',
 						value: releaseStartPadding
 					}).and(Ext.create('Rally.data.wsapi.Filter', { 
-						property:'PortfolioItem.Release.ReleaseDate',
+						property: lowestPortfolioItem + '.Release.ReleaseDate',
 						operator: '>',
 						value: releaseEndPadding
 					}))
@@ -1759,7 +1777,7 @@
 					fetch: false,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
-						project: undefined
+						project: null
 					},
 					filters:[{ 
 						property:'Project.ObjectID', 
@@ -1856,8 +1874,8 @@
 			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
 		},
 		
-		/********************************************** Project Funcs ********************************************/	
-		//NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (fix this eventually)
+		/********************************************** Project Funcs ********************************************/
+		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -1984,7 +2002,7 @@
 					fetch: me._projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
-					context: {
+					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
 					}
@@ -2095,6 +2113,32 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		_loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>',
+						value: new Date(startDate).toISOString()
+					},{
+						property:'ReleaseStartDate',
+						operator:'<',
+						value: new Date(endDate).toISOString()
+					}]
+				});
+			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+		},
 		_loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
@@ -2181,7 +2225,7 @@
 				_.reduce(rs, function(best, r){
 					if(best===null) return r;
 					else {
-						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+						var d1 = new Date(best.data.ReleaseStartDate)*1, d2 = new Date(r.data.ReleaseStartDate)*1, now = new Date()*1;
 						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
 					}
 				}, null);
@@ -2195,7 +2239,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2210,13 +2254,14 @@
 	});
 		
 	/************************* USED FOR WORKSPACE TRAIN CONFIG *********************************************/
-	Ext.define('TrainConfigItem', {
+	Ext.define('ScrumGroupPortfolioConfigItem', {
 		extend: 'Ext.data.Model',
 		fields: [
-			{name: 'TrainProjectOID', type: 'number'},
-			{name: 'TrainName', type: 'string'},
-			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
-			{name: 'PortfolioProjectOID', type:'number'}
+			{name: 'ScrumGroupRootProjectOID', type: 'number'},
+			{name: 'ScrumGroupName', type: 'string'},
+			{name: 'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'},
+			{name: 'PortfolioProjectOID', type:'number'},
+			{name: 'IsTrain', type:'boolean'}
 		]
 	});
 }());						}
@@ -2227,7 +2272,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2294,7 +2339,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is pretty much like a mutex implementation. you call enqueue and then when its your function's turn
 	you do stuff and then you call the callback passed to you so the next function can execute.
@@ -2345,7 +2390,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							/** This class is used to save user preferences per project, that can follow the user from app to app **/
 (function(){
@@ -2392,7 +2437,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2438,7 +2483,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2472,7 +2517,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2524,7 +2569,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2591,14 +2636,14 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy639469";			
+						var smAppID = "Portfolio_Hierarchy892831";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
 	var context = Rally.environment.getContext(),
-		SETTINGS_TOKEN = (context.getProject().ObjectID + '-' + context.getUser().ObjectID);
+		SETTINGS_TOKEN = context.getProject().ObjectID;
 
 	Ext.define('IntelPortfolioHierarchy', {
 		extend: 'IntelRallyApp',
@@ -2718,7 +2763,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy639469").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy892831").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -2768,13 +2813,13 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
-							.then(function(trainRecord){
-								if(trainRecord){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											me.TrainPortfolioProject = trainPortfolioProject;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
 							}),
@@ -2819,7 +2864,7 @@
 					me.FilterOnProject = prefs.FilterOnProject || false;
 					me.FilterOnComplete = prefs.FilterOnComplete || false;
 					if(me.InferPortfolioLocation){
-						if(me.TrainPortfolioProject) me.PortfolioLocation = me.TrainPortfolioProject;
+						if(me.ScrumGroupPortfolioProject) me.PortfolioLocation = me.ScrumGroupPortfolioProject;
 						else me.PortfolioLocation = me.ProjectRecord;
 					}
 					else {
@@ -2829,15 +2874,14 @@
 							});
 						}
 						if(!me.PortfolioLocation){
-							return Q.reject('Inferring Portfolio Location. You must set the ' + 
-								'project that the portfolio resides in!');
+							return Q.reject('Error inferring Portfolio Location. You must set the project that the portfolio resides in!');
 						}
 					}
 					me._reloadEverything();
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -3060,11 +3104,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy639469";			
+				var smAppID = "Portfolio_Hierarchy892831";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy639469"
+						smAppID: "Portfolio_Hierarchy892831"
 					});
 				}
 			}());

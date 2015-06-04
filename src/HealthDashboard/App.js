@@ -2,7 +2,7 @@
 /*jslint white:true */
 var app = null;
 Ext.QuickTips.init();
-Ext.define('CustomApp', {
+Ext.define('HealthDashboard', {
     extend: 'Rally.app.App',
 
     componentCls: 'app',

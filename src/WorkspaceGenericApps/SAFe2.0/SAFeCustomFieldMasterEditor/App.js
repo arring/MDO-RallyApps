@@ -97,8 +97,8 @@
 		},	
 		_loadPortfolioItems: function(){ 
 			var me=this;
-			if(me.TrainPortfolioProject){
-				return me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, me.PortfolioItemTypes[0])
+			if(me.ScrumGroupPortfolioProject){
+				return me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, me.PortfolioItemTypes[0])
 					.then(function(portfolioItemStore){
 						me.PortfolioItemStore = portfolioItemStore;
 					});
@@ -121,6 +121,7 @@
 		},
 		_getUserStoryFilter: function(){
 			var me=this,
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
 				releaseStartPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
 				releaseEndPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
@@ -138,11 +139,11 @@
 					value: null
 				}).and(
 					Ext.create('Rally.data.wsapi.Filter', {
-						property: 'PortfolioItem.Release.ReleaseStartDate',
+						property: lowestPortfolioItemType + '.Release.ReleaseStartDate',
 						operator: '<',
 						value: releaseStartPadding
 					}).and(Ext.create('Rally.data.wsapi.Filter', { 
-						property: 'PortfolioItem.Release.ReleaseDate',
+						property: lowestPortfolioItemType + '.Release.ReleaseDate',
 						operator: '>',
 						value: releaseEndPadding
 					}))
@@ -151,16 +152,15 @@
 		},
 		_loadUserStories: function(){	
 			var me=this, 
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				config = {
 					model: me.UserStory,
-					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-					params: {
-						pagesize:200,
-						query: me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
-							'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'PortfolioItem', 'c_Dependencies'].join(','),
-						workspace: me.TrainRecord ? null : me.getContext().getWorkspace()._ref,
-						project: me.TrainRecord ? me.TrainRecord.data._ref : null,
+					filters: [me._getUserStoryFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
+						'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType, 'c_Dependencies'],
+					scope: {
+						workspace: me.ScrumGroupRootRecord ? null : me.getContext().getWorkspace()._ref,
+						project: me.ScrumGroupRootRecord ? me.ScrumGroupRootRecord.data._ref : null,
 						projectScopeUp: false,
 						projectScopeDown: true
 					}
@@ -231,7 +231,7 @@
 				me._clearEverything();
 				if(!me.ReleasePicker){ //draw these once, never remove them
 					me._loadReleasePicker();
-					me._loadTrainPicker();
+					me._loadScrumGroupPicker();
 					me._loadManualRefreshButton();
 				}		
 				me._reloadStores()
@@ -264,11 +264,11 @@
 							.then(function(allProjects){
 								me.AllProjects = allProjects;
 							}),
-						me._loadAllTrains() /************ 2 **********/
-							.then(function(trainRecords){
-								me.TrainRecord = null;
-								me.AllTrainRecords = trainRecords;
-								me.TrainNames = _.map(trainRecords, function(tr){ return {Name: me._getTrainName(tr)}; });
+						me._loadAllScrumGroups() /************ 2 **********/
+							.then(function(scrumGroupRootRecords){
+								me.ScrumGroupRootRecord = null;
+								me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+								me.ScrumGroupNames = _.map(scrumGroupRootRecords, function(sgr){ return {Name: me._getScrumGroupName(sgr)}; });
 							}),
 						me._loadAppsPreference() /********* 3 ************/
 							.then(function(appsPref){
@@ -286,11 +286,11 @@
 				})
 				.then(function(){
 					var projectOID = me.ProjectRecord.data.ObjectID;
-					if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].Train){
-						me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].Train; });
-						return me._loadTrainPortfolioProject(me.TrainRecord)
-							.then(function(trainPortfolioProject){
-								me.TrainPortfolioProject = trainPortfolioProject;
+					if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
+						me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; });
+						return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+							.then(function(scrumGroupPortfolioProject){
+								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 							});
 					} 
 				})
@@ -330,23 +330,23 @@
 				}
 			});
 		},	
-		_trainPickerSelected: function(combo, records){
+		_scrumGroupPickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
-			if((me.TrainRecord && me._getTrainName(me.TrainRecord) == records[0].data.Name) || 
-				(!me.TrainRecord && records[0].data.Name == 'All')) return;
+			if((me.ScrumGroupRootRecord && me._getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) || 
+				(!me.ScrumGroupRootRecord && records[0].data.Name == 'All')) return;
 			me.setLoading("Saving Preference");
 			if(records[0].data.Name === 'All'){
-				me.TrainRecord = null;
-				me.TrainPortfolioProject = null;
+				me.ScrumGroupRootRecord = null;
+				me.ScrumGroupPortfolioProject = null;
 			}
-			else me.TrainRecord = _.find(me.AllTrainRecords, function(tr){ return me._getTrainName(tr) == records[0].data.Name; });
+			else me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(tr){ return me._getScrumGroupName(tr) == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Train = me.TrainRecord ? me.TrainRecord.data.ObjectID : null;
+			me.AppsPref.projs[pid].ScrumGroup = me.ScrumGroupRootRecord ? me.ScrumGroupRootRecord.data.ObjectID : null;
 			Q.all([
 				me._saveAppsPreference(me.AppsPref),
-				Q(me.TrainRecord && me._loadTrainPortfolioProject(me.TrainRecord)
-					.then(function(trainPortfolioProject){
-						me.TrainPortfolioProject = trainPortfolioProject;
+				Q(me.ScrumGroupRootRecord && me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+					.then(function(scrumGroupPortfolioProject){
+						me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 					})
 				)
 			])
@@ -355,22 +355,22 @@
 			.then(function(){ me.setLoading(false); })
 			.done();
 		},	
-		_loadTrainPicker: function(){
+		_loadScrumGroupPicker: function(){
 			var me=this;
-			me.TrainPicker = me.down('#navbox_left').add({
+			me.ScrumGroupPicker = me.down('#navbox_left').add({
 				xtype:'intelfixedcombo',
 				width:240,
-				labelWidth:40,
+				labelWidth:50,
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],				
-					data: [{Name:'All'}].concat(_.sortBy(me.TrainNames, function(t){ return t.Name; }))
+					data: [{Name:'All'}].concat(_.sortBy(me.ScrumGroupNames, function(t){ return t.Name; }))
 				}),
 				displayField: 'Name',
-				fieldLabel: 'Train:',
-				value: me.TrainRecord ? me._getTrainName(me.TrainRecord) : 'All',
+				fieldLabel: 'Portfolio:',
+				value: me.ScrumGroupRootRecord ? me._getScrumGroupName(me.ScrumGroupRootRecord) : 'All',
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._trainPickerSelected.bind(me)
+					select: me._scrumGroupPickerSelected.bind(me)
 				}
 			});
 		},	

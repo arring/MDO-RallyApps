@@ -93,19 +93,12 @@
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-					)
-					.then(function(portfolioStore){
-						return {
-							ordinal: ordinal,
-							store: portfolioStore
-						};
-					});
+						me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+					);
 				}))
-				.then(function(items){
-					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
-					me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
+				.then(function(portfolioItemStores){
+					me.PortfolioItemStore = portfolioItemStores[0];
 					me.PortfolioItemMap = {};
 					_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItem){
 						var ordinal = 0, 
@@ -113,11 +106,11 @@
 							getParentRecord = function(child, parentList){
 								return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
 							};
-						while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItem){
-							parentPortfolioItem = getParentRecord(parentPortfolioItem, orderedPortfolioItemStores[ordinal+1].store.getRange());
+						while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
+							parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
 							++ordinal;
 						}
-						if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItem)
+						if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
 							me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
 					});
 				});
@@ -187,14 +180,12 @@
 			var me=this, 
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
-					model: me.UserStory,
-					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-					params: {
-						pagesize:200,
-						query: me._getUserStoryFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
-							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'DirectChildrenCount',					
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'].join(','),
+					model: 'HierarchicalRequirement',
+					filters: [me._getUserStoryFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
+						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'DirectChildrenCount',					
+						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'],
+					scope: {
 						project:me.ProjectRecord.data._ref,
 						projectScopeDown:false,
 						projectScopeUp:false
@@ -224,16 +215,14 @@
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
-					model: me.UserStory,
-					url: me.BaseUrl + '/slm/webservice/v2.0/HierarchicalRequirement',
-					params: {
-						pagesize:200,
-						query:me._getExtraDataIntegrityUserStoriesFilter().toString(),
-						fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
-							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem].join(','),
-						workspace:me.getContext().getWorkspace()._ref,
-						includePermissions:true
+					model: 'HierarchicalRequirement',
+					filters: [me._getExtraDataIntegrityUserStoriesFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
+						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
+						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
+					scope: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
 					}
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -693,7 +682,7 @@
 			me.setLoading('Loading Data');
 			if(!me.ReleasePicker){ //draw these once, never remove them
 				me._loadReleasePicker();
-				me._loadTrainPicker();
+				me._loadScrumGroupPicker();
 				me._loadRefreshIntervalCombo();
 				me._loadManualRefreshButton();
 			}		
@@ -702,7 +691,7 @@
 					.then(function(){ return me._updateGrids(); })
 					.then(function(){ return me._checkForDuplicates(); })
 					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){	me._alert('ERROR', reason || ''); })
+					.fail(function(reason){	me._alert('ERROR', reason); })
 					.then(function(){
 						unlockFunc();
 						me.setLoading(false); 
@@ -740,7 +729,7 @@
 					.then(function(){ return me._updateGrids(); })
 					.then(function(){ return me._checkForDuplicates(); })
 					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){ me._alert('ERROR', reason || ''); })
+					.fail(function(reason){ me._alert('ERROR', reason); })
 					.then(function(){ 
 						unlockFunc();
 						me._removeLoadingMasks();
@@ -788,21 +777,23 @@
 								if(!me.ProjectsWithTeamMembers[me.ProjectRecord.data.ObjectID])
 									return Q.reject('Please scope to a project that has team members!');
 							}),
-						me._projectInWhichTrain(me.ProjectRecord) /********* 2 ************/
-							.then(function(trainRecord){
-								if(trainRecord){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											me.TrainPortfolioProject = trainPortfolioProject;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 2 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
-								else me.ProjectNotInTrain = true;
+								else me.ProjectNotInScrumGroup = true;
 							}),
-						me._loadAllTrains() /********* 3 ************/
-							.then(function(trainRecords){
-								me.AllTrainRecords = trainRecords;
-								me.TrainNames = _.map(trainRecords, function(tr){ return {Name: me._getTrainName(tr)}; });
+						me._loadAllScrumGroups() /********* 3 ************/
+							.then(function(scrumGroupRootRecords){
+								me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+								me.ScrumGroupNames = _.sortBy(_.map(scrumGroupRootRecords, 
+									function(sgr){ return {Name: me._getScrumGroupName(sgr)}; }),
+									function(sgn){ return sgn.Name; });
 							}),
 						me._loadAppsPreference() /********* 4 ************/
 							.then(function(appsPref){
@@ -827,16 +818,16 @@
 					]);
 				})
 				.then(function(){
-					if(me.ProjectNotInTrain){
+					if(me.ProjectNotInScrumGroup){
 						var projectOID = me.ProjectRecord.data.ObjectID;
-						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].Train){
-							me.TrainRecord = _.find(me.AllTrainRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].Train; });
-							if(!me.TrainRecord) me.TrainRecord = me.AllTrainRecords[0];
+						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
+							me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; });
+							if(!me.ScrumGroupRootRecord) me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
 						} 
-						else me.TrainRecord = me.AllTrainRecords[0];
-						return me._loadTrainPortfolioProject(me.TrainRecord)
-							.then(function(trainPortfolioProject){
-								me.TrainPortfolioProject = trainPortfolioProject;
+						else me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
+						return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+							.then(function(scrumGroupPortfolioProject){
+								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 							});
 					}
 				})
@@ -846,7 +837,7 @@
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -862,7 +853,7 @@
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
+				.fail(function(reason){ me._alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
@@ -879,42 +870,42 @@
 				}
 			});
 		},	
-		_trainPickerSelected: function(combo, records){
+		_scrumGroupPickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
-			if(me._getTrainName(me.TrainRecord) == records[0].data.Name) return;
+			if(me._getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) return;
 			me.setLoading('Loading Data');
-			me.TrainRecord = _.find(me.AllTrainRecords, function(tr){ return me._getTrainName(tr) == records[0].data.Name; });
+			me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(sgr){ return me._getScrumGroupName(sgr) == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Train = me.TrainRecord.data.ObjectID;
+			me.AppsPref.projs[pid].ScrumGroup = me.ScrumGroupRootRecord.data.ObjectID;
 			Q.all([
-				(me.ProjectNotInTrain ? me._saveAppsPreference(me.AppsPref) : Q()), //Do not set a preference for scrums in trains
-				me._loadTrainPortfolioProject(me.TrainRecord)
-					.then(function(trainPortfolioProject){
-						me.TrainPortfolioProject = trainPortfolioProject;
+				(me.ProjectNotInScrumGroup ? me._saveAppsPreference(me.AppsPref) : Q()), //Do not set a preference for scrums in scrum-groups
+				me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+					.then(function(scrumGroupPortfolioProject){
+						me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 					})
 			])
 				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
+				.fail(function(reason){ me._alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},	
-		_loadTrainPicker: function(){
+		_loadScrumGroupPicker: function(){
 			var me=this;
 			me.down('#navboxLeft').add({
 				xtype:'intelfixedcombo',
-				id:'trainPicker',
+				id:'scrumGroupPicker',
 				width:240,
-				labelWidth:40,
+				labelWidth:50,
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name'],				
-					data: me.TrainNames
+					data: me.ScrumGroupNames
 				}),
 				displayField: 'Name',
-				fieldLabel: 'Train:',
-				value: me._getTrainName(me.TrainRecord),
+				fieldLabel: 'Portfolio:',
+				value: me._getScrumGroupName(me.ScrumGroupRootRecord),
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._trainPickerSelected.bind(me)
+					select: me._scrumGroupPickerSelected.bind(me)
 				}
 			});
 		},	
@@ -925,7 +916,7 @@
 			me._setRefreshInterval();
 			me.setLoading("Saving Preference");
 			me._saveAppsPreference(me.AppsPref)
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
+				.fail(function(reason){ me._alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},			
@@ -1882,7 +1873,7 @@
 							me._loadPortfolioItemByOrdinal(teamCommitsRecord.data.PortfolioItemObjectID, 0).then(function(realPortfolioItem){
 								if(realPortfolioItem) return me._setTeamCommit(realPortfolioItem, tc);
 							})
-							.fail(function(reason){ me._alert('ERROR', reason || ''); })
+							.fail(function(reason){ me._alert('ERROR', reason); })
 							.then(function(){ 
 								unlockFunc();
 								me.TeamCommitsGrid.setLoading(false);
@@ -2579,7 +2570,7 @@
 									var oldRealRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);
 									if(oldRealRiskData) return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
 								})
-								.fail(function(reason){ me._alert('ERROR:', reason || ''); })
+								.fail(function(reason){ me._alert('ERROR:', reason); })
 								.then(function(){
 									unlockFunc();
 									me.CustomRisksStore.remove(riskRecord);
@@ -3341,13 +3332,13 @@
 													return me._addPredecessor(newUserStoryRecord, localPredecessorData, me.ProjectRecord, me.DependenciesParsedData); 
 												})
 												.then(function(){ predecessorRecord.set('Edited', false); })
-												.fail(function(reason){ me._alert('ERROR:', reason || ''); })
+												.fail(function(reason){ me._alert('ERROR:', reason); })
 												.then(function(){	predecessorRecord.endEdit(); });
 										});
 									});
 								});
 							})
-							.fail(function(reason){ me._alert('ERROR:', reason || ''); })
+							.fail(function(reason){ me._alert('ERROR:', reason); })
 							.then(function(){
 								unlockFunc();
 								updatePredecessorFilterOptions();
@@ -3394,7 +3385,7 @@
 									});
 								})
 								.then(function(){ me.CustomPredecessorStore.remove(predecessorRecord); })
-								.fail(function(reason){ me._alert('ERROR', reason || ''); })
+								.fail(function(reason){ me._alert('ERROR', reason); })
 								.then(function(){
 									unlockFunc();
 									updatePredecessorFilterOptions();
@@ -4003,12 +3994,12 @@
 									if(realSuccessorData){
 										me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData)
 											.then(function(){ me.CustomSuccessorStore.remove(successorRecord); })
-											.fail(function(reason){ me._alert('ERROR', reason || ''); })
+											.fail(function(reason){ me._alert('ERROR', reason); })
 											.done();
 									}
 									else me.CustomSuccessorStore.remove(successorRecord);
 								}
-								else me._alert('ERROR', reason || '');
+								else me._alert('ERROR', reason);
 							})
 							.then(function(){
 								unlockFunc();
