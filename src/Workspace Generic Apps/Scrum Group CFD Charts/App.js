@@ -1,10 +1,10 @@
-/** this app shows the cumulative flow charts for a train, and the scrums in it
+/** this app shows the cumulative flow charts for a scrum-group, and the scrums in it
 	it is scoped to a specific release (and optionally) top portfolioItem
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('TrainCfdCharts', { 
+	Ext.define('ScrumGroupCfdCharts', { 
 		extend: 'IntelRallyApp',
 		cls:'app',
 		requires:[
@@ -54,117 +54,82 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			me.AllSnapshots = [];
 			me.TeamStores = {};
-			return Q.all(_.map(me.TrainChildren, function(project){
+			return Q.all(_.map(me.LeafProjects, function(project){
 				var parallelLoaderConfig = {
-					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-					params: {
+					context:{ 
 						workspace: me.getContext().getWorkspace()._ref,
-						compress:true,
-						find: JSON.stringify({ 
-							_TypeHierarchy: 'HierarchicalRequirement',
-							Children: null,
-							Project: project.data.ObjectID,
-							_ValidFrom: { $lte: releaseEnd },
-							_ValidTo: { $gt: releaseStart }
-						}),
-						fields:JSON.stringify(['ScheduleState', 'Release', 'PlanEstimate', lowestPortfolioItem, '_ValidFrom', '_ValidTo', 'ObjectID']),
-						hydrate:JSON.stringify(['ScheduleState'])
-					}
+						project: null
+					},
+					compress:true,
+					findConfig: { 
+						_TypeHierarchy: 'HierarchicalRequirement',
+						Children: null,
+						Project: project.data.ObjectID,
+						_ValidFrom: { $lte: releaseEnd },
+						_ValidTo: { $gt: releaseStart }
+					},
+					fetch: ['ScheduleState', 'Release', 'PlanEstimate', lowestPortfolioItem, '_ValidFrom', '_ValidTo', 'ObjectID'],
+					hydrate: ['ScheduleState']
 				};
-				return me._parallelLoadLookbackStore(parallelLoaderConfig)
-					.then(function(snapshotStore){ 
-						//only keep snapshots where (release.name == releasName || (!release && portfolioItem.Release.Name == releaseName))
-						//	AND have length > 0 (another bug in LBAPI!)
-						var records = _.filter(snapshotStore.getRange(), function(snapshot){
-							return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-									(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
-								(snapshot.data._ValidFrom != snapshot.data._ValidTo);
-						});
-						
-						//BUG IN LBAPI with duplicates. must workaround it....
-						var tmpRecs = records.slice(),
-							convertDupes = function(dupes){
-								return _.map(_.sortBy(dupes, 
-									function(d){ return new Date(d.data._ValidFrom); }),
-									function(d, i, a){ if(i < a.length-1) d.raw._ValidTo = a[i+1].raw._ValidFrom; return d; });
-							};
-						for(var i=tmpRecs.length-1;i>=0;--i){
-							var dupes = [];
-							for(var j=i-1;j>=0;--j){
-								if(tmpRecs[i].data.ObjectID == tmpRecs[j].data.ObjectID){
-									if(tmpRecs[i].data._ValidTo == tmpRecs[j].data._ValidTo){
-										dupes.push(tmpRecs.splice(j, 1)[0]);
-										--i;
-									}
-								}
-							}
-							if(dupes.length){
-								dupes.push(tmpRecs.splice(i, 1)[0]);
-								tmpRecs = tmpRecs.concat(convertDupes(dupes));
-							}
-						}
-						records = tmpRecs;
-						//END BUG IN LBAPI Polyfill thing
-						
-						if(records.length > 0){
-							me.TeamStores[project.data.Name] = records;
-							me.AllSnapshots = me.AllSnapshots.concat(records);
-						}
-					});
+				return me._parallelLoadLookbackStore(parallelLoaderConfig).then(function(snapshotStore){ 
+					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
+					//	AND have length > 0 (another bug ('feature') in LBAPI!)
+					var records = _.filter(snapshotStore.getRange(), function(snapshot){
+						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
+							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
+					});						
+					if(records.length > 0){
+						me.TeamStores[project.data.Name] = records;
+						me.AllSnapshots = me.AllSnapshots.concat(records);
+					}
+				});
 			}));
 		},				
 		_loadPortfolioItems: function(){ 
 			var me=this;
 			
 			me.LowestPortfolioItemsHash = {};
-			me.PortfolioItemMap = {}; 
+			me.PortfolioItemMap = {}; //map of lowestPortfolioItem -> its upper-most portfolioItem
 			me.TopPortfolioItemNames = [];
 			me.CurrentTopPortfolioItemName = null;
 			
-			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+			return Q.all(_.map(me.PortfolioItemTypes, function(type){
 				//NOTE: we are loading ALL lowestPortfolioItems b/c sometimes we run into issues where
 				//userstories in one release are under portfolioItems in another release (probably a user
 				// mistake). And this messes up the numbers in the topPortfolioItem filter box
-				return me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type)
-					.then(function(portfolioStore){
-						return {
-							ordinal: ordinal,
-							store: portfolioStore
+				return me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type);			
+			}))
+			.then(function(portfolioItemStores){
+				var lowestPortfolioItemStore = portfolioItemStores[0];
+				_.each(lowestPortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
+					var ordinal = 0, 
+						parentPortfolioItem = lowPortfolioItem,
+						getParentRecord = function(child, parentList){
+							return _.find(parentList, function(parent){ 
+								return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+							});
 						};
-					});
-				}))
-				.then(function(items){
-					var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; }),
-						lowestPortfolioItemStore = orderedPortfolioItemStores[0].store;
-					_.each(lowestPortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
-						var ordinal = 0, 
-							parentPortfolioItem = lowPortfolioItem,
-							getParentRecord = function(child, parentList){
-								return _.find(parentList, function(parent){ 
-									return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
-								});
-							};
-						while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItem){
-							parentPortfolioItem = getParentRecord(parentPortfolioItem, orderedPortfolioItemStores[ordinal+1].store.getRange());
-							++ordinal;
-						}
-						if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItem)
-							me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
-					});
-					
-					me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
-						function(name){ return {Name: name}; }),
-						function(name){ return name.Name; });
-					me.LowestPortfolioItemsHash = _.reduce(lowestPortfolioItemStore.getRange(), function(hash, r){
-						hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
-						return hash;
-					}, {});
+					while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
+						parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
+						++ordinal;
+					}
+					if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
+						me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
 				});
+				
+				me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
+					function(name){ return {Name: name}; }),
+					function(name){ return name.Name; });
+				me.LowestPortfolioItemsHash = _.reduce(lowestPortfolioItemStore.getRange(), function(hash, r){
+					hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
+					return hash;
+				}, {});
+			});
 		},
 		_loadAllChildReleases: function(){ 
 			var me = this, releaseName = me.ReleaseRecord.data.Name;			
-			return me._loadReleasesByNameUnderProject(releaseName, me.TrainRecord)
+			return me._loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 						hash[rr.data.ObjectID] = true;
@@ -234,20 +199,20 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //parallel loads
-						me._projectInWhichTrain(me.ProjectRecord) /******** load stream 1 *****/
-							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(trainRecord);
+						me._projectInWhichScrumGroup(me.ProjectRecord) /******** load stream 1 *****/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(scrumGroupRootRecord);
 								}
-								else return Q.reject('You are not scoped to a train.');
+								else return Q.reject('You are not scoped to a valid project.');
 							})
-							.then(function(trainPortfolioProject){
-								me.TrainPortfolioProject = trainPortfolioProject;
-								return me._loadAllChildrenProjects(me.TrainRecord);
+							.then(function(scrumGroupPortfolioProject){
+								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+								return me._loadAllLeafProjects(me.ScrumGroupRootRecord);
 							})
 							.then(function(scrums){
-								me.TrainChildren = _.filter(scrums, function(s){ return s.data.Children.Count === 0 && s.data.TeamMembers.Count > 0; });
+								me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
 							}),
 						me._loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
@@ -266,7 +231,7 @@
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -284,7 +249,7 @@
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 					me.setLoading(false);
 				})
 				.done();
@@ -338,7 +303,7 @@
 					scheduleStates: me.ScheduleStates
 				});
 
-			/************************************** Train CHART STUFF *********************************************/
+			/************************************** Scrum Group CHART STUFF *********************************************/
 			var updateOptions = {trendType:'Last2Sprints'},
 				aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
@@ -351,7 +316,7 @@
 							itemWidth:100
 						},
 						title: {
-							text: me._getTrainName(me.TrainRecord)
+							text: me._getScrumGroupName(me.ScrumGroupRootRecord)
 						},
 						subtitle:{
 							text: me.ReleaseRecord.data.Name.split(' ')[0] + 

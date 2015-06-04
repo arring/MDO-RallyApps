@@ -12,7 +12,12 @@
 				var deferred = Q.defer(),
 					store = Ext.create('Rally.data.wsapi.Store', _.merge({}, config, {
 						pageSize:200,
-						listeners:{ load: deferred.resolve }
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
 					}));
 				store.loadPage(page);
 				return deferred.promise;
@@ -42,7 +47,12 @@
 				var deferred = Q.defer(),
 					store = Ext.create('Rally.data.lookback.SnapshotStore', _.merge({}, config, {
 						pageSize:20000,
-						listeners:{ load: deferred.resolve }
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
 					}));
 				store.loadPage(page);
 				return deferred.promise;

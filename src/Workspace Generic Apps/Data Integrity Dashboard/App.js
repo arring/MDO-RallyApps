@@ -76,18 +76,18 @@
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
 				userStoryProjectFilter;
-			if(!me.TrainRecord) //scoped outside train
+			if(!me.ScrumGroupRootRecord) //scoped outside scrum group
 				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { 
 					property: 'Project.ObjectID', 
 					value: me.CurrentScrum.data.ObjectID 
 				});
-			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within train
+			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within scrum group
 				userStoryProjectFilter = _.reduce(me.LeafProjects, function(filter, projectData, projectOID){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: projectOID});
 					if(filter) return filter.or(newFilter);
 					else return newFilter;
 				}, null);
-			else throw "Train has no Scrums!";
+			else throw "No scrums were found!";
 
 			return Rally.data.wsapi.Filter.and([
 				userStoryProjectFilter, 
@@ -103,7 +103,10 @@
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
-					context:{ workspace:me.getContext().getWorkspace()._ref }
+					context:{ 
+						workspace:me.getContext().getWorkspace()._ref, 
+						project:null 
+					}
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
@@ -119,16 +122,16 @@
 		_getLowestPortfolioItems: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
-			if(!me.TrainRecord) return Q();
+			if(!me.ScrumGroupRootRecord) return Q();
 			var config = {
 				model: 'PortfolioItem/' + lowestPortfolioItem,
 				filters: [me._getLowestPortfolioItemFilter()],
 				fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
 					'Description', 'FormattedID', 'UserStories'],
 				context: {
-					project:me.TrainPortfolioProject.data._ref,
-					projectScopeUp:false,
-					projectScopeDown:true
+					project: me.ScrumGroupPortfolioProject.data._ref,
+					projectScopeUp: false,
+					projectScopeDown: true
 				}
 			};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -226,33 +229,28 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //two streams
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
-							.then(function(trainRecord){
-								if(trainRecord){
-									if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
-									else me._isScopedToTrain = true;
-									me.TrainRecord = trainRecord;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
 									return Q.all([
-										me._loadAllLeafProjects(me.TrainRecord)
-											.then(function(leftProjects){
-												me.LeafProjects = leftProjects;
-												if(me._isScopedToTrain) me.CurrentScrum = null;
-												else me.CurrentScrum = me.ProjectRecord;
-											}),
-										me._loadTrainPortfolioProject(me.TrainRecord)
-											.then(function(trainPortfolioProject){
-												me.TrainPortfolioProject = trainPortfolioProject;
-												var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
-												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType);
-											})
-											.then(function(topPortfolioItemStore){ 
-												me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
-											})
+										me._loadAllLeafProjects(me.ScrumGroupRootRecord).then(function(leafProjects){
+											me.LeafProjects = leafProjects;
+											if(_.find(me.LeafProjects, function(p){ return p.data.ObjectID == me.ProjectRecord.data.ObjectID; }))
+												me.CurrentScrum = me.ProjectRecord;
+											else me.CurrentScrum = null;
+										}),
+										me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+											var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
+											return me._loadPortfolioItemsOfType(scrumGroupPortfolioProject, topPortfolioItemType);
+										})
+										.then(function(topPortfolioItemStore){ 
+											me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
+										})
 									]);
-								} else {
-									me.CurrentScrum = me.ProjectRecord;
-									me._isScopedToTrain = false;
-								}
+								} 
+								else me.CurrentScrum = me.ProjectRecord;
 							}),
 						me._loadAppsPreference() /********* 2 ************/
 							.then(function(appsPref){
@@ -271,7 +269,7 @@
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -288,7 +286,7 @@
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 					me.setLoading(false);
 				})
 				.done();
@@ -318,7 +316,7 @@
 		},
 		_loadScrumPicker: function(){
 			var me=this;
-			if(!me.TrainRecord) return; //don't show for non-train scrums
+			if(!me.ScrumGroupRootRecord) return; //don't show for scrums not in scrum-group
 			me.ScrumPicker = Ext.getCmp('controlsContainer').add({
 				xtype:'intelcombobox',
 				width: 200,
@@ -393,7 +391,7 @@
 				items:[{
 					xtype:'container',
 					html:'<span class="integrity-inticator-title">' + 
-						(me.CurrentScrum ? me.CurrentScrum.data.Name : me.TrainRecord.data.Name) + ' Integrity <em>(% Correct)</em></span><br/>' + 
+						(me.CurrentScrum ? me.CurrentScrum.data.Name : me.ScrumGroupRootRecord.data.Name) + ' Integrity <em>(% Correct)</em></span><br/>' + 
 						'<span class="integrity-indicator-value"><b>Stories: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' +
 						'<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'
 				}]
@@ -723,7 +721,7 @@
 		_buildRibbon: function() {
 			var me=this;
 			$('#pie').highcharts(me._getPieChartConfig());
-			if(!me.TrainRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-train scrums
+			if(!me.ScrumGroupRootRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-scrum-group scrums
 			else {
 				$('#heatmap').highcharts(me._getHeatMapConfig());
 				me._hideHighchartsLinks();
@@ -732,9 +730,9 @@
 		
 		/******************************************************* Render GRIDS ********************************************************/
 		_getFilteredStories: function(){
-			/** gets the stories in this release for the scoped scrum or the train **/
+			/** gets the stories in this release for the scoped scrum or the scrum-group **/
 			var me=this; 
-			if(me.TrainRecord){
+			if(me.ScrumGroupRootRecord){
 				if(me.CurrentScrum) return _.filter(me.UserStoryStore.getRange(), function(item){ 
 					return item.data.Project.ObjectID == me.CurrentScrum.data.ObjectID;
 				});

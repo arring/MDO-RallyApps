@@ -18,11 +18,26 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
+	//increase timeouts to 2 minutes since rally can be slow sometimes
+	var timeout = 120000;
+	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
+	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
+	
+	//rally's built-in jsonpproxy does not handle timeouts
+	Ext.override(Rally.sdk.data.lookback.JsonPProxy, {
+		setException: function(operation, response){
+			var error = operation.getError() || {};
+			operation.setException(Ext.apply(error, {
+				errors:(response || {}).Errors || []
+			}));
+		}
+	});
+				
 	Ext.define('IntelRallyApp', {
 		alias: 'widget.intelrallyapp',
 		extend: 'Rally.app.App',
 		
-		_TrainConfigPrefName: 'intel-train-config', //preference to store train config for workspace
+		_ScrumGroupConfigPrefName: 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
 		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
@@ -122,36 +137,38 @@
 			});
 			return Q.all(promises);
 		},
-		_loadTrainConfig: function(){
-			/** me.TrainConfig is an array of these objects: 
+		_loadScrumGroupConfig: function(){
+			/** scrum-groups are groups of scrums that share the same portfolio. The group of scrums may or may not be a train */
+			/** me.ScrumGroupConfig is an array of these objects: 
 				{
-					TrainProjectOID: configItem.TrainProjectOID || 0,
-					TrainName: configItem.TrainName || '',
-					TrainAndPortfolioLocationTheSame: configItem.TrainAndPortfolioLocationTheSame ? true : false,
-					PortfolioProjectOID: configItem.PortfolioProjectOID || 0
+					ScrumGroupRootProjectOID: configItem.ScrumGroupRootProjectOID || 0,
+					ScrumGroupName: configItem.ScrumGroupName || '',
+					ScrumGroupAndPortfolioLocationTheSame: configItem.ScrumGroupAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: configItem.PortfolioProjectOID || 0,
+					IsTrain: configItem.IsTrain ? true : false
 				}
 			*/
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._TrainConfigPrefName,
+				filterByName: me._ScrumGroupConfigPrefName,
 				success: function(prefs) {
-					var workspaceConfigString = prefs[me._TrainConfigPrefName], trainConfig;
-					try{ trainConfig = JSON.parse(workspaceConfigString); }
-					catch(e){ trainConfig = []; }
-					me.TrainConfig = trainConfig;
+					var configString = prefs[me._ScrumGroupConfigPrefName], scrumGroupConfig;
+					try{ scrumGroupConfig = JSON.parse(configString); }
+					catch(e){ scrumGroupConfig = []; }
+					me.ScrumGroupConfig = scrumGroupConfig;
 					deferred.resolve();
 				},
 				failure: deferred.reject
 			});
 			return deferred.promise;
 		},
-		_saveTrainConfig: function(trainConfig){
+		_saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
-			s[me._TrainConfigPrefName] = JSON.stringify(trainConfig); 
+			s[me._ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._TrainConfigPrefName,
+				filterByName: me._ScrumGroupConfigPrefName,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
@@ -163,13 +180,13 @@
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
-					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryINRelease false for those who: (release == nulll && portfolioItrem.release.name == me.ReleaseRecord.data.Name)). that is why this line is necessary
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
 					]);
 				}),
-				me._loadTrainConfig(),
+				me._loadScrumGroupConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -194,7 +211,10 @@
 			else {
 				me.Project.load(oid, {
 					fetch: me._projectFields,
-					context: { workspace: me.getContext().getWorkspace()._ref},
+					context: { 
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
 					callback: deferred.resolve
 				});
 				return deferred.promise;
@@ -225,7 +245,6 @@
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
-						
 					},
 					callback: deferred.resolve
 				});
@@ -238,51 +257,51 @@
 			return me._loadPortfolioItemByType(oid, type);
 		},	
 		
-		/**************************************** Train Funcs ***************************************************/
-		_projectInWhichTrain: function(projectRecord){ 
-			/** returns train the projectRecord is in, otherwise null. */
+		/**************************************** ScrumGroup Funcs ***************************************************/
+		_projectInWhichScrumGroup: function(projectRecord){ 
+			/** returns scrumgroup the projectRecord is in, otherwise null. */
 			if(!projectRecord) return Q();
 			else {
 				var me=this,
-					foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-						return trainConfig.TrainProjectOID == projectRecord.data.ObjectID; 
+					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
 					});
-				if(foundTrainConfig) return Q(projectRecord);
+				if(foundScrumGroupConfig) return Q(projectRecord);
 				else { 
 					var parent = projectRecord.data.Parent;
 					if(!parent) return Q();
 					else {
 						return me._loadProject(parent.ObjectID).then(function(parentRecord){
-							return me._projectInWhichTrain(parentRecord);
+							return me._projectInWhichScrumGroup(parentRecord);
 						});
 					}
 				}
 			}
 		},
-		_loadTrainPortfolioProject: function(trainRecord){
-			if(!trainRecord) return Q.reject('Invalid arguments: ltpp');
+		_loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: _loadScrumGroupPortfolioProject');
 			var me=this,
-				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
 				});
-			if(!foundTrainConfig) return Q.reject('Project ' + trainRecord.data.Name + ' is not a train!');
-			if(foundTrainConfig.TrainAndPortfolioLocationTheSame) return Q(trainRecord);
-			else return me._loadProject(foundTrainConfig.PortfolioProjectOID);
+			if(!foundScrumGroupConfig) return Q.reject('Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum group!');
+			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
+			else return me._loadProject(foundScrumGroupConfig.PortfolioProjectOID);
 		},
-		_getTrainName: function(trainRecord){
-			if(!trainRecord) throw 'Invalid arguments: gtn';
+		_getScrumGroupName: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: _getScrumGroupName';
 			var me=this,
-				foundTrainConfig = _.find(me.TrainConfig, function(trainConfig){ 
-					return trainConfig.TrainProjectOID == trainRecord.data.ObjectID; 
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
 				});
-			if(!foundTrainConfig) throw 'Project ' + trainRecord.data.Name + ' is not a train!';
-			if(foundTrainConfig.TrainName) return foundTrainConfig.TrainName;
-			else return trainRecord.data.Name;
+			if(!foundScrumGroupConfig) throw 'Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum-group!';
+			if(foundScrumGroupConfig.ScrumGroupName) return foundScrumGroupConfig.ScrumGroupName;
+			else return scrumGroupRootProjectRecord.data.Name;
 		},
-		_loadAllTrains: function(){
+		_loadAllScrumGroups: function(){
 			var me=this,
-				filter = _.reduce(me.TrainConfig, function(filter, item){
-					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: item.TrainProjectOID });
+				filter = _.reduce(me.ScrumGroupConfig, function(filter, scrumGroupConfig){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: scrumGroupConfig.ScrumGroupRootProjectOID });
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
 			if(!filter) return Q([]);
@@ -307,6 +326,7 @@
 		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
 			/** only pull look at PortfolioItem Release if US.Release == null */
 			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
 				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
 				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
@@ -324,11 +344,11 @@
 					value: null
 				}).and(
 					Ext.create('Rally.data.wsapi.Filter', {
-						property:'PortfolioItem.Release.ReleaseStartDate',
+						property: lowestPortfolioItem + '.Release.ReleaseStartDate',
 						operator: '<',
 						value: releaseStartPadding
 					}).and(Ext.create('Rally.data.wsapi.Filter', { 
-						property:'PortfolioItem.Release.ReleaseDate',
+						property: lowestPortfolioItem + '.Release.ReleaseDate',
 						operator: '>',
 						value: releaseEndPadding
 					}))
@@ -346,7 +366,7 @@
 					fetch: false,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
-						project: undefined
+						project: null
 					},
 					filters:[{ 
 						property:'Project.ObjectID', 
@@ -443,12 +463,8 @@
 			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
 		},
 		
-		/********************************************** Project Funcs ********************************************/	
-		/**
-			NOTE: these Project Funcs do not work with sdk 2.0. You have to use sdk2.0rc3 for them to work properly (another rally bug).
-						The issue is that Rally incorrectly returns a bunch of these projects with no 'Parent' field with sdk 2.0 
-						FIGURE THIS OUT SO WE CAN UPGRADE TO V2.0
-		*/
+		/********************************************** Project Funcs ********************************************/
+		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
 		__storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
@@ -575,7 +591,7 @@
 					fetch: me._projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
-					context: {
+					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project:null
 					}
@@ -694,7 +710,7 @@
 					autoLoad:false,
 					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
 					context:{
-						workspace: this.getContext().getWorkspace()._ref,
+						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					},
 					filters:[{
@@ -702,12 +718,12 @@
 						value: projectRecord.data.ObjectID
 					},{
 						property:'ReleaseDate',
-						operator:'<=',
-						value: new Date(endDate).toISOString()
-					},{
-						property:'ReleaseDate',
-						operator:'>=',
+						operator:'>',
 						value: new Date(startDate).toISOString()
+					},{
+						property:'ReleaseStartDate',
+						operator:'<',
+						value: new Date(endDate).toISOString()
 					}]
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
@@ -798,7 +814,7 @@
 				_.reduce(rs, function(best, r){
 					if(best===null) return r;
 					else {
-						var d1 = new Date(best.data.ReleaseStartDate), d2 = new Date(r.data.ReleaseStartDate), now = new Date();
+						var d1 = new Date(best.data.ReleaseStartDate)*1, d2 = new Date(r.data.ReleaseStartDate)*1, now = new Date()*1;
 						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
 					}
 				}, null);
@@ -818,13 +834,14 @@
 	});
 		
 	/************************* USED FOR WORKSPACE TRAIN CONFIG *********************************************/
-	Ext.define('TrainConfigItem', {
+	Ext.define('ScrumGroupPortfolioConfigItem', {
 		extend: 'Ext.data.Model',
 		fields: [
-			{name: 'TrainProjectOID', type: 'number'},
-			{name: 'TrainName', type: 'string'},
-			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
-			{name: 'PortfolioProjectOID', type:'number'}
+			{name: 'ScrumGroupRootProjectOID', type: 'number'},
+			{name: 'ScrumGroupName', type: 'string'},
+			{name: 'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'},
+			{name: 'PortfolioProjectOID', type:'number'},
+			{name: 'IsTrain', type:'boolean'}
 		]
 	});
 }());
@@ -1140,7 +1157,12 @@
 				var deferred = Q.defer(),
 					store = Ext.create('Rally.data.wsapi.Store', _.merge({}, config, {
 						pageSize:200,
-						listeners:{ load: deferred.resolve }
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
 					}));
 				store.loadPage(page);
 				return deferred.promise;
@@ -1170,7 +1192,12 @@
 				var deferred = Q.defer(),
 					store = Ext.create('Rally.data.lookback.SnapshotStore', _.merge({}, config, {
 						pageSize:20000,
-						listeners:{ load: deferred.resolve }
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
 					}));
 				store.loadPage(page);
 				return deferred.promise;
@@ -1403,18 +1430,18 @@
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
 				userStoryProjectFilter;
-			if(!me.TrainRecord) //scoped outside train
+			if(!me.ScrumGroupRootRecord) //scoped outside scrum group
 				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { 
 					property: 'Project.ObjectID', 
 					value: me.CurrentScrum.data.ObjectID 
 				});
-			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within train
+			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within scrum group
 				userStoryProjectFilter = _.reduce(me.LeafProjects, function(filter, projectData, projectOID){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: projectOID});
 					if(filter) return filter.or(newFilter);
 					else return newFilter;
 				}, null);
-			else throw "Train has no Scrums!";
+			else throw "No scrums were found!";
 
 			return Rally.data.wsapi.Filter.and([
 				userStoryProjectFilter, 
@@ -1430,7 +1457,10 @@
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
-					context:{ workspace:me.getContext().getWorkspace()._ref }
+					context:{ 
+						workspace:me.getContext().getWorkspace()._ref, 
+						project:null 
+					}
 				};
 			return me._parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
@@ -1446,16 +1476,16 @@
 		_getLowestPortfolioItems: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
-			if(!me.TrainRecord) return Q();
+			if(!me.ScrumGroupRootRecord) return Q();
 			var config = {
 				model: 'PortfolioItem/' + lowestPortfolioItem,
 				filters: [me._getLowestPortfolioItemFilter()],
 				fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
 					'Description', 'FormattedID', 'UserStories'],
 				context: {
-					project:me.TrainPortfolioProject.data._ref,
-					projectScopeUp:false,
-					projectScopeDown:true
+					project: me.ScrumGroupPortfolioProject.data._ref,
+					projectScopeUp: false,
+					projectScopeDown: true
 				}
 			};
 			return me._parallelLoadWsapiStore(config).then(function(store){
@@ -1553,33 +1583,28 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //two streams
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
-							.then(function(trainRecord){
-								if(trainRecord){
-									if(trainRecord.data.ObjectID != me.ProjectRecord.data.ObjectID) me._isScopedToTrain = false;
-									else me._isScopedToTrain = true;
-									me.TrainRecord = trainRecord;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
 									return Q.all([
-										me._loadAllLeafProjects(me.TrainRecord)
-											.then(function(leftProjects){
-												me.LeafProjects = leftProjects;
-												if(me._isScopedToTrain) me.CurrentScrum = null;
-												else me.CurrentScrum = me.ProjectRecord;
-											}),
-										me._loadTrainPortfolioProject(me.TrainRecord)
-											.then(function(trainPortfolioProject){
-												me.TrainPortfolioProject = trainPortfolioProject;
-												var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
-												return me._loadPortfolioItemsOfType(trainPortfolioProject, topPortfolioItemType);
-											})
-											.then(function(topPortfolioItemStore){ 
-												me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
-											})
+										me._loadAllLeafProjects(me.ScrumGroupRootRecord).then(function(leafProjects){
+											me.LeafProjects = leafProjects;
+											if(_.find(me.LeafProjects, function(p){ return p.data.ObjectID == me.ProjectRecord.data.ObjectID; }))
+												me.CurrentScrum = me.ProjectRecord;
+											else me.CurrentScrum = null;
+										}),
+										me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+											var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
+											return me._loadPortfolioItemsOfType(scrumGroupPortfolioProject, topPortfolioItemType);
+										})
+										.then(function(topPortfolioItemStore){ 
+											me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
+										})
 									]);
-								} else {
-									me.CurrentScrum = me.ProjectRecord;
-									me._isScopedToTrain = false;
-								}
+								} 
+								else me.CurrentScrum = me.ProjectRecord;
 							}),
 						me._loadAppsPreference() /********* 2 ************/
 							.then(function(appsPref){
@@ -1645,7 +1670,7 @@
 		},
 		_loadScrumPicker: function(){
 			var me=this;
-			if(!me.TrainRecord) return; //don't show for non-train scrums
+			if(!me.ScrumGroupRootRecord) return; //don't show for scrums not in scrum-group
 			me.ScrumPicker = Ext.getCmp('controlsContainer').add({
 				xtype:'intelcombobox',
 				width: 200,
@@ -1720,7 +1745,7 @@
 				items:[{
 					xtype:'container',
 					html:'<span class="integrity-inticator-title">' + 
-						(me.CurrentScrum ? me.CurrentScrum.data.Name : me.TrainRecord.data.Name) + ' Integrity <em>(% Correct)</em></span><br/>' + 
+						(me.CurrentScrum ? me.CurrentScrum.data.Name : me.ScrumGroupRootRecord.data.Name) + ' Integrity <em>(% Correct)</em></span><br/>' + 
 						'<span class="integrity-indicator-value"><b>Stories: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' +
 						'<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'
 				}]
@@ -2050,7 +2075,7 @@
 		_buildRibbon: function() {
 			var me=this;
 			$('#pie').highcharts(me._getPieChartConfig());
-			if(!me.TrainRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-train scrums
+			if(!me.ScrumGroupRootRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-scrum-group scrums
 			else {
 				$('#heatmap').highcharts(me._getHeatMapConfig());
 				me._hideHighchartsLinks();
@@ -2059,9 +2084,9 @@
 		
 		/******************************************************* Render GRIDS ********************************************************/
 		_getFilteredStories: function(){
-			/** gets the stories in this release for the scoped scrum or the train **/
+			/** gets the stories in this release for the scoped scrum or the scrum-group **/
 			var me=this; 
-			if(me.TrainRecord){
+			if(me.ScrumGroupRootRecord){
 				if(me.CurrentScrum) return _.filter(me.UserStoryStore.getRange(), function(item){ 
 					return item.data.Project.ObjectID == me.CurrentScrum.data.ObjectID;
 				});

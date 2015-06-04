@@ -76,22 +76,21 @@
 			if(grid){
 				return Q.all(_.map(grid.getSelectionModel().getSelection(), function(record){ //faster to make many requests insteadof using $in
 					var parallelLoaderConfig = {
-						url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-							me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-						params: {
+						scope: {
 							workspace: me.getContext().getWorkspace()._ref,
-							compress:true,
-							find:JSON.stringify({
-								Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? 
-									me.getContext().getProject().ObjectID : 
-									undefined,
-								_ItemHierarchy: record.data.ObjectID,
-								_TypeHierarchy:'HierarchicalRequirement', 
-								Children:null
-							}),
-							fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
-							hydrate:JSON.stringify(['ScheduleState'])
-						}
+							project:null
+						},
+						compress:true,
+						findConfig: {
+							Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? 
+								me.getContext().getProject().ObjectID : 
+								undefined,
+							_ItemHierarchy: record.data.ObjectID,
+							_TypeHierarchy:'HierarchicalRequirement', 
+							Children:null
+						},
+						fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID'],
+						hydrate: ['ScheduleState']
 					};
 					return me._parallelLoadLookbackStore(parallelLoaderConfig);
 				}))
@@ -103,29 +102,26 @@
 						disableMetaChangeEvent: true,
 						model: Ext.define('Rally.data.lookback.SnapshotModel-' + Ext.id(), {
 							extend: 'Rally.data.lookback.SnapshotModel',
-							fields: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']
+							fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']
 						}),
 						load: function(){}
 					});
 				});
 			} else {
 				var parallelLoaderConfig = {
-					url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-						me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-					params: {
+					scope: {
 						workspace: me.getContext().getWorkspace()._ref,
-						compress:true,
-						find:JSON.stringify({
-							Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? 
-								me.getContext().getProject().ObjectID : 
-								undefined,
-							_ItemHierarchy: piRecord.data.ObjectID,
-							_TypeHierarchy:'HierarchicalRequirement', 
-							Children:null
-						}),
-						fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
-						hydrate:JSON.stringify(['ScheduleState'])
-					}
+						project: null
+					},
+					compress:true,
+					findConfig: {
+						Project: (piRecord.self.ordinal === 0 && me.OnlyStoriesInCurrentProject) ? me.getContext().getProject().ObjectID : undefined,
+						_ItemHierarchy: piRecord.data.ObjectID,
+						_TypeHierarchy:'HierarchicalRequirement', 
+						Children:null
+					},
+					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID'],
+					hydrate: ['ScheduleState']
 				};
 				return me._parallelLoadLookbackStore(parallelLoaderConfig);
 			}
@@ -219,8 +215,11 @@
 				me._buildHeader();
 				me._buildGrid()
 					.then(function(){ return me._buildChart(); })
-					.then(function(){ return me._hideHighchartsLinks(); })
-					.fail(function(reason){ me._alert('ERROR', reason || ''); })
+					.then(function(){ 
+						me.doLayout();
+						me._hideHighchartsLinks(); 
+					})
+					.fail(function(reason){ me._alert('ERROR', reason); })
 					.then(function(){ unlockFunc(); })
 					.done();
 			});
@@ -372,7 +371,17 @@
 					height: 500,
 					showPagingToolbar: false,
 					listeners:{
-						selectionchange: function(){ me._buildChart(); }
+						selectionchange: function(){ 
+							me._enqueue(function(unlockFunc){	
+								me._buildChart().then(function(){ 
+									me.doLayout();
+									me._hideHighchartsLinks(); 
+								})
+								.fail(function(reason){ me._alert('ERROR', reason); })
+								.then(function(){ unlockFunc(); })
+								.done();
+							});
+						}
 					}
 				});
 				gridContainer.setLoading(false);

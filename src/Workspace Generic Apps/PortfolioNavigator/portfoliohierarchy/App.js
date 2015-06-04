@@ -173,13 +173,13 @@
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ************/
-							.then(function(trainRecord){
-								if(trainRecord){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											me.TrainPortfolioProject = trainPortfolioProject;
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
 							}),
@@ -224,7 +224,7 @@
 					me.FilterOnProject = prefs.FilterOnProject || false;
 					me.FilterOnComplete = prefs.FilterOnComplete || false;
 					if(me.InferPortfolioLocation){
-						if(me.TrainPortfolioProject) me.PortfolioLocation = me.TrainPortfolioProject;
+						if(me.ScrumGroupPortfolioProject) me.PortfolioLocation = me.ScrumGroupPortfolioProject;
 						else me.PortfolioLocation = me.ProjectRecord;
 					}
 					else {
@@ -234,15 +234,14 @@
 							});
 						}
 						if(!me.PortfolioLocation){
-							return Q.reject('Inferring Portfolio Location. You must set the ' + 
-								'project that the portfolio resides in!');
+							return Q.reject('Error inferring Portfolio Location. You must set the project that the portfolio resides in!');
 						}
 					}
 					me._reloadEverything();
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},

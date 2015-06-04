@@ -2,7 +2,7 @@
    "name": "Portfolio Hierarchy",
    "className": "IntelPortfolioHierarchy",
    "server": "https://rally1.rallydev.com",
-   "sdk": "2.0",
+   "sdk": "2.0rc3",
    "javascript": [
       "../../lib/intel-rally-app.js",
       "../../lib/data/intel-models.js",

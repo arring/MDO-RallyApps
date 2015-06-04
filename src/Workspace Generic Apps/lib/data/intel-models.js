@@ -11,13 +11,14 @@
 	});
 		
 	/************************* USED FOR WORKSPACE TRAIN CONFIG *********************************************/
-	Ext.define('TrainConfigItem', {
+	Ext.define('ScrumGroupPortfolioConfigItem', {
 		extend: 'Ext.data.Model',
 		fields: [
-			{name: 'TrainProjectOID', type: 'number'},
-			{name: 'TrainName', type: 'string'},
-			{name: 'TrainAndPortfolioLocationTheSame', type:'boolean'},
-			{name: 'PortfolioProjectOID', type:'number'}
+			{name: 'ScrumGroupRootProjectOID', type: 'number'},
+			{name: 'ScrumGroupName', type: 'string'},
+			{name: 'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'},
+			{name: 'PortfolioProjectOID', type:'number'},
+			{name: 'IsTrain', type:'boolean'}
 		]
 	});
 }());

@@ -64,19 +64,18 @@
 			return Q.all(_.map(me.ReleasesWithName, function(releaseRecords){
 				return Q.all(_.map(releaseRecords, function(releaseRecord){
 					var parallelLoaderConfig = {
-						url: me.BaseUrl + '/analytics/v2.0/service/rally/workspace/' + 
-							me.getContext().getWorkspace().ObjectID + '/artifact/snapshot/query.js',
-						params: {
+						context:{ 
 							workspace: me.getContext().getWorkspace()._ref,
-							compress:true,
-							find: JSON.stringify({ 
-								_TypeHierarchy: 'HierarchicalRequirement',
-								Children:null,
-								Release: releaseRecord.data.ObjectID
-							}),
-							fields:JSON.stringify(['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID']),
-							hydrate:JSON.stringify(['ScheduleState'])
-						}
+							project: null
+						},
+						compress:true,
+						findConfig: { 
+							_TypeHierarchy: 'HierarchicalRequirement',
+							Children:null,
+							Release: releaseRecord.data.ObjectID
+						},
+						fetch:['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID'],
+						hydrate:['ScheduleState']
 					};
 					return me._parallelLoadLookbackStore(parallelLoaderConfig)
 						.then(function(snapshotStore){ 
@@ -161,7 +160,7 @@
 				.then(function(){	return me._reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -178,7 +177,7 @@
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ return me._reloadEverything(); })
 				.fail(function(reason){
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 					me.setLoading(false);
 				})
 				.done();
