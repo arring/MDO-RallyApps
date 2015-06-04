@@ -1,6 +1,6 @@
 {
   "name": "MDO-RallyApps",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "A Suite of Custom Rally Apps",
   "repository": {
     "type": "git",
@@ -29,12 +29,13 @@
     "url": "https://github.com/arring/MDO-RallyApps/issues"
   },
   "homepage": "https://github.com/arring/MDO-RallyApps",
+	"scripts": {
+		"build": "node scripts/build.js"
+	},
   "dependencies": {
     "lodash": "^3.6.0",
     "q": "^1.2.0",
+    "rally": "^0.2.0",
     "shelljs": "^0.4.0"
-  },
-  "devDependencies": {
-    "grunt": "^0.4.5",
   }
 }

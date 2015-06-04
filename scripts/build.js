@@ -24,9 +24,9 @@ function buildEachProject(configFiles, buildCommand, srcFile, deployDir){
 			appDir = path.dirname(configFile),
 			deployFile = format('%s/%s.html', deployDir, appName);
 		echo('Building ' + appName);
-		echo('cd ' + appDir); cd(appDir);
+		cd(appDir);
 		exec(buildCommand);
-		exec(format('cp "%s" "%s"', srcFile, deployFile));
+		cp(srcFile, deployFile);
 		echo('\n');
 	});
 }
