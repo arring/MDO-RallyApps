@@ -2,7 +2,7 @@ node_modules
 npm-debug.log
 scripts/get-project-oids/config.json
 scripts/get-project-oids/output*
-deploy/
-App-Debug.html
+deploy
+App-debug.html
 
 
