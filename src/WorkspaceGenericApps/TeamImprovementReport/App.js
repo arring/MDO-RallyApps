@@ -135,7 +135,7 @@
 				}
 				// Grrr, I don't like that I did this...will figure out a way to prevent.
 				// Resultant of the fact that filtering stories by release didn't work server-side
-				me.StoryStore.remove(_.filter(me.StoryStore.getRange(), function(story) {return story.data.Release.Name !== me.CurrentRelease.data.Name;}));
+				me.StoryStore.remove(_.filter(me.StoryStore.getRange(), function(story) {return !story.data.Release || story.data.Release.Name !== me.CurrentRelease.data.Name;}));
 				console.log('StoryStore', me.StoryStore);
 				
 				me.setLoading(false);
