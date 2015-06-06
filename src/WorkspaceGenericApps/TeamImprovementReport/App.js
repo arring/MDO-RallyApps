@@ -29,8 +29,6 @@
 			me._configureIntelRallyApp()
 			// Get scoped project
 			.then (function() {
-				// DEBUG
-				Q.longStackSupport = true;
 				me.setLoading('Loading current project');
 				var scopedProject = me.getContext().getProject();
 				return me._loadProject(scopedProject.ObjectID);
@@ -42,9 +40,6 @@
 					throw 'You must be scoped to a scrum';
 				}
 				me.Team = me._getTeamInfo(projectRecord);
-				
-				console.log('Team: ', me.Team);
-				
 				// Load release records
 				me.setLoading('Loading portfolio project');
 				return me._loadReleasesAfterGivenDate(projectRecord, (new Date()*1 - 1000*60*60*24*7*12)).then(function(releaseRecords) {
@@ -55,7 +50,6 @@
 			// I'm going to throw a TODO in here saying to reorganize this highly offensive code (that I wrote...)
 			.then(function(release) {
 				me.CurrentRelease = release;
-				console.log('Release', release);
 				return me._loadProjectByName(me.Team.Train + ' POWG Portfolios');
 			})
 			// Get all products under the portfolio project
@@ -78,7 +72,6 @@
 				
 				// Find the continuous improvement product
 				ciProduct = _.find(productStore.getRange(), function(p) {return p.data.Name === ciProductName;});
-				console.log('ciProduct: ', ciProduct);
 				if (!ciProduct) {
 					throw 'Could not load continuous improvement product';
 				}
@@ -95,8 +88,6 @@
 					throw 'Could not load milestones';
 				}
 				me.setLoading('Loading features');
-				
-				console.log('Milestones:', milestoneStore);
 				// Create promise array
 				milestones = milestoneStore.getRange();
 				for (var i in milestones) {
@@ -112,7 +103,6 @@
 					throw 'Could not load features';
 				}
 				me.setLoading('Loading stories');
-				console.log('Features: ', featureStores);
 				for (var i in featureStores) {
 					var features = featureStores[i].getRange();
 					for (var j in features) {
@@ -127,7 +117,6 @@
 				if (!storyStores) {
 					throw 'Could not load user stories';
 				}
-				console.log(storyStores);
 				
 				me.StoryStore = storyStores[0];
 				for (var i = 1; i < storyStores.length; i++) {
@@ -136,7 +125,6 @@
 				// Grrr, I don't like that I did this...will figure out a way to prevent.
 				// Resultant of the fact that filtering stories by release didn't work server-side
 				me.StoryStore.remove(_.filter(me.StoryStore.getRange(), function(story) {return !story.data.Release || story.data.Release.Name !== me.CurrentRelease.data.Name;}));
-				console.log('StoryStore', me.StoryStore);
 				
 				me.setLoading(false);
 				me._loadGrid();
@@ -149,6 +137,10 @@
 			.done();
 		},
 		
+		/*
+		 *	Loads direct children of a portfolio item of type
+		 *	Filters by customFilter (if provided), a {property, operator, value} object
+		 */
 		_loadPortfolioChildren: function(portfolioItem, type, customFilter) {
 			var me = this,
 				parentFilter = {property: 'Parent.ObjectID', operator: '=', value: portfolioItem.data.ObjectID},
@@ -174,6 +166,9 @@
 			return me._reloadStore(store);
 		},
 		
+		/*
+		 *	Loads all stories within a feature
+		 */
 		_loadStoriesByFeature: function(feature, customFilter) {
 			var me = this,
 				featureFilter = {property: 'Feature.FormattedID', operator: '=', value: feature.data.FormattedID},
@@ -197,10 +192,21 @@
 			return me._reloadStore(store);
 		},
 		
+		/*
+		 *	Determines if project is a scrum team project
+		 */
 		_isTeamProject: function(project) {
 			return (/^.+\s-\s.+$/).test(project.data.Name) && project.data.Children.Count === 0;
 		},
 		
+		/*
+		 *	Gets info about a scrum team based on its name
+		 *	Returns an object of {Name, Type, Number, Train} where:
+		 *		-Name is the original name of the project
+		 *		-Type is the type of team (e.g. Array, CLK, etc.)
+		 *		-Number is the number designator for teams of that type within the train
+		 *		-Train is the train to which it belongs
+		 */
 		_getTeamInfo: function(project) {
 			var team = {Name: '', Type: '', Number: 1, Train: ''};
 			team.Name = project.data.Name;
@@ -212,6 +218,9 @@
 			return team;
 		},
 		
+		/*
+		 *	Loads the charts and adds them to the UI
+		 */
 		_loadCharts: function() {
 			var me = this;
 			var stateData = [
@@ -228,11 +237,9 @@
 			stateCounts['In-Progress'] = stateData[2];
 			stateCounts.Completed = stateData[3];
 			stateCounts.Accepted = stateData[4];
-			console.log('State counts: ', stateCounts);
 			_.each(me.StoryStore.getRange(), function(story) {
 				stateCounts[story.data.ScheduleState].y++;
 			});
-			console.log(stateData);
 			var stateChartConfig = {
 				chart: {
 					height:400,
@@ -276,6 +283,9 @@
 			return me;
 		},
 		
+		/*
+		 *	Loads the user story grid and adds it to the screen
+		 */
 		_loadGrid: function() {
 			var me = this;
 			me.StoryGrid = Ext.create('Rally.ui.grid.Grid', {
