@@ -6,7 +6,6 @@
    "javascript": [
       "https://code.jquery.com/jquery-2.1.1.js",
       "https://code.highcharts.com/highcharts.src.js",
-      "https://code.highcharts.com/modules/heatmap.src.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.1/sprintf.js",
       "../lib/intel-rally-app.js",
@@ -14,10 +13,6 @@
       "../lib/mixins/window-listener.js",
       "../lib/mixins/iframe-resize.js",
       "../lib/mixins/pretty-alert.js",
-      "../lib/mixins/intel-workweek.js",
-      "../lib/mixins/user-apps-preference.js",
-      "../lib/mixins/parallel-loader.js",
-      "../lib/mixins/data-integrity-dashboard-objectid-preference.js",
       "App.js"
    ],
    "css": [
