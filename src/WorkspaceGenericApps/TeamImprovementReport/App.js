@@ -7,9 +7,7 @@
 		mixins:[
 			'WindowListener',
 			'PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'ParallelLoader'
+			'IframeResize'
 		],
 		items: [
 			{
@@ -29,7 +27,6 @@
 			me._configureIntelRallyApp()
 			// Get scoped project
 			.then (function() {
-				me.setLoading('Loading current project');
 				var scopedProject = me.getContext().getProject();
 				return me._loadProject(scopedProject.ObjectID);
 			})
@@ -41,7 +38,6 @@
 				}
 				me.Team = me._getTeamInfo(projectRecord);
 				// Load release records
-				me.setLoading('Loading portfolio project');
 				return me._loadReleasesAfterGivenDate(projectRecord, (new Date()*1 - 1000*60*60*24*7*12)).then(function(releaseRecords) {
 					return me._getScopedRelease(releaseRecords, projectRecord.data.ObjectID, null);
 				});
@@ -54,10 +50,7 @@
 			})
 			// Get all products under the portfolio project
 			.then(function(portfolioProject) {
-				if (!portfolioProject) {
-					throw 'Could not load portfolio project';
-				}
-				me.setLoading('Loading product');
+				me.setLoading('Loading continuous improvement product');
 				
 				// Load all products
 				return me._loadPortfolioItemsOfType(portfolioProject, 'Product');
@@ -66,16 +59,9 @@
 			.then(function(productStore) {
 				var ciProduct,
 					ciProductName = me.Team.Train + 'STDCI';
-				if (!productStore) {
-					throw 'Could not load products';
-				}
 				
 				// Find the continuous improvement product
 				ciProduct = _.find(productStore.getRange(), function(p) {return p.data.Name === ciProductName;});
-				if (!ciProduct) {
-					throw 'Could not load continuous improvement product';
-				}
-				me.setLoading('Loading milestones');
 				
 				return me._loadPortfolioChildren(ciProduct, 'Milestone');
 			})
@@ -84,10 +70,6 @@
 				var featurePromises = [],
 					releaseFilter = {property: 'Release.Name', operator: '=', value: me.CurrentRelease.data.Name},
 					milestones;
-				if (!milestoneStore) {
-					throw 'Could not load milestones';
-				}
-				me.setLoading('Loading features');
 				// Create promise array
 				milestones = milestoneStore.getRange();
 				for (var i in milestones) {
@@ -99,9 +81,6 @@
 			.then(function(featureStores) {
 				var storyPromises = [],
 					teamFilter = {property: 'Project.Name', operator: '=', value: me.Team.Name};
-				if (!featureStores) {
-					throw 'Could not load features';
-				}
 				me.setLoading('Loading stories');
 				for (var i in featureStores) {
 					var features = featureStores[i].getRange();
@@ -114,10 +93,6 @@
 			})
 			// Place all stories in a single store
 			.then(function(storyStores) {
-				if (!storyStores) {
-					throw 'Could not load user stories';
-				}
-				
 				me.StoryStore = storyStores[0];
 				for (var i = 1; i < storyStores.length; i++) {
 					me.StoryStore.add(storyStores[i].getRange());
@@ -130,6 +105,7 @@
 				me._loadGrid();
 				me._loadCharts();
 			})
+			// Catch-all fail function, alerts user of error message or generic message if none provided
 			.fail(function(reason) {
 				me.setLoading(false);
 				me._alert('Error', reason || 'error');
@@ -219,28 +195,39 @@
 		},
 		
 		/*
-		 *	Loads the charts and adds them to the UI
+		 *	Creates the chart data object
 		 */
-		_loadCharts: function() {
-			var me = this;
-			var stateData = [
-				{name: 'Undefined', y: 0, totalCount: me.StoryStore.data.length},
-				{name: 'Defined', y: 0, totalCount: me.StoryStore.data.length},
-				{name: 'In-Progress', y: 0, totalCount: me.StoryStore.data.length},
-				{name: 'Completed', y: 0, totalCount: me.StoryStore.data.length},
-				{name: 'Accepted', y: 0, totalCount: me.StoryStore.data.length}
-			];
-			// I made this out of laziness and efficiency
+		_getChartData: function() {
+			var me = this,
+				total = me.StoryStore.data.length,
+				stateData = [
+					{name: 'Undefined', y: 0, totalCount: total},
+					{name: 'Defined', y: 0, totalCount: total},
+					{name: 'In-Progress', y: 0, totalCount: total},
+					{name: 'Completed', y: 0, totalCount: total},
+					{name: 'Accepted', y: 0, totalCount: total}
+				];
+			
+			// Create object for fast counting
 			var stateCounts = {};
-			stateCounts.Undefined = stateData[0];
-			stateCounts.Defined = stateData[1];
-			stateCounts['In-Progress'] = stateData[2];
-			stateCounts.Completed = stateData[3];
-			stateCounts.Accepted = stateData[4];
+			_.forEach(stateData, function(datum, index) {
+				stateCounts[datum.name] = stateData[index];
+			});
+			
+			// Count number of user stories in each state category
 			_.each(me.StoryStore.getRange(), function(story) {
 				stateCounts[story.data.ScheduleState].y++;
 			});
-			var stateChartConfig = {
+			
+			return stateData;
+		},
+		
+		/*
+		 *	Creates the config object for the pie chart
+		 *	data must be an array of properly formatted Highcharts data objects
+		 */
+		_getChartConfig: function(data) {
+			return {
 				chart: {
 					height:400,
 					width: 600,
@@ -273,22 +260,17 @@
 					name: 'States',
 					innerSize: '25%',
 					size:260,
-					data: stateData
+					data: data
 				}]
 			};
-			
-			$('#chart-container').highcharts(stateChartConfig);
-			// Hide the link (thanks Sam)
-			$('.highcharts-container > svg > text:last-child').hide();
-			return me;
 		},
 		
 		/*
-		 *	Loads the user story grid and adds it to the screen
+		 *	Creates the config object for the user story grid
 		 */
-		_loadGrid: function() {
+		_getGridConfig: function() {
 			var me = this;
-			me.StoryGrid = Ext.create('Rally.ui.grid.Grid', {
+			return {
 				id: 'storygrid',
 				title: 'Team Continuous Improvement Stories',
 				store: me.StoryStore,
@@ -300,7 +282,36 @@
 					'Iteration',
 					'ScheduleState'
 				]
-			});
+			};
+		},
+		
+		/*
+		 *	Loads and adds charts
+		 */
+		_loadCharts: function() {
+			var me = this,
+				data = me._getChartData(),
+				stateChartConfig = me._getChartConfig(data);
+			
+			// Add chart
+			$('#chart-container').highcharts(stateChartConfig);
+			
+			// Hide the link for Highcharts (thanks Sam)
+			$('.highcharts-container > svg > text:last-child').hide();
+			
+			// TODO: Change this to something else, this doesn't quite make sense
+			return me;
+		},
+		
+		/*
+		 *	Loads and adds user story grid
+		 */
+		_loadGrid: function() {
+			var me = this,
+				gridConfig = me._getGridConfig();
+			me.StoryGrid = Ext.create('Rally.ui.grid.Grid', gridConfig);
+			
+			// TODO: Find the component in a more extensible manner
 			return me.getComponent(1).add(me.StoryGrid);
 		}
 	});
