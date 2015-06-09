@@ -12,7 +12,25 @@
 		items: [
 			{
 				xtype: 'container',
-				id: 'chart-container'
+				id: 'chart-container',
+				items: [
+					{
+						xtype: 'container',
+						id: 'state-chart-container',
+						columnWidth: 0.25
+					},
+					{
+						xtype: 'container',
+						id: 'percentage-chart-container',
+						columnWidth: 0.25
+					},
+					{
+						xtype: 'container',
+						id: 'backlog-chart-container',
+						columnWidth: 0.5
+					}
+				],
+				layout: 'column'
 			},
 			{
 				xtype: 'container',
@@ -32,13 +50,15 @@
 			})
 			// Get current release, team info, and load portfolio project
 			.then(function(projectRecord) {
+				me.Project = projectRecord;
+			
 				// Extract team info from current project
 				if (!me._isTeamProject(projectRecord)) {
 					throw 'You must be scoped to a scrum';
 				}
 				me.Team = me._getTeamInfo(projectRecord);
 				// Load release records
-				return me._loadReleasesAfterGivenDate(projectRecord, (new Date()*1 - 1000*60*60*24*7*12)).then(function(releaseRecords) {
+				return me._loadAllReleases(projectRecord).then(function(releaseRecords) {
 					return me._getScopedRelease(releaseRecords, projectRecord.data.ObjectID, null);
 				});
 			})
@@ -98,12 +118,17 @@
 					me.StoryStore.add(storyStores[i].getRange());
 				}
 				// Grrr, I don't like that I did this...will figure out a way to prevent.
-				// Resultant of the fact that filtering stories by release didn't work server-side
+				// Resultant of the fact that filtering stories by release wasn't working server-side
 				me.StoryStore.remove(_.filter(me.StoryStore.getRange(), function(story) {return !story.data.Release || story.data.Release.Name !== me.CurrentRelease.data.Name;}));
 				
+				me.setLoading('Loading visuals');
+				return me._loadCharts();
+			})
+			.then(function() {
+				return me._loadGrid();
+			})
+			.then(function() {
 				me.setLoading(false);
-				me._loadGrid();
-				me._loadCharts();
 			})
 			// Catch-all fail function, alerts user of error message or generic message if none provided
 			.fail(function(reason) {
@@ -195,9 +220,9 @@
 		},
 		
 		/*
-		 *	Creates the chart data object
+		 *	Creates the state chart data object
 		 */
-		_getChartData: function() {
+		_getStateChartData: function() {
 			var me = this,
 				total = me.StoryStore.data.length,
 				stateData = [
@@ -219,14 +244,61 @@
 				stateCounts[story.data.ScheduleState].y++;
 			});
 			
-			return stateData;
+			return Q.fcall(function() {return stateData;});
 		},
 		
 		/*
-		 *	Creates the config object for the pie chart
-		 *	data must be an array of properly formatted Highcharts data objects
+		 *	Creates the percentage chart data object
 		 */
-		_getChartConfig: function(data) {
+		_getPercentageChartData: function() {
+			var me = this,
+				percentageData = [
+					{name: 'CI Stories', y: me.StoryStore.data.length},
+					{name: 'Non-CI Stories', y: 0}
+				],
+				config = {
+					autoLoad: false,
+					limit: Infinity,
+					model: me.UserStory,
+					fetch: ['ObjectID', 'Release', 'Project'],
+					filters: [
+						{
+							property: 'Release.ObjectID',
+							operator: '=',
+							value: me.CurrentRelease.data.ObjectID
+						},
+						{
+							property: 'Project.ObjectID',
+							operator: '=',
+							value: me.Project.data.ObjectID
+						}
+					],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: me.Project.data._ref,
+						projectScopeUp: false,
+						projectScopeDown: true
+					}
+				},
+				releaseStoryStore = Ext.create('Rally.data.wsapi.Store', config);
+			return me._reloadStore(releaseStoryStore).then(function(store) {
+				percentageData[1].y = store.data.length - percentageData[0].y;
+				percentageData[1].totalCount = percentageData[0].totalCount = store.data.length;
+				return percentageData;
+			});
+		},
+		
+		/*
+		 *	Creates the backlog chart data object
+		 */
+		_getBacklogChartData: function() {
+			// TODO: Implement
+		},
+		
+		/*
+		 *	Creates the config object for the state chart
+		 */
+		_getStateChartConfig: function(data) {
 			return {
 				chart: {
 					height:400,
@@ -266,6 +338,61 @@
 		},
 		
 		/*
+		 *	Creates the config object for the percentage chart
+		 */
+		_getPercentageChartConfig: function(data) {
+			return {
+				chart: {
+					height:400,
+					width: 600,
+					plotBackgroundColor: null,
+					plotBorderWidth: 0,
+					plotShadow: false
+				},
+				title: {text: 'CI Story Percentage'},
+				tooltip: {enabled: false},
+				plotOptions: {
+					pie: {
+						dataLabels: {
+							enabled: true,
+							distance:25,
+							crop:false,
+							overflow:'none',
+							formatter: function(){
+								return '<b>' + this.point.name + '</b>: ' + this.point.y/this.point.totalCount*100 + '%';
+							},
+							style: { 
+								cursor:'pointer',
+								color: 'black'
+							}
+						}
+					}
+				},
+				series: [{
+					type: 'pie',
+					name: 'Percentages',
+					innerSize: '25%',
+					size: 260,
+					data: data
+				}]
+			};
+		},
+		
+		/*
+		 *	Creates the config object for the backlog chart
+		 */
+		_getBacklogChartConfig: function(data) {
+			// TODO: Implement
+		},
+		
+		/*
+		 *	Hides the link for Highcharts
+		 */
+		_hideHighchartsLink: function() {
+			$('.highcharts-container > svg > text:last-child').hide();
+		},
+		
+		/*
 		 *	Creates the config object for the user story grid
 		 */
 		_getGridConfig: function() {
@@ -290,17 +417,24 @@
 		 */
 		_loadCharts: function() {
 			var me = this,
-				data = me._getChartData(),
-				stateChartConfig = me._getChartConfig(data);
+				promises = [
+					me._getStateChartData(),
+					me._getPercentageChartData()
+				];
+			if (me.isShowingAllReleases) promises.push(me._getBacklogChartData());
 			
-			// Add chart
-			$('#chart-container').highcharts(stateChartConfig);
-			
-			// Hide the link for Highcharts (thanks Sam)
-			$('.highcharts-container > svg > text:last-child').hide();
-			
-			// TODO: Change this to something else, this doesn't quite make sense
-			return me;
+			return Q.all(promises).then(function(data) {
+				// Add charts
+				$('#state-chart-container').highcharts(me._getStateChartConfig(data[0]));
+				$('#percentage-chart-container').highcharts(me._getPercentageChartConfig(data[1]));
+				if (me.isShowingAllReleases) $('#backlog-chart-container').highcharts(me._getBacklogChartConfig(data[2]));
+				
+				// Hide that pesky link
+				me._hideHighchartsLink();
+				
+				// TODO: Lol, still need something to return here
+				return 0;
+			});
 		},
 		
 		/*
