@@ -3,7 +3,6 @@ MDO-RallyApps
 
 A sweet suite of apps.
 
-
 ## For People who just want code
 All the files are in the dist folder. just copy and paste into a custom app
 
