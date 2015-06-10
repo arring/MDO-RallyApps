@@ -34,7 +34,7 @@
 			return doStoreLoad(1).then(function(store){
 				data = data.concat(store.getRange());
 				model = store.model;
-				var pages = (store.totalCount/200>>0 + (store.totalCount%200 ? 0 : 1)) || 1;
+				var pages = ((store.totalCount/200>>0) + (store.totalCount%200 ? 1 : 0)) || 1;
 				if(pages === 1) return makeStore();
 				else return Q.all(_.times(pages-1, function(pageNum){
 					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
@@ -69,7 +69,7 @@
 			return doStoreLoad(1).then(function(store){
 				data = data.concat(store.getRange());
 				model = store.model;
-				var pages = (store.totalCount/20000>>0 + (store.totalCount%20000 ? 0 : 1)) || 1;
+				var pages = ((store.totalCount/20000>>0) + (store.totalCount%20000 ? 1 : 0)) || 1;
 				if(pages === 1) return makeStore();
 				else return Q.all(_.times(pages-1, function(pageNum){
 					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
