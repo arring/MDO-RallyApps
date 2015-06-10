@@ -31,7 +31,7 @@ function buildEachProject(configFiles, buildCommand, srcFile, deployDir){
 	});
 }
 function buildEachRabProject(){
-	buildEachProject(getFiles('config.json'), 'rab', 'deploy/App.html', rabDeployDir);
+	buildEachProject(getFiles('config.json'), 'rab', 'deploy/App-uncompressed.html', rabDeployDir);
 }
 function buildEachSmProject(){
 	buildEachProject(getFiles('sm-config.json'), 'sm-rab', 'sm-deploy/sm-app.html', smDeployDir);
