@@ -120,7 +120,7 @@
 					UserStory: 'HierarchicalRequirement',
 					PortfolioItem: 'PortfolioItem'
 				};
-			_.each(me.PortfolioItemTypes, function(name){ models[name] = 'PortfolioItem/' + name; });
+			_.each(me.PortfolioItemTypes, function(name){ models['PortfolioItem/' + name] = 'PortfolioItem/' + name; });
 			_.each(models, function(modelType, modelName){
 				var deferred = Q.defer();
 				Rally.data.WsapiModelFactory.getModel({
