@@ -1,12 +1,13 @@
 {
-   "name": "Scrum Group Portfolio Configuration",
-   "className": "ScrumGroupPortfolioConfiguration",
+   "name": "Workspace Configuration",
+   "className": "WorkspaceConfiguration",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "../lib/intel-rally-app.js",
       "../lib/data/intel-models.js",
+      "../lib/resources/key-value-db.js",
       "../lib/mixins/window-listener.js",
       "../lib/mixins/iframe-resize.js",
       "../lib/mixins/pretty-alert.js",

@@ -1,8 +1,9 @@
 /** this app is used to configure the scrum-groups and portfolio locations in the workspace **/
 (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	Ext.define('ScrumGroupPortfolioConfiguration', {
+	var Ext = window.Ext4 || window.Ext,
+		KeyValueDb = Intel.lib.resources.KeyValueDb;
+		
+	Ext.define('WorkspaceConfiguration', {
 		extend: 'IntelRallyApp',
 		mixins:[
 			'WindowListener',
@@ -11,7 +12,7 @@
 		],
 
 		/************************************************** UTIL FUNCS **********************************************/
-		_getStoreData: function(){
+		_getScrumGroupPortfolioStoreData: function(){
 			var me=this;
 			return _.map(me.ScrumGroupConfig, function(scrumGroupConfig){
 				return {
@@ -43,22 +44,28 @@
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
 					me.setLoading(false);
-					me._renderGrid();
+					me._renderScrumGroupPortfolioGrid();
+					me._renderChooseDatabaseProject();
+				})
+				.then(function(){
+					return KeyValueDb.getDatabaseProjectOID()
+						.then(function(projectOID){ me.DatabaseProjectObjectID = projectOID; })
+						.fail(function(){ me.DatabaseProjectObjectID = undefined; });
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
 
 		/************************************************************* RENDER *******************************************/
-		_renderGrid: function(){
+		_renderScrumGroupPortfolioGrid: function(){
 			var me = this;
 			
 			me.ScrumGroupPortfolioConfigStore = Ext.create('Ext.data.Store', { 
 				model:'ScrumGroupPortfolioConfigItem',
-				data: me._getStoreData()
+				data: me._getScrumGroupPortfolioStoreData()
 			});
 
 			var columnCfgs = [{
@@ -192,7 +199,7 @@
 							listeners:{
 								click: function(){
 									me.ScrumGroupPortfolioConfigStore.removeAll();
-									me.ScrumGroupPortfolioConfigStore.add(me._getStoreData());
+									me.ScrumGroupPortfolioConfigStore.add(me._getScrumGroupPortfolioStoreData());
 								}
 							}
 						},{
@@ -284,6 +291,28 @@
 				enableEditing:false,
 				store: me.ScrumGroupPortfolioConfigStore
 			});	
+		},
+		
+		_renderChooseDatabaseProject: function(){
+			me.DatabaseProjectSection = me.add({
+				xtype: 'intelcombobox',
+				width: 500,
+				labelWidth: 300,
+				fieldLabel: 'Select Key-Value Database Project',
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name', 'ObjectID'],
+					data: me.ProjectDataForStore
+				}),
+				value: me.DatabaseProjectObjectID,
+				displayField: 'Name',
+				valueField: 'ObjectID',
+				listeners: {
+					select: function(){
+						debugger;
+						//KeyValueDb.setDatabaseProjectOID().then(function(){ me.setLoading(false); });
+					}
+				}
+			});
 		}
 	});
 }());
