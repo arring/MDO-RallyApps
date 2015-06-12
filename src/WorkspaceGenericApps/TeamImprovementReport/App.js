@@ -12,6 +12,10 @@
 		items: [
 			{
 				xtype: 'container',
+				id: 'controls-container'
+			},
+			{
+				xtype: 'container',
 				id: 'chart-container',
 				items: [
 					{
@@ -45,6 +49,7 @@
 			me._configureIntelRallyApp()
 			// Get scoped project
 			.then (function() {
+				me.isShowingAllReleases = false;
 				var scopedProject = me.getContext().getProject();
 				return me._loadProject(scopedProject.ObjectID);
 			})
@@ -53,13 +58,14 @@
 				me.Project = projectRecord;
 			
 				// Extract team info from current project
-				if (!me._isTeamProject(projectRecord)) {
+				if (!me._isTeamProject(me.Project)) {
 					throw 'You must be scoped to a scrum';
 				}
-				me.Team = me._getTeamInfo(projectRecord);
+				me.Team = me._getTeamInfo(me.Project);
 				// Load release records
-				return me._loadAllReleases(projectRecord).then(function(releaseRecords) {
-					return me._getScopedRelease(releaseRecords, projectRecord.data.ObjectID, null);
+				return me._loadAllReleases(me.Project).then(function(releaseRecords) {
+					me.ReleaseRecords = releaseRecords;
+					return me._getScopedRelease(releaseRecords, me.Project.data.ObjectID, null);
 				});
 			})
 			// Well isn't this an awkward little function
@@ -87,48 +93,11 @@
 			})
 			// Load all features under all milestones
 			.then(function (milestoneStore) {
-				var featurePromises = [],
-					releaseFilter = {property: 'Release.Name', operator: '=', value: me.CurrentRelease.data.Name},
-					milestones;
-				// Create promise array
-				milestones = milestoneStore.getRange();
-				for (var i in milestones) {
-					featurePromises.push(me._loadPortfolioChildren(milestones[i], 'Feature', releaseFilter));
-				}
-				return Q.all(featurePromises);
-			})
-			// Load user stories belonging to the currently scoped scrum
-			.then(function(featureStores) {
-				var storyPromises = [],
-					teamFilter = {property: 'Project.Name', operator: '=', value: me.Team.Name};
-				me.setLoading('Loading stories');
-				for (var i in featureStores) {
-					var features = featureStores[i].getRange();
-					for (var j in features) {
-						storyPromises.push(me._loadStoriesByFeature(features[j], teamFilter));
-					}
-				}
-				
-				return Q.all(storyPromises);
-			})
-			// Place all stories in a single store
-			.then(function(storyStores) {
-				me.StoryStore = storyStores[0];
-				for (var i = 1; i < storyStores.length; i++) {
-					me.StoryStore.add(storyStores[i].getRange());
-				}
-				// Grrr, I don't like that I did this...will figure out a way to prevent.
-				// Resultant of the fact that filtering stories by release wasn't working server-side
-				me.StoryStore.remove(_.filter(me.StoryStore.getRange(), function(story) {return !story.data.Release || story.data.Release.Name !== me.CurrentRelease.data.Name;}));
-				
-				me.setLoading('Loading visuals');
-				return me._loadCharts();
+				me.Milestones = milestoneStore.getRange();
+				return me._loadStories();
 			})
 			.then(function() {
-				return me._loadGrid();
-			})
-			.then(function() {
-				me.setLoading(false);
+				return me._loadUI();
 			})
 			// Catch-all fail function, alerts user of error message or generic message if none provided
 			.fail(function(reason) {
@@ -139,21 +108,100 @@
 		},
 		
 		/*
+		 *	Loads all UI components
+		 */
+		_loadUI: function() {
+			var me = this;
+			me.setLoading('Loading Visuals');
+			if (!me.ReleaseCheck) me._loadReleaseCheck();
+			return me._loadCharts().then(function() {
+				return me._loadGrid();
+			}).then(function() {
+				me.setLoading(false);
+			});
+		},
+		
+		/*
+		 *	Loads stories under features under the CI milestone
+		 */
+		_loadStories: function() {
+			var me = this;
+			me.setLoading('Loading stories');
+			me.ReleaseFilter = me._getReleaseFilter();
+			return me._loadFeaturesUnderMilestones(me.Milestones).then(function(featureStores) {
+				return me._loadStoriesUnderFeatures(featureStores);
+			});
+		},
+		
+		/*
+		 *	Loads all features under the given milestones
+		 */
+		_loadFeaturesUnderMilestones: function(milestones) {
+			var me = this,
+				featurePromises = [];
+			// Create promise array
+			for (var i in milestones) {
+				featurePromises.push(me._loadPortfolioChildren(milestones[i], 'Feature', me.ReleaseFilter));
+			}
+			return Q.all(featurePromises);
+		},
+		
+		/*
+		 *	Loads all stories under the given features
+		 */
+		_loadStoriesUnderFeatures: function(featureStores) {
+			var me = this,
+				storyPromises = [];
+			me.setLoading('Loading stories');
+			for (var i in featureStores) {
+				var features = featureStores[i].getRange();
+				for (var j in features) {
+					storyPromises.push(me._loadStoriesByFeature(features[j]));
+				}
+			}
+			return Q.all(storyPromises).then(function(storyStores) {
+				me.StoryStore = storyStores[0];
+				for (var i = 1; i < storyStores.length; i++) {
+					me.StoryStore.add(storyStores[i].getRange());
+				}
+				me.setLoading(false);
+			});
+		},
+		
+		/*
+		 *	Gets a filter object for either all releases or just the current release
+		 */
+		_getReleaseFilter: function() {
+			var me = this;
+			if (me.isShowingAllReleases) {
+				// TODO: Uhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+				return Ext.create('Rally.data.wsapi.Filter', {property: 'Name', operator: '!=', value: null});
+			}
+			else {
+				return Ext.create('Rally.data.wsapi.Filter', {
+					property: 'Release.Name',
+					operator: '=',
+					value: me.CurrentRelease.data.Name
+				});
+			}
+		},
+		
+		/*
 		 *	Loads direct children of a portfolio item of type
-		 *	Filters by customFilter (if provided), a {property, operator, value} object
+		 *	Filters by customFilter (if provided), a Filter object
 		 */
 		_loadPortfolioChildren: function(portfolioItem, type, customFilter) {
 			var me = this,
-				parentFilter = {property: 'Parent.ObjectID', operator: '=', value: portfolioItem.data.ObjectID},
-				portfolioFilters = (!customFilter ? [parentFilter] : [parentFilter, customFilter]),
+				parentFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Parent.ObjectID', operator: '=', value: portfolioItem.data.ObjectID}),
+				portfolioFilter = (!customFilter ? parentFilter : parentFilter.and(customFilter)),
 				storeConfig = {
-					model: 'PortfolioItem/' + type,
-					fetch: me._portfolioItemFields,
+					model: me[type],
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'Release'],
 					autoLoad: false,
 					disableMetaChangeEvent: true,
 					limit: Infinity,
 					pageSize: 200,
-					filters: portfolioFilters,
+					filters: [portfolioFilter],
 					sorters: [
 						{property: 'FormattedID', direction: 'ASC'}
 					],
@@ -172,25 +220,48 @@
 		 */
 		_loadStoriesByFeature: function(feature, customFilter) {
 			var me = this,
-				featureFilter = {property: 'Feature.FormattedID', operator: '=', value: feature.data.FormattedID},
-				storyFilters = (!customFilter ? [featureFilter] : [featureFilter, customFilter]),
+				featureFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.ObjectID', operator: '=', value: feature.data.ObjectID}),
+				standardFilter = featureFilter.and(me.ReleaseFilter),
+				storyFilter = (!customFilter ? standardFilter : standardFilter.and(customFilter)),
 				storeConfig = {
-					model: 'UserStory',
-					fetch: me._userStoryFields.concat('Feature', 'Owner', 'ScheduleState'),
+					model: me.UserStory,
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'Owner', 'Iteration', 'ScheduleState', 'Feature', 'PlanEstimate', 'AcceptedDate', 'CreationDate'],
 					autoLoad: false,
 					limit: Infinity,
 					pageSize: 200,
-					filters: storyFilters,
-					sorters: [
-						{property: 'FormattedID', direction: 'ASC'}
-					],
+					filters: [storyFilter],
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: null
+						project: me.Project.data._ref
 					}
 				};
 			var store = Ext.create('Rally.data.wsapi.Store', storeConfig);
 			return me._reloadStore(store);
+		},
+		
+		_loadReleaseCheck: function() {
+			var me = this;
+			me.ReleaseCheck = Ext.create('Rally.ui.CheckboxField', {
+				checked: false,
+				fieldLabel: 'Show for all releases: ',
+				listeners: {
+					change: me._releaseCheckboxChanged,
+					scope: me
+				}
+			});
+			me.down('#controls-container').add(me.ReleaseCheck);
+		},
+		
+		/*
+		 *	Fired when the checkbox for showing all releases is clicked
+		 */
+		_releaseCheckboxChanged: function(box, newVal, oldVal, opts) {
+			var me = this;
+			me.isShowingAllReleases = newVal;
+			me._removeAllComponents();
+			return me._loadStories().then(function() {
+				return me._loadUI();
+			});
 		},
 		
 		/*
@@ -217,6 +288,17 @@
 			team.Train = parts[1].split('(')[0].trim();
 			team.Number = !team.Number ? 1 : team.Number;
 			return team;
+		},
+		
+		/*
+		 *	Removes all existing components
+		 */
+		_removeAllComponents: function() {
+			var me = this;
+			$('#state-chart-container').empty();
+			$('#percentage-chart-container').empty();
+			$('#backlog-chart-container').empty();
+			me.down('#grid-container').removeAll(true);
 		},
 		
 		/*
@@ -249,6 +331,7 @@
 		
 		/*
 		 *	Creates the percentage chart data object
+		 *	TODO: This should be highly optimizable
 		 */
 		_getPercentageChartData: function() {
 			var me = this,
@@ -258,21 +341,10 @@
 				],
 				config = {
 					autoLoad: false,
-					limit: Infinity,
+					limit: 1,
 					model: me.UserStory,
-					fetch: ['ObjectID', 'Release', 'Project'],
-					filters: [
-						{
-							property: 'Release.ObjectID',
-							operator: '=',
-							value: me.CurrentRelease.data.ObjectID
-						},
-						{
-							property: 'Project.ObjectID',
-							operator: '=',
-							value: me.Project.data.ObjectID
-						}
-					],
+					fetch: [], // ['ObjectID', 'Release'/*, 'Project'*/],
+					filters: [me.ReleaseFilter],
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: me.Project.data._ref,
@@ -282,9 +354,53 @@
 				},
 				releaseStoryStore = Ext.create('Rally.data.wsapi.Store', config);
 			return me._reloadStore(releaseStoryStore).then(function(store) {
-				percentageData[1].y = store.data.length - percentageData[0].y;
-				percentageData[1].totalCount = percentageData[0].totalCount = store.data.length;
+				percentageData[1].y = store.totalCount - percentageData[0].y;
+				percentageData[1].totalCount = percentageData[0].totalCount = store.totalCount;
 				return percentageData;
+			});
+		},
+		
+		/*
+		 *	Loads all iterations referenced by the current set of user stories
+		 */
+		_loadIterations: function() {
+			var me = this,
+				iterationIDs = {},
+				filter;
+			console.log(me.StoryStore);
+			_.each(me.StoryStore.getRange(), function(story) {
+				if (story.data.Iteration && !iterationIDs[story.data.Iteration.ObjectID]) {
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'ObjectID', operator: '=', value: story.data.Iteration.ObjectID});
+					if (!filter) filter = newFilter;
+					else {
+						filter = newFilter.or(filter);
+						// Now it 'exists'
+						iterationIDs[story.data.Iteration.ObjectID] = 42;
+					}
+				}
+			});
+			var store = Ext.create('Rally.data.wsapi.Store', {
+				autoLoad: false,
+				limit: Infinity,
+				model: 'Iteration',
+				pageSize: 200,
+				fetch: ['ObjectID', 'Name', 'StartDate', 'EndDate'],
+				filters: [filter],
+				sorters: [
+					{
+						property: 'StartDate',
+						direction: 'ASC'
+					}
+				],
+				context: {
+					workspace: me.getContext().getWorkspace(),
+					project: me.getContext().getProject()._ref,
+					projectScopeUp: false,
+					projectScopeDown: false
+				}
+			});
+			return me._reloadStore(store).then(function(iterationStore) {
+				return iterationStore.getRange();
 			});
 		},
 		
@@ -292,17 +408,39 @@
 		 *	Creates the backlog chart data object
 		 */
 		_getBacklogChartData: function() {
-			// TODO: Implement
+			var me = this;
+			return me._loadIterations().then(function(iterations) {
+				var backlogData = [];
+				_.each(iterations, function(iteration) {
+					backlogData.push({name: iteration.data.Name, startDate: iteration.data.StartDate, endDate: iteration.data.EndDate, y: 0});
+				});
+				_.each(me.StoryStore.getRange(), function(story) {
+					var storyCreationDate = new Date(story.data.CreationDate),
+						storyAcceptedDate = new Date(story.data.AcceptedDate);
+					_.each(backlogData, function(iteration) {
+						var iterationStartDate = new Date(iteration.startDate),
+							iterationEndDate = new Date(iteration.endDate);
+						if (storyCreationDate >= iterationStartDate && storyCreationDate <= iterationEndDate) {
+							iteration.y++;
+						}
+						if (storyAcceptedDate >= iterationStartDate && storyAcceptedDate <= iterationEndDate) {
+							iteration.y--;
+						}
+					});
+				});
+				return backlogData;
+			});
 		},
 		
 		/*
 		 *	Creates the config object for the state chart
 		 */
 		_getStateChartConfig: function(data) {
+			var me = this;
 			return {
 				chart: {
 					height:400,
-					width: 600,
+					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
 					plotShadow: false
@@ -331,7 +469,7 @@
 					type: 'pie',
 					name: 'States',
 					innerSize: '25%',
-					size:260,
+					size: 200,
 					data: data
 				}]
 			};
@@ -341,10 +479,11 @@
 		 *	Creates the config object for the percentage chart
 		 */
 		_getPercentageChartConfig: function(data) {
+			var me = this;
 			return {
 				chart: {
 					height:400,
-					width: 600,
+					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
 					plotShadow: false
@@ -359,7 +498,7 @@
 							crop:false,
 							overflow:'none',
 							formatter: function(){
-								return '<b>' + this.point.name + '</b>: ' + this.point.y/this.point.totalCount*100 + '%';
+								return '<b>' + this.point.name + '</b>: ' + (this.point.y/this.point.totalCount*100).toFixed(1) + '%';
 							},
 							style: { 
 								cursor:'pointer',
@@ -372,7 +511,7 @@
 					type: 'pie',
 					name: 'Percentages',
 					innerSize: '25%',
-					size: 260,
+					size: 200,
 					data: data
 				}]
 			};
@@ -382,7 +521,35 @@
 		 *	Creates the config object for the backlog chart
 		 */
 		_getBacklogChartConfig: function(data) {
-			// TODO: Implement
+			var me = this;
+			return {
+				chart: {
+					height: 400,
+					width: (me.getWidth()/2 >> 0),
+					plotBackgroundColor: null,
+					plotBorderWidth: 0,
+					plotShadow: false
+				},
+				title: {text: 'CI Story Backlog'},
+				tooltip: {enabled: false},
+				plotOptions: {
+					line: {
+						// TODO: hmmmmmmmmmmmm
+					}
+				},
+				series: [
+					{
+						type: 'line',
+						name: 'Backlog Stories',
+						data: data
+					}
+				],
+				yAxis: {
+					title: {
+						text: '# Stories'
+					}
+				}
+			};
 		},
 		
 		/*
@@ -401,7 +568,7 @@
 				id: 'storygrid',
 				title: 'Team Continuous Improvement Stories',
 				store: me.StoryStore,
-				sortableColumns: false,
+				sortableColumns: true,
 				columnCfgs: [
 					'FormattedID',
 					'Name',
@@ -444,9 +611,7 @@
 			var me = this,
 				gridConfig = me._getGridConfig();
 			me.StoryGrid = Ext.create('Rally.ui.grid.Grid', gridConfig);
-			
-			// TODO: Find the component in a more extensible manner
-			return me.getComponent(1).add(me.StoryGrid);
+			return me.down('#grid-container').add(me.StoryGrid);
 		}
 	});
 })();
