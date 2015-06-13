@@ -12,7 +12,7 @@
 				c_usDbValue: 'blue'
 			}
 		
-		"key" field should be a 'string' field and "value field" should be a 'text' field.
+		"key" field should be a unique 'string' field and "value field" should be a 'text' field.
 		
 		We have to keep track of which project this preference is stored in, so we create a custom field that keeps track of it.
 		
@@ -23,18 +23,25 @@
 			kvPair {
 				key: dbKey,
 				value: dbValue
+				ObjectID: artifactID
 			}
 	
 	DEPENDENCIES: 
 		- kriskowal/q
+		- jquery 2.X
+		- lodash
 		- the KEY_NAME and VALUE_NAME must be non-visible custom fields on whatever <MODEL_NAME> artifact type you choose.
+			> so, if you use the defaults in this app, you have to create hidden c_usDbKey(string) and c_usDbValue(text) fields on 
+				HierarchicalRequirement in your workspace
 	
 	ISSUES: 
 		If someone has an app open that uses this, and another person changes the projectOID, the first person will continue to 
 		save key-value pairs to the old project. So make sure nobody is using apps that require this class when you are modifying the 
 		project serving as the database.
 		
-		Also, this uses Ext.Ajax, not sure what that means with regards to CORS but I think you cannot use file:/// protocol when developing
+		Ext.Ajax keeps changing the apiKey in the url for POST, PUT and DELETE requests. Could not figure out why, so using jquery instead.
+		
+		Also, this uses ajax, not sure what that means with regards to CORS but I think you cannot use file:/// protocol when developing
 		locally.
 */
 (function(){
@@ -44,19 +51,75 @@
 		The first 5 variables should probably just be left alone. But if you feel compelled to use Tasks or Defects as the KV storage
 		medium (MODEL_NAME) or change the KEY_NAME or VALUE_NAME or PREF_NAME, knock yourself out.
 		
-		The last 2 variables will be modified as apps use this database
+		The next 2 variables are the max length the key and value strings can be.
+		
+		The last 3 variables will be modified as apps use this database
 	*/
 	var PREF_NAME = 'intel-key-value-database-project',
 		MODEL_NAME = 'HierarchicalRequirement',
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
-		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0/' + MODEL_NAME,
+		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
 		
+		MAX_TEXT_LENGTH = 256,
+		MAX_STRING_LENGTH = 65536,
+		
+		SECURITY_KEY = '',
 		INITIALIZED = false,
-		PROJECT_OID = null;
+		PROJECT_OID = 0;
 	
 	Ext.define('Intel.lib.resources.KeyValueDb', {
 		singleton: true,
+		
+		/**
+			private method for sending requests to the rally server. 
+		
+			method must be an HTTP method
+			params must be an object
+			data may be undefined or a non-null object
+			
+			returns Promise(httpResponseData)
+		*/
+		_sendRequest: function(method, params, urlExtension, data){
+			var deferred = Q.defer();
+			
+			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1)											return Q.reject('invalid method');
+			if(!(params instanceof Object) || params === null)															return Q.reject('invalid params');
+			if(typeof urlExtension !== 'string' || urlExtension[0] !== '/')									return Q.reject('invalid urlExtension');
+			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null))	return Q.reject('invalid data');
+
+			data = (data === undefined ? data : JSON.stringify(data, null, '  '));
+			params = _.map(Ext.merge({
+				fetch: ['ObjectID', KEY_NAME, VALUE_NAME].join(','),
+				project: '/project/' + PROJECT_OID,
+				projectScopeUp: false,
+				projectScopeDown: false,
+				key: SECURITY_KEY
+			}, params), function(value, key){ return key + '=' + value; }).join('&');
+			
+			var request = $.ajax({
+				url: BASE_URL + urlExtension + '?' + params,
+				method: method,
+				data: data,
+				dataType: 'json',
+				headers: {
+					'Content-Type' : 'application/json'
+				}
+			});
+			request.done(function(json){
+				var results, errors;
+				json = json.OperationResult || json.QueryResult || json.CreateResult || json[MODEL_NAME];
+				errors = json.Errors;
+				results = json.Results || json.Object || json;
+				if(errors && errors.length) deferred.reject(errors);
+				else deferred.resolve(results);
+			});
+			request.fail(function(jqXHR, textStatus){
+				deferred.reject(textStatus);
+			});
+			
+			return deferred.promise;
+		},
 		
 		/** 
 			You must call this before you can use it. Not using constructor because we need a promise to be returned.
@@ -65,14 +128,18 @@
 		*/
 		initialize: function(){
 			if(INITIALIZED) return Q.reject('already initialized');
-			return this.getDatabaseProjectOID().then(function(projectOID){
-				projectOID = parseInt(projectOID, 10);
-				if(isNaN(projectOID) || projectOID <= 0) return Q.reject('Intel.KeyValueDb not properly initialized');
-				else {
-					PROJECT_OID = projectOID;
-					INITIALIZED = true;
-				}
-			});
+			return Q.all([
+				this.getDatabaseProjectOID().then(function(projectOID){
+					projectOID = parseInt(projectOID, 10);
+					if(isNaN(projectOID) || projectOID <= 0) return Q.reject('KeyValueDb not properly initialized');
+					else PROJECT_OID = projectOID;
+				}),
+				this._sendRequest('GET', {}, '/security/authorize').then(function(data){
+					if(!data.SecurityToken) return Q.reject('invalid security token returned from server');
+					SECURITY_KEY = data.SecurityToken;
+				})
+			])
+			.then(function(){ INITIALIZED = true; });
 		},
 		
 		/** 
@@ -81,10 +148,13 @@
 		*/
 		setDatabaseProjectOID: function(projectOID){
 			var settings = {}, deferred = Q.defer();
+			
 			projectOID = parseInt(projectOID, 10);
 			if(isNaN(projectOID) || projectOID <= 0) return Q.reject('invalid projectOID');
+			
 			settings[PREF_NAME] = projectOID; 
 			Rally.data.PreferenceManager.update({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
 				filterByName: PREF_NAME,
 				settings: settings,
 				success: function(prefs){ 
@@ -103,9 +173,10 @@
 		getDatabaseProjectOID: function(){
 			var deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
 				filterByName: PREF_NAME,
 				success: function(prefs){ 
-					var projectOID = parseInt(prefs[PREF_NAME]);
+					var projectOID = parseInt(prefs[PREF_NAME], 10);
 					if(isNaN(projectOID) || projectOID <= 0) deferred.reject('invalid projectOID');
 					else deferred.resolve(projectOID); 
 				},
@@ -114,103 +185,142 @@
 			return deferred.promise;
 		},
 		
-		/**
-			private method for sending requests to the rally server. 
-		
-			method must be an HTTP method
-			params must be an object
-			data may be undefined or a non-null object
-			
-			returns Promise(httpResponseData)
-		*/
-		_sendRequest: function(method, params, urlExtension, data){
-			var deferred = Q.defer();
-			if(!INITIALIZED) 																																													return Q.reject('not initialized');
-			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1) 																							return Q.reject('invalid method');
-			if(!(data instanceof Object) || data === null) 																														return Q.reject('invalid params');
-			if(typeof urlExtension !== 'undefined' && (typeof urlExtension !== 'string' || urlExtension[0] !== '/')) 	return Q.reject('invalid urlExtension');
-			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null)) 													return Q.reject('invalid data');
-			
-			Ext.Ajax.request({
-				url: BASE_URL + (urlExtension || ''),
-				method: method,
-				params: Ext.merge({
-					fetch: ['ObjectID', keyName, valueName].join(','),
-					project: PROJECT_OID,
-					projectScopeUp: false,
-					projectScopeDown: false
-				}, params),
-				jsonData: data,
-				success: deferred.resolve,
-				failure: deferred.reject
-			});
-			return deferred.promise;
-		},
-		
-		/** returns Promise({<key>: <value>} || null) */
+		/** returns Promise(kvPair || null) */
 		getKeyValuePair: function(dbKey){
-			return this._sendRequest('GET', {
-				query: '(' + keyName + ' = "' + dbKey + '")',
-				pagesize: 1
-			}).then(function(data){
-				debugger;
+			if(!INITIALIZED)											return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
+			if(dbKey.length === 0)								return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' = "' + dbKey + '")',
+					pagesize: 1
+				};
+			
+			return this._sendRequest('GET', params, urlExtension).then(function(items){ 
+				if(items.length){
+					return {
+						key: items[0][KEY_NAME],
+						value: items[0][VALUE_NAME],
+						ObjectID: items[0].ObjectID
+					};
+				}
+				else return null;
 			});
 		},
 		
-		/** returns Promise([{<key>: <value>}]) */
+		/** returns Promise( [kvPair] ) */
 		queryKeyValuePairs: function(dbKeyContains){
-			var me=this, total = [], start = 1;
-			function nextPage(){
-				return me._sendRequest('GET', {
-					query: '(' + keyName + ' contains "' + dbKeyContains + '")',
+			var me=this, allItems = [];
+			
+			if(!INITIALIZED)															return Q.reject('not initialized');
+			if(typeof dbKeyContains !== 'string')					return Q.reject('invalid key');
+			if(dbKeyContains.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' contains "' + dbKeyContains + '")',
 					pagesize: 200,
-					start: start
-				}).then(function(pairs){
-					if(pairs.length){
-						total = total.concat(pairs);
-						start += 200;
+					start: 1
+				};
+				
+			function nextPage(){
+				return me._sendRequest('GET', params, urlExtension).then(function(items){
+					if(items.length){
+						allItems = allItems.concat(items);
+						params.start += 200;
 						return nextPage();
 					}
 				});
 			}
-			nextPage().then(function(){
-				debugger;
+			return nextPage().then(function(){
+				return allItems.map(function(item){
+					return {
+						key: item[KEY_NAME],
+						value: item[VALUE_NAME],
+						ObjectID: item.ObjectID
+					};
+				});
 			});
 		},
 		
-		/** returns Promise({<key>: <value>}) */
+		/** returns Promise(kvPair) */
 		createKeyValuePair: function(dbKey, dbValue){
 			var me = this, jsonData = {};
-			jsonData[keyName] = dbKey;
-			jsonData[valueName] = dbValue;
-			jsonData.Name = dbKey; //Name is required
+			
+			if(!INITIALIZED)											return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')				return Q.reject('invalid value');
+			if(dbKey.length === 0)								return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)	return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
 			
 			return me.getKeyValuePair(dbKey).then(function(kvPair){
 				if(kvPair) return Q.reject('key already exists');
-				else return me._sendRequest('PUT', {}, '/create', jsonData);
-			}).then(function(data){
-				debugger;
+				else {					
+					var urlExtension = '/' + MODEL_NAME + '/create';
+					return me._sendRequest('PUT', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
 			});
 		},
 		
-		/** returns Promise({<key>: <value>}) */
+		/** returns Promise(kvPair) */
 		updateKeyValuePair: function(dbKey, dbValue){
-			var jsonData = {};
-			jsonData[keyName] = dbKey;
-			jsonData[valueName] = dbValue;
+			var me = this, jsonData = {};
 			
+			if(!INITIALIZED)											return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')				return Q.reject('invalid value');
+			if(dbKey.length === 0)								return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)	return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
+
 			return me.getKeyValuePair(dbKey).then(function(kvPair){
 				if(!kvPair) return Q.reject('key does not exist');
-				else return me._sendRequest('POST', {}, ('/' + kvPair.ObjectID), jsonData);
-			}).then(function(data){
-				debugger;
+				else{					
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;
+					return me._sendRequest('POST', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
 			});
 		},
 		
 		/** returns Promise(void) */
 		deleteKeyValuePair: function(dbKey){
+			var me = this;
+			
+			if(!INITIALIZED)											return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
+			if(dbKey.length === 0)								return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+
 			return me.getKeyValuePair(dbKey).then(function(kvPair){
-				if(kvPair) return me._sendRequest('DELETE', {}, ('/' + kvPair.ObjectID));
+				if(kvPair){
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;	
+					return me._sendRequest('DELETE', {}, urlExtension);
+				}
 			});
 		}
 	});

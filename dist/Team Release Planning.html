@@ -1157,6 +1157,7 @@
 		
 		_alert: function(title, message){
 			var me=this;
+			message = message || '';
 			message = (typeof message === 'string') ? message : 
 								(message.message ? message.message : 
 								JSON.stringify(message, null, '\t'));
@@ -1175,6 +1176,7 @@
 		
 		_confirm: function(title, message, fn){
 			var me=this;
+			message = message || '';
 			message = (typeof message === 'string') ? message : 
 								(message.message ? message.message : 
 								JSON.stringify(message, null, '\t'));

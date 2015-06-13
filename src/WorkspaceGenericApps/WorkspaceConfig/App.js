@@ -43,14 +43,16 @@
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
-					me.setLoading(false);
-					me._renderScrumGroupPortfolioGrid();
-					me._renderChooseDatabaseProject();
 				})
 				.then(function(){
 					return KeyValueDb.getDatabaseProjectOID()
 						.then(function(projectOID){ me.DatabaseProjectObjectID = projectOID; })
 						.fail(function(){ me.DatabaseProjectObjectID = undefined; });
+				})
+				.then(function(){
+					me.setLoading(false);
+					me._renderChooseDatabaseProject();
+					me._renderScrumGroupPortfolioGrid();
 				})
 				.fail(function(reason){
 					me.setLoading(false);
@@ -60,6 +62,41 @@
 		},
 
 		/************************************************************* RENDER *******************************************/
+		_renderChooseDatabaseProject: function(){
+			var me = this;
+			me.add({
+				xtype:'container',
+				cls: 'section-header-text',
+				html:'Key-Value Database Project Config'
+			});
+			me.add({
+				xtype: 'intelcombobox',
+				width: 400,
+				labelWidth: 200,
+				margin:'5px 0 15px 0',
+				fieldLabel: 'Key-Value Database Project',
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name', 'ObjectID'],
+					data: me.ProjectDataForStore
+				}),
+				value: me.DatabaseProjectObjectID,
+				displayField: 'Name',
+				valueField: 'ObjectID',
+				listeners: {
+					select: function(combo, records){
+						var newProjectOID = records[0].data.ObjectID;
+						if(me.DatabaseProjectObjectID === newProjectOID) return;
+						me.setLoading('Saving');
+						KeyValueDb.setDatabaseProjectOID(newProjectOID)
+							.then(function(){ me.DatabaseProjectObjectID = newProjectOID; })
+							.fail(function(reason){ me._alert(reason); })
+							.then(function(){ me.setLoading(false); })
+							.done();
+					}
+				}
+			});
+		},
+		
 		_renderScrumGroupPortfolioGrid: function(){
 			var me = this;
 			
@@ -164,7 +201,7 @@
 					layout: 'hbox',
 					items: [{
 						xtype:'text',
-						cls:'grid-header-text',
+						cls:'section-header-text',
 						width:500,
 						text:"Scrum Group Portfolio Config"
 					},{
@@ -291,28 +328,6 @@
 				enableEditing:false,
 				store: me.ScrumGroupPortfolioConfigStore
 			});	
-		},
-		
-		_renderChooseDatabaseProject: function(){
-			me.DatabaseProjectSection = me.add({
-				xtype: 'intelcombobox',
-				width: 500,
-				labelWidth: 300,
-				fieldLabel: 'Select Key-Value Database Project',
-				store: Ext.create('Ext.data.Store', {
-					fields: ['Name', 'ObjectID'],
-					data: me.ProjectDataForStore
-				}),
-				value: me.DatabaseProjectObjectID,
-				displayField: 'Name',
-				valueField: 'ObjectID',
-				listeners: {
-					select: function(){
-						debugger;
-						//KeyValueDb.setDatabaseProjectOID().then(function(){ me.setLoading(false); });
-					}
-				}
-			});
 		}
 	});
 }());
