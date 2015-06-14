@@ -48,23 +48,23 @@
 	var Ext = window.Ext4 || window.Ext;
 	
 	/** 
-		The first 5 variables should probably just be left alone. But if you feel compelled to use Tasks or Defects as the KV storage
+		The first 6 variables should probably just be left alone. But if you feel compelled to use Tasks or Defects as the KV storage
 		medium (MODEL_NAME) or change the KEY_NAME or VALUE_NAME or PREF_NAME, knock yourself out.
 		
 		The next 2 variables are the max length the key and value strings can be.
 		
-		The last 3 variables will be modified as apps use this database
+		The last 2 variables will be modified as apps use this database
 	*/
 	var PREF_NAME = 'intel-key-value-database-project',
 		MODEL_NAME = 'HierarchicalRequirement',
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
+		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
 		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
 		
 		MAX_TEXT_LENGTH = 256,
 		MAX_STRING_LENGTH = 65536,
 		
-		SECURITY_KEY = '',
 		INITIALIZED = false,
 		PROJECT_OID = 0;
 	
@@ -83,10 +83,10 @@
 		_sendRequest: function(method, params, urlExtension, data){
 			var deferred = Q.defer();
 			
-			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1)											return Q.reject('invalid method');
-			if(!(params instanceof Object) || params === null)															return Q.reject('invalid params');
-			if(typeof urlExtension !== 'string' || urlExtension[0] !== '/')									return Q.reject('invalid urlExtension');
-			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null))	return Q.reject('invalid data');
+			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1)                     return Q.reject('invalid method');
+			if(!(params instanceof Object) || params === null)                              return Q.reject('invalid params');
+			if(typeof urlExtension !== 'string' || urlExtension[0] !== '/')                 return Q.reject('invalid urlExtension');
+			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null)) return Q.reject('invalid data');
 
 			data = (data === undefined ? data : JSON.stringify(data, null, '  '));
 			params = _.map(Ext.merge({
@@ -104,6 +104,9 @@
 				dataType: 'json',
 				headers: {
 					'Content-Type' : 'application/json'
+				},
+				xhrFields: {
+					withCredentials: true
 				}
 			});
 			request.done(function(json){
@@ -127,19 +130,14 @@
 			returns Promise()
 		*/
 		initialize: function(){
-			if(INITIALIZED) return Q.reject('already initialized');
-			return Q.all([
-				this.getDatabaseProjectOID().then(function(projectOID){
+			if(INITIALIZED) return Q();
+			return this.getDatabaseProjectOID()
+				.then(function(projectOID){
 					projectOID = parseInt(projectOID, 10);
 					if(isNaN(projectOID) || projectOID <= 0) return Q.reject('KeyValueDb not properly initialized');
 					else PROJECT_OID = projectOID;
-				}),
-				this._sendRequest('GET', {}, '/security/authorize').then(function(data){
-					if(!data.SecurityToken) return Q.reject('invalid security token returned from server');
-					SECURITY_KEY = data.SecurityToken;
 				})
-			])
-			.then(function(){ INITIALIZED = true; });
+				.then(function(){ INITIALIZED = true; });
 		},
 		
 		/** 
@@ -187,10 +185,10 @@
 		
 		/** returns Promise(kvPair || null) */
 		getKeyValuePair: function(dbKey){
-			if(!INITIALIZED)											return Q.reject('not initialized');
-			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
-			if(dbKey.length === 0)								return Q.reject('key too short');
-			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
 			
 			var urlExtension = '/' + MODEL_NAME,
 				params = {
@@ -214,9 +212,9 @@
 		queryKeyValuePairs: function(dbKeyContains){
 			var me=this, allItems = [];
 			
-			if(!INITIALIZED)															return Q.reject('not initialized');
-			if(typeof dbKeyContains !== 'string')					return Q.reject('invalid key');
-			if(dbKeyContains.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			if(!INITIALIZED)                              return Q.reject('not initialized');
+			if(typeof dbKeyContains !== 'string')         return Q.reject('invalid key');
+			if(dbKeyContains.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
 			
 			var urlExtension = '/' + MODEL_NAME,
 				params = {
@@ -249,12 +247,12 @@
 		createKeyValuePair: function(dbKey, dbValue){
 			var me = this, jsonData = {};
 			
-			if(!INITIALIZED)											return Q.reject('not initialized');
-			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
-			if(typeof dbValue !== 'string')				return Q.reject('invalid value');
-			if(dbKey.length === 0)								return Q.reject('key too short');
-			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
-			if(dbValue.length > MAX_TEXT_LENGTH)	return Q.reject('value too long');
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
 			
 			jsonData[MODEL_NAME] = {};
 			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
@@ -280,12 +278,12 @@
 		updateKeyValuePair: function(dbKey, dbValue){
 			var me = this, jsonData = {};
 			
-			if(!INITIALIZED)											return Q.reject('not initialized');
-			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
-			if(typeof dbValue !== 'string')				return Q.reject('invalid value');
-			if(dbKey.length === 0)								return Q.reject('key too short');
-			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
-			if(dbValue.length > MAX_TEXT_LENGTH)	return Q.reject('value too long');
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
 			
 			jsonData[MODEL_NAME] = {};
 			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
@@ -311,10 +309,10 @@
 		deleteKeyValuePair: function(dbKey){
 			var me = this;
 			
-			if(!INITIALIZED)											return Q.reject('not initialized');
-			if(typeof dbKey !== 'string')					return Q.reject('invalid key');
-			if(dbKey.length === 0)								return Q.reject('key too short');
-			if(dbKey.length > MAX_STRING_LENGTH)	return Q.reject('key too long');
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
 
 			return me.getKeyValuePair(dbKey).then(function(kvPair){
 				if(kvPair){

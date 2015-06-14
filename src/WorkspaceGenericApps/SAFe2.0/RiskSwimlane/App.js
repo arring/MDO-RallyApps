@@ -1,5 +1,13 @@
+/** 
+	RiskIDs are in the form of risk-<releaseName>-<scrumGroupRootProjectObjectID>-<random string> 
+	
+	App only works with ScrumGroups that have been configured in WorkspaceConfig app. 
+	You must have Database Project set in WorkspaceConfig app as well.
+*/
+
 (function(){
-	var Ext = window.Ext4 || window.Ext;
+	var Ext = window.Ext4 || window.Ext,
+		RiskDb = Intel.SAFe.lib.resources.RiskDb;
 
 	Ext.define('RiskSwimlane', {
 		extend: 'IntelRallyApp',
@@ -9,9 +17,6 @@
 			'PrettyAlert',
 			'IframeResize',
 			'IntelWorkweek',
-			'AsyncQueue',
-			'ParallelLoader',
-			'RisksLib',
 			'UserAppsPreference'
 		],
 		
@@ -52,7 +57,15 @@
 		minWidth:910,
 		
 		_userAppsPref: 'intel-SAFe-apps-preference',
-
+		
+		/**___________________________________ UTIL FUNCS ___________________________________*/	
+		_getRandomString: function(){
+			return new Date()*1 + '' + (Math.random()*10000 >> 0);
+		},
+		_generateRiskID: function(){
+			return 'risk-' + this.ReleaseRecord.data.Name + '-' + this.ScrumGroupRootRecord.data.ObjectID + '-' + this._getRandomString();
+		},
+		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
@@ -74,145 +87,85 @@
 			return me._reloadStore(store);
 		},	
 		_loadPortfolioItems: function(){ 
-			var me=this, deferred = Q.defer();
-			me._enqueue(function(done){
-				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-							me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-							me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
-						)
-						.then(function(portfolioStore){
-							return {
-								ordinal: ordinal,
-								store: portfolioStore
+			var me=this;
+			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
+						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
+					);
+				}))
+				.then(function(portfolioItemStores){
+					if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
+					me.PortfolioItemStore = portfolioItemStores[0];
+					
+					//make the mapping of lowest to highest portfolioItems
+					me.PortfolioItemMap = {};
+					_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
+						var ordinal = 0, 
+							parentPortfolioItemRecord = lowPortfolioItemRecord,
+							getParentRecord = function(child, parentList){
+								return _.find(parentList, function(parent){ 
+									return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+								});
 							};
-						});
-					}))
-					.then(function(items){
-						var orderedPortfolioItemStores = _.sortBy(items, function(item){ return item.ordinal; });
-						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
-						me.PortfolioItemStore = orderedPortfolioItemStores[0].store;
-						
-						//make the mapping of lowest to highest portfolioItems
-						me.PortfolioItemMap = {};
-						_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
-							var ordinal = 0, 
-								parentPortfolioItemRecord = lowPortfolioItemRecord,
-								getParentRecord = function(child, parentList){
-									return _.find(parentList, function(parent){ 
-										return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
-									});
-								};
-							while(ordinal < (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord){
-								parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, orderedPortfolioItemStores[ordinal+1].store.getRange());
-								++ordinal;
-							}
-							if(ordinal === (orderedPortfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
-								me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
-						});
-						
-						//destroy the stores, so they get GCed
-						orderedPortfolioItemStores.shift();
-						while(orderedPortfolioItemStores.length) orderedPortfolioItemStores.shift().store.destroyStore();
-					})
-					.then(function(){ done(); deferred.resolve();})
-					.fail(function(reason){ done(); deferred.reject(reason); })
-					.done();
-				}, 'PortfolioItemQueue');
-			return deferred.promise;
+						while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
+							parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
+							++ordinal;
+						}
+						if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+							me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
+					});
+					
+					//destroy the stores, so they get GCed
+					portfolioItemStores.shift();
+					while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
+				})
+				.then(function(){ deferred.resolve();})
+				.fail(function(reason){ deferred.reject(reason); })
+				.done();
 		},		
 
-		/**___________________________________ RISKS STUFF___________________________________**/
-		_parseRisksFromPortfolioItem: function(portfolioItemRecord){
-			var me=this,
-				array = [], 
-				risks = me._getRisks(portfolioItemRecord),
-				PortfolioItemFormattedID = portfolioItemRecord.data.FormattedID,
-				PortfolioItemName = portfolioItemRecord.data.Name;
-				
-			_.each(risks, function(risksData, projectID){
-				_.each(risksData, function(riskData, riskID){
-					array.push({
-						_originalRiskData: Ext.merge({RiskID: riskID}, riskData),
-						RiskID: riskID,
-						Rank: 1,
-						"PortfolioItem #": PortfolioItemFormattedID,
-						"PortfolioItem Name": PortfolioItemName,
-						"Project": (_.find(me.ProjectsWithTeamMembers, function(project){ return project.data.ObjectID == projectID; }) || {data: {}}).data.Name || '?',
-						"Risk Description": riskData.Description,
-						Impact: riskData.Impact,
-						MitigationPlan: riskData.MitigationPlan || " ",
-						Urgency: riskData.Urgency || 'Undefined',
-						Status: riskData.Status,
-						Contact: riskData.Contact,
-						Checkpoint: 'ww' + me._getWorkweek(riskData.Checkpoint),
-						updatable: true
-					});
-				});
+		_loadRisks: function(){
+			var me=this;
+			RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + me.ScrumGroupRootRecord.data.ObjectID + '-').then(function(risks){
+				me.Risks = risks;
 			});
-			return array;
-		},	
-		_parseRisksData: function(){ 
-			var me=this, 
-				array = [];
-			_.each(me.PortfolioItemStore.getRecords(), function(portfolioItemRecord){
-				array = array.concat(me._parseRisksFromPortfolioItem(portfolioItemRecord));
-			});
-			return array;
-		},		
-		_saveRisk: function(riskData){
-			var me=this,
-				data = Ext.clone(riskData)._originalRiskData,
-				portfolioItem = _.find(me.PortfolioItemStore.getRange(), function(pi){ return pi.data.FormattedID == riskData['PortfolioItem #']; }),
-				projectRecord = _.find(me.ProjectsWithTeamMembers, function(project){ return project.data.Name == riskData.Project; });
-			data.Urgency = riskData.Urgency;
-			data.Status = riskData.Status;
-			me._addRisk(portfolioItem, data, projectRecord); 
 		},
 		
 		/**___________________________________ LOADING AND RELOADING ___________________________________*/
-		_showSwimlanes: function(){
-			var me=this;
-			if(!me.RisksSwimlanes) me._loadRisksSwimlanes();
+		_renderSwimlanes: function(){
+			this._renderRiskSwimlanes();
 		},	
 		_updateSwimlanes: function(){
-			var me=this;
-			if(me.PortfolioItemStore){
-				if(me.MatrixStore) me.MatrixStore.intelUpdate();
-			}
+			if(this.MatrixStore) this.MatrixStore.intelUpdate();
 		},
 		_clearEverything: function(){
-			var me=this;
-			
-			if(me.RiskSwimlanes) {
+			if(this.RiskSwimlanes) {
 				document.getElementById('risk-swimlanes').remove(); //can't properly destroy this because there is a bug in column.destroy() code
-				me.RiskSwimlanes = undefined;
+				this.RiskSwimlanes = undefined;
 			}	
 		},
-		_reloadStores: function(){
+		_reloadData: function(){
 			var me=this;
-			return me._loadPortfolioItems()
-				.then(function(){
-					me.Risks = me._parseRisksData();
-				});
+			return Q.all([
+				me._loadPortfolioItems()
+				me._loadRisks()
+			]);
 		},
 		
 		_reloadEverything: function(){
 			var me=this;
-
 			me.setLoading('Loading Data');
-			me._enqueue(function(done){
-				me._reloadStores()
-					.then(function(){
-						me._clearEverything();
-						if(!me.ReleasePicker) me._loadReleasePicker();			
-					})
-					.then(function(){ me._updateSwimlanes(); })
-					.then(function(){ me._showSwimlanes(); })
-					.fail(function(reason){ me._alert('ERROR', reason); })
-					.then(function(){ me.setLoading(false); done(); })
-					.done();
-			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
+			me._reloadData()
+				.then(function(){
+					me._clearEverything();
+					if(!me.ReleasePicker) me._loadReleasePicker();			
+				})
+				.then(function(){ me._updateSwimlanes(); })
+				.then(function(){ me._renderSwimlanes(); })
+				.fail(function(reason){ me._alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
+				.done();
 		},
 
 		/**___________________________________ LAUNCH ___________________________________*/	
@@ -233,20 +186,20 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //3 streams
-						me._projectInWhichTrain(me.ProjectRecord) /********* 1 ********/
-							.then(function(trainRecord){
-								if(trainRecord && me.ProjectRecord.data.ObjectID == trainRecord.data.ObjectID){
-									me.TrainRecord = trainRecord;
-									return me._loadTrainPortfolioProject(me.TrainRecord)
-										.then(function(trainPortfolioProject){
-											if(!trainPortfolioProject) return Q.reject('Invalid portfolio location');
-											me.TrainPortfolioProject = trainPortfolioProject;
+					return Q.all([ //4 streams
+						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 										});
 								} 
-								else return Q.reject('You are not scoped to a train');
+								else return Q.reject('You are not scoped to a valid project');
 							}),
-						me._loadAppsPreference() /********* 2 ********/
+						me._loadAppsPreference() /********* 2 ************/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
@@ -263,6 +216,7 @@
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
 								me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
 							})
+						RiskDb.initialize() /********* 4 ************/
 					]);
 				})
 				.then(function(){ 
@@ -270,7 +224,7 @@
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me._alert('ERROR', reason);
 				})
 				.done();
 		},
@@ -301,12 +255,12 @@
 		},	
 
 		/************************************************************* RENDER ********************************************************************/
-		_loadRisksSwimlanes: function(){
+		_renderRiskSwimlanes: function(){
 			var me = this, 
 				customStore = Ext.create('Ext.data.Store', {	//need to add custom store to go along with the _queryForData override
 					data: me.Risks,
 					sorters: [{property: Rally.data.Ranker.RANK_FIELDS.MANUAL, direction: 'ASC'}],
-					model: 'IntelSwimlaneRiskForTracking',
+					model: 'Intel.SAFe.lib.models.SwimlaneRisk',
 					proxy: {
 						type:'sessionstorage',
 						id:'Risk-Swimlane-' + (Math.random()*1000000>>0)
@@ -321,7 +275,7 @@
 			me.RiskSwimlanes = me.add({
 				xtype:'rallycardboard',
 				id:'risk-swimlanes',
-				models: [Ext.ClassManager.get('IntelSwimlaneRiskForTracking')],	//need to instantiate this
+				models: [Ext.ClassManager.get('Intel.SAFe.lib.models.SwimlaneRisk')],	//need to instantiate this
 				plugins: [{
 					ptype: 'rallyscrollablecardboard',
 					containerEl: this.getEl()
@@ -340,12 +294,12 @@
 				enableRanking:true, //if we set this to false, there is a bug in ColumnDropTarget.notifyOver where it indexes into cards[] wrong
 				cardConfig: {
 					xtype: 'rallycard',
-					fields: ['PortfolioItem #', 'PortfolioItem Name', 'Project', 'Contact', 'Checkpoint', 'Risk Description', 'Impact', 'MitigationPlan'],
+					fields: ['PortfolioItem #', 'PortfolioItem Name', 'Project', 'Contact', 'Checkpoint', 'Description', 'Impact', 'MitigationPlan'],
 					showGearIcon: false
 				},
 				rowConfig: {
 					field: 'Urgency',
-					values: ['1-Hot', '2-Watch', '3-Simmer', 'Undefined'],
+					values: ['High', 'Medium', 'Low'],
 					enableCrossRowDragging: true
 				},
 				store: customStore,
@@ -369,7 +323,11 @@
 						else {
 							window[cardID] = true;
 							setTimeout(function(){ window[cardID] = false; }, 100);
-							me._saveRisk(card.record.data);
+							me.setLoading('Saving Risk');
+							RiskDb.update(card.record.data.RiskID, card.record.data)
+								.catch(function(reason){ me._alert(reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
 						}
 					}
 				}
