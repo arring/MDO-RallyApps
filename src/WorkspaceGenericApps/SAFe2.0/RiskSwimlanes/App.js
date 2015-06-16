@@ -6,15 +6,14 @@
 */
 
 (function(){
-	var Ext = window.Ext4 || window.Ext,
-		RiskDb = Intel.SAFe.lib.resources.RiskDb;
+	var RiskDb = Intel.SAFe.lib.resources.RiskDb;
 
-	Ext.define('RiskSwimlane', {
-		extend: 'IntelRallyApp',
-		cls:'RiskSwimlaneApp',
+	Ext.define('Intel.SAFe.RiskSwimlanes', {
+		extend: 'Intel.lib.RallyApp',
+		cls:'RiskSwimlanesApp',
 		mixins:[
 			'WindowListener',
-			'PrettyAlert',
+			'Intel.lib.mixins.PrettyAlert',
 			'IframeResize',
 			'IntelWorkweek',
 			'UserAppsPreference'
@@ -37,13 +36,7 @@
 				xtype:'container',
 				flex:3,
 				itemId:'navboxLeft',
-				layout: 'hbox',
-				items:[{
-					xtype:'container',
-					flex:1,
-					itemId:'navboxLeftVert',
-					layout: 'vbox'
-				}]
+				layout: 'hbox'
 			},{
 				xtype:'container',
 				flex:2,
@@ -90,8 +83,8 @@
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.TrainPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.TrainPortfolioProject, type)
+						me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
 					);
 				}))
 				.then(function(portfolioItemStores){
@@ -119,15 +112,12 @@
 					//destroy the stores, so they get GCed
 					portfolioItemStores.shift();
 					while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
-				})
-				.then(function(){ deferred.resolve();})
-				.fail(function(reason){ deferred.reject(reason); })
-				.done();
+				});
 		},		
 
 		_loadRisks: function(){
 			var me=this;
-			RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + me.ScrumGroupRootRecord.data.ObjectID + '-').then(function(risks){
+			return RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + me.ScrumGroupRootRecord.data.ObjectID + '-').then(function(risks){
 				me.Risks = risks;
 			});
 		},
@@ -136,38 +126,28 @@
 		_renderSwimlanes: function(){
 			this._renderRiskSwimlanes();
 		},	
-		_updateSwimlanes: function(){
-			if(this.MatrixStore) this.MatrixStore.intelUpdate();
-		},
 		_clearEverything: function(){
-			if(this.RiskSwimlanes) {
-				document.getElementById('risk-swimlanes').remove(); //can't properly destroy this because there is a bug in column.destroy() code
-				this.RiskSwimlanes = undefined;
-			}	
+			if(this.RiskSwimlanes) this.RiskSwimlanes.destroy();
+			this.RiskSwimlanes = null;
 		},
 		_reloadData: function(){
-			var me=this;
-			return Q.all([
-				me._loadPortfolioItems()
-				me._loadRisks()
-			]);
-		},
-		
+			return this._loadRisks();
+		},	
 		_reloadEverything: function(){
 			var me=this;
 			me.setLoading('Loading Data');
 			me._reloadData()
 				.then(function(){
 					me._clearEverything();
-					if(!me.ReleasePicker) me._loadReleasePicker();			
+					if(!me.ReleasePicker) me._renderReleasePicker();
+					if(!me.AddRiskButton) me._renderAddRiskButton();
 				})
-				.then(function(){ me._updateSwimlanes(); })
 				.then(function(){ me._renderSwimlanes(); })
-				.fail(function(reason){ me._alert('ERROR', reason); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},
-
+		
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
@@ -176,7 +156,7 @@
 			me._initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
-				me._alert('ERROR', 'You do not have permissions to edit this project');
+				me.alert('ERROR', 'You do not have permissions to edit this project');
 				return;
 			}	
 			me._configureIntelRallyApp()
@@ -186,7 +166,7 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //4 streams
+					return Q.all([
 						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
@@ -208,24 +188,24 @@
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
 								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) me.ReleaseRecord = currentRelease;
+								if(currentRelease){
+									me.ReleaseRecord = currentRelease;
+									me.WorkweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
+								}
 								else return Q.reject('This project has no releases.');
 							}),
 						me._loadProjectsWithTeamMembers() /********* 3 ************/
 							.then(function(projectsWithTeamMembers){
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
 								me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
-							})
+							}),
 						RiskDb.initialize() /********* 4 ************/
 					]);
 				})
-				.then(function(){ 
-					return me._reloadEverything(); 
-				})
-				.fail(function(reason){
-					me.setLoading(false);
-					me._alert('ERROR', reason);
-				})
+				.then(function(){ return me._loadPortfolioItems(); })
+				.then(function(){ return me._reloadEverything(); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
 				.done();
 		},
 		
@@ -235,15 +215,16 @@
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
+			me.WorkweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me._saveAppsPreference(me.AppsPref)
 				.then(function(){ me._reloadEverything(); })
 				.done();
 		},				
-		_loadReleasePicker: function(){
+		_renderReleasePicker: function(){
 			var me=this;
-			me.ReleasePicker = me.down('#navboxLeftVert').add({
+			me.ReleasePicker = me.down('#navboxLeft').add({
 				xtype:'intelreleasepicker',
 				id: 'releasePicker',
 				labelWidth: 70,
@@ -253,85 +234,124 @@
 				listeners: { select: me._releasePickerSelected.bind(me) }
 			});
 		},	
-
+		_renderAddRiskButton: function(){
+			var me=this;
+			me.AddRiskButton = me.down('#navboxRight').add({
+				xtype:'button',
+				text: 'Add Risk',
+				handler: function(){
+					var modal = Ext.create('Ext.window.Window', {
+						modal:true,
+						closable:true,
+						width: 500,
+						height: 300,
+						y: 5,
+						items: [{
+							xtype: 'container',
+							html:'<b>New Risk</b>'
+						},{
+							xtype:'fieldcontainer',
+							layout:'hbox',
+							items: [{
+								//necessary fields go here
+							}]
+						},{
+							xtype:'container',
+							layout:'hbox',
+							items:[{
+								xtype:'button',
+								text:'Cancel',
+								handler: function(){
+									modal.destroy();
+								}
+							},{
+								xtype:'button',
+								text:'Create Risk',
+								handler: function(){
+									var riskJSON = {
+										ReleaseName: me.ReleaseRecord.data.Name,
+										PortfolioItemObjectID: undefined,
+										ProjectObjectID: undefined,
+										Description: '',
+										Impact: '',
+										MitigationPlan: '',
+										Urgency: RiskDb.URGENCY_OPTIONS[0],
+										Status: RiskDb.STATUS_OPTIONS[0],
+										Contact: '',
+										Checkpoint: me.WorkweekData[0].DateVal
+									};
+									
+									me.setLoading('Creating Risk');
+									RiskDb.create(me._generateRiskID(), riskJSON)
+										.then(function(riskJSON){
+											me.RiskSwimlanes.addCard(Ext.create('Intel.SAFe.lib.models.SwimlaneRisk', riskJSON));
+											modal.destroy();
+										})
+										.fail(function(reason){ me.alert('ERROR', reason); })
+										.then(function(){ me.setLoading(false); })
+										.done();
+								}
+							}]
+						}]
+					});
+					setTimeout(function(){ modal.show(); }, 10);
+				}
+			});
+		},
+		
 		/************************************************************* RENDER ********************************************************************/
 		_renderRiskSwimlanes: function(){
-			var me = this, 
-				customStore = Ext.create('Ext.data.Store', {	//need to add custom store to go along with the _queryForData override
-					data: me.Risks,
-					sorters: [{property: Rally.data.Ranker.RANK_FIELDS.MANUAL, direction: 'ASC'}],
-					model: 'Intel.SAFe.lib.models.SwimlaneRisk',
-					proxy: {
-						type:'sessionstorage',
-						id:'Risk-Swimlane-' + (Math.random()*1000000>>0)
-					},
-					reloadRecord: function(record){ //because wsapi.Store has this apparently 
-						if(typeof record === 'string') return Deft.Promise.when(this.getById(record));
-						else return Deft.Promise.when(record); 
-					} 
-				});
-			_.each(customStore.getRange(), function(model){ model.setProxy(model.store.proxy); });	//since we are overriding Ext.data.Model need to reset proxy
-			
+			var me = this;
+
 			me.RiskSwimlanes = me.add({
-				xtype:'rallycardboard',
-				id:'risk-swimlanes',
-				models: [Ext.ClassManager.get('Intel.SAFe.lib.models.SwimlaneRisk')],	//need to instantiate this
-				plugins: [{
-					ptype: 'rallyscrollablecardboard',
-					containerEl: this.getEl()
-				},{
-					ptype: 'rallyfixedheadercardboard'
-				}],
-				shouldRetrieveModels: function(){ return false; },							//override private function
-				addRow: function(item, applySort) {															//override private function
-					var value = item.isModel ? item.getData() : item;
-					return this._createRow({showHeader: true, value: item.Urgency}, applySort);
-        },
-				_refreshAssociatedCards: function(record, changedFields) {			//this has to be overriden because it called getAssociatedRefs()
-					this.refreshCard(record.getId());
-        },
-				attribute: 'Status',
-				enableRanking:true, //if we set this to false, there is a bug in ColumnDropTarget.notifyOver where it indexes into cards[] wrong
-				cardConfig: {
-					xtype: 'rallycard',
-					fields: ['PortfolioItem #', 'PortfolioItem Name', 'Project', 'Contact', 'Checkpoint', 'Description', 'Impact', 'MitigationPlan'],
-					showGearIcon: false
-				},
-				rowConfig: {
-					field: 'Urgency',
-					values: ['High', 'Medium', 'Low'],
-					enableCrossRowDragging: true
-				},
-				store: customStore,
-				columns: _.map(['Undefined', 'Resolved', 'Owned', 'Accepted', 'Mitigated'], function(status){
-					return {
-						xtype: 'rallycardboardcolumn',
-						value: status,
-						columnHeaderConfig: { headerTpl: status},
-						_queryForData: function() {		//override private function so board doesn't use storeConfig, but the passed in store object instead
-							var me=this;
-							this.store = this.ownerCardboard.store;
-							this.fireEvent('storeload', this.store, this.store.getRange(), true);
-							setTimeout(function(){ me._createAndAddCardsFromStore(me.store); }, 100);	//setting the timeout allows the board to render (avoids errors)
-            }
-					};
-				}),
-				listeners: {
-					cardupdated: function(card){
-						var cardID = card.record.data.RiskID;
-						if(window[cardID]) return; //throttle the saving. this gets called 2 consecutive times per d-n-d
-						else {
-							window[cardID] = true;
-							setTimeout(function(){ window[cardID] = false; }, 100);
-							me.setLoading('Saving Risk');
-							RiskDb.update(card.record.data.RiskID, card.record.data)
-								.catch(function(reason){ me._alert(reason); })
-								.then(function(){ me.setLoading(false); })
-								.done();
-						}
-					}
-				}
-			});	
+				xtype:'container',
+				html: [
+					'<div class="swimlanes">',
+						'<div class="swimlane-column-header-row">',
+							_.map(RiskDb.STATUS_OPTIONS, function(statusOption){
+								return [
+									'<div class="swimlane-column-header">',
+										statusOption,
+									'</div>'
+								].join('\n');
+							}).join('\n'),
+						'</div>',
+						'<div class="swimlane-body">',
+							_.map(RiskDb.URGENCY_OPTIONS, function(urgencyOption){
+								return [
+									'<div class="swimlane-header-row">',
+										urgencyOption,
+									'</div>',
+									'<div class="swimlane-row">',
+										_.map(RiskDb.STATUS_OPTIONS, function(statusOption){
+											return [
+												'<div id="swimlaneDropArea-' + statusOption + '___' + urgencyOption + '" class="swimlane-drop-area">',
+												'</div>'
+											].join('\n');
+										}).join('\n'),
+									'</div>'
+								].join('\n');
+							}).join('\n'),
+						'</div>',
+					'</div>'
+				].join('\n')
+			});
+			
+			_.each(me.Risks, function(risk){
+				var urgency = risk.Urgency,
+					status = risk.Status,
+					dropArea = Ext.get('swimlaneDropArea-' + status + '___' + urgency);
+				Ext.DomHelper.append(dropArea, [
+					'<div id="swimlaneRisk-' + risk.RiskID + '" class="swimlane-risk">',
+						'<div class="' + status + '-' + urgency + '-card-color"></div>',
+						'<div class="swimlane-risk-card-content">',
+							'Urgency: ' + urgency + '<br/>',
+							'Status: ' + status + '<br/>',
+							'Description: ' + risk.Description + '<br/>',
+						'</div>',
+					'</div>'
+				].join('\n'));
+			});
 		}
 	});
 }());

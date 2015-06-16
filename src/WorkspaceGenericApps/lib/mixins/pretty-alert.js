@@ -1,13 +1,15 @@
+/**  
+	DESCRIPTION:
+		gives a window-centered alert or confirm dialog box that isn't ugly. 
+		
+	ISSUES:
+		sometimes alert.setY() fails so we have to fallback to the built-in alert
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	
-	/**  
-		THIS IS ONLY USEFUL AS A RALLYAPP MIXIN 
-		gives a window-centered alert or confirm dialog box that isn't ugly. 
-	*/
-	Ext.define('PrettyAlert', {
 
-		__getMessageBoxY: function(){ 
+	Ext.define('Intel.lib.mixins.PrettyAlert', {	
+		_getMessageBoxY: function(){ 
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
 				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
@@ -17,31 +19,32 @@
 			return iyOffset<0 ? 0 : iyOffset;
 		},
 		
-		_alert: function(title, message){
-			var me=this;
+		_formatString: function(message){
 			message = message || '';
-			message = (typeof message === 'string') ? message : 
-								(message.message ? message.message : 
-								JSON.stringify(message, null, '\t'));
+			return (typeof message === 'string') ? 
+				message : (message.message ? 
+				message.message : JSON.stringify(message, null, '\t'));
+		},
+
+		alert: function(title, message){
 			if(arguments.length<1) return;
 			if(arguments.length===1){
 				message = title;
 				title = '';
 			}
-			Ext.MessageBox.alert(title, message).setY(me.__getMessageBoxY());
-			setTimeout(function(){ //give some time to give the 'ok' or 'yes' button focus
-				var x = Ext.MessageBox.down('button');
-				while(x.isHidden()) x = x.nextSibling();
-				x.focus();
-			}, 50);
+			
+			try {
+				Ext.MessageBox.alert(this._formatString(title), this._formatString(message)).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			}
+			catch(e){ alert(this._formatString(message)); }
 		},
 		
-		_confirm: function(title, message, fn){
-			var me=this;
-			message = message || '';
-			message = (typeof message === 'string') ? message : 
-								(message.message ? message.message : 
-								JSON.stringify(message, null, '\t'));
+		confirm: function(title, message, fn){
 			if(arguments.length<2) return;
 			if(arguments.length===2){
 				fn = message;
@@ -49,12 +52,15 @@
 				title = '';
 			}
 			if(typeof fn !== 'function') fn = function(){};
-			Ext.MessageBox.confirm(title, message, fn).setY(me.__getMessageBoxY());
-			setTimeout(function(){
-				var x = Ext.MessageBox.down('button');
-				while(x.isHidden()) x = x.nextSibling();
-				x.focus();
-			}, 20);
+			
+			try {
+				Ext.MessageBox.confirm(this._formatString(title), this._formatString(message), fn).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			catch(e){ if(confirm(this._formatString(message))) fn(); }
 		}
 	});
 }());

@@ -19,7 +19,7 @@
 		}
 	});
 				
-	Ext.define('IntelRallyApp', {
+	Ext.define('Intel.lib.RallyApp', {
 		alias: 'widget.intelrallyapp',
 		extend: 'Rally.app.App',
 		

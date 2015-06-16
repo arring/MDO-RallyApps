@@ -1,14 +1,15 @@
 {
-   "name": "Test Risk Db",
-   "className": "TestRiskDb",
+   "name": "Test RiskDb",
+   "className": "Test.RiskDb",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
       "https://code.jquery.com/jquery-2.1.4.js",
       "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.9.3/lodash.js",
-      "../../src/WorkspaceGenericApps/lib/resources/key-value-db.js",
-      "../../src/WorkspaceGenericApps/SAFe2.0/lib/resources/risk-db.js",
+      "../../src/WorkspaceGenericApps/lib/resource/key-value-db.js",
+      "../../src/WorkspaceGenericApps/SAFe2.0/lib/model/risk.js",
+      "../../src/WorkspaceGenericApps/SAFe2.0/lib/resource/risk-db.js",
       "App.js"
    ],
    "css": []

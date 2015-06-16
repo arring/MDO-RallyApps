@@ -5,7 +5,7 @@
 	Just copy/paste this in a custom app in Rally. test results are console.logged
 */
 (function(){
-	var RiskDb = Intel.SAFe.lib.resources.RiskDb,
+	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
 		TEST_TOKEN = 'risk---testing-app---',
 		passing = 0, failing = 0,
 		RISK_TMPL = {
@@ -16,8 +16,8 @@
 			Impact: 'Impact',
 			MitigationPlan: 'MitigationPlan',
 			Urgency: 'High',
-			Status: 'Resolved',
-			Contact: 'Contact',
+			Status: 'Open',
+			OwnerObjectID: 14,
 			Checkpoint: 12
 		};
 	
@@ -30,7 +30,7 @@
 			});
 	}
 	
-	Ext.define('TestRiskDb', {
+	Ext.define('Test.RiskDb', {
 		extend: 'Rally.app.App',
 		
 		launch: function(){
@@ -98,7 +98,29 @@
 					RiskDb.create(TEST_TOKEN + 'create1', _.merge({}, RISK_TMPL, {Description: null}))
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason === 'invalid Description') deferred.resolve();
+							if(reason[0] === 'Description is invalid') deferred.resolve();
+							else deferred.reject();
+						})
+						.done();
+					return deferred.promise;
+				},
+				function(){ //should validate fields
+					var deferred = Q.defer();
+					RiskDb.create(TEST_TOKEN + 'create1', _.merge({}, RISK_TMPL, {Description: 3}))
+						.then(deferred.reject)
+						.fail(function(reason){
+							if(reason[0] === 'Description is invalid') deferred.resolve();
+							else deferred.reject();
+						})
+						.done();
+					return deferred.promise;
+				},
+				function(){ //should validate fields
+					var deferred = Q.defer();
+					RiskDb.create(TEST_TOKEN + 'create1', _.merge({}, RISK_TMPL, {Description: {x:3}}))
+						.then(deferred.reject)
+						.fail(function(reason){
+							if(reason[0] === 'Description is invalid') deferred.resolve();
 							else deferred.reject();
 						})
 						.done();
@@ -109,7 +131,7 @@
 					RiskDb.create(TEST_TOKEN + 'create1', _.merge({}, RISK_TMPL, {Status: 'Magic Johnson'}))
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason === 'invalid Status') deferred.resolve();
+							if(reason[0] === 'Status is invalid') deferred.resolve();
 							else deferred.reject();
 						})
 						.done();
@@ -120,7 +142,7 @@
 					RiskDb.create(TEST_TOKEN + 'create1')
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason === 'invalid riskJSON') deferred.resolve();
+							if(reason.length === 8) deferred.resolve();
 							else deferred.reject();
 						})
 						.done();
@@ -131,11 +153,34 @@
 					RiskDb.create(TEST_TOKEN + 'create1', 'magic object!')
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason === 'invalid riskJSON') deferred.resolve();
+							if(reason.length === 8) deferred.resolve();
 							else deferred.reject();
 						})
 						.done();
 					return deferred.promise;
+				},
+				function(){ //should validate fields
+					var deferred = Q.defer();
+					var newRisk = _.merge({}, RISK_TMPL);
+					delete newRisk.Description;
+					
+					RiskDb.create(TEST_TOKEN + 'create_1', newRisk)
+						.then(deferred.reject)
+						.fail(function(reason){
+							if(reason[0] === 'Description is invalid') deferred.resolve();
+							else deferred.reject();
+						})
+						.done();
+					return deferred.promise;
+				},
+				function(){ //should remove extra fields
+					var newRisk = _.merge({}, RISK_TMPL);
+					newRisk.Magic = 'magic';
+					
+					return RiskDb.create(TEST_TOKEN + 'create_2', newRisk)
+						.then(function(riskJSON){
+							if(riskJSON.Magic === 'magic') deferred.reject();
+						});
 				},
 				
 				/************************ TEST UPDATE **********************************/
@@ -169,14 +214,14 @@
 				
 				/************************ TEST DELETE **********************************/
 				function(){ //should delete risk
-					return RiskDb.delete(TEST_TOKEN + 'create1').then(function(){ 
+					return RiskDb['delete'](TEST_TOKEN + 'create1').then(function(){ 
 						return RiskDb.get(TEST_TOKEN + 'create1').then(function(risk){
 							if(risk) return Q.reject();
 						});
 					});
 				},
 				function(){ //should no-op delete a non-existent risk
-					return RiskDb.delete(TEST_TOKEN + 'not-exist');
+					return RiskDb['delete'](TEST_TOKEN + 'not-exist');
 				},
 				
 				/************************ TEST QUERY **********************************/
@@ -201,7 +246,7 @@
 		cleanup: function(){
 			return RiskDb.query(TEST_TOKEN).then(function(risks){
 				return Q.all(risks.map(function(risk){
-					return RiskDb.delete(risk.RiskID);
+					return RiskDb['delete'](risk.RiskID);
 				}));
 			});
 		}

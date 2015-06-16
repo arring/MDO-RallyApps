@@ -4,7 +4,7 @@
 	Just copy/paste this in a custom app in Rally. test results are console.logged
 */
 (function(){
-	var KeyValueDb = Intel.lib.resources.KeyValueDb,
+	var KeyValueDb = Intel.lib.resource.KeyValueDb,
 		TEST_TOKEN = 'KeyValueDbTestingAppToken-',
 		passing = 0, failing = 0;
 	
@@ -17,7 +17,7 @@
 			});
 	}
 	
-	Ext.define('TestKeyValueDb', {
+	Ext.define('Test.KeyValueDb', {
 		extend: 'Rally.app.App',
 		
 		launch: function(){

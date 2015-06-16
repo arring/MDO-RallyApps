@@ -62,13 +62,13 @@
 		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
 		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
 		
-		MAX_TEXT_LENGTH = 256,
-		MAX_STRING_LENGTH = 65536,
+		MAX_TEXT_LENGTH = 65536,
+		MAX_STRING_LENGTH = 256,
 		
 		INITIALIZED = false,
 		PROJECT_OID = 0;
 	
-	Ext.define('Intel.lib.resources.KeyValueDb', {
+	Ext.define('Intel.lib.resource.KeyValueDb', {
 		singleton: true,
 		
 		/**
