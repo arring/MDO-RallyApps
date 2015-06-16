@@ -72,9 +72,9 @@
 							fn: function(){ 
 								var html = ['<ul class ="ulInformation"><li><b>Scope Delta</b> = (Final Workload - Original Commit) / Original Commit</li>',
 									'<li><b>A/C Original</b> = Final Accepted / Original Commit</li>',
-									'<li><b>A/C Final</b> = Final Accepted / Original Commit</li>',
+									'<li><b>A/C Final</b> = Final Accepted / Final Workload</li>',
 									'<li>Sample dates are taken on 7th day of the Release Start Date and on the Release End Date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
-									'<li>If there are 0 points at Release Start Date, then the ideal data is taken for the sample.</li>',
+									'<li>If there are 0 points at Release End Date, then the ideal and projected data are taken for the sample.</li>',
 									'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
 									'<li>Once Release Start Date for a selected Release is changed, it will be saved and reloaded with the saved Release Start Date in future.</li>',
 									'<li><b>Final Accepted</b> is the total points for user stories that are accepted at the Release End Date',
@@ -262,7 +262,7 @@
 				.then(function(portfolioItemStore){
 					var portfolioItemsInRelease = _.filter(portfolioItemStore.getRange(), function(pi){ return (pi.data.Release || {}).Name == releaseName; });
 					me.PortfolioItemsInReleaseStore = Ext.create('Rally.data.wsapi.Store', {
-						model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+						model: me['PortfolioItem/' + me.PortfolioItemTypes[0]], 
 						data: portfolioItemsInRelease,
 						totalCount: portfolioItemsInRelease.length,
 						disableMetaChangeEvent: true,
@@ -601,23 +601,6 @@
 				total.finalCommit = total.ideal > 0 ? total.ideal : total.projected;
 				total.finalAccepted = total.projected > 0 ? total.projected : total.ideal;
 			}
-			var commitDataPlus =[];
-			// commitDataMinus = [];
-			//adding a line for the initial Commitment projection
-/* 			_.each(aggregateChartData.categories,function(f,key){
-				commitDataPlus.push(total.initialCommit);
-				//commitDataMinus.push(total.initialCommit - 10);
-			}); */
-			//console.log(commitDataPlus,commitDataMinus);
-/* 			aggregateChartData.series.push({
-				colorIndex: 1,
-				symbolIndex: 1,
-				dashStyle: "shortdash",
-				color: "red",
-				data:commitDataPlus,
-				name: "Commitment",
-				type: "spline"
-			}); */
 
 			me.total = total;
 
@@ -649,7 +632,7 @@
 						width: 2,
 						zIndex: 5,
 						label : {
-							text : 'Original Commit Sample Date ',
+							text : 'Original Commit ',
 							style:{
 								color:'black',
 								'text-shadow': '0 1px 0 white',
@@ -664,7 +647,7 @@
 						width: 2,
 						zIndex: 5,
 						label : {
-							text : 'Final Workload & Accepted Sample Date',
+							text : 'Final Workload & Accepted',
 							style:{
 								color:'black',
 								'text-shadow': '0 1px 0 white'
@@ -675,7 +658,6 @@
 				},
 				series: aggregateChartData.series
 			}));
-			debugger;
 			me._setCumulativeFlowChartDatemap($("#retroChart").children()[0].id, datemap);
 		},  
 		_hideHighchartsLinks: function(){
