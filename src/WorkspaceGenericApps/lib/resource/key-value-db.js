@@ -30,9 +30,9 @@
 		- kriskowal/q
 		- jquery 2.X
 		- lodash
-		- the KEY_NAME and VALUE_NAME must be non-visible custom fields on whatever <MODEL_NAME> artifact type you choose.
+		- the KEY_NAME and VALUE_NAME must be hidden custom fields on the <MODEL_NAME> artifact type you choose.
 			> so, if you use the defaults in this app, you have to create hidden c_usDbKey(string) and c_usDbValue(text) fields on 
-				HierarchicalRequirement in your workspace
+				HierarchicalRequirement in your workspace. Dont mess up the (string) and (text) part
 	
 	ISSUES: 
 		If someone has an app open that uses this, and another person changes the projectOID, the first person will continue to 

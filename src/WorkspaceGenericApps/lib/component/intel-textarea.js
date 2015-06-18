@@ -1,7 +1,11 @@
+/**
+	SUMMARY:
+		Textarea with some defaults built into it.
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('IntelTextarea', {
+	Ext.define('Intel.lib.component.Textarea', {
 		extend: 'Ext.form.field.TextArea',
 		alias: ['widget.inteltextarea'],
 		

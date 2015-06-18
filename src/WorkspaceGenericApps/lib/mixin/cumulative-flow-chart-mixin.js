@@ -1,14 +1,22 @@
-/** This is a mixin for using highcharts with rally data data after it is run through the lookback calculator */
+/** 
+	SUMMARY:
+		This is a mixin for using highcharts with rally data data after it is run through the lookback calculator.
+		It just formats the data, and adds trendlines and labels to the charts. 
+		
+		This mixin assumes you are using UserStories with lookback api and you are mapping ScheduleState vs. Time.
+		
+	DEPENDENCIES:
+		'Intel.lib.IntelRallyApp' parent class of app for me.ScheduleStates, 
+		'Intel.lib.mixin.IntelWorkweek' mixed into app for me.getWorkweek,
+		Sylvester math library
+		lodash
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
 	var ChartsTooltipDatemap = {}, //closure variable that maps the x values to date strings -- per chart
-		RSquaredMap = {};
-
-	Ext.define('CumulativeFlowChartMixin', {
-		requires:['IntelRallyApp', 'IntelWorkweek'],
-
-		_defaultCumulativeFlowChartConfig: {
+		RSquaredMap = {},
+		defaultCFCConfig: {
 			chart: {
 				defaultSeriesType: "area",
 				zoomType: "xy"
@@ -75,15 +83,25 @@
 					}
 				}
 			}
+		};
+
+	Ext.define('Intel.lib.mixin.CumulativeFlowChartMixin', {
+		requires:[
+			'Intel.lib.IntelRallyApp', 
+			'Intel.lib.mixin.IntelWorkweek'
+		],
+		
+		getDefaultCFCConfig: function(){
+			return _.merge({}, defaultCFCConfig);
 		},
-		_getCumulativeFlowChartColors: function(){
+		getCumulativeFlowChartColors: function(){
 			var me=this,
-				colors = me._defaultCumulativeFlowChartConfig.colors,
+				colors = me.getDefaultCFCConfig().colors,
 				scheduleStates = me.ScheduleStates;
 			if(scheduleStates.length >= 5) return {colors: colors};
 			else return {colors: colors.slice(0, scheduleStates.length).concat(colors.slice(scheduleStates.length + 1))};
 		},
-		_getValidTrendTypes: function(){
+		getValidTrendTypes: function(){
 			return [
 				'FromZero', 
 				'FromStartAccepted', 
@@ -96,7 +114,7 @@
 				'LinearRegressionFromStartWork'
 			];
 		},
-		__getRSquared: function(ySeries, fSeries, lastIndex){
+		_getRSquared: function(ySeries, fSeries, lastIndex){
 			//using algorithm from http://en.wikipedia.org/wiki/Coefficient_of_determination
 			if(lastIndex <= 0) return 1;
 			var ys = ySeries.data.slice(0, lastIndex),
@@ -106,11 +124,11 @@
 				SSres = _.reduce(fs, function(sum, fi, i){ return sum + Math.pow((ys[i] || 0) - (fi || 0), 2); }, 0);
 			return (1000*(1 - SSres/SStot)>>0)/1000;
 		},
-		__addProjectedTrendline: function(data, options){
+		_addProjectedTrendline: function(data, options){
 			var me=this,
 				totalPoints = options.totalPoints,
 				trendType = options.trendType,
-				validTypes = me._getValidTrendTypes(),
+				validTypes = me.getValidTrendTypes(),
 				slope, intercept, X, Y, 
 				scheduleStateSeries  = _.filter(data.series, function(s){ return me.ScheduleStates.indexOf(s.name) > -1; }),
 				scheduleStatesSumList = _.times(scheduleStateSeries[0].length, function(n){ 
@@ -268,7 +286,7 @@
 			}
 			return projectedTrend;
 		},
-		_updateCumulativeFlowChartData: function(data, options){
+		updateCumulativeFlowChartData: function(data, options){
 			_.merge({}, options);
 			var me = this, 
 				now = new Date(),
@@ -305,7 +323,7 @@
 			//zero future points, convert to workweeks, and set datemap
 			_.each(data.categories, function(c, i, a){
 				var d = new Date(c);
-				a[i] = 'ww' + me._getWorkweek(d);
+				a[i] = 'ww' + me.getWorkweek(d);
 				datemap[i] = c;
 				if(d>now){
 					_.each(data.series, function(s, j){
@@ -315,9 +333,9 @@
 			});
 
 			if(!hideTrends){
-				var projectedTrend = me.__addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
+				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
-				rSquaredMap[data.series.length-1] = {val: me.__getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
+				rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		
 			data.datemap = datemap;
@@ -325,7 +343,7 @@
 			
 			return data;
 		},
-		_getCumulativeFlowChartTicks: function(startDate, endDate, width){
+		getCumulativeFlowChartTicks: function(startDate, endDate, width){
 			var pixelTickWidth = 40,
 				ticks = width/pixelTickWidth>>0,
 				oneDay = 1000*60*60*24,
@@ -333,10 +351,10 @@
 				interval = ((days/ticks>>0)/7>>0)*7;
 			return (interval < 7) ? 7 : interval; //make it weekly at the minimum
 		},
-		_setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
+		setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
 			ChartsTooltipDatemap[chartContainerId] = datemap;
 		},
-		_setCumulativeFlowChartRSquaredMap: function(chartContainerId, rSquaredMap){
+		setCumulativeFlowChartRSquaredMap: function(chartContainerId, rSquaredMap){
 			RSquaredMap[chartContainerId] = rSquaredMap;
 		}
 	});

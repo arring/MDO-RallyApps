@@ -9,14 +9,14 @@
 	var RiskDb = Intel.SAFe.lib.resources.RiskDb;
 
 	Ext.define('Intel.SAFe.RiskSwimlanes', {
-		extend: 'Intel.lib.RallyApp',
+		extend: 'Intel.lib.IntelRallyApp',
 		cls:'RiskSwimlanesApp',
 		mixins:[
-			'WindowListener',
-			'Intel.lib.mixins.PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'UserAppsPreference'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.UserAppsPreference'
 		],
 		
 		layout: {
@@ -49,19 +49,19 @@
 		}],
 		minWidth:910,
 		
-		_userAppsPref: 'intel-SAFe-apps-preference',
+		userAppsPref: 'intel-SAFe-apps-preference',
 		
 		/**___________________________________ UTIL FUNCS ___________________________________*/	
 		_getRandomString: function(){
 			return new Date()*1 + '' + (Math.random()*10000 >> 0);
 		},
-		_generateRiskID: function(){
+		generateRiskID: function(){
 			return 'risk-' + this.ReleaseRecord.data.Name + '-' + this.ScrumGroupRootRecord.data.ObjectID + '-' + this._getRandomString();
 		},
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
+		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
@@ -77,14 +77,14 @@
 						projectScopeUp:false
 					}
 				});
-			return me._reloadStore(store);
+			return me.reloadStore(store);
 		},	
-		_loadPortfolioItems: function(){ 
+		loadPortfolioItems: function(){ 
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me.loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
 					);
 				}))
 				.then(function(portfolioItemStores){
@@ -115,7 +115,7 @@
 				});
 		},		
 
-		_loadRisks: function(){
+		loadRisks: function(){
 			var me=this;
 			return RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + me.ScrumGroupRootRecord.data.ObjectID + '-').then(function(risks){
 				me.Risks = risks;
@@ -123,55 +123,54 @@
 		},
 		
 		/**___________________________________ LOADING AND RELOADING ___________________________________*/
-		_renderSwimlanes: function(){
-			this._renderRiskSwimlanes();
+		renderSwimlanes: function(){
+			this.renderRiskSwimlanes();
 		},	
-		_clearEverything: function(){
+		clearEverything: function(){
 			if(this.RiskSwimlanes) this.RiskSwimlanes.destroy();
 			this.RiskSwimlanes = null;
 		},
-		_reloadData: function(){
-			return this._loadRisks();
+		reloadData: function(){
+			return this.loadRisks();
 		},	
-		_reloadEverything: function(){
+		reloadEverything: function(){
 			var me=this;
 			me.setLoading('Loading Data');
-			me._reloadData()
+			return me.reloadData()
 				.then(function(){
-					me._clearEverything();
-					if(!me.ReleasePicker) me._renderReleasePicker();
-					if(!me.AddRiskButton) me._renderAddRiskButton();
+					me.clearEverything();
+					if(!me.ReleasePicker) me.renderReleasePicker();
+					if(!me.AddRiskButton) me.renderAddRiskButton();
 				})
-				.then(function(){ me._renderSwimlanes(); })
+				.then(function(){ me.renderSwimlanes(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
-				.then(function(){ me.setLoading(false); })
-				.done();
+				.then(function(){ me.setLoading(false); });
 		},
 		
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
 			me.setLoading('Loading configuration');
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
 				return;
 			}	
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([
-						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
 									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+									return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 										.then(function(scrumGroupPortfolioProject){
 											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
 											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
@@ -179,22 +178,22 @@
 								} 
 								else return Q.reject('You are not scoped to a valid project');
 							}),
-						me._loadAppsPreference() /********* 2 ************/
+						me.loadAppsPreference() /********* 2 ************/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
-								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease){
 									me.ReleaseRecord = currentRelease;
-									me.WorkweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
+									me.WorkweekData = me.getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 								}
 								else return Q.reject('This project has no releases.');
 							}),
-						me._loadProjectsWithTeamMembers() /********* 3 ************/
+						me.loadProjectsWithTeamMembers() /********* 3 ************/
 							.then(function(projectsWithTeamMembers){
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
 								me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
@@ -202,27 +201,29 @@
 						RiskDb.initialize() /********* 4 ************/
 					]);
 				})
-				.then(function(){ return me._loadPortfolioItems(); })
-				.then(function(){ return me._reloadEverything(); })
+				.then(function(){ return me.loadPortfolioItems(); })
+				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
-		_releasePickerSelected: function(combo, records){
+		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			me.WorkweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
+			me.WorkweekData = me.getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._saveAppsPreference(me.AppsPref)
-				.then(function(){ me._reloadEverything(); })
+			me.saveAppsPreference(me.AppsPref)
+				.then(function(){ return me.reloadEverything(); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
-		_renderReleasePicker: function(){
+		renderReleasePicker: function(){
 			var me=this;
 			me.ReleasePicker = me.down('#navboxLeft').add({
 				xtype:'intelreleasepicker',
@@ -231,10 +232,10 @@
 				width: 250,
 				releases: me.ReleaseRecords,
 				currentRelease: me.ReleaseRecord,
-				listeners: { select: me._releasePickerSelected.bind(me) }
+				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},	
-		_renderAddRiskButton: function(){
+		renderAddRiskButton: function(){
 			var me=this;
 			me.AddRiskButton = me.down('#navboxRight').add({
 				xtype:'button',
@@ -300,7 +301,7 @@
 		},
 		
 		/************************************************************* RENDER ********************************************************************/
-		_renderRiskSwimlanes: function(){
+		renderRiskSwimlanes: function(){
 			var me = this;
 
 			me.RiskSwimlanes = me.add({

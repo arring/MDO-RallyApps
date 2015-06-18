@@ -1,18 +1,17 @@
+/**
+	SUMMARY:
+		This override improves performance for sessionStorage proxy mostly by removing redundant page refreshes.
+		
+		The regular proxy calls record.commit() and later on, datarefresh event is called. since these both cause a rerender, 
+		we make the record edits SILENT, so only the datarefresh actually re-render the page
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-		
-	/**
-		the regular proxy calls record.commit() and later on, datarefresh event is called. since these both cause a rerender, 
-		we make the record edits SILENT, so only the datarefresh actually rerender the page
-	*/
 
-	Ext.define('Intel.data.proxy.SessionStorage', {
+	Ext.define('Intel.lib.override.SessionStorage', {
 		extend: 'Ext.data.proxy.SessionStorage',
-		alias: 'proxy.fastsessionproxy',
-
 		constructor: function(cfg) {
-			var me = this;
-			me.callParent(arguments);
+			this.callParent(arguments);
 		},
 		
 		create: function(operation, callback, scope) {

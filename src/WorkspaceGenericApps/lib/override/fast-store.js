@@ -1,13 +1,15 @@
+/**
+	SUMMARY:
+		performance optimized Ext.data.Store. Improvements found using Chrome Profiling.
+		Improvements include removing redundant call to me.sync() which triggers another grid refresh
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('Intel.data.FastStore', {  //doesn't redundantly call fireEvent... me.sync() calls that downstream 
+	Ext.define('Intel.lib.override.FastStore', {
 		extend: 'Ext.data.Store',
-		alias: 'store.faststore',
-
 		constructor: function(cfg) {
-			var me = this;
-			me.callParent(arguments);
+			this.callParent(arguments);
 		},
 		
 		afterEdit: function(record, modifiedFieldNames) {

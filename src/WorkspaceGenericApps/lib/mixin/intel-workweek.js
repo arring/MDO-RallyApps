@@ -1,21 +1,19 @@
+/** 
+	intel workweek utility module. you can pass in Date objects, strings, or numbers.
+	do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
+**/
 (function(){
-	var Ext = window.Ext4 || window.Ext;
-
-	var intel_ww = {},
+	var Ext = window.Ext4 || window.Ext,
+		intel_ww = {},
 		SECOND = 1000,
 		MINUTE = 60*SECOND,
 		HOUR = 60*MINUTE,
 		DAY = 24*HOUR,
 		WEEK = 7*DAY;
 		
-	Ext.define('IntelWorkweek', {
-		/** 
-			intel workweek utility module. you can pass in Date objects, strings, or numbers.
-			do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
-		**/
-		
+	Ext.define('Intel.lib.mixin.IntelWorkweek', {
 		/** calculates intel workweek, returns integer */
-		_getWorkweek: function(_date){  //ww1 always contains jan 1st
+		getWorkweek: function(_date){  //ww1 always contains jan 1st
 			var date = new Date(_date),
 				yearStart = new Date(date.getFullYear(), 0, 1),
 				dayIndex = yearStart.getDay(),
@@ -30,14 +28,14 @@
 		},
 		
 		/** returns the number of intel workweeks in the year the date is in */
-		_getWeekCount: function(_date){  // # of intel workweeks in the year the date is in
+		getWeekCount: function(_date){
 			var date = new Date(_date),
 				leap = (date.getFullYear() % 4 === 0),
 				day = new Date(date.getFullYear(), 0, 1).getDay();
 			return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
 		},
 		
-		_roundDateDownToWeekStart: function(_date){
+		roundDateDownToWeekStart: function(_date){
 			var date = new Date(_date),
 				day = date.getDay(),
 				monthDate = date.getDate(),
@@ -47,8 +45,8 @@
 			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
 		},
 		
-		/**  gets list of date numbers for each week start between start and end date*/
-		_getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
+		/**  gets list of Date()'s for each week start between start and end date*/
+		getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
 			var startWeekDate = this._roundDateDownToWeekStart(startDate),
 				endWeekDate = this._roundDateDownToWeekStart(endDate),
 				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
@@ -62,7 +60,8 @@
 			return weeks;
 		},
 		
-		_workweekToDate: function(ww, year){ //gets the Date() object of this ww and year
+		/** gets the Date() object of this ww and year */
+		workweekToDate: function(ww, year){ 
 			var yearStart = new Date(year, 0, 1),
 				dayIndex = yearStart.getDay(),
 				ww01StartMidday = new Date(yearStart - (dayIndex*DAY - 0.5*DAY)),
@@ -70,7 +69,8 @@
 			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
 		},
 		
-		_getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ //assumes DropDown uses WorkweekDropdown model
+		/** assumes DropDown uses Intel.lib.data.WorkweekDropdown model */
+		getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ 
 			var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
 				data = new Array(workweeks.length);
 			for(var i=0, len=workweeks.length; i<len; ++i){

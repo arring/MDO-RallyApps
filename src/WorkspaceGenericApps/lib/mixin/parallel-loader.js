@@ -1,12 +1,16 @@
 /** 
-	Use this to load stores that have lots of records. it will load them in parallel instead of serially.
-	what it does is loads 1 page and then based on the totalCount it loads the rest of the pages in parallel.
+	SUMMARY:
+		Use this mixin to load stores that have lots of records. it will load them in parallel instead of serially.
+		what it does is loads 1 page and then based on the totalCount it loads the rest of the pages in parallel.
+		
+		The config you pass to parallelLoadLookbackStore and parallelLoadWsapiStore are the same configs you would pass
+		to Rally.data.lookback.Store (or something like that) and Rally.data.wsapi.Store.
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;	
 	
-	Ext.define('ParallelLoader', {		
-		_parallelLoadWsapiStore: function(config){
+	Ext.define('Intel.lib.mixin.ParallelLoader', {		
+		parallelLoadWsapiStore: function(config){
 			var me=this, data = [], model;
 			function doStoreLoad(page){
 				var deferred = Q.defer(),
@@ -41,7 +45,7 @@
 				})).then(makeStore);
 			});
 		},
-		_parallelLoadLookbackStore: function(config){
+		parallelLoadLookbackStore: function(config){
 			var me=this, data = [], model;
 			function doStoreLoad(page){
 				var deferred = Q.defer(),

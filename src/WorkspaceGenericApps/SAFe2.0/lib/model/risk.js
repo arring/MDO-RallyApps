@@ -8,20 +8,21 @@
 	var Ext = window.Ext4 || window.Ext,
 		RISK_KEY_PREFIX = 'risk-',
 		STATUS_OPTIONS = ['Open', 'WIP', 'Closed'],
-		URGENCY_OPTIONS = ['High', 'Medium', 'Low'];
+		URGENCY_OPTIONS = ['High', 'Medium', 'Low'],
+		INVALID_MESSAGE = 'is invalid';
 	
 	/*************************** Risk Custom Validators **********************************/
-	Ext.data.validations.RiskIDMessage = 'is invalid';
-	Ext.data.validations.RiskReleaseNameMessage = 'is invalid';
-	Ext.data.validations.RiskPortfolioItemObjectIDMessage = 'is invalid';
-	Ext.data.validations.RiskProjectObjectIDMessage = 'is invalid';
-	Ext.data.validations.RiskDescriptionMessage = 'is invalid';
-	Ext.data.validations.RiskImpactMessage = 'is invalid';
-	Ext.data.validations.RiskMitigationPlanMessage = 'is invalid';
-	Ext.data.validations.RiskStatusMessage = 'is invalid';
-	Ext.data.validations.RiskUrgencyMessage = 'is invalid';
-	Ext.data.validations.RiskOwnerObjectIDMessage = 'is invalid';
-	Ext.data.validations.RiskCheckpointMessage = 'is invalid';
+	Ext.data.validations.RiskIDMessage =                    INVALID_MESSAGE;
+	Ext.data.validations.RiskReleaseNameMessage =           INVALID_MESSAGE;
+	Ext.data.validations.RiskPortfolioItemObjectIDMessage = INVALID_MESSAGE;
+	Ext.data.validations.RiskProjectObjectIDMessage =       INVALID_MESSAGE;
+	Ext.data.validations.RiskDescriptionMessage =           INVALID_MESSAGE;
+	Ext.data.validations.RiskImpactMessage =                INVALID_MESSAGE;
+	Ext.data.validations.RiskMitigationPlanMessage =        INVALID_MESSAGE;
+	Ext.data.validations.RiskStatusMessage =                INVALID_MESSAGE;
+	Ext.data.validations.RiskUrgencyMessage =               INVALID_MESSAGE;
+	Ext.data.validations.RiskOwnerObjectIDMessage =         INVALID_MESSAGE;
+	Ext.data.validations.RiskCheckpointMessage =            INVALID_MESSAGE;
 	
 	Ext.data.validations.RiskID = function(config, value){
 		return typeof value === 'string' && new RegExp('^' + RISK_KEY_PREFIX).test(value);

@@ -1,11 +1,15 @@
-/** all dependencies are injected, it assumes nothing about the app its mixed into other than it has to derive from IntelRallyApp */
+/**
+	DO NOT USE THIS: IT IS DEPRECATED! 
+	
+	USE Intel.SAFe.lib.resource.RiskDb instead!!!!!!!!!!!
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
 	var RALLY_MAX_STRING_SIZE = 32768;
 	
-	Ext.define('RisksLib', {
-		requires: ['IntelRallyApp'],
+	Ext.define('Intel.SAFe.lib.mixin.RisksLib', {
+		requires: ['Intel.lib.IntelRallyApp'],
 		
 		_getRisks: function(portfolioItemRecord){
 			var risks = portfolioItemRecord.data.c_Risks;

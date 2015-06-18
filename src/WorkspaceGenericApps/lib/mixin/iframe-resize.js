@@ -1,4 +1,10 @@
-/** this mixin is used to mess with the environment outside of the iframe that the rally app is put in. */
+/** 
+	SUMMARY:
+		this mixin is used to mess with the environment outside of the iframe that the rally app is put in. 
+		
+	DEPENDENCIES:
+		'Intel.lib.mixin.WindowListener' mixed in to app so listen for window events
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
@@ -8,11 +14,15 @@
 		TITLE_BAR_HEIGHT = 33,
 		IFRAME_HEADER_HEIGHT = 28;
 		
-	Ext.define('IframeResize', {
-		requires: ['WindowListener'],
+	Ext.define('Intel.lib.mixin.IframeResize', {
+		requires: ['Intel.lib.mixin.WindowListener'],
 		
+		/**
+			makes app as large as screen, without the padding/margin. 
+			Makes it look more like a built-in rally app instead of a custom app.
+			NOTE: as rally changes their interface overtime, this mixin will have to change as well to compensate for it.
+		*/
 		_fixRallyDashboard: function(){ 
-			/** makes app as large as screen, without the padding/margin */
 			if(window && window.frameElement){
 				var me=this,
 					bottomEl = Ext.get(window.frameElement),
@@ -51,7 +61,7 @@
 				titleBar.dom.style.margin = "0";
 			}
 		},		
-		_initFixRallyDashboard: function(){ 
+		initFixRallyDashboard: function(){ 
 			var me=this;
 			if(me._addWindowEventListener){
 				me._addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
@@ -59,8 +69,10 @@
 			me._fixRallyDashboard();
 		},
 
+		/** 
+			hides the draggable resize handle from under the app 
+		*/
 		_disableResizeHandle: function(){ 
-			/** hides the draggable resize handle from under the app */
 			var me=this, handle;
 			if(window && window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
@@ -70,7 +82,7 @@
 				}
 			}
 		},	
-		_initDisableResizeHandle: function(){
+		initDisableResizeHandle: function(){
 			var me=this;
 			if(me._addWindowEventListener){
 				me._addWindowEventListener('resize', function(){ me._disableResizeHandle(); });

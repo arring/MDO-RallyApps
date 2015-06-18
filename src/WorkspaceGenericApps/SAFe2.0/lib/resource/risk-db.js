@@ -40,7 +40,7 @@
 		get: function(riskID){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
 			return KeyValueDb.getKeyValuePair(riskID).then(function(kvPair){
-				try { return kvPair ? _.merge({RiskID: kvPair.key}, JSON.parse(kvPair.value)) : null; }
+				try { return kvPair ? _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}) : null; }
 				catch(e){ return Q.reject(e); }
 			});
 		},
@@ -51,7 +51,7 @@
 			return KeyValueDb.queryKeyValuePairs(riskIDContains).then(function(kvPairs){
 				try { 
 					return _.map(kvPairs, function(kvPair){
-						return _.merge({RiskID: kvPair.key}, JSON.parse(kvPair.value));
+						return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key});
 					});
 				}
 				catch(e){ return Q.reject(e); }
@@ -64,10 +64,10 @@
 		*/
 		create: function(riskID, riskJSON){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
-			return this._validateRisk(_.merge({RiskID: riskID}, riskJSON)).then(function(riskJSON){
+			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
 				var riskJSONString = JSON.stringify(riskJSON, null, '\t');		
 				return KeyValueDb.createKeyValuePair(riskID, riskJSONString).then(function(kvPair){
-					try { return _.merge({RiskID: kvPair.key}, JSON.parse(kvPair.value)); }
+					try { return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}); }
 					catch(e){ return Q.reject(e); }
 				});
 			});
@@ -79,10 +79,10 @@
 		*/
 		update: function(riskID, riskJSON){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
-			return this._validateRisk(_.merge({RiskID: riskID}, riskJSON)).then(function(riskJSON){
+			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
 				var riskJSONString = JSON.stringify(riskJSON, null, '\t');	
 				return KeyValueDb.updateKeyValuePair(riskID, riskJSONString).then(function(kvPair){
-					try { return _.merge({RiskID: kvPair.key}, JSON.parse(kvPair.value)); }
+					try { return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}); }
 					catch(e){ return Q.reject(e); }
 				});
 			});

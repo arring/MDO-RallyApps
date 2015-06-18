@@ -1,7 +1,9 @@
-/** Fast CFD Calculator is a lot faster than the rally build in calculators because this is not a generic 
-	calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields in an area chart
-	between two dates. Example app using this is Train CFD Charts.
-	
+/** 
+	SUMMARY:
+		Fast CFD Calculator is a lot faster than the rally build in calculators because this is not a generic 
+		calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields in an area chart
+		between two dates. Example app using this is Train CFD Charts.
+		
 	NOTE: you MUST give this calculator startDate, endDate, and ScheduleState in the config. ONLY.
 	
 	NOTE: if new Date() is between the start and end date, it will substitute new Date() for what would've been 
@@ -14,7 +16,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define("FastCumulativeFlowCalculator", {		
+	Ext.define('Intel.lib.chart.FastCumulativeFlowCalculator', {		
 		constructor:function(options){
 			this.scheduleStates = options.scheduleStates;
 			this.startDate = options.startDate;
@@ -38,7 +40,8 @@
 			return Ext.Date.format(date, 'm/d/Y');
 		},
 		
-		_getIndexHelper:function(date, dateArray){ //binsearches for the closest date to 'date'
+		/** binsearches for the closest date to 'date' */
+		_getIndexHelper:function(date, dateArray){ 
 			var curVal = (dateArray.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
 			while(curInt !== lastInt){
 				if(dateArray[curInt]===date) return curInt;
@@ -51,14 +54,16 @@
 			return curInt;
 		},
 		
-		_getIndexBefore: function(date, dateArray){ //returns index in dateArray of the date before the input date
+		/** returns index in dateArray of the date before the input date */
+		_getIndexBefore: function(date, dateArray){ 
 			if(dateArray.length===0) return -1;
 			var pos = this._getIndexHelper(date, dateArray);
 			if(dateArray[pos] < date) return pos; 
 			else return pos-1;
 		},
 		
-		_getIndexOnOrAfter: function(date, dateArray){ //returns index in dateArra of date after or on the input date
+		/** returns index in dateArra of date after or on the input date */
+		_getIndexOnOrAfter: function(date, dateArray){ 
 			if(dateArray.length===0) return -1;
 			var pos = this._getIndexHelper(date, dateArray);
 			if(pos===dateArray.length-1) { if(dateArray[pos] >= date) return pos; else return -1; } //either start of list or everything is after 'date'
@@ -66,6 +71,7 @@
 			else return pos+1;
 		},
 		
+		/** items is an array of snapshot records
 		runCalculation:function(items){
 			if(!this.scheduleStates || !this.startDate || !this.endDate) throw 'invalid constructor config';
 			var dates = this._getDates(), day=1000*60*60*24,

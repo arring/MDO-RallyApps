@@ -1,13 +1,14 @@
-(function(){
-	var Ext = window.Ext4 || window.Ext;
-		
-	/**
+/**
+	SUMMARY:
 		Cell editing has redundant calls to store.afterEdit, which in turn renders the page multiple times per edit. 
 		fastcellediting solves this by wrapping all the calls in beginEdit and endEdit, so store.afterEdit is called only once
-	*/
-	Ext.define('Intel.grid.plugin.CellEditing', {
-		alias: 'plugin.fastcellediting',
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('Intel.lib.override.FastCellEditing', {
 		extend: 'Ext.grid.plugin.CellEditing',
+		alias: 'plugin.fastcellediting',
 
 		triggerEvent:'cellclick',
 		

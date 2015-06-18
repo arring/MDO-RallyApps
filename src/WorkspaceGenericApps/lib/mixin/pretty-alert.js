@@ -1,14 +1,14 @@
 /**  
 	DESCRIPTION:
-		gives a window-centered alert or confirm dialog box that isn't ugly. 
+		This mixin gives a window-centered alert or confirm dialog box that isn't ugly. 
 		
 	ISSUES:
-		sometimes alert.setY() fails so we have to fallback to the built-in alert
+		Sometimes alert.setY() fails so we have to fallback to the ugly built-in alert
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('Intel.lib.mixins.PrettyAlert', {	
+	Ext.define('Intel.lib.mixin.PrettyAlert', {	
 		_getMessageBoxY: function(){ 
 			var me=this,
 				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
@@ -26,6 +26,7 @@
 				message.message : JSON.stringify(message, null, '\t'));
 		},
 
+		/** non-ugly alert dialog */
 		alert: function(title, message){
 			if(arguments.length<1) return;
 			if(arguments.length===1){
@@ -44,6 +45,7 @@
 			catch(e){ alert(this._formatString(message)); }
 		},
 		
+		/** non-ugly confirm dialog */
 		confirm: function(title, message, fn){
 			if(arguments.length<2) return;
 			if(arguments.length===2){

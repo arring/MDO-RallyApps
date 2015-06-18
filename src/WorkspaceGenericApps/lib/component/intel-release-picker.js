@@ -1,12 +1,17 @@
+/** 
+	SUMMARY:
+		This component is an easy release picker based off Intel.lib.component.FixedComboBox. You supply the 
+		Release Records to it on construction.
+		
+		YOU MUST PASS IT 2 THINGS IN THE CONFIG
+			1: releases (array of release records)
+			2: currentRelease (what to show as initial value
+	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	/** YOU MUST PASS IT 2 THINGS IN THE CONFIG
-		1: releases (array of release records)
-		2: currentRelease (what to show as initial value
-	*/
-	Ext.define('IntelReleasePicker', {
-		extend: 'IntelFixedComboBox',
+	Ext.define('Intel.lib.component.ReleasePicker', {
+		extend: 'Intel.lib.component.FixedComboBox',
 		alias: ['widget.intelreleasepicker'],
 		
 		constructor: function(options){

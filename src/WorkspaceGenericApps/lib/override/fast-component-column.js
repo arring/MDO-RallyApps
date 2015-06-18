@@ -1,9 +1,13 @@
+/**
+	SUMMARY:
+		This override makes the ComponentColumn component much more performant. Edits found using Chrome profiling
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('intel.grid.column.Component.', {
-		alias: 'widget.fastgridcolumn',
+	Ext.define('Intel.lib.override.FastComponentColumn', {
 		extend: 'Skirtle.grid.column.Component',
+		alias: 'widget.fastcomponentcolumn',
 
 		autoWidthComponents: false,
 		componentGC: true,

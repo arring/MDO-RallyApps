@@ -1,8 +1,24 @@
-/** this extends Rally.app.app. if you want to use it's utility functions, just
-		extend IntelRallyApp instead of Rally.app.App
+/** 
+	SUMMARY:
+		This extends Rally.app.app. All Intel Apps should extend from this if they want to use the functionality it provides,
+		as well as numerous other lib/* files that require you to extend from this.
+		
+		If you extend from Intel.lib.IntelRallyApp, you have to call me.configureIntelRallyApp() before anything else in your launch() 
+		function. After you call me.configureIntelRallyApp, you will be able to access a lot of things, such as:
+		 - me.ScheduleStates: possible UserStory schedule States
+		 - me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
+		 - me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
+		 - All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
+		
+	DEPENDENCIES:
+		Q promise library
+		
+	ISSUES:
+		sdk 2.0 does not work with the project function due to a bug in the sdk.
 	*/
 (function(){
-	var Ext = window.Ext4 || window.Ext;
+	var Ext = window.Ext4 || window.Ext,
+		ScrumGroupConfigPrefName: 'intel-portfolio-locations-config'; //preference to store portfolio locations config for workspace
 	
 	//increase timeouts to 2 minutes since rally can be slow sometimes
 	var timeout = 120000;
@@ -19,11 +35,8 @@
 		}
 	});
 				
-	Ext.define('Intel.lib.RallyApp', {
-		alias: 'widget.intelrallyapp',
+	Ext.define('Intel.lib.IntelRallyApp', {
 		extend: 'Rally.app.App',
-		
-		_ScrumGroupConfigPrefName: 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
 		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
@@ -137,9 +150,9 @@
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._ScrumGroupConfigPrefName,
+				filterByName: me.ScrumGroupConfigPrefName,
 				success: function(prefs) {
-					var configString = prefs[me._ScrumGroupConfigPrefName], scrumGroupConfig;
+					var configString = prefs[me.ScrumGroupConfigPrefName], scrumGroupConfig;
 					try{ scrumGroupConfig = JSON.parse(configString); }
 					catch(e){ scrumGroupConfig = []; }
 					me.ScrumGroupConfig = scrumGroupConfig;
@@ -149,24 +162,25 @@
 			});
 			return deferred.promise;
 		},
-		_saveScrumGroupConfig: function(scrumGroupConfig){
+		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
-			s[me._ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
+			s[me.ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me._ScrumGroupConfigPrefName,
+				filterByName: me.ScrumGroupConfigPrefName,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
 			});
 			return deferred.promise;
 		},
-		_configureIntelRallyApp: function(){
+		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
-					me._userStoryFields.push(me.PortfolioItemTypes[0]);  //HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
+				//HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
+					me._userStoryFields.push(me.PortfolioItemTypes[0]);  
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
@@ -178,7 +192,7 @@
 		},
 				
 		/**************************** Generic store loading with Q wrapper, returns promise *************************************/		
-		_reloadStore: function(store){
+		reloadStore: function(store){
 			var deferred = Q.defer();
 			store.load({
 				callback: function(records, operation, success){
@@ -190,7 +204,7 @@
 		},
 		
 		/********************************************** LOADING SINGLE MODELS **************************************/	
-		_loadProject: function(oid){ 
+		loadProject: function(oid){ 
 			var me = this, deferred = Q.defer();
 			if(!oid) return Q.reject('Invalid arguments: LP');
 			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
@@ -206,7 +220,7 @@
 				return deferred.promise;
 			}
 		},	
-		_loadUserStory: function(oid, projectRecord){
+		loadUserStory: function(oid, projectRecord){
 			var me = this, deferred = Q.defer();
 			if(!oid) return Q.reject('Invalid arguments: LUS');
 			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
@@ -222,7 +236,7 @@
 				return deferred.promise;
 			}
 		},	
-		_loadPortfolioItemByType: function(oid, type){
+		loadPortfolioItemByType: function(oid, type){
 			var me = this, deferred = Q.defer();
 			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
 			else {
@@ -237,14 +251,14 @@
 				return deferred.promise;
 			}
 		},	
-		_loadPortfolioItemByOrdinal: function(oid, ordinal){
+		loadPortfolioItemByOrdinal: function(oid, ordinal){
 			var me = this, deferred = Q.defer(),
 				type = me.PortfolioItemTypes[ordinal];
 			return me._loadPortfolioItemByType(oid, type);
 		},	
 		
 		/**************************************** ScrumGroup Funcs ***************************************************/
-		_projectInWhichScrumGroup: function(projectRecord){ 
+		projectInWhichScrumGroup: function(projectRecord){ 
 			/** returns scrumgroup the projectRecord is in, otherwise null. */
 			if(!projectRecord) return Q();
 			else {
@@ -264,7 +278,7 @@
 				}
 			}
 		},
-		_loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
+		loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
 			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: _loadScrumGroupPortfolioProject');
 			var me=this,
 				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
@@ -274,7 +288,7 @@
 			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
 			else return me._loadProject(foundScrumGroupConfig.PortfolioProjectOID);
 		},
-		_getScrumGroupName: function(scrumGroupRootProjectRecord){
+		getScrumGroupName: function(scrumGroupRootProjectRecord){
 			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: _getScrumGroupName';
 			var me=this,
 				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
@@ -284,7 +298,7 @@
 			if(foundScrumGroupConfig.ScrumGroupName) return foundScrumGroupConfig.ScrumGroupName;
 			else return scrumGroupRootProjectRecord.data.Name;
 		},
-		_loadAllScrumGroups: function(){
+		loadAllScrumGroups: function(){
 			var me=this,
 				filter = _.reduce(me.ScrumGroupConfig, function(filter, scrumGroupConfig){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: scrumGroupConfig.ScrumGroupRootProjectOID });
@@ -309,7 +323,7 @@
 		},
 		
 		/**************************************** UserStory Funcs ************************************************/
-		__getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
 			/** only pull look at PortfolioItem Release if US.Release == null */
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
@@ -341,7 +355,7 @@
 				)
 			);
 		},
-		_loadRandomUserStory: function(projectRecord){
+		loadRandomUserStory: function(projectRecord){
 			if(!projectRecord) return Q.reject('Invalid arguments: LRUS');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -361,7 +375,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
-		_loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
+		loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
 			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -389,7 +403,7 @@
 				else return Q(undefined);
 			});
 		},
-		_loadUserStoryByFID: function(formattedID, projectRecord){
+		loadUserStoryByFID: function(formattedID, projectRecord){
 			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: LUSBFID');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -416,7 +430,7 @@
 		},	
 		
 		/**************************************** PortfolioItem Funcs ************************************************/
-		_loadPortfolioItemsOfType: function(portfolioProject, type){
+		loadPortfolioItemsOfType: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -433,25 +447,25 @@
 				});
 			return me._reloadStore(store);
 		},		
-		_loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
+		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
 			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
 			if(type) return me._loadPortfolioItemsOfType(portfolioProject, type);
 			else return Q.reject('Invalid PortfolioItem ordinal');
 		},
-		_portfolioItemTypeToOrdinal: function(type){
+		portfolioItemTypeToOrdinal: function(type){
 			return this.PortfolioItemTypes.indexOf(type);
 		},
-		_getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
+		getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
 			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
 		},
-		_getPortfolioItemTypeStateByName: function(portfolioType, stateName){
+		getPortfolioItemTypeStateByName: function(portfolioType, stateName){
 			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
 		},
 		
 		/********************************************** Project Funcs ********************************************/
 		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
-		__storeItemsToProjTree: function(projects){
+		_storeItemsToProjTree: function(projects){
 			var me=this, projTree = {};
 			for(var i=0, len=projects.length; i<len; ++i){
 				var project = projects[i],
@@ -466,7 +480,33 @@
 			}
 			return projTree;
 		},
-		_loadAllProjects: function(){
+		_addProjectsWithTeamMembersToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
+			}
+		},	
+		_allChildProjectToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_allLeafProjectsToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me.__allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		loadAllProjects: function(){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
@@ -486,16 +526,7 @@
 				return map;
 			});	
 		},
-		__addProjectsWithTeamMembersToList: function(projTree, hash){
-			var me=this, curProj = projTree.ProjectRecord;
-			if(curProj.data.TeamMembers.Count >0) 
-				hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me.__addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
-			}
-		},	
-		_loadProjectsWithTeamMembers: function(rootProjectRecord){
+		loadProjectsWithTeamMembers: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me=this,
 				projectsWithTeamMembers = {},
@@ -524,15 +555,7 @@
 				}
 			});
 		},	
-		__allChildProjectToList: function(projTree, hash){
-			var me=this, curProj = projTree.ProjectRecord;
-			hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me.__allChildProjectToList(projTree[childProjRef], hash);
-			}
-		},
-		_loadAllChildrenProjects: function(rootProjectRecord){
+		loadAllChildrenProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me=this,
 				childrenProjects = {},
@@ -559,16 +582,7 @@
 				}
 			});
 		},	
-		__allLeafProjectsToList: function(projTree, hash){
-			var me=this, curProj = projTree.ProjectRecord;
-			if(curProj.data.Children.Count === 0) 
-				hash[curProj.data.ObjectID] = curProj;
-			for(var childProjRef in projTree){
-				if(childProjRef !== 'ProjectRecord')
-					me.__allLeafProjectsToList(projTree[childProjRef], hash);
-			}
-		},	
-		_loadAllLeafProjects: function(rootProjectRecord){
+		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me=this,
 				leafProjects = {}, 
@@ -597,7 +611,7 @@
 				}
 			});
 		},
-		_loadProjectByName: function(projectName){
+		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -621,7 +635,7 @@
 		},
 		
 		/********************************************** Release loading ********************************************/	
-		_loadAllReleases: function(projectRecord){
+		loadAllReleases: function(projectRecord){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
@@ -640,7 +654,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},	
-		_loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+		loadReleasesAfterGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -664,7 +678,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		_loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
+		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
@@ -688,7 +702,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		_loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+		loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
@@ -714,10 +728,10 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		_loadReleasesInTheFuture: function(projectRecord){
+		loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
-		_loadReleasesByNameUnderProject: function(releaseName, projectRecord){
+		loadReleasesByNameUnderProject: function(releaseName, projectRecord){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
@@ -737,7 +751,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},	
-		_loadReleaseByNameForProject: function(releaseName, projectRecord){
+		loadReleaseByNameForProject: function(releaseName, projectRecord){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
@@ -759,7 +773,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
-		_loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+		loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'Release',
@@ -782,7 +796,7 @@
 				});
 			return me._reloadStore(store).then(function(store){ return store.getRange(); });
 		},
-		_getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
+		getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
 			/** gets the most likely release to scope to base on the following order:
 				1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
 								to use preferences for this one)

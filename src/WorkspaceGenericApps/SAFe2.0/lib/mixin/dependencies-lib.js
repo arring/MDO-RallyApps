@@ -1,11 +1,16 @@
-/** all dependencies are injected, it assumes nothing about the app its mixed into other than it has to derive from IntelRallyApp */
+/** 
+	all dependencies are injected (pun intended), it assumes nothing about the app its mixed into other than it has to derive from IntelRallyApp 
+	
+	TODO: GETRID OF THIS FILE AND MOVE DEPENDENCIES TO DependencyDb which follows suit of RiskDb. A centralized location for dependencies. and a testable
+	interface to them.
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
 	var RALLY_MAX_STRING_SIZE = 32768;
 	
-	Ext.define('DependenciesLib', {
-		requires: ['IntelRallyApp'],
+	Ext.define('Intel.SAFe.lib.mixin.DependenciesLib', {
+		requires: ['Intel.lib.IntelRallyApp'],
 		
 		_getDependencies: function(userStoryRecord){
 			var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;

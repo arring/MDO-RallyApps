@@ -1,10 +1,12 @@
-(function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	/** this combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+/** 
+	SUMMARY:
+		This combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
 		(although there is some arrow key scrolling bug) 
 	*/
-	Ext.define('IntelComboBox', {
+(function(){
+	var Ext = window.Ext4 || window.Ext;	
+	
+	Ext.define('Intel.lib.component.ComboBox', {
 		extend:'Ext.form.field.ComboBox',
 		alias: ['widget.intelcombo', 'widget.intelcombobox'],
 		

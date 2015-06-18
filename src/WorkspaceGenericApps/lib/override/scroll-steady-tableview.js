@@ -1,13 +1,15 @@
+/**
+	SUMMARY:
+		Overrides Ext.view.Table to make the scrollbar not jump on grid refreshes. Also it has some 
+		permormance optimizations included in it (which should be commented)
+*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('Intel.view.ScrollTable', {  //keeps the scrollbar steady. Cant believe Extjs cant do this
-		extend: 'Ext.view.Table',
-		alias: 'widget.scrolltableview',
-		
+	Ext.define('Intel.lib.override.ScrollTable', {
+		extend: 'Ext.view.Table',		
 		constructor: function(cfg) {
-			var me = this;
-			me.callParent(arguments);
+			this.callParent(arguments);
 		},
 		
 		refresh: function() {
