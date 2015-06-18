@@ -2382,10 +2382,11 @@
 							fn: function(){ 
 								var html = ['<ul class ="ulInformation"><li><b>Scope Delta</b> = (Final Workload - Original Commit) / Original Commit</li>',
 									'<li><b>A/C Original</b> = Final Accepted / Original Commit</li>',
-									'<li><b>A/C Final</b> = Final Accepted / Original Commit</li>',
-									'<li>Sample dates are taken 7 days after Release Start Date and 7 days before the Release end date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
-									'<li>If there are 0 points at Release Start Date, then the projected data is taken for the sample, and if there is no projected data, ideal data is taken for the sample.</li>',
+									'<li><b>A/C Final</b> = Final Accepted / Final Workload</li>',
+									'<li>Sample dates are taken on 7th day of the Release Start Date and on the Release End Date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
+									'<li>If there are 0 points at Release End Date, then the ideal and projected data are taken for the sample.</li>',
 									'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
+									'<li>Once Release Start Date for a selected Release is changed, it will be saved and reloaded with the saved Release Start Date in future.</li>',
 									'<li><b>Final Accepted</b> is the total points for user stories that are accepted at the Release End Date',
 									'<li><b>Final Workload</b> is the total points for user stories at the Release End Date',
 									'<li><b>Initial Commit</b> is the total points for user stories at the Release Start Date</ul>'
@@ -2483,11 +2484,11 @@
 			Ext.getCmp('cntClickForDateChange').hide();
 			Ext.getCmp('cntDatePickerWrapper').show();
 			var me = this;
-			var	_6days = 1000 * 60 *60 *24*6;
+			//var	_6days = 1000 * 60 *60 *24*6;
 			var datePickerDefaultDate;
 			var rid = me.ReleaseRecord.data.ObjectID;
 			var pid = me.ProjectRecord.data.ObjectID;
-			var releaseSampleDataDate =  new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days);
+			var releaseSampleDataDate =  new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 /* + _6days */);
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			datePickerDefaultDate = !!(me.AppsPref.projs[pid][rid]) ? new Date(me.AppsPref.projs[pid][rid].ReleaseStartDate):releaseSampleDataDate ;
 			var maxDate = me.ReleaseRecord.data.ReleaseDate > new Date() ? new Date() : me.ReleaseRecord.data.ReleaseDate;
@@ -2506,7 +2507,7 @@
 				id: "btnUpdateReleaseDate",
 				handler: function() {
 					var txtValue = new Date(Ext.getCmp('ReleaseDatePicker').value).toLocaleDateString();
-					if(Date.parse(txtValue) >= Date.parse(new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _6days)) && Date.parse(txtValue) <= Date.parse(maxDate)){
+					if(Date.parse(txtValue) >= Date.parse(new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 /* + _6days */)) && Date.parse(txtValue) <= Date.parse(maxDate)){
 						//saving the release start date
 						me.setLoading("Loading Data");
 						me.AppsPref.projs[pid] = me.AppsPref.projs[pid] || {};
@@ -2571,7 +2572,7 @@
 				.then(function(portfolioItemStore){
 					var portfolioItemsInRelease = _.filter(portfolioItemStore.getRange(), function(pi){ return (pi.data.Release || {}).Name == releaseName; });
 					me.PortfolioItemsInReleaseStore = Ext.create('Rally.data.wsapi.Store', {
-						model: me[me.PortfolioItemTypes[0]],
+						model: me['PortfolioItem/' + me.PortfolioItemTypes[0]], 
 						data: portfolioItemsInRelease,
 						totalCount: portfolioItemsInRelease.length,
 						disableMetaChangeEvent: true,
@@ -2866,13 +2867,13 @@
 				datemap = aggregateChartData.datemap;
 
 			//retro dashboard calculation
-
 			var total = {};
 				total.initialCommit = 0;
 				total.finalCommit = 0;
 				total.finalAccepted = 0;
 				total.projected = 0;
 				total.ideal = 0;
+
 			//for shaky date difference calc
 			//sometimes the days difference is in points and it would be off by one or two days
 			if(!!(me.releaseStartDateChanged && me.initialAddedDaysCount)){
@@ -2889,51 +2890,35 @@
 			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount ;
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
-					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 6];
+					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 1];
 				}
 				//we want to ignore the ideal and the projected from the aggregateChartData
 				if(f.name !="Ideal" && f.name != "Projected"){
 					//taking sample after 7 days and before 7 days 
 					//or date from date picker
 					total.initialCommit = total.initialCommit + f.data[me.initialAddedDaysCount];
-					total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 6];
+					total.finalCommit = total.finalCommit + f.data[aggregateChartData.categories.length - 1];
 				}
 				//if the release is still on going we would like to use the projected data for the final commit
 				if(f.name === "Projected"){
-					total.projected = total.projected + f.data[aggregateChartData.categories.length - 6];
+					total.projected = total.projected + f.data[aggregateChartData.categories.length - 1];
 				}
 				if(f.name === "Ideal"){
-					total.ideal = total.ideal + f.data[aggregateChartData.categories.length - 6];
+					total.ideal = total.ideal + f.data[aggregateChartData.categories.length - 1];
 				}
 			});
 			if(total.finalCommit === 0){
-				total.finalCommit = total.projected > 0 ? total.projected : total.ideal;
+				total.finalCommit = total.ideal > 0 ? total.ideal : total.projected;
 				total.finalAccepted = total.projected > 0 ? total.projected : total.ideal;
 			}
-			var commitDataPlus =[];
-			// commitDataMinus = [];
-			//adding a line for the initial Commitment projection
-			_.each(aggregateChartData.categories,function(f,key){
-				commitDataPlus.push(total.initialCommit);
-				//commitDataMinus.push(total.initialCommit - 10);
-			});
-			//console.log(commitDataPlus,commitDataMinus);
-			aggregateChartData.series.push({
-				colorIndex: 1,
-				symbolIndex: 1,
-				dashStyle: "shortdash",
-				color: "red",
-				data:commitDataPlus,
-				name: "Commitment",
-				type: "spline"
-			});
 
 			me.total = total;
 
 			$("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
 				chart: {
 					height: 400,
-					width: me.getWidth()*0.42>>0
+					width: me.getWidth()*0.42>>0,
+					zoomType: ""
 				},
 				legend:{
 					borderWidth:0,
@@ -2948,7 +2933,38 @@
 				},
 				xAxis:{
 					categories: aggregateChartData.categories,
-					tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44)
+					tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44),
+					plotLines: [{
+						color: 'red', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: me.initialAddedDaysCount, // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Original Commit ',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white',
+								background:'#40d0ed'
+							}
+						}						
+					},{
+						color: 'red', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: [aggregateChartData.categories.length - 1], // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Final Workload & Accepted',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white'
+							}
+						}						
+						
+					}]
 				},
 				series: aggregateChartData.series
 			}));
@@ -3290,6 +3306,18 @@
 				me._loadAllChildReleases(),
 				me._getPortfolioItems()	
 			])
+			.then(function(){
+				//check if the release start date is set in preference
+				//if saved in preference load it 
+				//need to do before loading the snapshots
+				me._loadAppsPreference().then(function(appsPref){
+				//loading it again if you have multiple tab open for the same app 
+				//and changing date from different tab
+				//you will be able to see the right away
+					me.AppsPref = appsPref;
+					me._setUserPreferenceReleaseStartDate();
+				});
+			})
 			.then(function(){ return me._loadSnapshotStores(); })
 			.then(function() {  
 				//load all the user story snap shot for release
@@ -3298,14 +3326,6 @@
 				me._buildRetroChart();
 				me._hideHighchartsLinks();
 				return me._loadUserStoriesforPortfolioItems();
-			})
-			.then(function(){
-				//check if the release start date is set in preference
-				//if saved in preference load it 
-				me._loadAppsPreference().then(function(appsPref){//SAM: i dont think you need to call _loadAppsPreference again
-					me.AppsPref = appsPref;
-					me._setUserPreferenceReleaseStartDate();
-				});
 			})
 			.then(function(){ 
 				if(me.AllSnapshots.length === 0 ){
