@@ -240,7 +240,7 @@
 			var me = this, deferred = Q.defer();
 			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
 			else {
-				me[type].load(oid, {
+				me['PortfolioItem/' + type].load(oid, {
 					fetch: me._portfolioItemFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,

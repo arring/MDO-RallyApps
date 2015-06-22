@@ -3,6 +3,7 @@ npm-debug.log
 scripts/get-project-oids/config.json
 scripts/get-project-oids/output*
 deploy
+sm-deploy
 App-debug.html
 
 
