@@ -601,7 +601,25 @@
 				total.finalCommit = total.ideal > 0 ? total.ideal : total.projected;
 				total.finalAccepted = total.projected > 0 ? total.projected : total.ideal;
 			}
-
+			
+			var commitDataPlus =[];
+			// commitDataMinus = [];
+			//adding a line for the initial Commitment projection
+			_.each(aggregateChartData.categories,function(f,key){
+				commitDataPlus.push(total.initialCommit);
+				//commitDataMinus.push(total.initialCommit - 10);
+			});
+			//console.log(commitDataPlus,commitDataMinus);
+			aggregateChartData.series.push({
+				colorIndex: 1,
+				symbolIndex: 1,
+				dashStyle: "shortdash",
+				color: "red",
+				data:commitDataPlus,
+				name: "Commitment",
+				type: "spline"
+			});
+			
 			me.total = total;
 
 			$("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
@@ -640,7 +658,7 @@
 							}
 						}						
 					},{
-						color: 'red', // Color value
+						color: '#58FAF4', // Color value
 						dashStyle: 'shortdash', // Style of the plot line. Default to solid
 						type: "spline",
 						value: [aggregateChartData.categories.length - 1], // Value of where the line will appear
