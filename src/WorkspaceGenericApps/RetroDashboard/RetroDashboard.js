@@ -643,7 +643,7 @@
 					categories: aggregateChartData.categories,
 					tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44),
 					plotLines: [{
-						color: 'red', // Color value
+						color: '#58FAF4', // Color value
 						dashStyle: 'shortdash', // Style of the plot line. Default to solid
 						type: "spline",
 						value: me.initialAddedDaysCount, // Value of where the line will appear
