@@ -5,13 +5,12 @@
  */
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	// TODO: Fix where the set loading functions go
 
 	/************************** Data Integrity Dashboard *****************************/
 	Ext.define('DataIntegrityDashboard', {
 		extend: 'IntelRallyApp',
-		// DEBUG: Changed this so that horizontal managers could have it be horizontal and others could be vertical
-		settingsScope: 'user',
+		// DEBUG: Changed back to workspace, allows implementation of a vertical and horizontal app with one code base
+		settingsScope: 'workspace',
 		cls:'app',
 		mixins:[
 			'WindowListener',
@@ -43,6 +42,10 @@
 				columnWidth:0.999,
 				id: 'heatmap'
 			}]
+		},{
+			xtype: 'button',
+			id: 'expand-heatmap-button',
+			text: 'Expand Heatmap'
 		},{
 			xtype:'container',
 			id:'gridsContainer',
@@ -120,6 +123,30 @@
 				return me._getReleases().then(function() {return me._loadData();});
 			})
 			.then(function() {
+				// DEBUG: Feature to expand Heatmap
+				// TODO: Optimize container searching and put into separate function
+				me.isPieHidden = false;
+				me.down('#expand-heatmap-button').on('click', function() {
+					var me = this,
+						heatmap = $('#heatmap'),
+						ribbon = me.down('#ribbon');
+					if (me.isPieHidden) {
+						ribbon.setLoading('Expanding Heatmap');
+						me.down('#pie').setWidth(480);
+						button = me.down('#expand-heatmap-button').setText('Expand Heatmap');
+					}
+					else {
+						ribbon.setLoading('Showing Pie');
+						me.down('#pie').setWidth(0);
+						button = me.down('#expand-heatmap-button').setText('Show Pie');
+					}
+					heatmap.empty();
+					heatmap.highcharts(me._getHeatMapConfig());
+					ribbon.setLoading(false);
+					me.isPieHidden = !me.isPieHidden;
+					
+					me._hideHighchartsLinks();
+				}, me);
 				return me._loadUI();
 			})
 			.fail(function(msg) {
@@ -218,7 +245,6 @@
 				return leafProjectsUnderGroup;
 			}
 			
-			// DEBUG SUPER HARDCORE
 			me.LeafProjectsByGroup = [];
 			
 			// If cache does not exist
@@ -233,13 +259,11 @@
 				
 				// Do promises and filter projects down by group then team
 				return Q.all(projectPromises).then(function(groupArray) {
-					// DEBUG SUPER HARDCORE
 					me.AllProjectsByGroup = groupArray;
 					// Caching team info as well as results
 					me.TeamInfoMap = me._createTeamInfoMap(allProjects);
 					me.LeafProjects = me._filterProjectsByTeamType(me._filterProjectsByHorizontalGroup(allProjects, me.HorizontalGroup), me.TeamType);
 					
-					// DEBUG SUPER HARDCORE
 					for (var projectIndex = 0; projectIndex < me.AllProjectsByGroup.length; projectIndex++) {
 						me.LeafProjectsByGroup.push({});
 						for (var oid in me.LeafProjects) {
@@ -253,7 +277,6 @@
 			else {
 				me.LeafProjects = me._filterProjectsByTeamType(me._filterMapByHorizontalGroup(me.TeamInfoMap, me.HorizontalGroup), me.TeamType);
 				
-				// DEBUG SUPER HARDCORE
 				for (var projectIndex = 0; projectIndex < me.AllProjectsByGroup.length; projectIndex++) {
 					me.LeafProjectsByGroup.push({});
 					for (var oid in me.LeafProjects) {
@@ -315,16 +338,18 @@
 					value: releaseName
 				}),
 				oids = [];
-			for (var i = 0; i < me.ProjectGroups.length; i++) {
+			/*for (var i = 0; i < me.ProjectGroups.length; i++) {
 				oids.push(me.ProjectGroups[i].data.PortfolioProjectObjectID);
-			}
-			return releaseFilter.and(me._createOrFilter(oids, 'Project.ObjectID'));
+				console.log(me.ProjectGroups[i].data.PortfolioProjectObjectID);
+			}*/
+			return releaseFilter/*.and(me._createOrFilter(oids, 'Project.ObjectID'))*/;
 		},
 		
 		/*
 		 *	Gets portfolio items in the current release associated with the scrum groups
 		 */
 		_getPortfolioItems: function() {
+			/*
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				piStore = Ext.create('Rally.data.wsapi.Store', {
@@ -343,6 +368,55 @@
 			return me._reloadStore(piStore).then(function(store){
 				me.PortfolioItemStore = store;
 				return store;
+			});*/
+			var me = this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
+				piStore = Ext.create('Rally.data.wsapi.Store', {
+					autoLoad: false,
+					model: me['PortfolioItem/' + lowestPortfolioItem],
+					pageSize: 200
+				}),
+				piPromises = [];
+			
+			function loadStore(project) {
+				console.log('PProject', project);
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: me['PortfolioItem/' + lowestPortfolioItem],
+					filters: [me._createPortfolioItemFilter()],
+					autoLoad: false,
+					pageSize: 200,
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
+							'Description', 'FormattedID', 'UserStories'],
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: project.data._ref,
+						projectScopeUp: false,
+						projectScopeDown: true
+					}
+				});
+				
+				return me._reloadStore(store);
+			}
+			
+			function addRecordsToStore(store) {
+				piStore.add(store.getRecords());
+				return store;
+			}
+			
+			for (var i in me.ProjectGroups) {
+				piPromises.push(
+					me._loadProject(me.ProjectGroups[i].data.PortfolioProjectObjectID).then(function(project) {
+						return loadStore(project);
+					}).then(function(store) {
+						return addRecordsToStore(store);
+					})
+				);
+			}
+			
+			return Q.all(piPromises).then(function(stores) {
+				console.log(stores);
+				me.PortfolioItemStore = piStore;
+				return piStore;
 			});
 		},
 		
@@ -466,7 +540,9 @@
 					fetch: fetchFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: me.ProjectGroups[groupIndex].data._ref
+						project: me.ProjectGroups[groupIndex].data._ref,
+						projectScopeUp: false,
+						projectScopeDown: true
 					},
 					pageSize: 200
 				};
@@ -603,7 +679,7 @@
 		},
 		
 		/*
-		 *	Generates the url for mailing the current view
+		 *	Generates the url the current view
 		 */
 		_generateMailto: function() {
 			var me = this;
@@ -1185,7 +1261,7 @@
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						if(item.data.Children.Count === 0) return false;
 						var pe = item.data.PlanEstimate;
-						return !(pe === 0 || pe === 1 || pe === 2 || pe === 4 || pe === 8 || pe === 16);
+						return pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
 				},{
 					showIfLeafProject:true,
@@ -1318,17 +1394,6 @@
 			me.HorizontalGroup = combo.getValue();
 			me.TeamType = '';
 			me.TeamPicker.setValue('All');
-			// TODO: Reload everything the setLoading false
-			/*
-			return me._reloadEverything().then(function() {
-				me.TeamPicker.bindStore(Ext.create('Ext.data.Store', {
-					fields: ['Type'],
-					// TODO: Optimize
-					data: [{Type:'All'}].concat(_.uniq(_.map(me.LeafProjects, function(p){ return me._getTeamInfo(p) || p.data.Name; }), false, function(p) {return p.Type;}))
-				}));
-				me.setLoading(false);
-			});
-			*/
 			return me._loadData().then(function() {
 				return me._loadVisualizations();
 			}).then(function() {
@@ -1350,8 +1415,6 @@
 			me.setLoading(true);
 			if (combo.getValue() !== 'All') me.TeamType = combo.getValue();
 			else me.TeamType = '';
-			// TODO: Reload everything then set loading false
-			// return me._redrawEverything().then(function() {me.setLoading(false);});
 			return me._loadVisualizations();
 		},
 		
@@ -1400,6 +1463,9 @@
 							flex:1,
 							items:[{
 								xtype:'rallygrid',
+								// DEBUG added title to tooltip
+								// TODO: Make it less ugly, possibly outside of the grid
+								title: scrum.data.Name,
 								columnCfgs:[{
 									dataIndex:'Label',
 									width:60,
