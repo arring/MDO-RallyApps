@@ -190,10 +190,10 @@
 				if (me.ScrumGroupConfig[i].IsTrain) {
 					me.ProjectGroups.push(
 						me._createDummyProjectRecord({
-							ObjectID: me.ScrumGroupConfig[i].ScrumGroupRootProjectOID,
-							PortfolioProjectObjectID: me.ScrumGroupConfig[i].PortfolioProjectOID
+							ObjectID: me.ScrumGroupConfig[i].ScrumGroupRootProjectOID
 						})
 					);
+					me.PortfolioProjectObjectIDs.push(me.ScrumGroupConfig[i].PortfolioProjectOID);
 				}
 			}
 		},
@@ -204,6 +204,7 @@
 		_loadGroups: function() {
 			var me = this;
 			me.ProjectGroups = [];
+			me.PortfolioProjectObjectIDs = [];
 			if (me.isHorizontalView) {
 				me._createDummyTrainProjects();
 				return me.ProjectGroups;
@@ -221,9 +222,14 @@
 						else {
 							me.ProjectGroups.push(me.ProjectRecord);
 						}
+						me.PortfolioProjectObjectIDs.push(_.find(me.ScrumGroupConfig, function(group) {return group.ScrumGroupRootProjectOID === scrumGroup.data.ObjectID;}).PortfolioProjectOID);
 					}
 					else {
 						me.ProjectGroups.push(me.ProjectRecord);
+						for (var i = 0; i < me.ScrumGroupConfig.length; i++) {
+							// If the group is a train, create a dummy project and add to the array
+							if (me.ScrumGroupConfig[i].IsTrain) me.PortfolioProjectObjectIDs.push(me.ScrumGroupConfig[i].PortfolioProjectOID);
+						}
 					}
 					return me.ProjectGroups;
 				});
@@ -338,37 +344,13 @@
 					value: releaseName
 				}),
 				oids = [];
-			/*for (var i = 0; i < me.ProjectGroups.length; i++) {
-				oids.push(me.ProjectGroups[i].data.PortfolioProjectObjectID);
-				console.log(me.ProjectGroups[i].data.PortfolioProjectObjectID);
-			}*/
-			return releaseFilter/*.and(me._createOrFilter(oids, 'Project.ObjectID'))*/;
+			return releaseFilter;
 		},
 		
 		/*
 		 *	Gets portfolio items in the current release associated with the scrum groups
 		 */
 		_getPortfolioItems: function() {
-			/*
-			var me=this,
-				lowestPortfolioItem = me.PortfolioItemTypes[0],
-				piStore = Ext.create('Rally.data.wsapi.Store', {
-					model: me['PortfolioItem/' + lowestPortfolioItem],
-					autoLoad: false,
-					pageSize: 200,
-					limit: Infinity,
-					filters: [me._createPortfolioItemFilter()],
-					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-							'Description', 'FormattedID', 'UserStories'],
-					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					}
-				});
-			return me._reloadStore(piStore).then(function(store){
-				me.PortfolioItemStore = store;
-				return store;
-			});*/
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				piStore = Ext.create('Rally.data.wsapi.Store', {
@@ -379,7 +361,6 @@
 				piPromises = [];
 			
 			function loadStore(project) {
-				console.log('PProject', project);
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: me['PortfolioItem/' + lowestPortfolioItem],
 					filters: [me._createPortfolioItemFilter()],
@@ -403,9 +384,9 @@
 				return store;
 			}
 			
-			for (var i in me.ProjectGroups) {
+			for (var i in me.PortfolioProjectObjectIDs) {
 				piPromises.push(
-					me._loadProject(me.ProjectGroups[i].data.PortfolioProjectObjectID).then(function(project) {
+					me._loadProject(me.PortfolioProjectObjectIDs[i]).then(function(project) {
 						return loadStore(project);
 					}).then(function(store) {
 						return addRecordsToStore(store);
@@ -414,56 +395,11 @@
 			}
 			
 			return Q.all(piPromises).then(function(stores) {
-				console.log(stores);
 				me.PortfolioItemStore = piStore;
 				return piStore;
 			});
 		},
-		
-		/*
-		 *	Creates a filter for the user stories, ensuring they are:
-		 *		In one of the scrum projects
-		 *			AND
-		 *		In the release OR in an iteration but not a release
-		 *	TODO: Ensure releases are working properly (yeah, that's going to be a pain)
-		 */
-		/* MEGA DEBUG
-		_createStoryFilter: function(start, end){			
-			var me = this,
-				releaseName = me.CurrentRelease.data.Name,
-				releaseDate = new Date(me.CurrentRelease.data.ReleaseDate).toISOString(),
-				releaseStartDate = new Date(me.CurrentRelease.data.ReleaseStartDate).toISOString(),
-				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),// this will ONLY get leaf-stories (good)
-				// Filter for user stories that in iteration not a release
-				inIterationButNotReleaseFilter =
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
-				projectFilter;
-			// There must be leaf projects in order to create a valid filter
-			if(me.LeafProjects && Object.keys(me.LeafProjects).length > 0) {
-				// Create a filter for all user stories within the leaf projects
-				var keys = Object.keys(me.LeafProjects),
-					newFilter;
-				for (var i = start; i < end && i < keys.length; i++) {
-					newFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.ObjectID', value: parseInt(keys[i], 10)});
-					if (projectFilter) {
-						projectFilter = projectFilter.or(newFilter);
-					}
-					else {
-						projectFilter = newFilter;
-					}
-				}
-			}
-			else return undefined;
 
-			return Rally.data.wsapi.Filter.and([
-				projectFilter, 
-				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
-			]);
-		},*/
-		
 		_createStoryFilter: function(projects){			
 			var me = this,
 				releaseName = me.CurrentRelease.data.Name,
@@ -509,34 +445,19 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				keyCount = Object.keys(me.LeafProjects).length,
 				filter,
-				// TODO: can these be narrowed down?
+				// TODO: can these be narrowed down/is shallowfetch faster?
 				fetchFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 					'Release', /*'Description',*/ /*'Tasks',*/ 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
-				promises = [],
-				step = 20;
-			/*for (var leafStart = 0, leafEnd = step; leafStart < keyCount; leafStart += step, leafEnd += step) {
-				filter = me._createStoryFilter(leafStart, leafEnd);
-				var config = {
-					model: me.UserStory,
-					autoLoad: false,
-					filters: filter,
-					fetch: fetchFields,
-					context: {
-						workspace: me.getContext().getWorkspace()._ref,
-						project: null
-					},
-					pageSize: 200
-				};
-				promises.push(me._parallelLoadWsapiStore(config));
-			}*/
-			// Holy debugging Batman!
+				promises = [];
 			for (var groupIndex in me.LeafProjectsByGroup) {
 				filter = me._createStoryFilter(me.LeafProjectsByGroup[groupIndex]);
 				var config = {
 					model: me.UserStory,
+					enablePostGet: true,
 					autoLoad: false,
-					filters: filter,
+					// DEBUG: I added the brackets again...
+					filters: [filter],
 					fetch: fetchFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -559,7 +480,6 @@
 					store.add(stores[i].getRecords());
 				}
 				me.UserStoryStore = store;
-				console.log(me.UserStoryStore);
 				return store;
 			});
 		},
