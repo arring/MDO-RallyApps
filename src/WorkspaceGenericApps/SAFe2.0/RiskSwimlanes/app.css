@@ -1,42 +1,116 @@
-/************************************************ NAVBAR/CONTAINERS *****************************************/
+/************************************************ NAVBAR/TOOLSBAR *****************************************/
 #navbar { padding:0 10px 10px 10px; }
-#releasePicker { margin: 4px 0 0 0; }
+	#releasePicker { margin: 4px 0 0 0; }
+
+#toolsbar { margin-top:10px; }
+	#addNewButton {
+		padding: 3px; 
+		background-color: #00a9e0;
+		border-color: #00a9e0; }
+		
+	#filterByOwnerDropdown {
+		margin-left:20px; }
 
 /************************************************ RISK SWIMLANE STUFF *****************************************/
 .swimlanes {
 	width:100%;
 	height:100%;
-	margin:10px;
+	display:flex;
+	flex-direction:column;
 	font-family: ProximaNovaSemiBold, Helvetica, Arial;	}
 
-	.swimlane-column-header-row {
-		display:flex; }
+	/********************************* HEADER LAYOUT STUFF *************************/
+	.swimlane-header {}
+		.swimlane-column-header-row {
+			border-bottom: 1px dotted #888;
+			display:flex; }
 
-		.swimlane-column-header {
-			flex:1;
-			text-align:center;
-			font-size:1rem; 
-			padding:5px; }
-			.swimlane-column-header:not(:first-child) {
-				border-left:1px dotted #888 }
+			.swimlane-column-header {
+				flex:1;
+				text-align:center;
+				font-size:1rem; 
+				padding:5px; }
+				.swimlane-column-header:not(:first-child) {
+					border-left:1px dotted #888 }
 
-	.swimlane-header-row {
-		border-top:1px dotted #888;
-		border-bottom: 1px dotted #888;
-		font-size:1rem;
-		padding:5px; }
-		
-	.swimlane-row {
-		display:flex;
-		min-height:50px; }
+		.swimlane-agreements-row {
+			display:none; /*set to flex when row is visible */
+			border-bottom: 1px dotted #888;
+			min-height:50px;
+			font-size: 0.75rem; }
 			
-		.swimlane-drop-area {
-			flex:1;
-			background-color:#f6f6f6;
-			min-height:50px; }
-			.swimlane-drop-area:not(:first-child) {
-				border-left:1px dotted #888 }
+			.swimlane-agreements-cell {
+				flex:1;
+				padding:5px; }
+				.swimlane-agreements-cell:not(:first-child) {
+					border-left:1px dotted #888 }
+					
+				.swimlane-agreements-edit-section {
+					margin-bottom:3px; }
+					
+					.swimlanes .swimlane-agreements-edit-link {
+						color: rgba(0,0,0,0);
+						padding-left: 3px; }
+					.swimlanes .swimlane-agreements-cell:hover .swimlane-agreements-edit-link {
+						color: #337ec6; }
+					.swimlanes .swimlane-agreements-cell:hover .swimlane-agreements-edit-link:hover {
+						color: #29beff; }
+			
+				.swimlane-agreements-user-content {
+					padding-left: 3px; }
+	
+	/********************************* BODY LAYOUT STUFF *************************/
+	.swimlane-body {
+		flex:1; 
+		overflow-y:scroll; }
+		
+		.swimlane-header-row {
+			border-bottom: 1px dotted #888;
+			font-size:1rem;
+			padding:5px;
+			display: flex; }
 
+			.swimlane-header-row:hover {
+				cursor: pointer; }
+			
+			.swimlane-header-row-left {
+				flex:1 }
+				
+			.swimlane-header-row-right {
+				display: flex;
+				flex-direction: column;
+				font-size: 0.5rem;
+				color: silver; }
+				
+				.swimlane-header-row:hover .swimlane-header-row-right {
+					color: #444; }
+					
+				.swimlane-header-row.collapsed .swimlane-header-row-right > i:last-child {
+					display:none; }
+				.swimlane-header-row:not(.collapsed) .swimlane-header-row-right > i:first-child {
+					display:none; }
+					
+		.swimlane-row {
+			border-bottom: 1px dotted #888;
+			display:flex;}
+				
+			.swimlane-header-row.collapsed + .swimlane-row {
+				display:none; } 
+				
+			.swimlane-drop-area {
+				flex:1;
+				background-color:#f6f6f6;
+				min-height:80px; }
+				.swimlane-drop-area:not(:first-child) {
+					border-left:1px dotted #888; }
+
+	/********************************* CARD STUFF *************************/
+	.swimlane-risk-placeholder {
+		border-bottom-left-radius: 2px;
+		border-bottom-right-radius: 2px;
+		background-color: #d6d6d6;
+		margin: 10px 5px 20px 5px; }
+		
 	.swimlane-risk {
 		border-bottom-left-radius: 2px;
 		border-bottom-right-radius: 2px;
@@ -44,4 +118,57 @@
 		background-color: white;
 		margin: 10px 5px 20px 5px;
 		position: relative;
-	}
+		cursor: move;
+		white-space: normal; }
+		
+		.swimlane-risk.dragging {
+			opacity: 0.5; }
+			
+		.swimlane-risk .color-bar {
+			height: 7px; }
+			.swimlane-risk.status-Open .color-bar {
+				background-color: #ee6c19; }
+			.swimlane-risk.status-WIP .color-bar {
+				background-color: #fce205; }
+			.swimlane-risk.status-Closed .color-bar {
+				background-color: #21a2e0; }
+			
+		.swimlane-risk-content {
+			padding: 2px 2px 6px 6px; 
+			border-left: 1px solid gray;
+			border-right: 1px solid gray;
+			border-bottom: 1px solid gray;
+			display:flex; 
+			flex-direction:row; 
+			flex-wrap: wrap; }
+			
+			.risk-field-label {
+				font-size: 0.8rem;
+				flex: 1 1 35%; }
+			.risk-field-value {
+				flex: 1 1 65%; }
+				
+		.swimlane-risk-tools {
+			position: absolute; 
+			bottom: -10px;
+			height: 20px;
+			width: 100%;
+			display:none;
+			justify-content:center;
+			font-size: 1rem; }
+			
+			.swimlane-risk:hover .swimlane-risk-tools,
+			.swimlane-risk-tools:hover {
+				display: flex; }
+				
+			.swimlane-risk-tools-box {
+				color: black; 
+				border-radius: 2px;
+				background-color:#a9a9a9; } 
+			
+				.swimlane-risk-tools-box .tool:hover {
+					color: white; 
+					cursor:  pointer;
+					background-color:#00a9e0; } 
+				
+	

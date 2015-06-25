@@ -47,8 +47,8 @@
 		
 		/**  gets list of Date()'s for each week start between start and end date*/
 		getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
-			var startWeekDate = this._roundDateDownToWeekStart(startDate),
-				endWeekDate = this._roundDateDownToWeekStart(endDate),
+			var startWeekDate = this.roundDateDownToWeekStart(startDate),
+				endWeekDate = this.roundDateDownToWeekStart(endDate),
 				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
 				endMillis = Date.UTC(endWeekDate.getFullYear(), endWeekDate.getMonth(), endWeekDate.getDate()),
 				totalWeeks = Math.floor((endMillis - startMillis) / WEEK)+1,
@@ -70,12 +70,12 @@
 		},
 		
 		/** assumes DropDown uses Intel.lib.data.WorkweekDropdown model */
-		getWorkWeeksForDropdown: function(releaseStartDate, releaseEndDate){ 
-			var workweeks = this._getWorkweekDates(releaseStartDate, releaseEndDate),
+		getWorkweeksForDropdown: function(releaseStartDate, releaseEndDate){ 
+			var workweeks = this.getWorkweekDates(releaseStartDate, releaseEndDate),
 				data = new Array(workweeks.length);
 			for(var i=0, len=workweeks.length; i<len; ++i){
 				data[i] = { 
-					Workweek: 'ww' + this._getWorkweek(workweeks[i]),
+					Workweek: 'ww' + this.getWorkweek(workweeks[i]),
 					DateVal: workweeks[i]*1
 				};
 			}

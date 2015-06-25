@@ -12,7 +12,7 @@
 
 	Ext.define('Intel.lib.mixin.UserAppsPreference', {
 		
-		 /** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
+		/** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
 		userAppsPref: 'intel-user-apps-preference',
 		
 		loadAppsPreference: function(){

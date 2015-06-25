@@ -16,7 +16,9 @@
 				allowBlank:true,
 				queryMode:'local',
 				listeners: {
-					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+					change:function(combo, newval, oldval){ 
+						if(newval.length===0) combo.setValue(oldval || ''); 
+					},
 					focus: function(combo) {
 						combo.setValue('');
 						combo.expand();

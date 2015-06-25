@@ -63,8 +63,8 @@
 		},		
 		initFixRallyDashboard: function(){ 
 			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
 			}
 			me._fixRallyDashboard();
 		},
@@ -84,8 +84,8 @@
 		},	
 		initDisableResizeHandle: function(){
 			var me=this;
-			if(me._addWindowEventListener){
-				me._addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
 			}
 			me._disableResizeHandle();
 		}

@@ -16,8 +16,9 @@
       "../../lib/mixin/user-apps-preference.js",
       "../../lib/component/intel-combobox.js",
       "../../lib/component/intel-fixed-combobox.js",
+      "../../lib/component/intel-textarea.js",
       "../../lib/component/intel-release-picker.js",
-      "../lib/model/swimlane-risk.js",
+      "../lib/model/risk.js",
       "../lib/resource/risk-db.js",
       "App.js"
    ],

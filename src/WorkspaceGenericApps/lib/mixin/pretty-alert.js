@@ -62,6 +62,7 @@
 					while(x.isHidden()) x = x.nextSibling();
 					x.focus();
 				}, 50);
+			}
 			catch(e){ if(confirm(this._formatString(message))) fn(); }
 		}
 	});

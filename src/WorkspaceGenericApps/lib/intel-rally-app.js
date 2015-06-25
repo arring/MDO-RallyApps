@@ -5,10 +5,10 @@
 		
 		If you extend from Intel.lib.IntelRallyApp, you have to call me.configureIntelRallyApp() before anything else in your launch() 
 		function. After you call me.configureIntelRallyApp, you will be able to access a lot of things, such as:
-		 - me.ScheduleStates: possible UserStory schedule States
-		 - me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
-		 - me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
-		 - All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
+			- me.ScheduleStates: possible UserStory schedule States
+			- me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
+			- me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
+			- All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
 		
 	DEPENDENCIES:
 		Q promise library
@@ -18,7 +18,7 @@
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		ScrumGroupConfigPrefName: 'intel-portfolio-locations-config'; //preference to store portfolio locations config for workspace
+		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config'; //preference to store portfolio locations config for workspace
 	
 	//increase timeouts to 2 minutes since rally can be slow sometimes
 	var timeout = 120000;
@@ -37,6 +37,7 @@
 				
 	Ext.define('Intel.lib.IntelRallyApp', {
 		extend: 'Rally.app.App',
+		minWidth:910, //when Rally adds its own scrollbar anyways
 		
 		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
 		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
@@ -79,7 +80,7 @@
 						value: true
 					}]
 				});
-				return me._reloadStore(store).then(function(store){
+				return me.reloadStore(store).then(function(store){
 					me.PortfolioItemTypeStates[ordinal] = store.getRange();
 				});
 			}));
@@ -150,9 +151,9 @@
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me.ScrumGroupConfigPrefName,
+				filterByName: ScrumGroupConfigPrefName,
 				success: function(prefs) {
-					var configString = prefs[me.ScrumGroupConfigPrefName], scrumGroupConfig;
+					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
 					try{ scrumGroupConfig = JSON.parse(configString); }
 					catch(e){ scrumGroupConfig = []; }
 					me.ScrumGroupConfig = scrumGroupConfig;
@@ -164,10 +165,10 @@
 		},
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
-			s[me.ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
+			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
-				filterByName: me.ScrumGroupConfigPrefName,
+				filterByName: ScrumGroupConfigPrefName,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject
@@ -206,7 +207,7 @@
 		/********************************************** LOADING SINGLE MODELS **************************************/	
 		loadProject: function(oid){ 
 			var me = this, deferred = Q.defer();
-			if(!oid) return Q.reject('Invalid arguments: LP');
+			if(!oid) return Q.reject('Invalid arguments: loadProject');
 			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.Project.load(oid, {
@@ -240,6 +241,7 @@
 			var me = this, deferred = Q.defer();
 			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
 			else {
+				type = (type.indexOf('PortfolioItem/') === 0) ? type : ('PortfolioItem/' + type);	
 				me[type].load(oid, {
 					fetch: me._portfolioItemFields,
 					context: {
@@ -271,8 +273,8 @@
 					var parent = projectRecord.data.Parent;
 					if(!parent) return Q();
 					else {
-						return me._loadProject(parent.ObjectID).then(function(parentRecord){
-							return me._projectInWhichScrumGroup(parentRecord);
+						return me.loadProject(parent.ObjectID).then(function(parentRecord){
+							return me.projectInWhichScrumGroup(parentRecord);
 						});
 					}
 				}
@@ -286,7 +288,7 @@
 				});
 			if(!foundScrumGroupConfig) return Q.reject('Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum group!');
 			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
-			else return me._loadProject(foundScrumGroupConfig.PortfolioProjectOID);
+			else return me.loadProject(foundScrumGroupConfig.PortfolioProjectOID);
 		},
 		getScrumGroupName: function(scrumGroupRootProjectRecord){
 			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: _getScrumGroupName';
@@ -318,7 +320,7 @@
 						project:null
 					}
 				});
-				return me._reloadStore(store).then(function(store){ return store.getRange(); });
+				return me.reloadStore(store).then(function(store){ return store.getRange(); });
 			}
 		},
 		
@@ -373,7 +375,7 @@
 						value: projectRecord.data.ObjectID 
 					}]
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
 		loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
 			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
@@ -397,7 +399,7 @@
 						me.__getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				var records = store.data.items;
 				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
 				else return Q(undefined);
@@ -424,7 +426,7 @@
 						value: projectRecord.data.ObjectID
 					}]
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				return Q(store.data.items.pop());
 			});
 		},	
@@ -445,7 +447,7 @@
 						projectScopeUp:false
 					}
 				});
-			return me._reloadStore(store);
+			return me.reloadStore(store);
 		},		
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
 			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
@@ -518,7 +520,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				var map = _.reduce(store.getRange(), function(map, project){
 					map[project.data.ObjectID] = project;
 					return map;
@@ -540,7 +542,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
 					var projTree = me.__storeItemsToProjTree(store.getRange());
 					me.__addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
@@ -569,7 +571,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
 					var projTree = me.__storeItemsToProjTree(store.getRange());
 					me.__allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
@@ -596,7 +598,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
 					var projTree = me.__storeItemsToProjTree(store.getRange());
 					me.__allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
@@ -629,7 +631,7 @@
 						value:projectName
 					}]
 				});
-			return me._reloadStore(store).then(function(store){
+			return me.reloadStore(store).then(function(store){
 				return Q(store.data.items.pop());
 			});
 		},
@@ -652,7 +654,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},	
 		loadReleasesAfterGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
@@ -676,7 +678,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
 		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
@@ -700,7 +702,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
 		loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
 			var me=this,
@@ -726,7 +728,7 @@
 						value: new Date(endDate).toISOString()
 					}]
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
 		loadReleasesInTheFuture: function(projectRecord){
 			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
@@ -749,7 +751,7 @@
 						projectScopeUp:false
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},	
 		loadReleaseByNameForProject: function(releaseName, projectRecord){
 			var me=this,
@@ -771,7 +773,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange().pop(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
 		loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
 			var me=this,
@@ -794,7 +796,7 @@
 						project:null
 					}
 				});
-			return me._reloadStore(store).then(function(store){ return store.getRange(); });
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
 		getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
 			/** gets the most likely release to scope to base on the following order:

@@ -17,6 +17,7 @@
 			MitigationPlan: 'MitigationPlan',
 			Urgency: 'High',
 			Status: 'Open',
+			ROAM: 'Resolved',
 			OwnerObjectID: 14,
 			Checkpoint: 12
 		};

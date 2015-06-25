@@ -9,6 +9,7 @@
 		RISK_KEY_PREFIX = 'risk-',
 		STATUS_OPTIONS = ['Open', 'WIP', 'Closed'],
 		URGENCY_OPTIONS = ['High', 'Medium', 'Low'],
+		ROAM_OPTIONS = ['Resolved', 'Owned', 'Accepted', 'Mitigated'],
 		INVALID_MESSAGE = 'is invalid';
 	
 	/*************************** Risk Custom Validators **********************************/
@@ -21,6 +22,7 @@
 	Ext.data.validations.RiskMitigationPlanMessage =        INVALID_MESSAGE;
 	Ext.data.validations.RiskStatusMessage =                INVALID_MESSAGE;
 	Ext.data.validations.RiskUrgencyMessage =               INVALID_MESSAGE;
+	Ext.data.validations.RiskROAMMessage =                  INVALID_MESSAGE;
 	Ext.data.validations.RiskOwnerObjectIDMessage =         INVALID_MESSAGE;
 	Ext.data.validations.RiskCheckpointMessage =            INVALID_MESSAGE;
 	
@@ -51,6 +53,9 @@
 	Ext.data.validations.RiskUrgency = function(config, value){
 		return URGENCY_OPTIONS.indexOf(value) > -1;
 	};
+	Ext.data.validations.RiskROAM = function(config, value){
+		return ROAM_OPTIONS.indexOf(value) > -1;
+	};
 	Ext.data.validations.RiskOwnerObjectID = function(config, value){
 		return typeof value === 'number' && value > 0;
 	};
@@ -71,6 +76,7 @@
 			{name: 'MitigationPlan', type: 'auto'},
 			{name: 'Urgency', type: 'auto'},
 			{name: 'Status', type: 'auto'},
+			{name: 'ROAM', type: 'auto'},
 			{name: 'OwnerObjectID', type: 'auto'},
 			{name: 'Checkpoint', type: 'auto'}
 		],
@@ -84,6 +90,7 @@
 			{type: 'RiskMitigationPlan', field: 'MitigationPlan'},
 			{type: 'RiskStatus', field: 'Status'},
 			{type: 'RiskUrgency', field: 'Urgency'},
+			{type: 'RiskROAM', field: 'ROAM'},
 			{type: 'RiskOwnerObjectID', field: 'OwnerObjectID'},
 			{type: 'RiskCheckpoint', field: 'Checkpoint'}
 		],
@@ -92,10 +99,13 @@
 				return typeof riskID === 'string' && riskID.indexOf(RISK_KEY_PREFIX) === 0;
 			},
 			getStatusOptions: function(){
-				return STATUS_OPTIONS;
+				return STATUS_OPTIONS.slice();
 			},
 			getUrgencyOptions: function(){
-				return URGENCY_OPTIONS; 
+				return URGENCY_OPTIONS.slice(); 
+			},
+			getROAMOptions: function(){
+				return ROAM_OPTIONS.slice(); 
 			}
 		}
 	});
