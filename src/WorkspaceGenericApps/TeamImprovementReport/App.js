@@ -12,7 +12,8 @@
 			'IframeResize',
 			'Teams'
 		],
-		items: [
+		// Commented out for large changeset
+		/*items: [
 			{
 				xtype: 'container',
 				id: 'controls-container',
@@ -56,6 +57,73 @@
 			{
 				xtype: 'container',
 				id: 'grid-container'
+			}
+		],*/
+		items: [
+			{
+				xtype: 'container',
+				id: 'controls-container',
+				layout: 'column',
+				border: 1,
+				style: {
+					borderColor: 'black',
+					borderStyle: 'solid'
+				},
+				items: [
+					{
+						xtype: 'container',
+						id: 'general-controls-container',
+						columnWidth: 0.14
+					},
+					{
+						xtype: 'container',
+						id: 'backlog-chart-controls-container',
+						columnWidth: 0.84,
+						layout: 'hbox'
+					}
+				]
+			},
+			{
+				xtype: 'container',
+				id: 'chart-and-grid-container',
+				layout: 'column',
+				items: [
+					{
+						xtype: 'container',
+						id: 'chart-container',
+						columnWidth: 0.5,
+						padding: '0 10 0 0',
+						items: [
+							{
+								xtype: 'container',
+								id: 'backlog-chart-container'
+							},
+							{
+								xtype: 'container',
+								id: 'pie-chart-container',
+								layout: 'column',
+								items: [
+									{
+										xtype: 'container',
+										id: 'state-chart-container',
+										columnWidth: 0.5
+									},
+									{
+										xtype: 'container',
+										id: 'percentage-chart-container',
+										columnWidth: 0.5
+									}
+								]
+							}
+						]
+					},
+					{
+						xtype: 'container',
+						id: 'grid-container',
+						padding: '0 5 0 0',
+						columnWidth: 0.49
+					}
+				]
 			}
 		],
 		launch: function() {
@@ -136,6 +204,7 @@
 			me.setLoading('Loading Visuals');
 			
 			// Load controls
+			me.down('#backlog-chart-controls-container').removeAll();
 			me._loadControls();
 			
 			// Load other UI components
@@ -155,7 +224,7 @@
 			// Maintain state of checkbox
 			if (!me.ReleaseCheck) me._loadReleaseCheck();
 			
-			// Load backlog chart controls if necessary
+			// Load backlog chart controls only if showing backlog chart
 			if (me.isShowingAllReleases) me._loadBacklogChartControls();
 		},
 		
@@ -163,6 +232,7 @@
 		 *	Creates and adds all controls related to the backlog chart
 		 */
 		_loadBacklogChartControls: function() {
+			if (this.Iterations.length === 0) return;
 			var me = this,
 				backlogControls = [],
 				iterationStore = Ext.create('Rally.data.wsapi.Store', {
@@ -174,6 +244,7 @@
 					id: 'iteration-radio-box',
 					name: 'filter-type',
 					boxLabel: 'Iteration',
+					labelWidth: 50,
 					checked: true,
 					listeners: {
 						change: me._backlogFilterTypeChanged,
@@ -184,6 +255,7 @@
 					id: 'date-radio-box',
 					name: 'filter-type',
 					boxLabel: 'Date',
+					labelWidth: 50,
 					checked: false,
 					listeners: {
 						change: me._backlogFilterTypeChanged,
@@ -194,6 +266,7 @@
 					displayField: 'Name',
 					id: 'start-iteration-combo-box',
 					fieldLabel: 'Start:',
+					labelWidth: 50,
 					labelAlign: 'right',
 					store: iterationStore,
 					padding: '0 0 0 15',
@@ -201,7 +274,6 @@
 						select: me._rangeChanged,
 						scope: me
 					},
-					// TODO: This never, ever works...want to know why
 					value: me.Iterations[0],
 					valueField: 'StartDate'
 				}),
@@ -209,6 +281,7 @@
 					displayField: 'Name',
 					id: 'end-iteration-combo-box',
 					fieldLabel: 'End:',
+					labelWidth: 50,
 					labelAlign: 'right',
 					store: iterationStore,
 					padding: '0 0 0 15',
@@ -216,13 +289,13 @@
 						select: me._rangeChanged,
 						scope: me
 					},
-					// TODO: This never, ever works...want to know why
 					value: me.Iterations[me.Iterations.length - 1],
 					valueField: 'EndDate'
 				}),
 				startDatePicker = Ext.create('Rally.ui.DateField', {
 					fieldLabel: 'Start:',
 					labelAlign: 'right',
+					labelWidth: 50,
 					id: 'start-date-picker',
 					padding: '0 0 0 15',
 					listeners: {
@@ -234,6 +307,7 @@
 				endDatePicker = Ext.create('Rally.ui.DateField', {
 					fieldLabel: 'End:',
 					labelAlign: 'right',
+					labelWidth: 50,
 					id: 'end-date-picker',
 					padding: '0 0 0 15',
 					listeners: {
@@ -242,25 +316,28 @@
 					},
 					value: new Date(me.Iterations[me.Iterations.length - 1].data.EndDate)
 				}),
-				dataTypeStore = Ext.create('Ext.data.Store', {
+				dataFieldsStore = Ext.create('Ext.data.Store', {
 					fields: ['DisplayName', 'PropertyName'],
 					data: [
-						{DisplayName: 'Backlog Size', PropertyName: 'y'},
+						{DisplayName: 'Backlog Size', PropertyName: 'size'},
 						{DisplayName: 'Added Stories', PropertyName: 'added'},
 						{DisplayName: 'Accepted Stories', PropertyName: 'accepted'},
 						{DisplayName: 'Backlog Delta', PropertyName: 'delta'}
 					]
 				}),
-				dataTypeCombo = Ext.create('Ext.form.field.ComboBox', {
-					store: dataTypeStore,
-					fieldLabel: 'Data Type:',
+				dataFieldCombo = Ext.create('Ext.form.field.ComboBox', {
+					store: dataFieldsStore,
+					fieldLabel: 'Data:',
+					labelAlign: 'right',
+					labelWidth: 50,
 					padding: '0 0 0 15',
 					displayField: 'DisplayName',
 					valueField: 'PropertyName',
 					listeners: {
-						select: me._dataTypeSelected,
+						select: me._dataFieldSelected,
 						scope: me
-					}
+					},
+					value: 'size'
 				});
 			
 			// Store controls in me for use in listeners
@@ -270,6 +347,7 @@
 			me.EndIterationCombo = endIterationCombo;
 			me.StartDatePicker = startDatePicker;
 			me.EndDatePicker = endDatePicker;
+			me.DataFieldCombo = dataFieldCombo;
 			
 			// Set initial values used
 			me.StartingIteration = me.Iterations[0];
@@ -279,14 +357,18 @@
 			me.isFilteringByIteration = true;
 			
 			// Push all relevant controls onto array for efficient adding
-			backlogControls.push(iterationRadio, dateRadio, startIterationCombo, endIterationCombo);
+			backlogControls.push(iterationRadio, dateRadio, startIterationCombo, endIterationCombo, dataFieldCombo);
 			
 			// Add components
 			return me.down('#backlog-chart-controls-container').add(backlogControls);
 		},
 		
-		_dataTypeSelected: function() {
-			// TODO: Implement
+		/*
+		 *	Fires when the data field is changed
+		 */
+		_dataFieldSelected: function() {
+			var me = this;
+			me._redrawBacklogChart();
 		},
 		
 		/*
@@ -294,26 +376,31 @@
 		 *	NOTE: The chart DOES NOT need to be redrawn, as the values for the combo boxes will be set appropriately
 		 */
 		_backlogFilterTypeChanged: function() {
-			var me = this;
+			var me = this,
+				controlsContainer = me.down('#backlog-chart-controls-container');
 			
 			// Set the global variable
 			me.isFilteringByIteration = me.IterationRadio.getValue();
 			
 			// Remove pickers and add other set
 			if (me.isFilteringByIteration) {
-				me.down('#backlog-chart-controls-container').remove(me.StartDatePicker, false);
-				me.down('#backlog-chart-controls-container').remove(me.EndDatePicker, false);
-				me.down('#backlog-chart-controls-container').add(me.StartIterationCombo);
-				me.down('#backlog-chart-controls-container').add(me.EndIterationCombo);
+				controlsContainer.remove(me.StartDatePicker, false);
+				controlsContainer.remove(me.EndDatePicker, false);
+				controlsContainer.remove(me.DataFieldCombo, false);
+				controlsContainer.add(me.StartIterationCombo);
+				controlsContainer.add(me.EndIterationCombo);
+				controlsContainer.add(me.DataFieldCombo);
 				
 				me.StartIterationCombo.setValue(me.StartingIteration);
 				me.EndIterationCombo.setValue(me.EndingIteration);
 			}
 			else {
-				me.down('#backlog-chart-controls-container').remove(me.StartIterationCombo, false);
-				me.down('#backlog-chart-controls-container').remove(me.EndIterationCombo, false);
-				me.down('#backlog-chart-controls-container').add(me.StartDatePicker);
-				me.down('#backlog-chart-controls-container').add(me.EndDatePicker);
+				controlsContainer.remove(me.StartIterationCombo, false);
+				controlsContainer.remove(me.EndIterationCombo, false);
+				controlsContainer.remove(me.DataFieldCombo, false);
+				controlsContainer.add(me.StartDatePicker);
+				controlsContainer.add(me.EndDatePicker);
+				controlsContainer.add(me.DataFieldCombo);
 				
 				me.StartDatePicker.setValue(me.StartingDate);
 				me.EndDatePicker.setValue(me.EndingDate);
@@ -326,9 +413,6 @@
 		_rangeChanged: function() {
 			var me = this;
 			
-			// Remove old chart
-			$('#backlog-chart-container').empty();
-			
 			if (me.isFilteringByIteration) {
 				me.StartingIteration = _.find(me.Iterations, function(iteration) {return iteration.data.StartDate == me.StartIterationCombo.getValue();});
 				me.EndingIteration = _.find(me.Iterations, function(iteration) {return iteration.data.EndDate == me.EndIterationCombo.getValue();});
@@ -338,13 +422,30 @@
 			else {
 				// TODO: Ending iteration is horribly wrong, gets one iteration ahead
 				me.StartingIteration = _.find(me.Iterations, function(iteration) {return new Date(iteration.data.StartDate) >= me.StartDatePicker.getValue();});
-				me.EndingIteration = _.find(me.Iterations, function(iteration) {return new Date(iteration.data.EndDate) > me.EndDatePicker.getValue();});
+				me.EndingIteration = _.findLast(me.Iterations, function(iteration) {return new Date(iteration.data.EndDate) <= me.EndDatePicker.getValue();});
 				me.StartingDate = me.StartDatePicker.getValue();
 				me.EndingDate = me.EndDatePicker.getValue();
 			}
 			
-			// TODO: Entirely wrong data
-			$('#backlog-chart-container').highcharts(me._getBacklogChartConfig(me._filterBacklogPointsToRange(me._getBacklogChartData())));
+			me._redrawBacklogChart();
+		},
+		
+		/*
+		 *	Redraws the backlog chart using the new range and data field
+		 */
+		_redrawBacklogChart: function() {
+			var me = this,
+				dataField = me.DataFieldCombo.getValue(),
+				data = me._filterBacklogPointsToRange(me._getBacklogChartData(dataField)),
+				chartConfig = me._getBacklogChartConfig(data);
+			
+			// Remove old chart
+			$('#backlog-chart-container').empty();
+			
+			// Add new chart
+			$('#backlog-chart-container').highcharts(chartConfig);
+			
+			// Hide that pesky link
 			me._hideHighchartsLink();
 		},
 		
@@ -394,10 +495,15 @@
 			
 			// Load stories then aggregate the data into one store
 			return Q.all(storyPromises).then(function(storyStores) {
-				me.StoryStore = storyStores[0];
-				for (var i = 1; i < storyStores.length; i++) {
+				me.StoryStore = Ext.create('Ext.data.Store', {
+					autoLoad: false,
+					model: me.UserStory,
+					data: []
+				});
+				for (var i = 0; i < storyStores.length; i++) {
 					me.StoryStore.add(storyStores[i].getRange());
 				}
+				me.StoryStore.sort('CreationDate', 'ASC');
 				me.setLoading(false);
 			});
 		},
@@ -462,7 +568,7 @@
 				storyFilter = (!customFilter ? standardFilter : standardFilter.and(customFilter)),
 				storeConfig = {
 					model: me.UserStory,
-					fetch: ['Name', 'ObjectID', 'FormattedID', 'Owner', 'Iteration', 'ScheduleState', 'Feature', 'PlanEstimate', 'AcceptedDate', 'CreationDate'],
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'Owner', 'Iteration', 'StartDate', 'EndDate', 'ScheduleState', 'Feature', 'PlanEstimate', 'AcceptedDate', 'CreationDate'],
 					autoLoad: false,
 					limit: Infinity,
 					pageSize: 200,
@@ -567,8 +673,8 @@
 		_getPercentageChartData: function() {
 			var me = this,
 				percentageData = [
-					{name: 'CI Stories', y: me.StoryStore.data.length},
-					{name: 'Non-CI Stories', y: 0}
+					{name: 'CI', y: me.StoryStore.data.length},
+					{name: 'Non-CI', y: 0}
 				],
 				config = {
 					autoLoad: false,
@@ -602,30 +708,35 @@
 		_getIterationFilter: function() {
 			var me = this,
 				// Set to now, all dates guaranteed to be before
-				firstCreationDate = new Date(),
+				firstDate = new Date(),
 				// Set to minimum date
-				lastAcceptedDate = new Date(null),
+				lastDate = new Date(null),
 				endsAfterFilter,
 				startsBeforeFilter;
 			
 			// Find the extremes of dates
-			_.each(me.StoryStore.getRecords(), function(story) {
+			_.each(me.StoryStore.getRange(), function(story) {
 				var creationDate = new Date(story.data.CreationDate),
-					acceptedDate = new Date(story.data.AcceptedDate); 
-				if (creationDate < firstCreationDate) firstCreationDate = creationDate;
-				if (acceptedDate > lastAcceptedDate) lastAcceptedDate = acceptedDate;
+					acceptedDate = new Date(story.data.AcceptedDate),
+					iterationStartDate = story.data.Iteration ? new Date(story.data.Iteration.StartDate) : new Date();
+					iterationEndDate = story.data.Iteration ? new Date(story.data.Iteration.EndDate) : new Date(null);
+				if (creationDate < firstDate) firstDate = creationDate;
+				if (iterationStartDate < firstDate)firstDate = iterationStartDate;
+				if (acceptedDate > lastDate) lastDate = acceptedDate;
+				if (creationDate > lastDate) lastDate = creationDate;
+				if (iterationEndDate > lastDate) lastDate = iterationEndDate;
 			});
 			
 			// Create filters to narrow the time box of the iterations
 			endsAfterFilter = Ext.create('Rally.data.wsapi.Filter', {
 				property: 'EndDate',
 				operator: '>=',
-				value: firstCreationDate.toISOString()
+				value: firstDate.toISOString()
 			});
 			startsBeforeFilter = Ext.create('Rally.data.wsapi.Filter', {
 				property: 'StartDate',
 				operator: '<=',
-				value: lastAcceptedDate.toISOString()
+				value: lastDate.toISOString()
 			});
 			
 			return [endsAfterFilter, startsBeforeFilter];
@@ -698,23 +809,28 @@
 		/*
 		 *	Creates the backlog chart data object
 		 */
-		_getBacklogChartData: function() {
+		_getBacklogChartData: function(field) {
 			var me = this,
 				backlogData = [],
-				storyTotal = 0;
-			
+				storyTotal = 0,
+				dataField = field || 'size',
+				iterationNameRegExp = /^Q\d+_s\d+/;
 			// Create data objects for all iterations for the deltas and the totals
 			_.each(me.Iterations, function(iteration) {
 				var iterationStartDate = new Date(iteration.data.StartDate),
 					iterationEndDate = new Date(iteration.data.EndDate);
 				backlogData.push({
-					name: iteration.data.Name.substring(0, 8),
+					name: iteration.data.Name.match(iterationNameRegExp)[0],
 					delta: 0,
 					added: 0,
 					accepted: 0,
+					size: 0,
 					startDate: iterationStartDate,
 					endDate: iterationEndDate,
-					y: 0
+					y: 0,
+					createdStories: [],
+					acceptedStories: [],
+					backloggedStories: []
 				});
 			});
 			
@@ -722,14 +838,24 @@
 			_.each(me.StoryStore.getRange(), function(story) {
 				var storyCreationDate = new Date(story.data.CreationDate),
 					storyAcceptedDate = new Date(story.data.AcceptedDate);
+					
+				// Accounts for stories written before planned iterations
+				if (storyCreationDate < backlogData[0].startDate) storyTotal++;
+				if (story.data.AcceptedDate && storyAcceptedDate < backlogData[0].startDate) storyTotal--;
+				
 				for (var i in backlogData) {
+					if (storyCreationDate <= backlogData[i].endDate && (!story.data.AcceptedDate || storyAcceptedDate > backlogData[i].endDate)) {
+						backlogData[i].backloggedStories.push(story);
+					}
 					if (storyCreationDate >= backlogData[i].startDate && storyCreationDate <= backlogData[i].endDate) {
 						backlogData[i].added++;
 						backlogData[i].delta++;
+						backlogData[i].createdStories.push(story);
 					}
-					if (storyAcceptedDate >= backlogData[i].startDate && storyAcceptedDate <= backlogData[i].endDate) {
+					if (story.data.AcceptedDate && storyAcceptedDate >= backlogData[i].startDate && storyAcceptedDate <= backlogData[i].endDate) {
 						backlogData[i].accepted++;
 						backlogData[i].delta--;
+						backlogData[i].acceptedStories.push(story);
 					}
 				}
 			});
@@ -737,7 +863,8 @@
 			// Calculate backlog count at each iteration end
 			for (var j in backlogData) {
 				storyTotal += backlogData[j].delta;
-				backlogData[j].y = storyTotal;
+				backlogData[j].size = storyTotal;
+				backlogData[j].y = backlogData[j][dataField];
 			}
 			
 			me.BacklogData = backlogData;
@@ -768,7 +895,7 @@
 			var me = this;
 			return {
 				chart: {
-					height:500,
+					height:(me.getHeight() > 1100) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
 					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -785,7 +912,7 @@
 							overflow:'none',
 							formatter: function(){
 								var str = '<b>' + this.point.name + '</b>: ' + this.point.y;
-								return str + '/' + this.point.totalCount;
+								return str;
 							},
 							style: { 
 								cursor:'pointer',
@@ -811,7 +938,7 @@
 			var me = this;
 			return {
 				chart: {
-					height:500,
+					height: (me.getHeight() > 1100) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
 					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -846,6 +973,90 @@
 			};
 		},
 		
+		_loadIterationBreakdown: function(e) {
+			var point = e.point,
+				me = this,
+				breakdownContainer = Ext.create('Ext.container.Container', {
+					id: 'breakdown-container',
+					items: [
+						{
+							xtype: 'button',
+							text: 'Close Breakdown',
+							listeners: {
+								click: function() {
+									me.down('#breakdown-container').destroy();
+									me.down('#storygrid').show();
+								}
+							}
+						},
+						{
+							xtype: 'rallygrid',
+							title: 'Backlogged Stories',
+							columnCfgs: [
+								'FormattedID',
+								'Name',
+								'Owner'
+							],
+							pagingToolbarCfg: {
+								pageSizes: [5, 10],
+								autoRender: true,
+								resizable: false
+							},
+							store: Ext.create('Rally.data.custom.Store', {
+								model: me.UserStory,
+								autoLoad: false,
+								data: point.backloggedStories,
+								pageSize: 5
+							})
+						},
+						{
+							xtype: 'rallygrid',
+							title: 'Created Stories',
+							columnCfgs: [
+								'FormattedID',
+								'Name',
+								'Owner'
+							],
+							pagingToolbarCfg: {
+								pageSizes: [5, 10],
+								autoRender: true,
+								resizable: false
+							},
+							store: Ext.create('Rally.data.custom.Store', {
+								model: me.UserStory,
+								autoLoad: false,
+								data: point.createdStories,
+								pageSize: 5
+							})
+						},
+						{
+							xtype: 'rallygrid',
+							title: 'Accepted Stories',
+							columnCfgs: [
+								'FormattedID',
+								'Name',
+								'Owner'
+							],
+							pagingToolbarCfg: {
+								pageSizes: [5, 10],
+								autoRender: true,
+								resizable: false
+							},
+							store: Ext.create('Rally.data.custom.Store', {
+								model: me.UserStory,
+								autoLoad: false,
+								data: point.acceptedStories,
+								pageSize: 5
+							})
+						}
+					]
+				});
+			
+			me.down('#storygrid').hide();
+			if (me.down('#breakdown-container')) me.down('#breakdown-container').destroy();
+			me.down('#grid-container').add(breakdownContainer);
+		},
+		
 		/*
 		 *	Creates the config object for the backlog chart
 		 */
@@ -853,28 +1064,30 @@
 			var me = this;
 			return {
 				chart: {
-					height: 500,
-					width: (me.getWidth()/2 >> 0),
+					height: (me.getHeight() > 1100) ? (me.getHeight()*0.64 >> 0) : (me.getHeight()*0.5),
+					// width: (me.getWidth()/2 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
 					plotShadow: false
 				},
 				title: {text: 'CI Story Backlog'},
-				tooltip: {enabled: false},
-				plotOptions: {
-					line: {
-						// TODO: I'm not entirely sure if I want to do anything with this yet
-					}
-				},
+				tooltip: {enabled: true},
 				series: [
 					{
 						type: 'column',
-						name: 'Total Backlog Stories',
+						name: 'Backlog Over Time',
 						data: data,
-						point: {
-							events: {
-								click: me._showPointInformation
+						tooltip: {
+							pointFormatter: function() {
+								return '<b><u>Iteration Information:</u></b><br>' + 
+									'Backlog Size: ' + this.size + '<br>' +
+									'Stories Added: ' + this.added + '<br>' +
+									'Stories Accepted: ' + this.accepted + '<br>' +
+									'Backlog Delta: ' + this.delta + '<br>';
 							}
+						},
+						events: {
+							click: me._loadIterationBreakdown.bind(me)
 						}
 					}
 				],
@@ -894,14 +1107,6 @@
 		},
 		
 		/*
-		 *	Displays information about a point
-		 */
-		_showPointInformation: function() {
-			// TODO: Oh come on, you know this is just plain wrong
-			alert('Data at iteration end:\nBacklog stories: ' + this.y + '\nStories added: ' + this.added + '\nStories accepted: ' + this.accepted);
-		},
-		
-		/*
 		 *	Hides the link for Highcharts
 		 */
 		_hideHighchartsLink: function() {
@@ -916,15 +1121,33 @@
 			return {
 				id: 'storygrid',
 				title: 'Team Continuous Improvement Stories',
-				store: me.StoryStore,
-				// DEBUG: Issue with sorting when showing all releases; data gets deleted somehow (?)
-				sortableColumns: false,
+				store: Ext.create('Rally.data.custom.Store', {
+					autoLoad: false,
+					model: me.UserStory,
+					data: me.StoryStore.getRange(),
+					pageSize: (me.getHeight() > 1100 ? 25 : 10)
+					
+				}),
+				sortableColumns: true,
+				pagingToolbarCfg: {
+					pageSizes: [10, 15, 25, 100],
+					autoRender: true,
+					resizable: false
+				},
 				columnCfgs: [
 					'FormattedID',
 					'Name',
 					'Owner',
 					'Iteration',
-					'ScheduleState'
+					'ScheduleState',
+					{
+						text: 'Days Unaccepted',
+						editor: false,
+						renderer:function(val, meta, record){
+							var day = 1000*60*60*24;
+							return ((record.data.AcceptedDate ? new Date(record.data.AcceptedDate) : new Date()) - new Date(record.data.CreationDate).getTime())/day>>0;
+						}
+					}
 				]
 			};
 		},
@@ -942,9 +1165,9 @@
 			
 			return Q.all(promises).then(function(data) {
 				// Add charts
+				if (me.isShowingAllReleases) $('#backlog-chart-container').highcharts(me._getBacklogChartConfig(data[2]));
 				$('#state-chart-container').highcharts(me._getStateChartConfig(data[0]));
 				$('#percentage-chart-container').highcharts(me._getPercentageChartConfig(data[1]));
-				if (me.isShowingAllReleases) $('#backlog-chart-container').highcharts(me._getBacklogChartConfig(data[2]));
 				
 				// Hide that pesky link
 				me._hideHighchartsLink();
