@@ -278,6 +278,7 @@
 							}
 						}
 					}
+					me.LeafProjectsByGroup = _.filter(me.LeafProjectsByGroup, function(group) {return Object.keys(group).length !== 0;});
 				});
 			}
 			else {
@@ -291,6 +292,7 @@
 						}
 					}
 				}
+				me.LeafProjectsByGroup = _.filter(me.LeafProjectsByGroup, function(group) {return Object.keys(group).length !== 0;});
 			}
 		},
 		
@@ -367,7 +369,7 @@
 					autoLoad: false,
 					pageSize: 200,
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
-							'Description', 'FormattedID', 'UserStories'],
+							'Description', 'FormattedID', 'UserStories', 'Parent'],
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: project.data._ref,
@@ -386,16 +388,13 @@
 			
 			for (var i in me.PortfolioProjectObjectIDs) {
 				piPromises.push(
-					me._loadProject(me.PortfolioProjectObjectIDs[i]).then(function(project) {
-						return loadStore(project);
-					}).then(function(store) {
-						return addRecordsToStore(store);
-					})
+					me._loadProject(me.PortfolioProjectObjectIDs[i]).then(loadStore).then(addRecordsToStore)
 				);
 			}
 			
 			return Q.all(piPromises).then(function(stores) {
 				me.PortfolioItemStore = piStore;
+				console.log(piStore);
 				return piStore;
 			});
 		},
@@ -587,7 +586,18 @@
 				labelWidth:50,
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Type'],
-					data: [{Type:'All'}].concat(_.uniq(_.map(me.LeafProjects, function(p){ return me._getTeamInfo(p) || p.data.Name; }), false, function(p) {return p.Type;}))
+					data: [{Type:'All'}].concat(
+						_.sortBy(
+							_.uniq(
+								_.map(
+									_.reduce(me.LeafProjects, function(a, project) {return a.concat(me._getTeamInfo(project).KeyWords);}, []),
+									function(type) {return {Type: type};}
+								),
+								function(key) {return key.Type;}
+							),
+							function(key) {return key.Type;}
+						)
+					)
 				}),
 				displayField:'Type',
 				value:'All',
@@ -819,8 +829,8 @@
 		_getFilteredStories: function(){
 			var me = this;
 			if (!me.isScopedToScrum) {
-				if (me.TeamType !== '') {
-					var re = new RegExp('^' + me.TeamType);
+				if (me.TeamType !== '' && me.TeamType !== 'All') {
+					var re = new RegExp(me.TeamType);
 					return _.filter(me.UserStoryStore.getRecords(), function(story){ 
 						return re.test(story.data.Project.Name);
 					});
@@ -836,9 +846,32 @@
 		
 		/*
 		 *	Gets the collection of items of the lowest portfolio item type
+		 *	TODO: Optimize the filtering, I feel terrible about those nested loops
 		 */
 		_getFilteredLowestPortfolioItems: function(){ 
-			return this.PortfolioItemStore ? this.PortfolioItemStore.getRecords(): [];
+			var me = this;
+			// if (me.isHorizontalView) {
+				var activeGroups = {},
+					activeProjects = me._filterProjectsByTeamType(me.LeafProjects, me.TeamType),
+					portfolioItems = me.PortfolioItemStore.getRecords(),
+					filteredPortfolioItems = [];
+				for (var i in activeProjects) {
+					for (var j in me.ScrumGroupConfig) {
+						if (!activeGroups[me.ScrumGroupConfig[j].PortfolioProjectOID] && me.ScrumGroupConfig[j].ScrumGroupName.indexOf(me.TeamInfoMap[activeProjects[i].data.ObjectID].info.Train) > -1) {
+							activeGroups[me.ScrumGroupConfig[j].PortfolioProjectOID] = me.ScrumGroupConfig[j];
+						}
+					}
+				}
+				for (var k in portfolioItems) {
+					if (activeGroups[portfolioItems[k].data.Project.Parent.ObjectID] || activeGroups[portfolioItems[k].data.Project.ObjectID]) {
+						filteredPortfolioItems.push(portfolioItems[k]);
+					}
+				}
+				return filteredPortfolioItems;
+			/*}
+			else {
+				return me.PortfolioItemStore ? me.PortfolioItemStore.getRecords() : [];
+			}*/
 		},
 		
 		/*
@@ -1068,7 +1101,8 @@
 						store: Ext.create('Rally.data.custom.Store', {
 							model: storeModel,
 							pageSize:10,
-							data: gridConfig.data
+							data: gridConfig.data,
+							autoLoad: false
 						})
 					}) : 
 					Ext.create('Rally.ui.grid.Grid', {
@@ -1320,7 +1354,18 @@
 				me.TeamPicker.bindStore(Ext.create('Ext.data.Store', {
 					fields: ['Type'],
 					// TODO: Optimize
-					data: [{Type:'All'}].concat(_.uniq(_.map(me.LeafProjects, function(p){ return me._getTeamInfo(p) || p.data.Name; }), false, function(p) {return p.Type;}))
+					data: [{Type:'All'}].concat(
+						_.sortBy(
+							_.uniq(
+								_.map(
+									_.reduce(me.LeafProjects, function(a, project) {return a.concat(me._getTeamInfo(project).KeyWords);}, []),
+									function(type) {return {Type: type};}
+								),
+								function(key) {return key.Type;}
+							),
+							function(key) {return key.Type;}
+						)
+					)
 				}));
 				me.setLoading(false);
 			});
