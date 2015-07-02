@@ -18,6 +18,7 @@
       "../../lib/component/intel-fixed-combobox.js",
       "../../lib/component/intel-textarea.js",
       "../../lib/component/intel-release-picker.js",
+      "../../lib/component/intel-user-picker.js",
       "../lib/model/risk.js",
       "../lib/resource/risk-db.js",
       "App.js"

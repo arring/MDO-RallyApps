@@ -7,9 +7,8 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext,
 		RISK_KEY_PREFIX = 'risk-',
-		STATUS_OPTIONS = ['Open', 'WIP', 'Closed'],
-		URGENCY_OPTIONS = ['High', 'Medium', 'Low'],
-		ROAM_OPTIONS = ['Resolved', 'Owned', 'Accepted', 'Mitigated'],
+		STATUS_OPTIONS = ['Open', 'WIP', 'Mitigated', 'Closed'],
+		RISK_LEVEL_OPTIONS = ['High', 'Medium', 'Low'],
 		INVALID_MESSAGE = 'is invalid';
 	
 	/*************************** Risk Custom Validators **********************************/
@@ -21,9 +20,9 @@
 	Ext.data.validations.RiskImpactMessage =                INVALID_MESSAGE;
 	Ext.data.validations.RiskMitigationPlanMessage =        INVALID_MESSAGE;
 	Ext.data.validations.RiskStatusMessage =                INVALID_MESSAGE;
-	Ext.data.validations.RiskUrgencyMessage =               INVALID_MESSAGE;
-	Ext.data.validations.RiskROAMMessage =                  INVALID_MESSAGE;
+	Ext.data.validations.RiskLevelMessage =                 INVALID_MESSAGE;
 	Ext.data.validations.RiskOwnerObjectIDMessage =         INVALID_MESSAGE;
+	Ext.data.validations.RiskSubmitterObjectIDMessage =     INVALID_MESSAGE;
 	Ext.data.validations.RiskCheckpointMessage =            INVALID_MESSAGE;
 	
 	Ext.data.validations.RiskID = function(config, value){
@@ -33,7 +32,7 @@
 		return typeof value === 'string' && value.length > 0;
 	};
 	Ext.data.validations.RiskPortfolioItemObjectID = function(config, value){
-		return value === undefined || (typeof value === 'number' && value > 0);
+		return typeof value === 'number' && value > 0;
 	};
 	Ext.data.validations.RiskProjectObjectID = function(config, value){
 		return value === undefined || (typeof value === 'number' && value > 0);
@@ -50,13 +49,13 @@
 	Ext.data.validations.RiskStatus = function(config, value){
 		return STATUS_OPTIONS.indexOf(value) > -1;
 	};
-	Ext.data.validations.RiskUrgency = function(config, value){
-		return URGENCY_OPTIONS.indexOf(value) > -1;
-	};
-	Ext.data.validations.RiskROAM = function(config, value){
-		return ROAM_OPTIONS.indexOf(value) > -1;
+	Ext.data.validations.RiskLevel = function(config, value){
+		return RISK_LEVEL_OPTIONS.indexOf(value) > -1;
 	};
 	Ext.data.validations.RiskOwnerObjectID = function(config, value){
+		return typeof value === 'number' && value > 0;
+	};
+	Ext.data.validations.RiskSubmitterObjectID = function(config, value){
 		return typeof value === 'number' && value > 0;
 	};
 	Ext.data.validations.RiskCheckpoint = function(config, value){
@@ -69,15 +68,15 @@
 		fields: [
 			{name: 'RiskID', type:'auto'},
 			{name: 'ReleaseName', type:'auto'},
-			{name: 'PortfolioItemObjectID', type: 'auto', defaultValue: undefined},
+			{name: 'PortfolioItemObjectID', type: 'auto'},
 			{name: 'ProjectObjectID', type:'auto', defaultValue: undefined},
 			{name: 'Description', type: 'auto'},
 			{name: 'Impact', type: 'auto'},	
 			{name: 'MitigationPlan', type: 'auto'},
-			{name: 'Urgency', type: 'auto'},
+			{name: 'RiskLevel', type: 'auto'},
 			{name: 'Status', type: 'auto'},
-			{name: 'ROAM', type: 'auto'},
 			{name: 'OwnerObjectID', type: 'auto'},
+			{name: 'SubmitterObjectID', type: 'auto'},
 			{name: 'Checkpoint', type: 'auto'}
 		],
 		validations: [
@@ -89,9 +88,9 @@
 			{type: 'RiskImpact', field: 'Impact'},
 			{type: 'RiskMitigationPlan', field: 'MitigationPlan'},
 			{type: 'RiskStatus', field: 'Status'},
-			{type: 'RiskUrgency', field: 'Urgency'},
-			{type: 'RiskROAM', field: 'ROAM'},
+			{type: 'RiskLevel', field: 'RiskLevel'},
 			{type: 'RiskOwnerObjectID', field: 'OwnerObjectID'},
+			{name: 'RiskSubmitterObjectID', type: 'SubmitterObjectID'},
 			{type: 'RiskCheckpoint', field: 'Checkpoint'}
 		],
 		statics:{
@@ -101,11 +100,8 @@
 			getStatusOptions: function(){
 				return STATUS_OPTIONS.slice();
 			},
-			getUrgencyOptions: function(){
-				return URGENCY_OPTIONS.slice(); 
-			},
-			getROAMOptions: function(){
-				return ROAM_OPTIONS.slice(); 
+			getRiskLevelOptions: function(){
+				return RISK_LEVEL_OPTIONS.slice(); 
 			}
 		}
 	});

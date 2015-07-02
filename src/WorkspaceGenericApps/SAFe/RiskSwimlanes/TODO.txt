@@ -1,0 +1,28 @@
+Allen's Decision: 
+	- should contact field be added in addition to owner field?
+	- are all fields mandatory? can we allow Description/Impact/MitigationPlan/ROAM to be undefined?
+	- can a risk be blocked (do i have to add a blocked and a blockedReason field to risk)? 
+	- should owner be editable ? or is the risk creator the owner?
+	- should release be editable ? 
+	
+TODO:
+	DONE - add colors to cards 
+	DONE - add 'copy' card option
+	DONE - create look and feel of cards in regular app
+	DONE - create a universal modal for creating/editing/viewing risks
+	DONE - implement drag and drop
+	- Make sure KeyValueDb calls btoa(encodeURIComponent(<string>)) BEFORE checking the resulting length. 
+		This will avoid rally stripping html tags
+	- Remove ROAM field 
+	- Validate Risks when we read them as well as write them, so deprecated Risk formats do not break current Risk apps assuming certain 
+		fields exist or don't exist
+	
+	
+	
+MAYBE TODO:
+	- create look and feel of modals/dialogs in regular app
+	- inline editing of risk 'cards'
+	- enable filtering by more than just owner like in the real kanban app
+	- add a "which fields to show" button like in the real kanban app
+
+city attorney- 367 8880(speak to kieth)

@@ -99,14 +99,30 @@
 		formatUserName: function(user){
 			return user ? ((user.data.LastName + ', ' + user.data.FirstName) || user.data.UserName) : '?';
 		},
-		insertSortedRisk: function(risks, risk){
+		insertRiskIfValid: function(risks, risk){
 			risks = _.filter(risks, function(_risk){ return _risk.RiskID !== risk.RiskID; });
-			risks.push(risk);
+			if(risk.ReleaseName === this.ReleaseRecord.data.Name) risks.push(risk);
 			return _.sortBy(risks, function(risk){ return risk.RiskID; });
+		},
+		createPortfolioItemDropdownStores: function(portfolioItems){
+			return {
+				NameStore: Ext.create('Ext.data.Store', {
+					fields: ['Name', 'ObjectID'],
+					data: _.sortBy(_.map(portfolioItems, 
+						function(portfolioItem){ return {Name: portfolioItem.data.Name, ObjectID: portfolioItem.data.ObjectID}; }),
+						function(item){ return item.Name; })
+				}),
+				FIDStore: Ext.create('Ext.data.Store', {
+					fields: ['FormattedID', 'ObjectID'],
+					data: _.sortBy(_.map(portfolioItems, 
+						function(portfolioItem){ return {FormattedID: portfolioItem.data.FormattedID, ObjectID: portfolioItem.data.ObjectID}; }),
+						function(item){ return item.FormattedID; })
+				})
+			};
 		},
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		loadPortfolioItems: function(){
+		loadPortfolioItemsByRelease: function(releaseName){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + me.PortfolioItemTypes[0],
@@ -114,7 +130,7 @@
 					disableMetaChangeEvent: true,
 					remoteSort:false,
 					fetch: ['Name', 'FormattedID', 'ObjectID'],
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
+					filters:[{ property:'Release.Name', value:releaseName}],
 					context:{
 						project: me.ScrumGroupPortfolioProject.data._ref,
 						projectScopeDown: true,
@@ -133,6 +149,7 @@
 			var me = this,
 				userObjectIDs = _.reduce(me.Risks, function(oids, risk){
 					if(oids.indexOf(risk.OwnerObjectID) === -1) oids.push(risk.OwnerObjectID);
+					if(oids.indexOf(risk.SubmitterObjectID) === -1) oids.push(risk.SubmitterObjectID);
 					return oids;
 				}, [me.getContext().getUser().ObjectID]),
 				userOIDFilter = _.reduce(userObjectIDs, function(filter, oid){
@@ -147,7 +164,7 @@
 					context: { workspace: me.getContext().getWorkspace()._ref }
 				});
 			return me.reloadStore(store).then(function(store){ 
-				me.Users = store.getRange(); 
+				me.UsersOnRisks = store.getRange(); 
 			});
 		},
 					
@@ -193,7 +210,8 @@
 		},
 		reloadData: function(){
 			var me = this;
-			return Q.all([me.loadRisks(), me.loadPortfolioItems()])
+			return Q.all([me.loadRisks(), me.loadPortfolioItemsByRelease(me.ReleaseRecord.data.Name)])
+				.then(function(results){ me.PortfolioItemsInRelease = results[1]; })
 				.then(function(){ return me.loadUsers(); });
 		},	
 		reloadEverything: function(){
@@ -255,29 +273,15 @@
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
 								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease){
-									me.ReleaseRecord = currentRelease;
-									me.WorkweekData = me.getWorkweeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
-								}
+								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							}),
-						me.loadProjectsWithTeamMembers()
-							.then(function(projectsWithTeamMembers){
-								me.ProjectsForDropdown = _.sortBy(_.map(projectsWithTeamMembers, 
-									function(project){ return {Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
-									function(item){ return item.Name; });
-							}),
+						me.loadProjectsWithTeamMembers().then(function(projectsWithTeamMembers){
+							me.ProjectsWithTeamMembers = projectsWithTeamMembers;
+						}),
 						RiskDb.initialize(),
 						me.loadSwimlaneAgreements()
 					]);
-				})
-				.then(function(){
-					return me.loadPortfolioItems()
-						.then(function(portfolioItems){
-							me.PortfolioItemsForDropdown = _.sortBy(_.map(portfolioItems, 
-								function(portfolioItem){ return {Name: portfolioItem.data.Name, ObjectID: portfolioItem.data.ObjectID}; }),
-								function(item){ return item.Name; });
-						});
 				})
 				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
@@ -315,13 +319,13 @@
 		renderAddRiskButton: function(){
 			var me=this,
 				userOID = me.getContext().getUser().ObjectID,
-				owner = _.find(me.Users, function(user){ return user.data.ObjectID === userOID; });
+				submitter = _.find(me.UsersOnRisks, function(user){ return user.data.ObjectID === userOID; });
 			me.AddRiskButton = me.down('#toolsbarLeft').add({
 				xtype:'button',
 				text: '+ Add New',
 				id: 'addNewButton',
 				handler: function(){
-					me.showRiskEditingModal(undefined, {}, owner);
+					me.showRiskEditingModal(undefined, {}, submitter);
 				}
 			});
 		},
@@ -334,7 +338,7 @@
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name', 'ObjectID'],
 					data: [{Name:'Clear Filter', ObjectID: 0}].concat(
-						_.sortBy(_.map(me.Users, 
+						_.sortBy(_.map(me.UsersOnRisks, 
 							function(user){ return {Name: me.formatUserName(user), ObjectID: user.data.ObjectID}; }),
 							function(item){ return item.Name; })
 					)
@@ -376,10 +380,10 @@
 		renderRisk: function(risk){
 			var me = this,
 				riskID = risk.RiskID,
-				urgency = risk.Urgency,
+				riskLevel = risk.RiskLevel,
 				status = risk.Status,
-				ownerName = me.formatUserName(_.find(me.Users, function(user){ return user.data.ObjectID === risk.OwnerObjectID; })),
-				dropArea = Ext.get('swimlaneDropArea-' + status + '___' + urgency),
+				ownerName = me.formatUserName(_.find(me.UsersOnRisks, function(user){ return user.data.ObjectID === risk.OwnerObjectID; })),
+				dropArea = Ext.get('swimlaneDropArea-' + status + '___' + riskLevel),
 				childNodes = dropArea.query('.swimlane-risk'),
 				index = _.filter(childNodes, function(node){ return node.id.split('swimlaneRisk-')[1] < riskID; }).length,
 				riskHTML = [
@@ -406,7 +410,7 @@
 			//wire up event listeners
 			Ext.get(Ext.query('#swimlaneRisk-' + riskID + ' .swimlane-risk-edit-button')).on('click', function(){
 				var risk = _.find(me.Risks, function(risk){ return risk.RiskID === riskID; }),
-					owner = _.find(me.Users, function(user){ return user.data.ObjectID === risk.OwnerObjectID; });
+					owner = _.find(me.UsersOnRisks, function(user){ return user.data.ObjectID === risk.OwnerObjectID; });
 				me.showRiskEditingModal(riskID, risk, owner);
 			});
 			Ext.get(Ext.query('#swimlaneRisk-' + riskID + ' .swimlane-risk-copy-button')).on('click', function(){
@@ -418,7 +422,7 @@
 				me.setLoading('Copying Risk');
 				RiskDb.create(newRiskID, newRisk)
 					.then(function(riskJSON){ 
-						me.Risks = me.insertSortedRisk(me.Risks, riskJSON); 
+						me.Risks = me.insertRiskIfValid(me.Risks, riskJSON); 
 						me.setVisibleRisks(me.Risks.slice());
 					})
 					.fail(function(reason){ me.alert('ERROR', reason); })
@@ -504,11 +508,11 @@
 							'</div>',
 						'</div>',
 						'<div class="swimlane-body">',
-							_.map(RiskModel.getUrgencyOptions(), function(urgencyOption){
+							_.map(RiskModel.getRiskLevelOptions(), function(riskLevelOption){
 								return [
 									'<div class="swimlane-header-row collapsed">',
 										'<div class="swimlane-header-row-left">',
-											urgencyOption,
+											riskLevelOption,
 										'</div>',
 										'<div class="swimlane-header-row-right">',
 											'<i class="fa fa-arrow-up"></i>',
@@ -519,7 +523,7 @@
 									'<div class="swimlane-row">',
 										_.map(RiskModel.getStatusOptions(), function(statusOption){
 											return [
-												'<div id="swimlaneDropArea-' + statusOption + '___' + urgencyOption + '" class="swimlane-drop-area">',
+												'<div id="swimlaneDropArea-' + statusOption + '___' + riskLevelOption + '" class="swimlane-drop-area">',
 												'</div>'
 											].join('\n');
 										}).join('\n'),
@@ -593,14 +597,14 @@
 							riskJSON = _.find(me.Risks, function(risk){ return risk.RiskID === riskID; }),
 							splitID = dropEl.id.split('-').slice(1).join('-').split('___'),
 							newStatus = splitID[0],
-							newUrgency = splitID[1];
+							newRiskLevel = splitID[1];
 							
 						me.setLoading('Saving Risk');
 						riskJSON.Status = newStatus;
-						riskJSON.Urgency = newUrgency;
+						riskJSON.RiskLevel = newRiskLevel;
 						RiskDb.update(riskID, riskJSON)
 							.then(function(riskJSON){
-								me.Risks = me.insertSortedRisk(me.Risks, riskJSON);
+								me.Risks = me.insertRiskIfValid(me.Risks, riskJSON);
 								riskCard.remove();
 								Ext.get(dropEl.el.query('.swimlane-risk-placeholder')).remove();
 								me.renderRisk(riskJSON);
@@ -677,169 +681,265 @@
 				});
 			setTimeout(function(){ modal.show(); }, 10);
 		},
-		showRiskEditingModal: function(riskID, riskJSON, owner){
+		showRiskEditingModal: function(riskID, riskJSON, submitter){
 			var me = this,
-				releaseStartDate = me.ReleaseRecord.data.ReleaseStartDate,
-				releaseEndDate = me.ReleaseRecord.data.ReleaseDate,
-				releaseName = me.ReleaseRecord.data.Name,
+				isExistingRisk = !!riskID,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				portfolioItemStore = Ext.create('Ext.data.Store', {
-					fields: ['Name', 'ObjectID'],
-					data: [{Name:'None', ObjectID: undefined}].concat(me.PortfolioItemsForDropdown)
-				}),
-				projectStore = Ext.create('Ext.data.Store', {
-					fields: ['Name', 'ObjectID'],
-					data: [{Name:'None', ObjectID: undefined}].concat(me.ProjectsForDropdown)
-				}),
-				workweekStore = Ext.create('Ext.data.Store', {
-					fields: ['DateVal', 'Workweek'],
-					data: me.getWorkweeksForDropdown(releaseStartDate, releaseEndDate)
-				}),
+				currentReleaseRecord = me.ReleaseRecord,
+				currentPortfolioItemRecords = me.PortfolioItemsInRelease,
+				getReleaseNameComponent = function(){
+					var releaseNameStore = Ext.create('Ext.data.Store', {
+						fields: ['Name', 'ObjectID'],
+						data: _.sortBy(_.map(me.ReleaseRecords, 
+							function(release){ return {Name: release.data.Name, ObjectID: release.data.ObjectID}; }),
+							function(item){ return item.Name; });
+					});
+					return isExistingRisk ? {
+						xtype: 'intelcombobox',
+						id: 'editRiskModal-ReleaseName',
+						emptyText: 'Select Release',
+						fieldLabel: 'Release',
+						value: _.find(releaseNameStore.getRange(), function(item){ return item.data.Name === riskJSON.ReleaseName; }),
+						store: releaseNameStore,
+						displayField: 'Name',
+						valueField: 'ObjectID',
+						listeners: { 
+							select: function(combo, records){
+								var releaseName = records[0].data.Name;
+								if(releaseName === currentReleaseRecord.data.Name) return;
+								currentReleaseRecord = records[0];
+								me.setLoading('Loading Data');
+								me.loadPortfolioItemsByRelease(releaseName).then(function(portfolioItems){
+									currentPortfolioItemRecords = portfolioItems;
+									updateComponents();
+								})
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
+							}
+						}
+					} : {
+						xtype: 'displayfield',
+						id: 'editRiskModal-ReleaseName',
+						fieldLabel: 'Release',
+						value: me.ReleaseRecord.data.Name
+					};
+				},
+				getPortfolioItemFIDDropdown = function(){
+					var portfolioItemFIDStore = me.createPortfolioItemDropdownStores(currentPortfolioItemRecords).FIDStore;
+					return {
+						xtype: 'intelcombobox',
+						id: 'editRiskModal-PortfolioItemObjectID-FID',
+						emptyText: 'Select ' + lowestPortfolioItemType + ' by #',
+						fieldLabel: lowestPortfolioItemType + ' #',
+						value: _.find(portfolioItemFIDStore.getRange(), function(item){ return item.data.ObjectID === riskJSON.PortfolioItemObjectID; }) || undefined,
+						store: portfolioItemFIDStore,
+						displayField: 'FormattedID',
+						valueField: 'ObjectID',
+						listeners: {
+							select: function(combo, records){
+								var nameCmp = Ext.getCmp('editRiskModal-PortfolioItemObjectID-Name');
+								if(nameCmp.getValue() === records[0].data.ObjectID) return;
+								else nameCmp.setValue(records[0].data.ObjectID);
+							}
+						}
+					};
+				},
+				getPortfolioItemNameDropdown = function(){
+					var portfolioItemNameStore = me.createPortfolioItemDropdownStores(currentPortfolioItemRecords).NameStore;
+					return {
+						xtype: 'intelcombobox',
+						id: 'editRiskModal-PortfolioItemObjectID-Name',
+						emptyText: 'Select ' + lowestPortfolioItemType + ' by Name',
+						fieldLabel: lowestPortfolioItemType + ' Name',
+						value: _.find(portfolioItemNameStore.getRange(), function(item){ return item.data.ObjectID === riskJSON.PortfolioItemObjectID; }) || undefined,
+						store: portfolioItemNameStore,
+						displayField: 'Name',
+						valueField: 'ObjectID',
+						listeners: {
+							select: function(combo, records){
+								var fidCmp = Ext.getCmp('editRiskModal-PortfolioItemObjectID-FID');
+								if(fidCmp.getValue() === records[0].data.ObjectID) return;
+								else fidCmp.setValue(records[0].data.ObjectID);
+							}
+						}
+					};
+				},
+				getProjectDropdown = function(){
+					var projectStore = Ext.create('Ext.data.Store', {
+						fields: ['Name', 'ObjectID'],
+						data: [{Name:'None', ObjectID: undefined}].concat(_.sortBy(_.map(projectsWithTeamMembers, 
+							function(project){ return {Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
+							function(item){ return item.Name; }))
+					});
+					return {
+						xtype: 'intelcombobox',
+						id: 'editRiskModal-ProjectObjectID',
+						emptyText: 'Select Project',
+						fieldLabel: 'Project (optional)',
+						value: _.find(projectStore.getRange(), function(item){ return item.data.ObjectID === riskJSON.ProjectObjectID; }) || undefined,
+						store: projectStore,
+						displayField: 'Name',
+						valueField: 'ObjectID'
+					};
+				},
+				getCheckpointDropdown = function(){
+					var workweekStore = Ext.create('Ext.data.Store', {
+						fields: ['DateVal', 'Workweek'],
+						data: me.getWorkweeksForDropdown(currentReleaseRecord.data.ReleaseStartDate, currentReleaseRecord.data.ReleaseDate)
+					});
+					return {
+						xtype: 'intelfixedcombobox',
+						id: 'editRiskModal-Checkpoint',
+						emptyText: 'Select Checkpoint',
+						fieldLabel: 'Checkpoint',
+						value: _.find(workweekStore.getRange(), function(item){ return item.data.DateVal === riskJSON.Checkpoint; }) || undefined,
+						store: workweekStore,
+						displayField: 'Workweek',
+						valueField: 'DateVal'
+					};
+				},
+				updateComponents = function(){ 	
+					Ext.getCmp('editRiskModal').add(_.map(Ext.getCmp('editRiskModal').removeAll(), function(cmp){
+						switch(cmp.id){
+							case 'editRiskModal-ReleaseName': return getReleaseNameComponent();
+							case 'editRiskModal-PortfolioItemObjectID-FID': return getPortfolioItemFIDDropdown();
+							case 'editRiskModal-PortfolioItemObjectID-Name': return getPortfolioItemNameDropdown();
+							case 'editRiskModal-ProjectObjectID': return getProjectDropdown();
+							case 'editRiskModal-Checkpoint': return getCheckpointDropdown();
+							default: return cmp;
+						}
+					}));
+				},
 				modal = Ext.create('Ext.window.Window', {
 					modal: true,
 					closable: true,
 					resizable: true,
 					id: 'editRiskModal',
-					title: (riskID ? 'Edit Risk' : 'New Risk'),
+					title: (isExistingRisk ? 'Edit Risk' : 'New Risk'),
 					width: 400,
 					padding:'2px 5px 2px 5px',
 					height: Math.min(400, (window.innerHeight - 20)),
 					y: 5,
 					overflowY: 'auto',
-					items: [{
-						xtype: 'displayfield',
-						fieldLabel: 'Release',
-						value: releaseName
-					},{
-						xtype: 'displayfield',
-						fieldLabel: 'Owner',
-						value: me.formatUserName(owner)
-					},{
-						xtype: 'intelcombobox',
-						id: 'editRiskModal-PortfolioItemObjectID',
-						emptyText: 'Select ' + lowestPortfolioItemType,
-						fieldLabel: lowestPortfolioItemType + ' (optional)',
-						value: _.find(portfolioItemStore.getRange(), function(item){ 
-							return item.data.ObjectID == riskJSON.PortfolioItemObjectID; }) || undefined,
-						store: portfolioItemStore,
-						displayField: 'Name',
-						valueField: 'ObjectID'
-					},{
-						xtype: 'intelcombobox',
-						id: 'editRiskModal-ProjectObjectID',
-						emptyText: 'Select Project',
-						fieldLabel: 'Project (optional)',
-						value: _.find(projectStore.getRange(), function(item){ 
-							return item.data.ObjectID == riskJSON.ProjectObjectID; }) || undefined,
-						store: projectStore,
-						displayField: 'Name',
-						valueField: 'ObjectID'
-					},{
-						xtype: 'inteltextarea',
-						id: 'editRiskModal-Description',
-						emptyText: 'Enter Description',
-						value: riskJSON.Description,
-						fieldLabel: 'Description'
-					},{
-						xtype: 'inteltextarea',
-						id: 'editRiskModal-Impact',
-						emptyText: 'Enter Impact',
-						value: riskJSON.Impact,
-						fieldLabel: 'Impact'
-					},{
-						xtype: 'inteltextarea',
-						id: 'editRiskModal-MitigationPlan',
-						emptyText: 'Enter MitigationPlan',
-						value: riskJSON.MitigationPlan,
-						fieldLabel: 'MitigationPlan'
-					},{
-						xtype: 'intelfixedcombobox',
-						id: 'editRiskModal-Urgency',
-						emptyText: 'Select Urgency',
-						fieldLabel: 'Urgency',
-						value: riskJSON.Urgency,
-						store: Ext.create('Ext.data.Store', {
-							fields: ['Name'],
-							data: _.map(RiskModel.getUrgencyOptions(), function(option){ return {Name: option}; })
-						}),
-						displayField: 'Name'
-					},{
-						xtype: 'intelfixedcombobox',
-						id: 'editRiskModal-Status',
-						emptyText: 'Select Status',
-						fieldLabel: 'Status',
-						value: riskJSON.Status,
-						store: Ext.create('Ext.data.Store', {
-							fields: ['Name'],
-							data: _.map(RiskModel.getStatusOptions(), function(option){ return {Name: option}; })
-						}),
-						displayField: 'Name'
-					},{
-						xtype: 'intelfixedcombobox',
-						id: 'editRiskModal-ROAM',
-						emptyText: 'Select ROAM',
-						fieldLabel: 'ROAM',
-						value: riskJSON.ROAM,
-						store: Ext.create('Ext.data.Store', {
-							fields: ['Name'],
-							data: _.map(RiskModel.getROAMOptions(), function(option){ return {Name: option}; })
-						}),
-						displayField: 'Name'
-					},{
-						xtype: 'intelfixedcombobox',
-						id: 'editRiskModal-Checkpoint',
-						emptyText: 'Select Checkpoint',
-						fieldLabel: 'Checkpoint',
-						value: _.find(workweekStore.getRange(), function(item){ 
-							return item.data.DateVal === riskJSON.Checkpoint; }) || undefined,
-						store: workweekStore,
-						displayField: 'Workweek',
-						valueField: 'DateVal'
-					},{
-						xtype:'container',
-						layout:'hbox',
-						style: {
-							borderTop: '1px solid gray'
-						},
-						items:[{
-							xtype:'button',
-							text:'Cancel',
-							handler: function(){ modal.destroy(); }
+					items: [
+						getReleaseNameComponent(),
+						{
+							xtype: 'displayfield',
+							fieldLabel: 'Submitted By',
+							value: me.formatUserName(submitter)
 						},{
-							xtype:'button',
-							text: (riskID ? 'Save Risk' : 'Create Risk'),
-							handler: function(){
-								var riskJSON = {
-										ReleaseName:           releaseName,
-										PortfolioItemObjectID: Ext.getCmp('editRiskModal-PortfolioItemObjectID').getValue() || undefined,
-										ProjectObjectID:       Ext.getCmp('editRiskModal-ProjectObjectID').getValue() || undefined,
-										Description:           Ext.getCmp('editRiskModal-Description').getValue(),
-										Impact:                Ext.getCmp('editRiskModal-Impact').getValue(),
-										MitigationPlan:        Ext.getCmp('editRiskModal-MitigationPlan').getValue(),
-										Urgency:               Ext.getCmp('editRiskModal-Urgency').getValue(),
-										Status:                Ext.getCmp('editRiskModal-Status').getValue(),
-										ROAM:                  Ext.getCmp('editRiskModal-ROAM').getValue(),
-										Checkpoint:            Ext.getCmp('editRiskModal-Checkpoint').getValue(),
-										OwnerObjectID:         owner.data.ObjectID
-									},
-									action = (riskID ? 'update' : 'create'),
-									actionRiskID = riskID || me.generateRiskID();
-								
-								me.setLoading('Saving Risk');
-								RiskDb[action](actionRiskID, riskJSON)
-									.then(function(riskJSON){
-										me.Risks = me.insertSortedRisk(me.Risks, riskJSON);
-										me.setVisibleRisks(me.Risks.slice());
-										modal.destroy();
-									})
-									.fail(function(reason){ me.alert('ERROR', reason); })
-									.then(function(){ me.setLoading(false); })
-									.done();
-							}
-						}]
-					}]
+							xtype: 'inteluserpicker',
+							id: 'editRiskModal-OwnerObjectID',
+							emptyText: 'Select Owner',
+							fieldLabel: 'Owner',
+							value: _.find(me.UsersOnRisks, function(item){ return item.data.ObjectID === riskJSON.OwnerObjectID; }) || undefined,
+							displayField: 'Name',
+							valueField: 'ObjectID'
+						}, 
+						getPortfolioItemFIDDropdown(),
+						getPortfolioItemNameDropdown(),
+						getProjectDropdown(),
+						getCheckpointDropdown(),
+						{
+							xtype: 'inteltextarea',
+							id: 'editRiskModal-Description',
+							emptyText: 'Enter Description',
+							value: riskJSON.Description,
+							fieldLabel: 'Description'
+						},{
+							xtype: 'inteltextarea',
+							id: 'editRiskModal-Impact',
+							emptyText: 'Enter Impact',
+							value: riskJSON.Impact,
+							fieldLabel: 'Impact'
+						},{
+							xtype: 'inteltextarea',
+							id: 'editRiskModal-MitigationPlan',
+							emptyText: 'Enter MitigationPlan',
+							value: riskJSON.MitigationPlan,
+							fieldLabel: 'MitigationPlan'
+						},{
+							xtype: 'intelfixedcombobox',
+							id: 'editRiskModal-RiskLevel',
+							emptyText: 'Select RiskLevel',
+							fieldLabel: 'RiskLevel',
+							value: riskJSON.RiskLevel,
+							store: Ext.create('Ext.data.Store', {
+								fields: ['Name'],
+								data: _.map(RiskModel.getRiskLevelOptions(), function(option){ return {Name: option}; })
+							}),
+							displayField: 'Name'
+						},{
+							xtype: 'intelfixedcombobox',
+							id: 'editRiskModal-Status',
+							emptyText: 'Select Status',
+							fieldLabel: 'Status',
+							value: riskJSON.Status,
+							store: Ext.create('Ext.data.Store', {
+								fields: ['Name'],
+								data: _.map(RiskModel.getStatusOptions(), function(option){ return {Name: option}; })
+							}),
+							displayField: 'Name'
+						},{
+							xtype:'container',
+							layout:'hbox',
+							style: {
+								borderTop: '1px solid gray'
+							},
+							items:[{
+								xtype:'button',
+								text:'Cancel',
+								handler: function(){ modal.destroy(); }
+							},{
+								xtype:'button',
+								text: (isExistingRisk ? 'Save Risk' : 'Create Risk'),
+								handler: function(){
+									var riskJSON = {
+											ReleaseName:           Ext.getCmp('editRiskModal-ReleaseName').getValue(),
+											PortfolioItemObjectID: Ext.getCmp('editRiskModal-PortfolioItemObjectID-Name').getValue(),
+											ProjectObjectID:       Ext.getCmp('editRiskModal-ProjectObjectID').getValue() || undefined,
+											Description:           Ext.getCmp('editRiskModal-Description').getValue(),
+											Impact:                Ext.getCmp('editRiskModal-Impact').getValue(),
+											MitigationPlan:        Ext.getCmp('editRiskModal-MitigationPlan').getValue(),
+											RiskLevel:             Ext.getCmp('editRiskModal-RiskLevel').getValue(),
+											Status:                Ext.getCmp('editRiskModal-Status').getValue(),
+											Checkpoint:            Ext.getCmp('editRiskModal-Checkpoint').getValue(),
+											OwnerObjectID:         Ext.getCmp('editRiskModal-OwnerObjectID').getValue(),
+											SubmitterObjectID:     submitter.data.ObjectID
+										},
+										action = (isExistingRisk ? 'update' : 'create'),
+										actionRiskID = riskID || me.generateRiskID(); //if we are editing risk, use old RiskID otherwise generate new RiskID
+									
+									me.setLoading('Saving Risk');
+									RiskDb[action](actionRiskID, riskJSON)
+										.then(function(riskJSON){
+											me.Risks = me.insertRiskIfValid(me.Risks, riskJSON);
+											me.setVisibleRisks(me.Risks.slice());
+											modal.destroy();
+										})
+										.fail(function(reason){ me.alert('ERROR', reason); })
+										.then(function(){ me.setLoading(false); })
+										.done();
+								}
+							}]
+						}
+					]
 				});
-			setTimeout(function(){ modal.show(); }, 10);
+			
+			setTimeout(function(){ 
+				me.setLoading('Loading Data');
+				if(isExistingRisk){
+					currentRelease = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name === riskJSON.ReleaseName; });
+					me.loadPortfolioItemsByRelease(currentRelease.data.Name)
+						.then(function(portfolioItems){ currentPortfolioItemRecords = portfolioItems; })
+						.then(function(){ updateComponents(); })
+						.fail(function(reason){ me.alert(reason): })
+						.then(function(){ me.setLoading(false); })
+						.done();
+				}
+				else me.setLoading(false);
+			}, 10);				
 		}
 	});
 }());

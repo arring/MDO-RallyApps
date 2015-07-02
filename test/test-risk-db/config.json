@@ -8,8 +8,8 @@
       "https://code.jquery.com/jquery-2.1.4.js",
       "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.9.3/lodash.js",
       "../../src/WorkspaceGenericApps/lib/resource/key-value-db.js",
-      "../../src/WorkspaceGenericApps/SAFe2.0/lib/model/risk.js",
-      "../../src/WorkspaceGenericApps/SAFe2.0/lib/resource/risk-db.js",
+      "../../src/WorkspaceGenericApps/SAFe/lib/model/risk.js",
+      "../../src/WorkspaceGenericApps/SAFe/lib/resource/risk-db.js",
       "App.js"
    ],
    "css": []
