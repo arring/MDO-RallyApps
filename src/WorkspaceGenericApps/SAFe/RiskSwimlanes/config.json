@@ -19,6 +19,8 @@
       "../../lib/component/intel-textarea.js",
       "../../lib/component/intel-release-picker.js",
       "../../lib/component/intel-user-picker.js",
+      "../../lib/component/swimlane/intel-swimlanes.js",
+      "../../lib/component/swimlane/intel-swimlane-card.js",
       "../lib/model/risk.js",
       "../lib/resource/risk-db.js",
       "App.js"
@@ -26,6 +28,7 @@
    "css": [
       "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
       "../../lib/css/base.css",
+      "../../lib/component/swimlane/intel-swimlanes.css",
       "app.css"
    ]
 }

@@ -821,7 +821,9 @@
 					if(me.ProjectNotInScrumGroup){
 						var projectOID = me.ProjectRecord.data.ObjectID;
 						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
-							me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; });
+							me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ 
+								return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; 
+							});
 							if(!me.ScrumGroupRootRecord) me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
 						} 
 						else me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];

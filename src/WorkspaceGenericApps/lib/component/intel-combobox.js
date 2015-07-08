@@ -18,8 +18,8 @@
 				ignoreNoChange:true,
 				allowBlank:true,
 				listeners: {
-					keyup: function(a,b){
-						if(b.keyCode>=37 && b.keyCode <=40) return; //arrow keys
+					change: function(a,b){
+						if(!b || (b.keyCode>=37 && b.keyCode <=40)) return; //arrow keys
 						var combo = this;
 						combo.store.clearFilter();
 						combo.store.filterBy(function(item){

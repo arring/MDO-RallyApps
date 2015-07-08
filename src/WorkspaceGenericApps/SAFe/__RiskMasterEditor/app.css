@@ -1,0 +1,12 @@
+.custom-field-grid {
+	margin-bottom:10px;
+	border: 2px solid black; }
+
+.custom-field-grid .x-panel-header,
+.custom-field-grid .x4-panel-header {
+	font-weight:bold;
+	background-color:rgba(0, 255, 0, 0.4) !important; }
+		
+.custom-field-grid .x-grid-cell-inner,
+.custom-field-grid .x4-grid-cell-inner  {
+	white-space:pre !important; }

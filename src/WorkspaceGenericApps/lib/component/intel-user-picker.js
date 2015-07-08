@@ -1,7 +1,6 @@
 /** 
 	SUMMARY:
 		This component is an easy user search picker based off ComboBox. It searches all users in Rally as you type.
-		
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -13,15 +12,51 @@
 		constructor: function(options) {
 			options = options || {};
 			options = Ext.merge({
-				enableKeyEvents:true,
-				queryMode: 'remote',
-				store: Ext.create('Rally.data.wsapi.Store', {
-					model: 'user',
-					fetch: ['FirstName', 'LastName', 'UserName', 'EmailAddress', 'ObjectID'],
-					limit: 20
+				queryMode: 'local',
+				tpl: '<tpl for="."><div class="x-boundlist-item">{LastName}, {FirstName}</div></tpl>',
+				displayTpl: '<tpl for="."><tpl if="LastName">{LastName}, {FirstName}</tpl></tpl>',
+				allowBlank:true,
+				store: Ext.create('Ext.data.Store', {
+					fields: ['FirstName', 'LastName', 'UserName', 'ObjectID'],
+					proxy: {
+						type:'sessionstorage',
+						id:'inteluserpickerproxy' + (10000*Math.random()>>0)
+					},
+					data: []
 				}),
-				ignoreNoChange:true,
-				allowBlank:true
+				listeners: {
+					change: function(combo, newValue){
+						if(typeof newValue !== 'string') return;
+						combo.setLoading('Loading');
+						var searchTerms = (newValue || '').split(',').map(function(x){ return x.trim(); });
+						Ext.create('Rally.data.wsapi.Store', {
+							model: 'user',
+							fetch: ['FirstName', 'LastName', 'UserName', 'ObjectID'],
+							pageSize: 20,
+							limit:20,
+							autoLoad:true,
+							filters: (!newValue.length) ? [] : _.reduce(searchTerms, function(filter, term){
+								var newFilter = Ext.create('Rally.data.wsapi.Filter', {property:'FirstName', operator:'contains', value:term}).or(
+									Ext.create('Rally.data.wsapi.Filter', {property:'LastName', operator:'contains', value:term}));
+								if(filter) return newFilter.and(filter);
+								else return newFilter;
+							}, null),
+							listeners: {
+								load: function(store){
+									combo.setLoading(false);
+									combo.store.removeAll();
+									combo.store.add(store.getRange().map(function(x){ return x.data; }));
+									combo.expand();
+								}
+							}
+						});
+					},
+					focus: function(combo) {
+						combo.store.clearFilter();
+						combo.setValue('');
+						combo.expand();
+					}
+				}
 			}, options);
 			this.callParent([options]);
 		}

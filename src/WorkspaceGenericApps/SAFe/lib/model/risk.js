@@ -7,7 +7,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext,
 		RISK_KEY_PREFIX = 'risk-',
-		STATUS_OPTIONS = ['Open', 'WIP', 'Mitigated', 'Closed'],
+		STATUS_OPTIONS = ['Open', 'WIP', 'Materialized', 'Closed'],
 		RISK_LEVEL_OPTIONS = ['High', 'Medium', 'Low'],
 		INVALID_MESSAGE = 'is invalid';
 	
@@ -90,7 +90,7 @@
 			{type: 'RiskStatus', field: 'Status'},
 			{type: 'RiskLevel', field: 'RiskLevel'},
 			{type: 'RiskOwnerObjectID', field: 'OwnerObjectID'},
-			{name: 'RiskSubmitterObjectID', type: 'SubmitterObjectID'},
+			{type: 'RiskSubmitterObjectID', field: 'SubmitterObjectID'},
 			{type: 'RiskCheckpoint', field: 'Checkpoint'}
 		],
 		statics:{

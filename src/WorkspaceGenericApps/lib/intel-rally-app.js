@@ -323,6 +323,17 @@
 				return me.reloadStore(store).then(function(store){ return store.getRange(); });
 			}
 		},
+		getScrumGroupPortfolioObjectIDs: function(){
+			return _.map(me.ScrumGroupConfig, function(item){
+				return item.ScrumGroupAndPortfolioLocationTheSame ? item.ScrumGroupRootProjectOID : item.PortfolioProjectOID;
+			});
+		},
+		getPortfolioOIDForScrumGroupRootProjectRecord: function(scrumGroupRootProjectRecord){
+			var configItem = _.find(this.ScrumGroupConfig, function(item){ 
+				return item.ScrumGroupRootProjectOID === scrumGroupRootProjectRecord.data.ObjectID; 
+			});
+			return configItem.ScrumGroupAndPortfolioLocationTheSame ? configItem.ScrumGroupRootProjectOID : configItem.PortfolioProjectOID;
+		},
 		
 		/**************************************** UserStory Funcs ************************************************/
 		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 

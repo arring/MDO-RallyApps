@@ -143,7 +143,7 @@
 					RiskDb.create(TEST_TOKEN + 'create1')
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason.length === 8) deferred.resolve();
+							if(reason.length === 11) deferred.resolve(); //all but projectID
 							else deferred.reject();
 						})
 						.done();
@@ -154,7 +154,7 @@
 					RiskDb.create(TEST_TOKEN + 'create1', 'magic object!')
 						.then(deferred.reject)
 						.fail(function(reason){
-							if(reason.length === 8) deferred.resolve();
+							if(reason.length === 11) deferred.resolve(); //all but projectID
 							else deferred.reject();
 						})
 						.done();
@@ -202,14 +202,13 @@
 						.done();
 					return deferred.promise;
 				},
-				function(){ //should allow no PortfolioItemObjectID or ProjectObjectID
+				function(){ //should allow no ProjectObjectID
 					var newRisk = _.merge({}, RISK_TMPL);
-					delete newRisk.PortfolioItemObjectID;
 					delete newRisk.ProjectObjectID;
 					
 					return RiskDb.create(TEST_TOKEN + 'create_1', newRisk)
 						.then(function(risk){ 
-							if(typeof risk.PortfolioItemObjectID !== 'undefined') return Q.reject();
+							if(typeof risk.ProjectObjectID !== 'undefined') return Q.reject();
 						});
 				},
 				

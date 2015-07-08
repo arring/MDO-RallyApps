@@ -3,7 +3,11 @@
 		CRUD API for Risks. Each Risk has a RiskID. Choose the ID carefully, as it will be very important for querying, and GET, PUT, POST, and DELETE
 		all use RiskIDs as the key in the key-value storage. Recommended usage is to name the keys something like: 'risk-<release name>-<unique character hash>'
 		
-		this file does not handle schema or validation things for risks-- it only handles the CRUD interface for them. It uses the RiskModel object to do validation
+		The risk 'value' is obfuscated because Rally strips html characters from the text, which then breaks JSON. it is obfuscated by using:
+		btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')))
+		
+		this file does not handle schema or validation things for risks -- it only handles the CRUD interface for them. It uses the RiskModel object 
+		to do validation
 	
 	DEPENDENCIES: 
 		- Intel.lib.resource.KeyValueDb
@@ -40,7 +44,7 @@
 		get: function(riskID){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
 			return KeyValueDb.getKeyValuePair(riskID).then(function(kvPair){
-				try { return kvPair ? _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}) : null; }
+				try { return kvPair ? _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}) : null; }
 				catch(e){ return Q.reject(e); }
 			});
 		},
@@ -51,7 +55,7 @@
 			return KeyValueDb.queryKeyValuePairs(riskIDContains).then(function(kvPairs){
 				try { 
 					return _.map(kvPairs, function(kvPair){
-						return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key});
+						return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key});
 					});
 				}
 				catch(e){ return Q.reject(e); }
@@ -65,9 +69,9 @@
 		create: function(riskID, riskJSON){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
 			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
-				var riskJSONString = JSON.stringify(riskJSON, null, '\t');		
+				var riskJSONString = btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')));		
 				return KeyValueDb.createKeyValuePair(riskID, riskJSONString).then(function(kvPair){
-					try { return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}); }
+					try { return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}); }
 					catch(e){ return Q.reject(e); }
 				});
 			});
@@ -80,9 +84,9 @@
 		update: function(riskID, riskJSON){
 			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
 			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
-				var riskJSONString = JSON.stringify(riskJSON, null, '\t');	
+				var riskJSONString = btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')));	
 				return KeyValueDb.updateKeyValuePair(riskID, riskJSONString).then(function(kvPair){
-					try { return _.merge(JSON.parse(kvPair.value), {RiskID: kvPair.key}); }
+					try { return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}); }
 					catch(e){ return Q.reject(e); }
 				});
 			});
