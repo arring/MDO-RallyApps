@@ -78,7 +78,7 @@ SUMMARY:
 			this.el.setHTML(this._createHTML());
 			this._wireEventListeners();
 			this.parentSwimlanes._renderCard(this);
-			this.parentSwimlanes.filter();
+			if(!this.parentSwimlanes._shouldShowCard(this)) this.hide();
 		},
 		
 		/*************************************** public methods *****************************************/

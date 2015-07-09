@@ -23,7 +23,8 @@
 						var combo = this;
 						combo.store.clearFilter();
 						combo.store.filterBy(function(item){
-							return item.data[combo.displayField].match(new RegExp(combo.getRawValue(), 'i')) !== null;
+							var escapedValue = combo.getRawValue().replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+							return item.data[combo.displayField].match(new RegExp(escapedValue, 'i')) !== null;
 						});
 					},
 					focus: function(combo) {

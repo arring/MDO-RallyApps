@@ -325,6 +325,9 @@
 			var sortFn = this.sortFn;
 			return _.filter(cardCmps, function(cardCmp){ return sortFn(insertCardCmp, cardCmp) === -1; }).length;
 		},
+		_shouldShowCard: function(card){
+			return Ext.util.Filter.createFilterFn(this.filters)(card);
+		},
 		
 		/*************************************** templates to override *****************************************/
 		onCardEdit: function(){ },
@@ -344,16 +347,19 @@
 				data: cardData
 			});
 			this._renderCard(newCard);
-			this.filter();
+			if(!this._shouldShowCard(newCard)) newCard.hide();
 			return newCard;
 		},
 		
 		filter: function(){
-			var swimlanes = this, cards = swimlanes.getCards(),
-				mixedCollection = new Ext.util.MixedCollection();
+			var swimlanes = this, 
+				cards = swimlanes.getCards(),
+				filterFn = Ext.util.Filter.createFilterFn(swimlanes.filters);
 				
-			_.each(cards, function(card){ card.hide(); mixedCollection.add(card); });
-			mixedCollection.filter(swimlanes.filters).each(function(card){ card.show(); });
+			_.each(cards, function(card){
+				if(filterFn(card)) card.show();
+				else card.hide();
+			});
 		},
 		addFilter: function(filter){
 			this.filters.push(new Ext.util.Filter(filter));
