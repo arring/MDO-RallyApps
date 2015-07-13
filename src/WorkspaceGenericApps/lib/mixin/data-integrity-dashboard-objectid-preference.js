@@ -10,7 +10,7 @@
 **/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		dataIntegrityObjectIdPref: 'intel-data-integrity-dashboard-objectid-preference';
+		dataIntegrityObjectIdPref = 'intel-data-integrity-dashboard-objectid-preference';
 
 	Ext.define('Intel.lib.mixin.DataIntegrityDashboardObjectIDPreference', {
 		getDataIntegrityDashboardObjectID: function(){

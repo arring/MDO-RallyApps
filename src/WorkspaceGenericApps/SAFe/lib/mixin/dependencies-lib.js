@@ -12,7 +12,7 @@
 	Ext.define('Intel.SAFe.lib.mixin.DependenciesLib', {
 		requires: ['Intel.lib.IntelRallyApp'],
 		
-		_getDependencies: function(userStoryRecord){
+		getDependencies: function(userStoryRecord){
 			var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
 			if(dependencyString === '') dependencies = { Predecessors:{}, Successors:{} };
 			else {
@@ -41,7 +41,7 @@
 						collectionRecords = collectionStore.getRange();
 					_.each(depsToAdd, function(userStoryObjectID){
 						if(!_.find(collectionRecords, function(cr){ return cr.data.ObjectID === userStoryObjectID; })){
-							promises.push(me._loadUserStory(userStoryObjectID).then(function(us){
+							promises.push(me.loadUserStory(userStoryObjectID).then(function(us){
 								if(us){ 
 									syncCollectionProxy = true; 
 									collectionStore.add(us); 
@@ -103,12 +103,12 @@
 			}
 			return deferred.promise;
 		},	
-		_removePredecessor: function(userStoryRecord, predecessorData, currentProjectRecord, dependenciesParsedData){
+		removePredecessor: function(userStoryRecord, predecessorData, currentProjectRecord, dependenciesParsedData){
 			dependenciesParsedData = dependenciesParsedData || {};
 			dependenciesParsedData.Predecessors = dependenciesParsedData.Predecessors || [];
 			
 			var me=this, 
-				dependencies = me._getDependencies(userStoryRecord),
+				dependencies = me.getDependencies(userStoryRecord),
 				cachedPredecessors = dependenciesParsedData.Predecessors,
 				depsToAdd = [], 
 				depsToRemove = [], 
@@ -142,12 +142,12 @@
 				return me._collectionSynced(userStoryRecord, dependencies); 
 			});
 		},	
-		_removeSuccessor: function(userStoryRecord, successorData, currentProjectRecord, dependenciesParsedData){
+		removeSuccessor: function(userStoryRecord, successorData, currentProjectRecord, dependenciesParsedData){
 			dependenciesParsedData = dependenciesParsedData || {};
 			dependenciesParsedData.Successors = dependenciesParsedData.Successors || [];
 			
 			var me=this, 
-				dependencies = me._getDependencies(userStoryRecord),
+				dependencies = me.getDependencies(userStoryRecord),
 				cachedSuccessors = dependenciesParsedData.Successors,
 				depsToAdd = [],
 				depsToRemove = [successorData.SuccessorUserStoryObjectID], 
@@ -175,12 +175,12 @@
 				return me._collectionSynced(userStoryRecord, dependencies);
 			});
 		},
-		_addPredecessor: function(userStoryRecord, predecessorData, currentProjectRecord, dependenciesParsedData){ 
+		addPredecessor: function(userStoryRecord, predecessorData, currentProjectRecord, dependenciesParsedData){ 
 			dependenciesParsedData = dependenciesParsedData || {};
 			dependenciesParsedData.Predecessors = dependenciesParsedData.Predecessors || [];
 			
 			var me=this, 
-				dependencies = me._getDependencies(userStoryRecord),
+				dependencies = me.getDependencies(userStoryRecord),
 				cachedPredecessors = dependenciesParsedData.Predecessors,
 				depsToAdd = [], 
 				dependencyID = predecessorData.DependencyID;
@@ -191,6 +191,7 @@
 			dependencies.Predecessors[dependencyID] = {
 				Description: predecessorData.Description,
 				NeededBy: predecessorData.NeededBy,
+				Plan: predecessorData.Plan,
 				Status: predecessorData.Status,
 				PredecessorItems: predecessorData.PredecessorItems
 			};
@@ -213,12 +214,12 @@
 				return me._collectionSynced(userStoryRecord, dependencies);
 			});
 		},
-		_addSuccessor: function(userStoryRecord, successorData, currentProjectRecord, dependenciesParsedData){ 
+		addSuccessor: function(userStoryRecord, successorData, currentProjectRecord, dependenciesParsedData){ 
 			dependenciesParsedData = dependenciesParsedData || {};
 			dependenciesParsedData.Successors = dependenciesParsedData.Successors || [];
 			
 			var me=this, 
-				dependencies = me._getDependencies(userStoryRecord),
+				dependencies = me.getDependencies(userStoryRecord),
 				cachedSuccessors = dependenciesParsedData.Successors,
 				depsToAdd = [],
 				dependencyID = successorData.DependencyID;
@@ -252,14 +253,14 @@
 			});
 		},	
 	
-		_getOldAndNewUserStoryRecords: function(dependencyData, userStoryList){
+		getOldAndNewUserStoryRecords: function(dependencyData, userStoryList){
 			var me = this,
 				newUserStoryRecord = _.find(userStoryList, function(userStory){
 					return userStory.data.FormattedID == dependencyData.UserStoryFormattedID;
 				});
 				
 			function loadOriginalParent(){
-				return Q(dependencyData.UserStoryObjectID ? me._loadUserStory(dependencyData.UserStoryObjectID) : null)
+				return Q(dependencyData.UserStoryObjectID ? me.loadUserStory(dependencyData.UserStoryObjectID) : null)
 				.then(function(oldUserStoryRecord){
 					newUserStoryRecord = newUserStoryRecord || oldUserStoryRecord;
 					return [oldUserStoryRecord, newUserStoryRecord];
@@ -267,7 +268,7 @@
 			}
 			
 			if(newUserStoryRecord){
-				return me._loadUserStory(newUserStoryRecord.data.ObjectID).then(function(userStoryRecord){
+				return me.loadUserStory(newUserStoryRecord.data.ObjectID).then(function(userStoryRecord){
 					newUserStoryRecord = userStoryRecord; 
 					return loadOriginalParent();
 				});
@@ -276,7 +277,7 @@
 				return loadOriginalParent();
 			}
 		},	
-		_getPredecessorItemArrays: function(localPredecessorData, realPredecessorData){ 
+		getPredecessorItemArrays: function(localPredecessorData, realPredecessorData){ 
 			/** returns arrays of the team dependencies from the dependency grouped on their status */
 			var me=this, 
 				addedItemsData = [], 
@@ -305,7 +306,7 @@
 			};
 		},	
 		/* returns functions that add successor objects to each of the predecessorItems in the dependency */
-		_getAddedPredecessorItemCallbacks: function(
+		getAddedPredecessorItemCallbacks: function(
 				predecessorItemsData, 
 				predecessorData, 
 				successorProjectRecord, 
@@ -320,7 +321,7 @@
 					if(!permissions.isProjectEditor(predecessorProjectRecord)) 
 						return Q.reject('You lack permissions to modify project: ' + predecessorProjectRecord.data.Name);
 					else {
-						return me._loadRandomUserStoryFromReleaseTimeframe(predecessorProjectRecord, me.ReleaseRecord).then(function(newUserStory){
+						return me.loadRandomUserStoryFromReleaseTimeframe(predecessorProjectRecord, me.ReleaseRecord).then(function(newUserStory){
 							if(!newUserStory){
 								return Q.reject('Project ' + predecessorProjectRecord.data.Name + ' has no user stories in this Release, cannot continue');
 							} else {
@@ -338,7 +339,7 @@
 									Edited: false
 								};
 								predecessorItemData.PredecessorUserStoryObjectID = newUserStory.data.ObjectID;
-								return me._addSuccessor(newUserStory, newSuccessorDependency, currentProjectRecord, dependenciesParsedData);
+								return me.addSuccessor(newUserStory, newSuccessorDependency, currentProjectRecord, dependenciesParsedData);
 							}
 						});
 					}
@@ -346,7 +347,7 @@
 			}));
 		},	
 		/* returns functions that update successor objects to each of the predecessorItems in the dependency */
-		_getUpdatedPredecessorItemCallbacks: function(
+		getUpdatedPredecessorItemCallbacks: function(
 				predecessorItemsData, 
 				predecessorData, 
 				successorProjectRecord, 
@@ -378,9 +379,9 @@
 							Assigned: false, //need to set this after _loadUserStory
 							Edited: false
 						};
-						return me._loadUserStory(predecessorItemData.PredecessorUserStoryObjectID).then(function(userStory){
+						return me.loadUserStory(predecessorItemData.PredecessorUserStoryObjectID).then(function(userStory){
 							if(!userStory){
-								return me._loadRandomUserStoryFromReleaseTimeframe(predecessorProjectRecord, me.ReleaseRecord)
+								return me.loadRandomUserStoryFromReleaseTimeframe(predecessorProjectRecord, me.ReleaseRecord)
 								.then(function(newUserStory){
 									if(!newUserStory){
 										return Q.reject('Project ' + predecessorProjectRecord.data.Name + ' has no user stories in this Release, cannot continue');
@@ -392,7 +393,7 @@
 										updatedSuccessorDependency.UserStoryFormattedID = '';
 										updatedSuccessorDependency.UserStoryName = '';
 										updatedSuccessorDependency.Assigned = false;						
-										return me._addSuccessor(newUserStory, updatedSuccessorDependency, currentProjectRecord, dependenciesParsedData); 
+										return me.addSuccessor(newUserStory, updatedSuccessorDependency, currentProjectRecord, dependenciesParsedData); 
 									}
 								});
 							} else {
@@ -400,7 +401,7 @@
 								updatedSuccessorDependency.UserStoryFormattedID = userStory.data.FormattedID;
 								updatedSuccessorDependency.UserStoryName = userStory.data.Name;
 								updatedSuccessorDependency.Assigned = predecessorItemData.Assigned;
-								return me._addSuccessor(userStory, updatedSuccessorDependency, currentProjectRecord, dependenciesParsedData);
+								return me.addSuccessor(userStory, updatedSuccessorDependency, currentProjectRecord, dependenciesParsedData);
 							}
 						});
 					}
@@ -408,7 +409,7 @@
 			}));
 		},	
 		/* returns functions that remove successor objects for each of the predecessorItems in the dependency */
-		_getRemovedPredecessorItemCallbacks: function(
+		getRemovedPredecessorItemCallbacks: function(
 				predecessorItemsData, 
 				predecessorData, 
 				successorProjectRecord, 
@@ -423,7 +424,7 @@
 					if(!permissions.isProjectEditor(predecessorProjectRecord)) 
 						return Q.reject('You lack permissions to modify project: ' + predecessorProjectRecord.data.Name);
 					else {
-						return me._loadUserStory(predecessorItemData.PredecessorUserStoryObjectID).then(function(userStory){
+						return me.loadUserStory(predecessorItemData.PredecessorUserStoryObjectID).then(function(userStory){
 							if(userStory){
 								var successorDependency = {
 									DependencyID: predecessorData.DependencyID,
@@ -438,7 +439,7 @@
 									Assigned: predecessorItemData.Assigned,
 									Edited: false
 								};
-								return me._removeSuccessor(userStory, successorDependency, currentProjectRecord, dependenciesParsedData);
+								return me.removeSuccessor(userStory, successorDependency, currentProjectRecord, dependenciesParsedData);
 							}
 						});
 					}
@@ -446,7 +447,7 @@
 			}));
 		},
 		/* Updates a single PredecessorItem on the successor for a dependency */
-		_updateSuccessor: function(
+		updateSuccessor: function(
 				predecessorUserStory, 
 				successorData, 
 				predecessorProjectRecord, 
@@ -459,10 +460,10 @@
 			if(!permissions.isProjectEditor(successorProjectRecord)){
 				return Q.reject('You lack permissions to modify project: ' + successorProjectRecord.data.Name);
 			} else {
-				return me._loadUserStory(successorData.SuccessorUserStoryObjectID).then(function(userStory){
+				return me.loadUserStory(successorData.SuccessorUserStoryObjectID).then(function(userStory){
 					if(!userStory) return Q.reject({SuccessorDeletedDependency:true, message:'Successor UserStory has been deleted.'});
 					else {
-						var successorsDependencies = me._getDependencies(userStory),
+						var successorsDependencies = me.getDependencies(userStory),
 							successorsDependency = successorsDependencies.Predecessors[successorData.DependencyID];
 						if(successorsDependency){
 							var predecessorData = {
@@ -472,6 +473,7 @@
 								UserStoryName: userStory.data.Name,
 								Description: successorsDependency.Description,
 								NeededBy: successorsDependency.NeededBy,
+								Plan: successorsDependency.Plan,
 								Status: successorsDependency.Status,
 								PredecessorItems: successorsDependency.PredecessorItems || [], 
 								Edited: false
@@ -483,7 +485,7 @@
 								predecessorItem.PredecessorUserStoryObjectID = predecessorUserStory.data.ObjectID;
 								predecessorItem.Supported = successorData.Supported;
 								predecessorItem.Assigned = successorData.Assigned;
-								return me._addPredecessor(userStory, predecessorData, currentProjectRecord, dependenciesParsedData);
+								return me.addPredecessor(userStory, predecessorData, currentProjectRecord, dependenciesParsedData);
 							}
 							else return Q.reject({SuccessorDeletedDependency:true, message:'Successor removed this dependency.'});
 						}

@@ -3,7 +3,7 @@
 #releasePicker { margin: 4px 0 0 0; }
 #modePicker { margin:0; }
 #viewPicker { margin:0; }
-#manualRefreshButton { margin: 5px 0 0 0; }
+#manualRefreshButton { margin: 5px 0 5px 0; }
 
 .intel-legend-dot {
 	width:12px;

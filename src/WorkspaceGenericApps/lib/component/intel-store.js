@@ -6,11 +6,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('Intel.lib.override.FastStore', {
+	Ext.define('Intel.lib.component.Store', {
 		extend: 'Ext.data.Store',
-		constructor: function(cfg) {
-			this.callParent(arguments);
-		},
+		alias: ['store.intelstore'],
 		
 		afterEdit: function(record, modifiedFieldNames) {
 			var me = this, i, shouldSync;

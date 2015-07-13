@@ -136,6 +136,7 @@
 				font-size: 0.8rem;
 				flex: 1 1 35%; }
 			.card-field-value {
+				word-break: break-word;
 				flex: 1 1 65%; }
 				
 		.swimlane-card-tools {

@@ -3,12 +3,12 @@
 .risksdeps-hidden-grid-row { display:none !important; }
 	
 /************************************************ NAVBAR/CONTAINERS *****************************************/
-#navbar { padding:0 10px 0 10px; }
+#navbox { padding:0 10px 0 10px; }
 #releasePicker { margin: 4px 0 0 0; }
 #manualRefreshButton { margin: 5px 0 0 5px; }
 
 /************************************************ RISKS GRID *****************************************/
-.risks-grid { margin:10px 10px 0px 10px; }
+#risk-grid { margin:10px 10px 0px 10px; }
 
 /************************************************ DEPENDENCIES GRIDS *****************************************/
 .predecessors-grid { margin:40px 10px 20px 10px; }

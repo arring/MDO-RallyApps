@@ -39,12 +39,12 @@
 		extend: 'Rally.app.App',
 		minWidth:910, //when Rally adds its own scrollbar anyways
 		
-		_projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
-		_portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
+		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
+		portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
 			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
-		_userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
+		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
-		_releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
 		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
@@ -119,6 +119,7 @@
 			var me=this, 
 				promises = [],
 				models = {
+					User: 'User',
 					Project: 'Project',
 					UserStory: 'HierarchicalRequirement',
 					PortfolioItem: 'PortfolioItem'
@@ -181,7 +182,7 @@
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
 				//HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
-					me._userStoryFields.push(me.PortfolioItemTypes[0]);  
+					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
 					return Q.all([
 						me._loadModels(),
 						me._loadPortfolioItemStatesForEachType()
@@ -211,7 +212,7 @@
 			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.Project.load(oid, {
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					context: { 
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
@@ -227,7 +228,7 @@
 			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.UserStory.load(oid, {
-					fetch: me._userStoryFields,
+					fetch: me.userStoryFields,
 					context: {
 						workspace: projectRecord ? null : me.getContext().getWorkspace()._ref,
 						project: projectRecord ? projectRecord.data._ref : null
@@ -243,7 +244,7 @@
 			else {
 				type = (type.indexOf('PortfolioItem/') === 0) ? type : ('PortfolioItem/' + type);	
 				me[type].load(oid, {
-					fetch: me._portfolioItemFields,
+					fetch: me.portfolioItemFields,
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
@@ -256,7 +257,7 @@
 		loadPortfolioItemByOrdinal: function(oid, ordinal){
 			var me = this, deferred = Q.defer(),
 				type = me.PortfolioItemTypes[ordinal];
-			return me._loadPortfolioItemByType(oid, type);
+			return me.loadPortfolioItemByType(oid, type);
 		},	
 		
 		/**************************************** ScrumGroup Funcs ***************************************************/
@@ -313,7 +314,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					filters:[filter],
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
@@ -396,7 +397,7 @@
 					limit:5,
 					pageSize:5,
 					disableMetaChangeEvent: true,
-					fetch: me._userStoryFields,
+					fetch: me.userStoryFields,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: undefined
@@ -407,7 +408,7 @@
 					}],
 					filters:[
 						Ext.create('Rally.data.wsapi.Filter', { property:'Project.ObjectID', value: projectRecord.data.ObjectID }).and(
-						me.__getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
 					]
 				});
 			return me.reloadStore(store).then(function(store){
@@ -451,7 +452,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					remoteSort:false,
-					fetch: me._portfolioItemFields,
+					fetch: me.portfolioItemFields,
 					context:{
 						project: portfolioProject.data._ref,
 						projectScopeDown: true,
@@ -463,7 +464,7 @@
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
 			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
-			if(type) return me._loadPortfolioItemsOfType(portfolioProject, type);
+			if(type) return me.loadPortfolioItemsOfType(portfolioProject, type);
 			else return Q.reject('Invalid PortfolioItem ordinal');
 		},
 		portfolioItemTypeToOrdinal: function(type){
@@ -473,7 +474,7 @@
 			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
 		},
 		getPortfolioItemTypeStateByName: function(portfolioType, stateName){
-			return this._getPortfolioItemTypeStateByOrdinal(this._portfolioItemTypeToOrdinal(portfolioType), stateName);
+			return this.getPortfolioItemTypeStateByOrdinal(this.portfolioItemTypeToOrdinal(portfolioType), stateName);
 		},
 		
 		/********************************************** Project Funcs ********************************************/
@@ -499,7 +500,7 @@
 				hash[curProj.data.ObjectID] = curProj;
 			for(var childProjRef in projTree){
 				if(childProjRef !== 'ProjectRecord')
-					me.__addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
+					me._addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
 			}
 		},	
 		_allChildProjectToList: function(projTree, hash){
@@ -507,7 +508,7 @@
 			hash[curProj.data.ObjectID] = curProj;
 			for(var childProjRef in projTree){
 				if(childProjRef !== 'ProjectRecord')
-					me.__allChildProjectToList(projTree[childProjRef], hash);
+					me._allChildProjectToList(projTree[childProjRef], hash);
 			}
 		},
 		_allLeafProjectsToList: function(projTree, hash){
@@ -516,14 +517,14 @@
 				hash[curProj.data.ObjectID] = curProj;
 			for(var childProjRef in projTree){
 				if(childProjRef !== 'ProjectRecord')
-					me.__allLeafProjectsToList(projTree[childProjRef], hash);
+					me._allLeafProjectsToList(projTree[childProjRef], hash);
 			}
 		},	
 		loadAllProjects: function(){
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context: {
@@ -545,7 +546,7 @@
 				projectsWithTeamMembers = {},
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context: {
@@ -555,8 +556,8 @@
 				});
 			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
-					var projTree = me.__storeItemsToProjTree(store.getRange());
-					me.__addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
 					return projectsWithTeamMembers;
 				} else {
 					return _.reduce(_.filter(store.getRange(),
@@ -574,7 +575,7 @@
 				childrenProjects = {},
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context: {
@@ -584,8 +585,8 @@
 				});
 			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
-					var projTree = me.__storeItemsToProjTree(store.getRange());
-					me.__allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
 					return childrenProjects;
 				} else {
 					return _.reduce(store.getRange(), function(map, project){
@@ -601,7 +602,7 @@
 				leafProjects = {}, 
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
-					fetch: me._projectFields,
+					fetch: me.projectFields,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context:{
@@ -611,8 +612,8 @@
 				});
 			return me.reloadStore(store).then(function(store){
 				if(rootProjectRecord){
-					var projTree = me.__storeItemsToProjTree(store.getRange());
-					me.__allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
 					return leafProjects;
 				} else {
 					return _.reduce(_.filter(store.getRange(),
@@ -655,7 +656,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'Project.ObjectID',
 						value:projectRecord.data.ObjectID
@@ -675,7 +676,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'ReleaseDate',
 						operator:'>=',
@@ -699,7 +700,7 @@
 					limit:Infinity,
 					autoLoad:false,
 					disableMetaChangeEvent: true,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'ReleaseDate',
 						operator:'<=',
@@ -742,7 +743,7 @@
 			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
 		loadReleasesInTheFuture: function(projectRecord){
-			return this._loadReleasesAfterGivenDate(projectRecord, new Date());
+			return this.loadReleasesAfterGivenDate(projectRecord, new Date());
 		},
 		loadReleasesByNameUnderProject: function(releaseName, projectRecord){
 			var me=this,
@@ -751,7 +752,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'Name',
 						value: releaseName
@@ -771,7 +772,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'Name',
 						value: releaseName
@@ -793,7 +794,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					autoLoad:false,
-					fetch: me._releaseFields,
+					fetch: me.releaseFields,
 					filters:[{
 						property:'Name',
 						operator:'contains',

@@ -35,17 +35,23 @@
 							pageSize: 20,
 							limit:20,
 							autoLoad:true,
-							filters: (!newValue.length) ? [] : _.reduce(searchTerms, function(filter, term){
-								var newFilter = Ext.create('Rally.data.wsapi.Filter', {property:'FirstName', operator:'contains', value:term}).or(
+							filters: ((!newValue.length) ? [] : [_.reduce(searchTerms, function(filter, term){
+								var newFilter = 
+									Ext.create('Rally.data.wsapi.Filter', {property:'FirstName', operator:'contains', value:term}).or(
 									Ext.create('Rally.data.wsapi.Filter', {property:'LastName', operator:'contains', value:term}));
 								if(filter) return newFilter.and(filter);
 								else return newFilter;
-							}, null),
+							}, null)])
+							.concat(Ext.create('Rally.data.wsapi.Filter', {property:'WorkspacePermission', operator:'!=', value:'No Access'})),
 							listeners: {
 								load: function(store){
 									combo.setLoading(false);
 									combo.store.removeAll();
-									combo.store.add(store.getRange().map(function(x){ return x.data; }));
+									var users = _.sortBy(_.filter(_.map(store.getRange(),
+										function(x){ return x.data; }),
+										function(x){ return x.FirstName && x.LastName; }),
+										function(x){ return x.LastName + ', ' + x.FirstName; });
+									combo.store.add(users);
 									combo.expand();
 								}
 							}

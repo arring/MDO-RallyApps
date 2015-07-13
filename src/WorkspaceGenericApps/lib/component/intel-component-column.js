@@ -5,9 +5,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('Intel.lib.override.FastComponentColumn', {
+	Ext.define('Intel.lib.component.ComponentColumn', {
 		extend: 'Skirtle.grid.column.Component',
-		alias: 'widget.fastcomponentcolumn',
+		alias: 'widget.intelcomponentcolumn',
 
 		autoWidthComponents: false,
 		componentGC: true,

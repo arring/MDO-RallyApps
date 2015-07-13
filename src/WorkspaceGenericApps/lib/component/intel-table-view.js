@@ -6,11 +6,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 		
-	Ext.define('Intel.lib.override.ScrollTable', {
+	Ext.define('Intel.lib.component.TableView', {
 		extend: 'Ext.view.Table',		
-		constructor: function(cfg) {
-			this.callParent(arguments);
-		},
+		alias: ['widget.inteltableview'],
 		
 		refresh: function() {
 			var me = this,
@@ -165,7 +163,7 @@
 		},
 
 		scrollRowIntoView: function(row) {
-			if(row===0){										//this is just added because its a LOT faster and the main use case
+			if(row===0){
 				this.getEl().setScrollTop(0);
 				return;
 			}

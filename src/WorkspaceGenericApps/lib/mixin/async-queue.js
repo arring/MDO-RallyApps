@@ -10,7 +10,7 @@
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		QueueOfFuncs = {},
+		QueueOfFuncs = {};
 	
 	function dequeue(queueName){
 		queueName = queueName || 'undefined';

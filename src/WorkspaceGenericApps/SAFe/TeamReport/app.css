@@ -3,12 +3,12 @@
 .team-report-hidden-grid-row { display:none !important; }
 	
 /************************************************ NAVBAR/CONTAINERS *****************************************/
-#navbar { padding:0 10px 0 10px; }
+#navbox { margin:0 10px 0 10px; }
 #releasePicker { margin: 4px 0 0 0; }
 #scrumGroupPicker { margin: 4px 0 0 5px; }
 #manualRefreshButton { margin: 5px 0 0 5px; }
 
-#tcVelBox { padding:0 10px 0 10px; }
+#tcVelBox { margin:0 10px 0 10px; }
 
 /************************************************ TEAM COMMITS GRID *****************************************/
 .team-commits-grid { padding:0 20px 0 0; }
@@ -48,11 +48,10 @@
 .x-grid-row .mini-data-integrity-green-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
 
 /************************************************ RISKS GRID *****************************************/
-.risks-grid { margin:40px 10px 0px 10px; }
-#addRiskButton { margin: 0 10px 0 0; }
+#risk-grid { margin:40px 10px 0px 10px; }
 
 /************************************************ DEPENDENCIES GRIDS *****************************************/
-.predecessors-grid { margin:40px 10px 0px 10px; }
-.successors-grid { margin:40px 10px 40px 10px; }
+.predecessor-grid { margin:40px 10px 0px 10px; }
+.successor-grid { margin:40px 10px 40px 10px; }
 
-#addDependencyButton { margin: 0 10px 0 0; }
+.predecessor-grid .add-new-button { margin: 0 10px 0 0; }

@@ -6,9 +6,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('Intel.lib.override.FastCellEditing', {
+	Ext.define('Intel.lib.component.CellEditing', {
 		extend: 'Ext.grid.plugin.CellEditing',
-		alias: 'plugin.fastcellediting',
+		alias: ['plugin.intelcellediting'],
 
 		triggerEvent:'cellclick',
 		

@@ -7,3 +7,15 @@
 	font-size: 1.05rem;
 	line-height: .75em;
 	vertical-align: -15%; }
+	
+/************************************************ RALLY BUTTON STYLE *****************************************/
+.intel-button {
+	border-radius: 2px;
+	background-color: #00a9e0;
+	border-color: #00a9e0; }
+	
+	.intel-button:hover {
+		background-color: #29beff;
+		border-color: #29beff; }
+	
+	.intel-button * { font-size: 12px; }

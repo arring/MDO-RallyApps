@@ -5,7 +5,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Intel.lib.component.Textarea', {
+	Ext.define('Intel.lib.component.TextArea', {
 		extend: 'Ext.form.field.TextArea',
 		alias: ['widget.inteltextarea'],
 		

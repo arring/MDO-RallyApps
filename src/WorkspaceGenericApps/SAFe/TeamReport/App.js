@@ -1,21 +1,29 @@
 (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	var RALLY_MAX_STRING_SIZE = 32768;
+	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
+		RALLY_MAX_STRING_SIZE = 32768,
+		COLUMN_DEFAULTS = {
+			text:'',
+			resizable: false,
+			draggable: false,
+			sortable: false,
+			editor: false,
+			menuDisabled: true,
+			renderer: function(val){ return val || '-'; },
+			layout: 'hbox'
+		};
 
-	Ext.define('TeamReport', {
-		extend: 'IntelRallyApp',
+	Ext.define('Intel.SAFe.TeamReport', {
+		extend: 'Intel.lib.IntelRallyApp',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'AsyncQueue',
-			'ParallelLoader',
-			'UserAppsPreference',
-			'DataIntegrityDashboardObjectIDPreference',
-			'RisksLib',
-			'DependenciesLib'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.AsyncQueue',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.DataIntegrityDashboardObjectIDPreference',
+			'Intel.SAFe.lib.mixin.DependenciesLib'
 		],
 		
 		layout: {
@@ -58,20 +66,20 @@
 			},
 			items: [{
 				xtype:'container',
-				flex:2,
+				flex:9,
 				id: 'tcVelBoxLeft'
 			},{
 				xtype:'container',
-				flex:1,
+				flex:4,
 				id: 'tcVelBoxRight'
 			}]
 		}],
 		minWidth:910, /** thats when rally adds a horizontal scrollbar for a pagewide app */
 		
-		_userAppsPref: 'intel-SAFe-apps-preference',
+		userAppsPref: 'intel-SAFe-apps-preference',
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/
-		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
+		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
@@ -79,7 +87,7 @@
 					limit: Infinity,
 					disableMetaChangeEvent: true,
 					remoteSort:false,
-					fetch: me._portfolioItemFields,
+					fetch: me.portfolioItemFields,
 					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
 					context:{
 						project: portfolioProject.data._ref,
@@ -87,14 +95,14 @@
 						projectScopeUp:false
 					}
 				});
-			return me._reloadStore(store);
+			return me.reloadStore(store);
 		},	
-		_loadPortfolioItems: function(){ 
+		loadPortfolioItems: function(){ 
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
-						me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me.loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
 					);
 				}))
 				.then(function(portfolioItemStores){
@@ -115,7 +123,7 @@
 					});
 				});
 		},
-		_loadIterations: function(){
+		loadIterations: function(){
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
@@ -140,12 +148,12 @@
 						value: endDate  
 					}]
 				});
-			return me._reloadStore(iterationStore)
+			return me.reloadStore(iterationStore)
 				.then(function(iterationStore){ 
 					me.IterationStore = iterationStore; 
 				});
 		},
-		_getUserStoryFilter: function(){
+		getUserStoryFilter: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
@@ -176,12 +184,12 @@
 				)
 			);
 		},
-		_loadUserStories: function(){	
+		loadUserStories: function(){	
 			var me=this, 
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: 'HierarchicalRequirement',
-					filters: [me._getUserStoryFilter()],
+					filters: [me.getUserStoryFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'DirectChildrenCount',					
 						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'],
@@ -191,12 +199,12 @@
 						projectScopeUp:false
 					}
 				};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
 				return store;
 			});
 		},
-		_getExtraDataIntegrityUserStoriesFilter: function(){			
+		getExtraDataIntegrityUserStoriesFilter: function(){			
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
@@ -211,12 +219,12 @@
 				});
 			return userStoryProjectFilter.and(inIterationButNotReleaseFilter);
 		},				
-		_loadExtraDataIntegrityStories: function(){
+		loadExtraDataIntegrityStories: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: 'HierarchicalRequirement',
-					filters: [me._getExtraDataIntegrityUserStoriesFilter()],
+					filters: [me.getExtraDataIntegrityUserStoriesFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
@@ -225,21 +233,21 @@
 						project: null
 					}
 				};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.ExtraDataIntegrityUserStoriesStore = store;
 				return store;
 			});
 		},
 		
 		/**___________________________________ TEAM COMMITS STUFF ___________________________________**/		
-		_getTeamCommit: function(portfolioItemRecord){	
+		getTeamCommit: function(portfolioItemRecord){	
 			var teamCommits = portfolioItemRecord.data.c_TeamCommits,
 				projectOID = this.ProjectRecord.data.ObjectID;
 			try{ teamCommits = JSON.parse(atob(teamCommits))[projectOID] || {}; } 
 			catch(e){ teamCommits = {}; }
 			return teamCommits;
 		},		
-		_setTeamCommit: function(portfolioItemRecord, newTeamCommit){
+		setTeamCommit: function(portfolioItemRecord, newTeamCommit){
 			var teamCommits = portfolioItemRecord.data.c_TeamCommits,
 				projectOID = this.ProjectRecord.data.ObjectID,
 				deferred = Q.defer();
@@ -263,35 +271,35 @@
 			return deferred.promise;
 		},
 					
-		_getStoryCount: function(portfolioItemObjectID){	
+		getStoryCount: function(portfolioItemObjectID){	
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
-			me._TeamCommitsCountHash = me._TeamCommitsCountHash || {};
-			if(typeof me._TeamCommitsCountHash[portfolioItemObjectID] === 'undefined'){
-				me._TeamCommitsCountHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
+			me.teamCommitsCountHash = me.teamCommitsCountHash || {};
+			if(typeof me.teamCommitsCountHash[portfolioItemObjectID] === 'undefined'){
+				me.teamCommitsCountHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
 					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID),
 						isLeafStory = (userStory.data.DirectChildrenCount === 0);
 					return sum + (isLeafStory && isStoryInPortfolioItem)*1;
 				}, 0);
 			}
-			return me._TeamCommitsCountHash[portfolioItemObjectID];
+			return me.teamCommitsCountHash[portfolioItemObjectID];
 		},
-		_getStoriesEstimate: function(portfolioItemObjectID){	
+		getStoriesEstimate: function(portfolioItemObjectID){	
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
-			me._TeamCommitsEstimateHash = me._TeamCommitsEstimateHash || {};
-			if(typeof me._TeamCommitsEstimateHash[portfolioItemObjectID] === 'undefined'){
-				me._TeamCommitsEstimateHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
+			me.teamCommitsEstimateHash = me.teamCommitsEstimateHash || {};
+			if(typeof me.teamCommitsEstimateHash[portfolioItemObjectID] === 'undefined'){
+				me.teamCommitsEstimateHash[portfolioItemObjectID] = _.reduce(me.UserStoryStore.getRange(), function(sum, userStory){
 					var isStoryInPortfolioItem = ((userStory.data[lowestPortfolioItem] || {}).ObjectID == portfolioItemObjectID),
 						isLeafStory = (userStory.data.DirectChildrenCount === 0);
 					return sum + ((isLeafStory && isStoryInPortfolioItem) ? userStory.data.PlanEstimate : 0)*1;
 				}, 0);
 			}
-			return me._TeamCommitsEstimateHash[portfolioItemObjectID];
+			return me.teamCommitsEstimateHash[portfolioItemObjectID];
 		},
 
 		/** __________________________________ Data Integrity STUFF ___________________________________**/
-		_getMiniDataIntegrityStoreData: function(){ 
+		getMiniDataIntegrityStoreData: function(){ 
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				releaseName = me.ReleaseRecord.data.Name,
@@ -338,73 +346,31 @@
 		},
 
 		/**___________________________________ RISKS STUFF ___________________________________**/	
-		_parseRisksFromPortfolioItem: function(portfolioItemRecord){
-			var me=this,
-				array = [],
-				projectOID = me.ProjectRecord.data.ObjectID, 
-				risksData = me._getRisks(portfolioItemRecord),
-				PortfolioItemObjectID = portfolioItemRecord.data.ObjectID,
-				PortfolioItemFormattedID = portfolioItemRecord.data.FormattedID,
-				PortfolioItemName = portfolioItemRecord.data.Name;
-			
-			_.each(risksData[projectOID], function(riskData, riskID){
-				array.push({
-					RiskID: riskID,
-					PortfolioItemObjectID: PortfolioItemObjectID,
-					PortfolioItemFormattedID: PortfolioItemFormattedID,
-					PortfolioItemName: PortfolioItemName,
-					Description: riskData.Description,
-					Impact: riskData.Impact,
-					MitigationPlan: riskData.MitigationPlan,
-					Urgency: riskData.Urgency,
-					Status: riskData.Status,
-					Contact: riskData.Contact,
-					Checkpoint: riskData.Checkpoint,
-					Edited: false
+		loadRisks: function(){
+			var me = this;
+			return RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + me.ScrumGroupRootRecord.data.ObjectID + '-')
+				.then(function(risks){ 
+					me.Risks = _.filter(risks, function(r){ return r.ProjectObjectID === me.ProjectRecord.data.ObjectID; });
 				});
-			});
-			return array;
-		},	
-		_parseRisksData: function(){ 
-			var me=this, 
-				array = [];
-			_.each(me.PortfolioItemStore.getRecords(), function(portfolioItemRecord){
-				array = array.concat(me._parseRisksFromPortfolioItem(portfolioItemRecord));
-			});
-			return array;
-		},		
-		_spliceRiskFromList: function(riskID, risksData){ 
-			/** removes and returns risk with riskID from the risksData (NOT list of records) */
-			for(var i = 0; i<risksData.length; ++i){
-				if(risksData[i].RiskID == riskID) {
-					return risksData.splice(i, 1)[0];
-				}
-			}
-		},	
-		_getRealRiskData: function(oldPortfolioItemRecord, riskID){ 
-			var me = this, realRisksData;
-			if(oldPortfolioItemRecord) realRisksData = me._parseRisksFromPortfolioItem(oldPortfolioItemRecord);
-			else realRisksData = [];
-			return me._spliceRiskFromList(riskID, realRisksData) || null;		
 		},
 		
 		/**___________________________________ DEPENDENCIES STUFF ___________________________________**/					
-		_isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+		isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
 				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
 		},	
-		_spliceDependencyFromList: function(dependencyID, dependenciesData){ 
+		spliceDependencyFromList: function(dependencyID, dependenciesData){ 
 			for(var i = 0; i<dependenciesData.length; ++i){
 				if(dependenciesData[i].DependencyID == dependencyID) {
 					return dependenciesData.splice(i, 1)[0];
 				}
 			}
 		},
-		_parseDependenciesFromUserStory: function(userStoryRecord){
+		parseDependenciesFromUserStory: function(userStoryRecord){
 			var me=this,
-				predecessorsAndSuccessorsData = me._getDependencies(userStoryRecord), 
+				predecessorsAndSuccessorsData = me.getDependencies(userStoryRecord), 
 				inputPredecessors = predecessorsAndSuccessorsData.Predecessors, 
 				inputSuccessors = predecessorsAndSuccessorsData.Successors,
 				outputPredecessors = [], 
@@ -413,7 +379,7 @@
 				UserStoryFormattedID = userStoryRecord.data.FormattedID,
 				UserStoryName = userStoryRecord.data.Name;
 			
-			if(me._isUserStoryInRelease(userStoryRecord, me.ReleaseRecord)){
+			if(me.isUserStoryInRelease(userStoryRecord, me.ReleaseRecord)){
 				_.each(inputPredecessors, function(predecessorDependencyData, dependencyID){
 					outputPredecessors.push({
 						DependencyID: dependencyID,
@@ -422,6 +388,7 @@
 						UserStoryName: UserStoryName,
 						Description: predecessorDependencyData.Description,
 						NeededBy: predecessorDependencyData.NeededBy,
+						Plan: predecessorDependencyData.Plan,
 						Status: predecessorDependencyData.Status,
 						PredecessorItems: predecessorDependencyData.PredecessorItems || [], 
 						Edited: false
@@ -451,25 +418,25 @@
 			});
 			return {Predecessors:outputPredecessors, Successors:outputSuccessors};
 		},
-		_parseDependenciesData: function(userStoryList){	
+		parseDependenciesData: function(userStoryList){	
 			var me=this, 
 				predecessors = [], 
 				successors = [];			
 
 			_.each(userStoryList, function(userStoryRecord){
-				var predecessorsAndSuccessorsData = me._parseDependenciesFromUserStory(userStoryRecord);
+				var predecessorsAndSuccessorsData = me.parseDependenciesFromUserStory(userStoryRecord);
 				predecessors = predecessors.concat(predecessorsAndSuccessorsData.Predecessors);
 				successors = successors.concat(predecessorsAndSuccessorsData.Successors);
 			});
 			return {Predecessors:predecessors, Successors:successors};
 		},		
-		_getRealDependencyData: function(oldUserStoryRecord, dependencyID, type){ 
+		getRealDependencyData: function(oldUserStoryRecord, dependencyID, type){ 
 			var me = this, realDependenciesData;
-			if(oldUserStoryRecord) realDependenciesData = me._parseDependenciesFromUserStory(oldUserStoryRecord)[type];
+			if(oldUserStoryRecord) realDependenciesData = me.parseDependenciesFromUserStory(oldUserStoryRecord)[type];
 			else realDependenciesData = [];
-			return me._spliceDependencyFromList(dependencyID, realDependenciesData) || null;		
+			return me.spliceDependencyFromList(dependencyID, realDependenciesData) || null;		
 		},
-		_hydrateDependencyUserStories: function(dependenciesParsedData){
+		hydrateDependencyUserStories: function(dependenciesParsedData){
 			var me=this, 
 				storyOIDsToHydrate = [],
 				dependenciesHydratedUserStories = {};
@@ -484,13 +451,13 @@
 			});
 			
 			return Q.all(_.map(storyOIDsToHydrate, function(storyOID){
-				return me._loadUserStory(storyOID).then(function(userStory){
+				return me.loadUserStory(storyOID).then(function(userStory){
 					if(userStory) dependenciesHydratedUserStories[storyOID] = userStory;
 				});
 			}))
 			.then(function(){ return dependenciesHydratedUserStories; });
 		},
-		_newPredecessorItem: function(){
+		newPredecessorItem: function(){
 			return {
 				PredecessorItemID: 'PI' + (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 				PredecessorUserStoryObjectID: 0,
@@ -501,7 +468,7 @@
 		},
 		
 		/**___________________________________ MISC HELPERS ___________________________________*/		
-		_htmlEscape: function(str) {
+		htmlEscape: function(str) {
 			return String(str)
 				//.replace(/&/g, '&amp;')
 				.replace(/"/g, '&quot;')
@@ -509,12 +476,12 @@
 				.replace(/</g, '&lt;')
 				.replace(/>/g, '&gt;');
 		},	
-		_getDirtyType: function(localRecord, realDataFromServer){ 
+		getDirtyType: function(localRecord, realDataFromServer){ 
 			/** if risk or dep record is new/edited/deleted/unchanged */
 			if(!realDataFromServer)	return localRecord.data.Edited ? 'New' : 'Deleted'; //we just created the item, or it was deleted by someone else
 			else return localRecord.data.Edited ? 'Edited' : 'Unchanged'; //we just edited the item, or it is unchanged
 		},
-		_updateUserStoryColumnStores: function(){ 
+		updateUserStoryColumnStores: function(){ 
 			/** updates the dropdown stores with the most recent user stories in the release (in case some were added */
 			var me = this, userStories = me.UserStoriesInRelease;
 			if(me.UserStoryFIDStore){
@@ -530,65 +497,46 @@
 				});
 			}
 		},	
-		_updatePortfolioItemColumnStores: function(){ 
-			/** updates the dropdown stores with the most recent portfolioItems in the release */
-			var me = this, 
-				portfolioItems = me.PortfolioItemStore.getRange();
-			if(me.PortfolioItemFIDStore){
-				me.PortfolioItemFIDStore.removeAll();
-				_.each(portfolioItems, function(portfolioItem){
-					me.PortfolioItemFIDStore.add({'FormattedID': portfolioItem.data.FormattedID});
-				});
-			}
-			if(me.PortfolioItemNameStore) {
-				me.PortfolioItemNameStore.removeAll();
-				_.each(portfolioItems, function(portfolioItem){
-					me.PortfolioItemNameStore.add({'Name': portfolioItem.data.Name});
-				});
-			}
-		},
-		
+
 		/**___________________________________ LOADING AND RELOADING ___________________________________*/
-		_isEditingTeamCommits: false, 
-		_isEditingVelocity: false,
+		isEditingTeamCommits: false, 
+		isEditingVelocity: false,
 		
-		_isEditing: function(store){
-			if(!store) return false;
-			return _.some(store.getRange(), function(record){ return record.data.Edited; });
+		isEditing: function(grid){
+			if(!grid || !grid.store) return false;
+			if(grid.editingPlugin && grid.editingPlugin.activeEditor) return true;
+			return _.some(grid.store.getRange(), function(record){ return record.data.Edited; });
 		},		
-		_showGrids: function(){
+		showGrids: function(){
 			var me=this;
 			if(!me.TeamCommitsGrid){
-				me._loadTeamCommitsGrid();
-				me._loadVelocityGrid();
-				me._loadMiniDataIntegrityGrid();
-				me._loadRisksGrid();
-				me._loadDependenciesGrids();
+				me.renderTeamCommitsGrid();
+				me.renderVelocityGrid();
+				me.renderMiniDataIntegrityGrid();
+				me.renderRisksGrid();
+				me.renderDependenciesGrids();
 			}
 		},	
-		_checkForDuplicates: function(){ 
+		checkForDuplicates: function(){ 
 			/** duplicates are in a list of groups of duplicates for each type */
 			var me=this,
 				deferred = Q.defer(),
-				duplicateRisks = _.filter(_.groupBy(me.RisksParsedData,
-					function(risk){ return risk.RiskID; }),
-					function(list, riskID){ return list.length > 1; }),
 				duplicatePredecessors = _.filter(_.groupBy(me.DependenciesParsedData.Predecessors,
 					function(dependency){ return dependency.DependencyID; }),
 					function(list, dependencyID){ return list.length > 1; }),
 				duplicateSuccessors = _.filter(_.groupBy(me.DependenciesParsedData.Successors,
 					function(dependency){ return dependency.DependencyID; }),
 					function(list, dependencyID){ return list.length > 1; });
-			if(duplicateRisks.length || duplicatePredecessors.length || duplicateSuccessors.length){
-				me._clearRefreshInterval();
-				me._loadResolveDuplicatesModal(duplicateRisks, duplicatePredecessors, duplicateSuccessors)
+			if(duplicatePredecessors.length || duplicateSuccessors.length){
+				me.clearRefreshInterval();
+				me.renderResolveDuplicatesModal(duplicatePredecessors, duplicateSuccessors)
 					.then(function(){ 
-						me._setRefreshInterval(); 
-						me._clearEverything();
+						me.setRefreshInterval(); 
+						me.clearEverything();
 						me.setLoading('Loading Data');
-						return me._reloadStores(); 
+						return me.reloadStores(); 
 					})
-					.then(function(){ return me._updateGrids(); })
+					.then(function(){ return me.updateGrids(); })
 					.then(function(){ me.setLoading(false); })
 					.then(function(){ deferred.resolve(); })
 					.fail(function(reason){ deferred.reject(reason); })
@@ -597,54 +545,46 @@
 			
 			return deferred.promise;
 		},
-		_updateGrids: function(){
+		updateGrids: function(){
 			var me=this,
 				promises = [],
-				isEditingRisks = me._isEditing(me.CustomRisksStore),
-				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore);
-			if(!me._isEditingVelocity && me.IterationStore && me.UserStoryStore)
-				if(me.CustomVelocityStore) me.CustomVelocityStore.intelUpdate();
-			if(!me._isEditingTeamCommits && me.PortfolioItemStore && me.UserStoryStore)
-				if(me.CustomTeamCommitsStore) me.CustomTeamCommitsStore.intelUpdate();
-			if(!isEditingRisks && me.PortfolioItemStore){
-				me.RisksParsedData = me._parseRisksData(); 
-				me._updatePortfolioItemColumnStores();
-				if(me.CustomRisksStore) me.CustomRisksStore.intelUpdate();
-			}
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);
+			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.syncRisks(me.Risks);
+			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore)
+				if(me.VelocityGrid && me.VelocityGrid.store) me.VelocityGrid.store.intelUpdate();
+			if(!me.isEditingTeamCommits && me.PortfolioItemStore && me.UserStoryStore)
+				if(me.TeamCommitsGrid && me.TeamCommitsGrid.store) me.TeamCommitsGrid.store.intelUpdate();
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
 				/** me.UserStoriesInRelease is needed because some of the stories in me.UserStoryStore could be from other overlapping releases */
 				me.UserStoriesInRelease = _.filter(me.UserStoryStore.getRange(), function(userStoryRecord){ 
-					return me._isUserStoryInRelease(userStoryRecord, me.ReleaseRecord); 
+					return me.isUserStoryInRelease(userStoryRecord, me.ReleaseRecord); 
 				});
-				me.DependenciesParsedData = me._parseDependenciesData(me.UserStoryStore.getRange());
-				promises.push(me._hydrateDependencyUserStories(me.DependenciesParsedData).then(function(dependenciesHydratedUserStories){
+				me.DependenciesParsedData = me.parseDependenciesData(me.UserStoryStore.getRange());
+				promises.push(me.hydrateDependencyUserStories(me.DependenciesParsedData).then(function(dependenciesHydratedUserStories){
 					me.DependenciesHydratedUserStories = dependenciesHydratedUserStories;
-					me._updateUserStoryColumnStores();
-					if(me.CustomPredecessorStore) me.CustomPredecessorStore.intelUpdate();
-					if(me.CustomSuccessorStore) me.CustomSuccessorStore.intelUpdate();
+					me.updateUserStoryColumnStores();
+					if(me.PredecessorGrid && me.PredecessorGrid.store) me.PredecessorGrid.store.intelUpdate();
+					if(me.SuccessorGrid && me.SuccessorGrid.store) me.SuccessorGrid.store.intelUpdate();
 				}));
 			}
 			return Q.all(promises);
 		},	
-		_reloadStores: function(){
+		reloadStores: function(){
 			var me=this,
-				isEditingRisks = me._isEditing(me.CustomRisksStore),
-				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore),
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid),
 				promises = [];
-			promises.push(me._loadExtraDataIntegrityStories());
-			if(!me._isEditingVelocity) 
-				promises.push(me._loadIterations());
-			if(!me._isEditingTeamCommits && !isEditingRisks) 
-				promises.push(me._loadPortfolioItems());
-			if(!me._isEditingVelocity && !me._isEditingTeamCommits && !isEditingDeps) 
-				promises.push(me._loadUserStories());
+			promises.push(me.loadExtraDataIntegrityStories());
+			promises.push(me.loadRisks());
+			if(!me.isEditingVelocity)  promises.push(me.loadIterations());
+			if(!me.isEditingTeamCommits) promises.push(me.loadPortfolioItems());
+			if(!me.isEditingVelocity && !me.isEditingTeamCommits && !isEditingDeps) promises.push(me.loadUserStories());
 			return Q.all(promises);
 		},
-		_clearEverything: function(){
+		clearEverything: function(){
 			var me=this;
 			
-			me._isEditingTeamCommits = false;
-			me._isEditingVelocity = false;
+			me.isEditingTeamCommits = false;
+			me.isEditingVelocity = false;
 			
 			me.PortfolioItemMap = {};
 			
@@ -660,12 +600,6 @@
 			me.TeamCommitsGrid = undefined;
 			me.DataIntegrityGrid = undefined;
 			
-			me.CustomPredecessorStore = undefined;
-			me.CustomSuccessorStore = undefined;
-			me.CustomRisksStore = undefined;
-			me.CustomTeamCommitsStore = undefined;
-			me.CustomVelocityStore = undefined;
-			
 			var toRemove = me.down('#tcVelBox').next(), tmp;
 			while(toRemove){ //delete risks and dependencies 
 				tmp = toRemove.next();
@@ -675,23 +609,23 @@
 			me.down('#tcVelBoxLeft').removeAll();
 			me.down('#tcVelBoxRight').removeAll();
 		},
-		_reloadEverything:function(){
+		reloadEverything:function(){
 			var me = this;
 			
-			me._clearEverything();
+			me.clearEverything();
 			me.setLoading('Loading Data');
 			if(!me.ReleasePicker){ //draw these once, never remove them
-				me._loadReleasePicker();
-				me._loadScrumGroupPicker();
-				me._loadRefreshIntervalCombo();
-				me._loadManualRefreshButton();
+				me.renderReleasePicker();
+				me.renderScrumGroupPicker();
+				me.renderRefreshIntervalCombo();
+				me.renderManualRefreshButton();
 			}		
-			me._enqueue(function(unlockFunc){	
-				me._reloadStores()
-					.then(function(){ return me._updateGrids(); })
-					.then(function(){ return me._checkForDuplicates(); })
-					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){	me._alert('ERROR', reason); })
+			me.enqueue(function(unlockFunc){	
+				me.reloadStores()
+					.then(function(){ return me.updateGrids(); })
+					.then(function(){ return me.checkForDuplicates(); })
+					.then(function(){ return me.showGrids(); })
+					.fail(function(reason){	me.alert('ERROR', reason); })
 					.then(function(){
 						unlockFunc();
 						me.setLoading(false); 
@@ -701,120 +635,115 @@
 		},
 		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
-		_setLoadingMasks: function(){
+		setLoadingMasks: function(){
 			var me=this, message = 'Refreshing Data',
-				isEditingRisks = me._isEditing(me.CustomRisksStore),
-				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore);			
-			if(me.TeamCommitsGrid && !me._isEditingTeamCommits) me.TeamCommitsGrid.setLoading(message);
-			if(me.VelocityGrid && !me._isEditingVelocity) me.VelocityGrid.setLoading(message);
-			if(me.RisksGrid && !isEditingRisks) me.RisksGrid.setLoading(message);
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);			
+			if(me.TeamCommitsGrid && !me.isEditingTeamCommits) me.TeamCommitsGrid.setLoading(message);
+			if(me.VelocityGrid && !me.isEditingVelocity) me.VelocityGrid.setLoading(message);
+			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(message);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(message);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(message);
 		},	
-		_removeLoadingMasks: function(){
+		removeLoadingMasks: function(){
 			var me=this,
-				isEditingRisks = me._isEditing(me.CustomRisksStore),
-				isEditingDeps = me._isEditing(me.CustomPredecessorStore) || me._isEditing(me.CustomSuccessorStore);		
-			if(me.TeamCommitsGrid && !me._isEditingTeamCommits) me.TeamCommitsGrid.setLoading(false);
-			if(me.VelocityGrid && !me._isEditingVelocity) me.VelocityGrid.setLoading(false);
-			if(me.RisksGrid && !isEditingRisks) me.RisksGrid.setLoading(false);
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);		
+			if(me.TeamCommitsGrid && !me.isEditingTeamCommits) me.TeamCommitsGrid.setLoading(false);
+			if(me.VelocityGrid && !me.isEditingVelocity) me.VelocityGrid.setLoading(false);
+			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(false);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(false);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(false);
 		},	
-		_refreshDataFunc: function(){
+		refreshDataFunc: function(){
 			var me=this;
-			me._setLoadingMasks();
-			me._enqueue(function(unlockFunc){
-				me._reloadStores()
-					.then(function(){ return me._updateGrids(); })
-					.then(function(){ return me._checkForDuplicates(); })
-					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){ me._alert('ERROR', reason); })
+			me.setLoadingMasks();
+			me.enqueue(function(unlockFunc){
+				me.reloadStores()
+					.then(function(){ return me.updateGrids(); })
+					.then(function(){ return me.checkForDuplicates(); })
+					.then(function(){ return me.showGrids(); })
+					.fail(function(reason){ me.alert('ERROR', reason); })
 					.then(function(){ 
 						unlockFunc();
-						me._removeLoadingMasks();
+						me.removeLoadingMasks();
 					})
 					.done();
 			}, 'Queue-Main');
 		},	
-		_clearRefreshInterval: function(){
+		clearRefreshInterval: function(){
 			var me=this;
 			if(me.RefreshInterval){ 
 				clearInterval(me.RefreshInterval); 
 				me.RefreshInterval = undefined; 
 			}	
 		},
-		_setRefreshInterval: function(){
+		setRefreshInterval: function(){
 			var me=this;
-			me._clearRefreshInterval();
+			me.clearRefreshInterval();
 			if(me.AppsPref.refresh && me.AppsPref.refresh!=='Off')
-				me.RefreshInterval = setInterval(function(){ me._refreshDataFunc(); }, me.AppsPref.refresh*1000);
+				me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, me.AppsPref.refresh*1000);
 		},
 		
 		/**___________________________________ LAUNCH ___________________________________*/
 		launch: function(){
 			var me=this;
 			me.setLoading('Loading Configuration');
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 				me.setLoading(false);
-				me._alert('ERROR', 'You do not have permissions to edit this project');
+				me.alert('ERROR', 'You do not have permissions to edit this project');
 				return;
 			} 
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ // 5 streams
-						me._loadProjectsWithTeamMembers() /********* 1 ************/
-							.then(function(projectsWithTeamMembers){
-								me.ProjectsWithTeamMembers = projectsWithTeamMembers;
-								me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
-								if(!me.ProjectsWithTeamMembers[me.ProjectRecord.data.ObjectID])
-									return Q.reject('Please scope to a project that has team members!');
-							}),
-						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 2 ************/
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-										.then(function(scrumGroupPortfolioProject){
-											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										});
-								} 
-								else me.ProjectNotInScrumGroup = true;
-							}),
-						me._loadAllScrumGroups() /********* 3 ************/
-							.then(function(scrumGroupRootRecords){
-								me.AllScrumGroupRootRecords = scrumGroupRootRecords;
-								me.ScrumGroupNames = _.sortBy(_.map(scrumGroupRootRecords, 
-									function(sgr){ return {Name: me._getScrumGroupName(sgr)}; }),
-									function(sgn){ return sgn.Name; });
-							}),
-						me._loadAppsPreference() /********* 4 ************/
+					return Q.all([
+						me.loadProjectsWithTeamMembers().then(function(projectsWithTeamMembers){
+							me.ProjectsWithTeamMembers = projectsWithTeamMembers;
+							me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
+							if(!me.ProjectsWithTeamMembers[me.ProjectRecord.data.ObjectID])
+								return Q.reject('Please scope to a project that has team members!');
+						}),
+						me.projectInWhichScrumGroup(me.ProjectRecord).then(function(scrumGroupRootRecord){
+							if(scrumGroupRootRecord){
+								me.ScrumGroupRootRecord = scrumGroupRootRecord;
+								return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+									.then(function(scrumGroupPortfolioProject){
+										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+									});
+							} 
+							else me.ProjectNotInScrumGroup = true;
+						}),
+						me.loadAllScrumGroups().then(function(scrumGroupRootRecords){
+							me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+							me.ScrumGroupNames = _.sortBy(_.map(scrumGroupRootRecords, 
+								function(sgr){ return {Name: me.getScrumGroupName(sgr)}; }),
+								function(sgn){ return sgn.Name; });
+						}),
+						me.loadAppsPreference()
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
-								me.AppsPref.refresh = me.AppsPref.refresh || 30;
+								me.AppsPref.refresh = me.AppsPref.refresh || 60;
 								var twelveWeeks = 1000*60*60*24*7*12;
-								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease){
 									me.ReleaseRecord = currentRelease;
-									me.WorkweekData = me._getWorkWeeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
+									me.WorkweekData = me.getWorkweeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
 								}
 								else return Q.reject('This project has no releases.');
 							}),
-						me._loadDataIntegrityDashboardObjectID() /********* 5 ************/
-							.then(function(objectID){
-								me.DataIntegrityDashboardObjectID = objectID;
-							})
+						me.getDataIntegrityDashboardObjectID().then(function(objectID){
+							me.DataIntegrityDashboardObjectID = objectID;
+						}),
+						RiskDb.initialize()
 					]);
 				})
 				.then(function(){
@@ -827,39 +756,36 @@
 							if(!me.ScrumGroupRootRecord) me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
 						} 
 						else me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
-						return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-							.then(function(scrumGroupPortfolioProject){
-								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-							});
+						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
+							me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+						});
 					}
 				})
 				.then(function(){ 
-					me._setRefreshInterval(); 
-					return me._reloadEverything();
-				})
-				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason);
+					me.setRefreshInterval(); 
+					return me.reloadEverything();
 				})
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.done();
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
-		_releasePickerSelected: function(combo, records){
+		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			me.WorkweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
+			me.WorkweekData = me.getWorkweeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._saveAppsPreference(me.AppsPref)
-				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason); })
+			me.saveAppsPreference(me.AppsPref)
+				.then(function(){ me.reloadEverything(); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
-		_loadReleasePicker: function(){
+		renderReleasePicker: function(){
 			var me=this;
 			me.ReleasePicker = me.down('#navboxLeft').add({
 				xtype:'intelreleasepicker',
@@ -868,30 +794,30 @@
 				currentRelease: me.ReleaseRecord,
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._releasePickerSelected.bind(me)
+					select: me.releasePickerSelected.bind(me)
 				}
 			});
 		},	
-		_scrumGroupPickerSelected: function(combo, records){
+		scrumGroupPickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
-			if(me._getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) return;
+			if(me.getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) return;
 			me.setLoading('Loading Data');
-			me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(sgr){ return me._getScrumGroupName(sgr) == records[0].data.Name; });
+			me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(sgr){ return me.getScrumGroupName(sgr) == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].ScrumGroup = me.ScrumGroupRootRecord.data.ObjectID;
 			Q.all([
-				(me.ProjectNotInScrumGroup ? me._saveAppsPreference(me.AppsPref) : Q()), //Do not set a preference for scrums in scrum-groups
-				me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+				(me.ProjectNotInScrumGroup ? me.saveAppsPreference(me.AppsPref) : Q()), //Do not set a preference for scrums in scrum-groups
+				me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 					.then(function(scrumGroupPortfolioProject){
 						me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 					})
 			])
-				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason); })
-				.then(function(){ me.setLoading(false); })
-				.done();
+			.then(function(){ me.reloadEverything(); })
+			.fail(function(reason){ me.alert('ERROR', reason); })
+			.then(function(){ me.setLoading(false); })
+			.done();
 		},	
-		_loadScrumGroupPicker: function(){
+		renderScrumGroupPicker: function(){
 			var me=this;
 			me.down('#navboxLeft').add({
 				xtype:'intelfixedcombo',
@@ -904,25 +830,25 @@
 				}),
 				displayField: 'Name',
 				fieldLabel: 'Portfolio:',
-				value: me._getScrumGroupName(me.ScrumGroupRootRecord),
+				value: me.getScrumGroupName(me.ScrumGroupRootRecord),
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._scrumGroupPickerSelected.bind(me)
+					select: me.scrumGroupPickerSelected.bind(me)
 				}
 			});
 		},	
-		_refreshComboSelected: function(combo, records){
+		refreshComboSelected: function(combo, records){
 			var me=this, rate = records[0].data.Rate;
 			if(me.AppsPref.refresh === rate) return;
 			me.AppsPref.refresh = rate;
-			me._setRefreshInterval();
+			me.setRefreshInterval();
 			me.setLoading("Saving Preference");
-			me._saveAppsPreference(me.AppsPref)
-				.fail(function(reason){ me._alert('ERROR', reason); })
+			me.saveAppsPreference(me.AppsPref)
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},			
-		_loadRefreshIntervalCombo: function(){
+		renderRefreshIntervalCombo: function(){
 			var me=this;
 			me.down('#navboxRight').add({
 				xtype:'intelfixedcombo',
@@ -942,283 +868,163 @@
 				value:me.AppsPref.refresh,
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._refreshComboSelected.bind(me)
+					select: me.refreshComboSelected.bind(me)
 				}
 			});
 		},
-		_loadManualRefreshButton: function(){
+		renderManualRefreshButton: function(){
 			var me=this;
 			me.down('#navboxRight').add({
 				xtype:'button',
 				id: 'manualRefreshButton',
+				cls: 'intel-button',
 				text:'Refresh Data',
 				width:100,
 				listeners:{
-					click: me._refreshDataFunc.bind(me)
+					click: me.refreshDataFunc.bind(me)
 				}
 			});
 		},
 
 		/**___________________________________ RENDER RESOLVE DUPLICATES ___________________________________*/	
-		_loadResolveDuplicatesModal: function(duplicateRisks, duplicatePredecessors, duplicateSuccessors){
+		renderResolveDuplicatesModal: function(duplicatePredecessors, duplicateSuccessors){
 			var me=this,
 				deferred = Q.defer(),
-				defaultRenderer = function(val){ return val || '-'; },	
 				modal = Ext.create('Ext.window.Window', {
 					modal:true,
 					closable:false,
-					title:'ERROR: Duplicate Risks and/or Dependencies!',
+					title:'ERROR Duplicate Dependencies!',
 					cls:'duplicates-modal',
 					overflowY: 'scroll',
 					resizable: true,
-					height:me.getHeight()*0.9>>0,
-					width:Math.min(900, me.getWidth()*0.9>>0),
+					height: me.getHeight()*0.9>>0,
+					width: Math.min(900, me.getWidth()*0.9>>0),
 					y:5,
 					items: [{
 						xtype:'container',
 						html:'<p>Use the checkboxes to select which of the duplicates you want to keep. ' + 
 							'You have to keep exactly 1 of the duplicates. When you have finished, click Done.</p><br/>',
 						manageHeight:false
-					}].concat(duplicateRisks.length ? [{
-							xtype:'container',
-							html:'<h2 class="grid-group-header">Duplicate Risks</h2>',
-							manageHeight:false
-						}].concat(_.map(duplicateRisks, function(risksOfOneID){
-							return {
-								xtype:'rallygrid',
-								cls: 'team-report-grid duplicate-risks-grid rally-grid',
-								columnCfgs: [{
-									text:'#',
-									dataIndex:'PortfolioItemFormattedID',
-									width:80,
-									editor: false,
-									resizable:false,
-									draggable:false,
-									sortable:true,
-									renderer:defaultRenderer
-								},{
-									text: me.PortfolioItemTypes[0], 
-									dataIndex:'PortfolioItemName',
-									flex:1,
-									editor: false,
-									resizable:false,
-									draggable:false,
-									sortable:true,
-									renderer:defaultRenderer
-								},{
-									text:'Risk Description (If This...)', 
-									dataIndex:'Description',
-									flex:1,
-									editor: false,
-									resizable:false,
-									draggable:false,
-									sortable:false,
-									renderer:defaultRenderer	
-								},{
-									text:'Impact (Then this...)', 
-									dataIndex:'Impact',
-									flex:1,
-									resizable:false,
-									draggable:false,
-									sortable:false,
-									editor: false,
-									renderer:defaultRenderer
-								},{
-									text:'Mitigation Plan', 
-									dataIndex:'MitigationPlan',
-									flex:1,
-									resizable:false,
-									draggable:false,
-									sortable:false,
-									editor: false,
-									renderer:defaultRenderer
-								},{
-									text:'Status',
-									dataIndex:'Status',
-									width:100,		
-									tooltip:'(ROAM)',
-									tooltipType:'title',		
-									editor:false,
-									resizable:false,
-									draggable:false,
-									sortable:true,
-									renderer:function(val, meta){
-										meta.tdCls += (val==='Undefined' ? ' risks-grid-error-cell' : '');
-										return val || '-';
-									}	
-								},{
-									text:'Contact', 
-									dataIndex:'Contact',	
-									flex:1,
-									editor: false,
-									sortable:false,
-									resizable:false,
-									draggable:false,
-									renderer:defaultRenderer		
-								},{
-									text:'Checkpoint',	
-									dataIndex:'Checkpoint',
-									width:90,
-									resizable:false,	
-									draggable:false,			
-									editor:false,
-									sortable:true,
-									renderer:function(date){ return date ? 'ww' + me._getWorkweek(date) : '-'; }
-								}],
-								selModel: Ext.create('Ext.selection.CheckboxModel', {
-									mode:'SINGLE',
-									allowDeselect:false
-								}),
-								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
-								manageHeight:false,
-								sortableColumns:false,
-								showRowActionsColumn:false,
-								showPagingToolbar:false,
-								enableEditing:false,
-								store:Ext.create('Rally.data.custom.Store', { data: risksOfOneID })
-							};
-						})
-					) : []).concat(duplicatePredecessors.length ? [{
+					}].concat(duplicatePredecessors.length ? [{
 							xtype:'container',
 							html:'<h2 class="grid-group-header">Duplicate Predecessors</h2>',
 							manageHeight:false
 						}].concat(_.map(duplicatePredecessors, function(predecessorsOfOneID){
 							return {
-								xtype:'rallygrid',
+								xtype:'grid',
 								cls: 'team-report-grid duplicate-predecessors-grid rally-grid',
-								columnCfgs: [{
-									text:'#', 
-									dataIndex:'UserStoryFormattedID',
-									width:90,
-									resizable:false,
-									draggable:false,
-									sortable:true,
-									editor:false,
-									renderer: defaultRenderer
-								},{
-									text:'UserStory', 
-									dataIndex:'UserStoryName',
-									flex:1,
-									resizable:false,
-									draggable:false,			
-									sortable:true,
-									editor:false,
-									renderer: defaultRenderer
-								},{
-									text:'Dependency Description', 
-									dataIndex:'Description',
-									flex:1,
-									resizable:false,	
-									draggable:false,		
-									sortable:false,
-									editor:false,
-									renderer: defaultRenderer			
-								},{
-									text:'Needed By',			
-									dataIndex:'NeededBy',
-									width:90,
-									resizable:false,
-									draggable:false,
-									sortable:true,
-									editor:false,
-									renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}
-								},{
-									text:'Teams Depended On',
-									dataIndex:'DependencyID',
-									xtype:'fastgridcolumn',
-									html:	'<div class="predecessor-items-grid-header" style="width:10px !important;"></div>' +
-											'<div class="predecessor-items-grid-header" style="width:110px !important;">Team Name</div>' +
-											'<div class="predecessor-items-grid-header" style="width:95px  !important;">Supported</div>' +
-											'<div class="predecessor-items-grid-header" style="width:70px  !important;">#</div>' +
-											'<div class="predecessor-items-grid-header" style="width:130px !important;">User Story</div>',
-									width:420,
-									resizable:false,
-									draggable:false,
-									sortable:false,
-									renderer: function(dependencyID, meta, record, rowIndex){
-										var swallowEventHandler = {
-											element: 'el',
-											fn: function(a){ a.stopPropagation(); }
-										};
-										var predecessorItemColumnCfgs = [{
-											dataIndex:'PredecessorProjectObjectID',
-											width:115,
-											resizable:false,
-											renderer: function(val, meta){
-												var projectRecord = me.ProjectsWithTeamMembers[val];
-												if(val && projectRecord) return projectRecord.data.Name;
-												else return '-';
-											},
-											editor: false
-										},{
-											dataIndex:'Supported',
-											width:80,
-											resizable:false,
-											editor: false,
-											renderer: function(val, meta){
-												if(val == 'No') meta.tdCls = 'predecessor-item-not-supported-cell';
-												else if(val == 'Yes') meta.tdCls = 'predecessor-item-supported-cell';
-												return val;
-											}
-										},{
-											dataIndex:'PredecessorUserStoryObjectID',
-											width:75,
-											resizable:false,
-											editor: false,
-											renderer: function(userStoryObjectID, meta, predecessorItemRecord){
-												if(predecessorItemRecord.data.Assigned){
-													var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
-													if(userStory) return userStory.data.FormattedID;
-													else return '?';
+								columns: {
+									defaults: COLUMN_DEFAULTS,
+									items: [{
+										text:'#', 
+										dataIndex:'UserStoryFormattedID',
+										width:90,
+										sortable:true
+									},{
+										text:'UserStory', 
+										dataIndex:'UserStoryName',
+										flex:1,	
+										sortable:true
+									},{
+										text:'Dependency Description', 
+										dataIndex:'Description',
+										flex:1
+									},{
+										text:'Needed By',			
+										dataIndex:'NeededBy',
+										width:90,
+										sortable:true,
+										renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');}
+									},{
+										text:'Teams Depended On',
+										dataIndex:'DependencyID',
+										xtype:'intelcomponentcolumn',
+										html:	'<div class="predecessor-items-grid-header" style="width:10px !important;"></div>' +
+												'<div class="predecessor-items-grid-header" style="width:110px !important;">Team Name</div>' +
+												'<div class="predecessor-items-grid-header" style="width:95px  !important;">Supported</div>' +
+												'<div class="predecessor-items-grid-header" style="width:70px  !important;">#</div>' +
+												'<div class="predecessor-items-grid-header" style="width:130px !important;">User Story</div>',
+										width:420,
+										renderer: function(dependencyID, meta, record, rowIndex){
+											var swallowEventHandler = {
+												element: 'el',
+												fn: function(a){ a.stopPropagation(); }
+											};
+											var predecessorItemColumnCfgs = [{
+												dataIndex:'PredecessorProjectObjectID',
+												width:115,
+												renderer: function(val, meta){
+													var projectRecord = me.ProjectsWithTeamMembers[val];
+													if(val && projectRecord) return projectRecord.data.Name;
+													else return '-';
 												}
-												else return '-';
-											}
-										},{
-											dataIndex:'PredecessorUserStoryObjectID',
-											width:140,
-											resizable:false,
-											editor: false,
-											renderer: function(userStoryObjectID, meta, predecessorItemRecord){
-												if(predecessorItemRecord.data.Assigned){
-													var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
-													if(userStory) return userStory.data.Name;
-													else return '?';
+											},{
+												dataIndex:'Supported',
+												width:80,
+												renderer: function(val, meta){
+													if(val == 'No') meta.tdCls = 'predecessor-item-not-supported-cell';
+													else if(val == 'Yes') meta.tdCls = 'predecessor-item-supported-cell';
+													return val;
 												}
-												else return '-';
-											}				
-										}];
-										
-										return {
-											xtype: 'rallygrid',
-											cls:'team-report-grid duplicate-predecessor-items-grid rally-grid',
-											viewConfig: { stripeRows:false },
-											width:420,
-											manageHeight:false,
-											columnCfgs: predecessorItemColumnCfgs,
-											listeners: {
-												mousedown: swallowEventHandler,
-												mousemove: swallowEventHandler,
-												mouseout: swallowEventHandler,
-												mouseover: swallowEventHandler,
-												mouseup: swallowEventHandler,
-												mousewheel: swallowEventHandler,
-												scroll: swallowEventHandler,
-												click: swallowEventHandler,
-												dblclick: swallowEventHandler,
-												contextmenu: swallowEventHandler,
-												selectionchange: function(){ this.getSelectionModel().deselectAll(); }
-											},
-											rowLines:false,
-											disableSelection: true,
-											scroll:false,
-											hideHeaders:true,
-											showRowActionsColumn:false,
-											showPagingToolbar:false,
-											enableEditing:false,
-											store: Ext.create('Rally.data.custom.Store', { data: predecessorsOfOneID[rowIndex].PredecessorItems })
-										};
-									}
-								}],
+											},{
+												dataIndex:'PredecessorUserStoryObjectID',
+												width:75,
+												renderer: function(userStoryObjectID, meta, predecessorItemRecord){
+													if(predecessorItemRecord.data.Assigned){
+														var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+														if(userStory) return userStory.data.FormattedID;
+														else return '?';
+													}
+													else return '-';
+												}
+											},{
+												dataIndex:'PredecessorUserStoryObjectID',
+												width:140,
+												renderer: function(userStoryObjectID, meta, predecessorItemRecord){
+													if(predecessorItemRecord.data.Assigned){
+														var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+														if(userStory) return userStory.data.Name;
+														else return '?';
+													}
+													else return '-';
+												}				
+											}];
+											
+											return {
+												xtype: 'grid',
+												cls:'team-report-grid duplicate-predecessor-items-grid rally-grid',
+												viewConfig: { stripeRows:false },
+												width:420,
+												manageHeight:false,
+												columns: {
+													defaults: COLUMN_DEFAULTS,
+													items: predecessorItemColumnCfgs
+												},
+												listeners: {
+													mousedown: swallowEventHandler,
+													mousemove: swallowEventHandler,
+													mouseout: swallowEventHandler,
+													mouseover: swallowEventHandler,
+													mouseup: swallowEventHandler,
+													mousewheel: swallowEventHandler,
+													scroll: swallowEventHandler,
+													click: swallowEventHandler,
+													dblclick: swallowEventHandler,
+													contextmenu: swallowEventHandler,
+													selectionchange: function(){ this.getSelectionModel().deselectAll(); }
+												},
+												rowLines:false,
+												disableSelection: true,
+												scroll:false,
+												hideHeaders:true,
+												showRowActionsColumn:false,
+												showPagingToolbar:false,
+												enableEditing:false,
+												store: Ext.create('Rally.data.custom.Store', { data: predecessorsOfOneID[rowIndex].PredecessorItems })
+											};
+										}
+									}]
+								},
 								selModel: Ext.create('Ext.selection.CheckboxModel', {
 									mode:'SINGLE',
 									allowDeselect:false
@@ -1226,8 +1032,6 @@
 								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
 								manageHeight:false,
 								sortableColumns:false,
-								showRowActionsColumn:false,
-								showPagingToolbar:false,
 								enableEditing:false,
 								store:Ext.create('Rally.data.custom.Store', { data: predecessorsOfOneID })
 							};
@@ -1237,95 +1041,67 @@
 							html:'<h2 class="grid-group-header">Duplicate Successors</h2>'
 						}].concat(_.map(duplicateSuccessors, function(successorsOfOneID){
 							return {
-								xtype:'rallygrid',
+								xtype:'grid',
 								cls: 'team-report-grid duplicate-successors-grid rally-grid',
-								columnCfgs: [{	
-									text:'Requested By',
-									dataIndex:'SuccessorProjectObjectID',
-									width:160,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:true,
-									renderer: function(projectOID){ return me.ProjectsWithTeamMembers[projectOID].data.Name; }
-								},{
-									text:'Req #',
-									dataIndex:'SuccessorUserStoryObjectID',
-									width:90,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:true,
-									renderer: function(userStoryObjectID){
-										var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
-										if(userStory) return userStory.data.FormattedID;
-										else return '?';
-									}
-								},{
-									text:'Req UserStory',
-									dataIndex:'SuccessorUserStoryObjectID',
-									flex:1,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:true,
-									renderer: function(userStoryObjectID){
-										var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
-										if(userStory) return userStory.data.Name;
-										else return '?';
-									}
-								},{
-									text:'Dependency Description', 
-									dataIndex:'Description',
-									flex:1,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:false					
-								},{
-									text:'Needed By',
-									dataIndex:'NeededBy',
-									width:80,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:true,
-									renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}	
-								},{
-									text:'Supported',					
-									dataIndex:'Supported',
-									width:90,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									renderer: function(val, meta){
-										if(val == 'No') meta.tdCls = 'successor-not-supported-cell';
-										else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
-										return val;
-									}
-								},{
-									text:'Sup #', 
-									dataIndex:'UserStoryFormattedID',
-									width:90,
-									resizable:false,
-									draggable:false,
-									editor: false,
-									sortable:true,
-									renderer:function(val, meta, record){ return val || '-';  }
-								},{
-									text:'Sup UserStory', 
-									dataIndex:'UserStoryName',
-									flex:1,
-									resizable:false,
-									draggable:false,
-									editor:{
-										xtype:'intelcombobox',
-										store: me.UserStoryNameStore,
-										displayField: 'Name'
-									},
-									sortable: true,
-									renderer:function(val, meta, record){ return val || '-';  }
-								}],
+								columns: {
+									defaults: COLUMN_DEFAULTS,
+									items: [{
+										text:'Requested By',
+										dataIndex:'SuccessorProjectObjectID',
+										width:160,
+										sortable:true,
+										renderer: function(projectOID){ return me.ProjectsWithTeamMembers[projectOID].data.Name; }
+									},{
+										text:'Req #',
+										dataIndex:'SuccessorUserStoryObjectID',
+										width:90,
+										sortable:true,
+										renderer: function(userStoryObjectID){
+											var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+											if(userStory) return userStory.data.FormattedID;
+											else return '?';
+										}
+									},{
+										text:'Req UserStory',
+										dataIndex:'SuccessorUserStoryObjectID',
+										flex:1,
+										sortable:true,
+										renderer: function(userStoryObjectID){
+											var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+											if(userStory) return userStory.data.Name;
+											else return '?';
+										}
+									},{
+										text:'Dependency Description', 
+										dataIndex:'Description',
+										flex:1			
+									},{
+										text:'Needed By',
+										dataIndex:'NeededBy',
+										width:80,
+										sortable:true,
+										renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');}	
+									},{
+										text:'Supported',					
+										dataIndex:'Supported',
+										width:90,
+										renderer: function(val, meta){
+											if(val == 'No') meta.tdCls = 'successor-not-supported-cell';
+											else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
+											return val;
+										}
+									},{
+										text:'Sup #', 
+										dataIndex:'UserStoryFormattedID',
+										width:90,
+										sortable:true
+									},{
+										text:'Sup UserStory', 
+										dataIndex:'UserStoryName',
+										flex:1,
+										sortable: true
+									}]
+								},
 								selModel: Ext.create('Ext.selection.CheckboxModel', {
 									mode:'SINGLE',
 									allowDeselect:false
@@ -1333,8 +1109,6 @@
 								listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
 								manageHeight:false,
 								sortableColumns:false,
-								showRowActionsColumn:false,
-								showPagingToolbar:false,
 								enableEditing:false,
 								store:Ext.create('Rally.data.custom.Store', { data: successorsOfOneID })
 							};
@@ -1344,47 +1118,25 @@
 						cls:'done-button',
 						text:'Done',
 						handler:function(){
-							var grids = Ext.ComponentQuery.query('rallygrid', modal),
-								riskGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-risks-grid'); }),
+							var grids = Ext.ComponentQuery.query('grid', modal),
 								predecessorGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-predecessors-grid'); }),
 								successorGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-successors-grid'); });
 
 							modal.setLoading('Removing Duplicates');
 							Q.all([
-								Q.all(_.map(riskGrids, function(grid){ 
-									var riskToKeep = grid.getSelectionModel().getSelection()[0],
-										risksToDelete = _.filter(grid.store.getRange(), function(item){ return item.id != riskToKeep.id; });
-									return Q.all(_.map(risksToDelete, function(riskRecord){
-										var deferred = Q.defer();
-										/** create a mutex for each portfolio item across all grids, so we don't overwrite ourselves on accident */
-										me._enqueue(function(unlockFunc){
-											me._loadPortfolioItemByOrdinal(riskRecord.data.PortfolioItemObjectID, 0)
-											.then(function(oldPortfolioItemRecord){	
-												var realRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);							
-												if(!realRiskData) return;
-												return me._removeRisk(oldPortfolioItemRecord, realRiskData, me.ProjectRecord, me.RisksParsedData);
-											})
-											.then(function(){ deferred.resolve(); })
-											.fail(function(reason){ deferred.reject(reason); })
-											.then(function(){ unlockFunc(); })
-											.done();
-										}, 'Queue-' + riskRecord.data.PortfolioItemObjectID); 
-										return deferred.promise;
-									}));
-								})),
 								Q.all(_.map(predecessorGrids, function(grid){ 
 									var predecessorToKeep = grid.getSelectionModel().getSelection()[0],
 										predecessorsToRemove = _.filter(grid.store.getRange(), function(item){ return item.id != predecessorToKeep.id; });
 									return Q.all(_.map(predecessorsToRemove, function(predecessorRecord){			
 										var deferred = Q.defer();
 										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
-										me._enqueue(function(unlockFunc){
-											me._getOldAndNewUserStoryRecords(predecessorRecord.data, me.UserStoriesInRelease).then(function(records){
+										me.enqueue(function(unlockFunc){
+											me.getOldAndNewUserStoryRecords(predecessorRecord.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
-													realPredecessorData = me._getRealDependencyData(
+													realPredecessorData = me.getRealDependencyData(
 														oldUserStoryRecord, predecessorRecord.data.DependencyID, 'Predecessors');
 												if(!realPredecessorData) return;
-												return me._getRemovedPredecessorItemCallbacks(
+												return me.getRemovedPredecessorItemCallbacks(
 														realPredecessorData.PredecessorItems,  
 														realPredecessorData,
 														me.ProjectRecord,
@@ -1394,7 +1146,7 @@
 													var promise = Q();
 													_.each(removedCallbacks, function(callback){ promise = promise.then(callback); });													
 													return promise.then(function(){
-														return me._removePredecessor(
+														return me.removePredecessor(
 															oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
 													});
 												});											
@@ -1409,13 +1161,13 @@
 									.then(function(){
 										var deferred = Q.defer();
 										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
-										me._enqueue(function(unlockFunc){
-											me._getOldAndNewUserStoryRecords(predecessorToKeep.data, me.UserStoriesInRelease).then(function(records){
+										me.enqueue(function(unlockFunc){
+											me.getOldAndNewUserStoryRecords(predecessorToKeep.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
-													realPredecessorData = me._getRealDependencyData(
+													realPredecessorData = me.getRealDependencyData(
 														oldUserStoryRecord, predecessorToKeep.data.DependencyID, 'Predecessors');
 												if(!realPredecessorData) return;
-												return me._getAddedPredecessorItemCallbacks(
+												return me.getAddedPredecessorItemCallbacks(
 														realPredecessorData.PredecessorItems, 
 														realPredecessorData,
 														me.ProjectRecord,
@@ -1425,7 +1177,7 @@
 													var promise = Q();
 													_.each(addedCallbacks, function(callback){ promise = promise.then(callback); });			
 													return promise.then(function(){
-														return me._addPredecessor(
+														return me.addPredecessor(
 															oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
 													});
 												});											
@@ -1444,13 +1196,13 @@
 									return Q.all(_.map(successorsToDelete, function(successorRecord){
 										var deferred = Q.defer();
 										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
-										me._enqueue(function(unlockFunc){
-											me._getOldAndNewUserStoryRecords(successorRecord.data, me.UserStoriesInRelease).then(function(records){
+										me.enqueue(function(unlockFunc){
+											me.getOldAndNewUserStoryRecords(successorRecord.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
-													realSuccessorData = me._getRealDependencyData(
+													realSuccessorData = me.getRealDependencyData(
 														oldUserStoryRecord, successorRecord.data.DependencyID, 'Successors');		
 												if(!realSuccessorData) return;
-												return me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
+												return me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
 											})
 											.then(function(){ deferred.resolve(); })
 											.fail(function(reason){ deferred.reject(reason); })
@@ -1477,17 +1229,17 @@
 		},
 		
 		/**___________________________________ RENDER GRIDS ___________________________________*/	
-		_loadTeamCommitsGrid: function(){
+		renderTeamCommitsGrid: function(){
 			var me = this,
 				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''];
 			
-			me._TeamCommitsCountHash = {};
-			me._TeamCommitsEstimateHash = {};
+			me.teamCommitsCountHash = {};
+			me.teamCommitsEstimateHash = {};
 			
 			var customTeamCommitsRecords = _.map(_.sortBy(me.PortfolioItemStore.getRecords(), 
 				function(portfolioItemRecord){ return MoSCoWRanks.indexOf(portfolioItemRecord.data.c_MoSCoW); }),
 				function(portfolioItemRecord, index){
-					var teamCommit = me._getTeamCommit(portfolioItemRecord);
+					var teamCommit = me.getTeamCommit(portfolioItemRecord);
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
 						PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
@@ -1501,25 +1253,24 @@
 					};
 				});
 				
-			me.CustomTeamCommitsStore = Ext.create('Intel.data.FastStore', {
+			var teamCommitsStore = Ext.create('Intel.lib.component.Store', {
 				data: customTeamCommitsRecords,
 				model:'IntelTeamCommits',
 				autoSync:true,
 				limit:Infinity,
 				disableMetaChangeEvent: true,
 				proxy: {
-					type:'fastsessionproxy',
+					type:'intelsessionstorage',
 					id:'TeamCommitsProxy' + Math.random()
 				},
 				intelUpdate: function(){
-					var teamCommitsStore = me.CustomTeamCommitsStore;
 					teamCommitsStore.suspendEvents(true);
 					_.each(teamCommitsStore.getRange(), function(teamCommitsRecord){
 						var portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(portfolioItem){
 							return portfolioItem.data.ObjectID == teamCommitsRecord.data.PortfolioItemObjectID;
 						});
 						if(portfolioItemRecord) {
-							var newVal = me._getTeamCommit(portfolioItemRecord);
+							var newVal = me.getTeamCommit(portfolioItemRecord);
 							if(teamCommitsRecord.data.Commitment != newVal.Commitment)
 								teamCommitsRecord.set('Commitment', newVal.Commitment || 'Undecided');
 							if(teamCommitsRecord.data.Objective != (newVal.Objective || ''))
@@ -1527,43 +1278,18 @@
 							if(teamCommitsRecord.data.Expected != newVal.Expected)
 								teamCommitsRecord.set('Expected', newVal.Expected);
 							if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
-								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW);
+								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined');
 						}
 					});
 					teamCommitsStore.resumeEvents();
 				}
 			});
-					
-			var filterTopPortfolioItem = null, filterCommitment = null, filterEndDate = null, filterMoSCoW = null;
-			function teamCommitsFilter(teamCommitsRecord){
-				if(filterMoSCoW){
-					if(filterMoSCoW == 'Undefined'){
-							if(teamCommitsRecord.data.PortfolioItemMoSCoW && teamCommitsRecord.data.PortfolioItemMoSCoW != filterMoSCoW) return false;
-					}
-					else if(teamCommitsRecord.data.PortfolioItemMoSCoW != filterMoSCoW) return false;
-				}
-				if(filterTopPortfolioItem &&  teamCommitsRecord.data.TopPortfolioItemName != filterTopPortfolioItem) return false;
-				if(filterCommitment && teamCommitsRecord.data.Commitment != filterCommitment) return false;
-				if(filterEndDate && me._roundDateDownToWeekStart(teamCommitsRecord.data.PortfolioItemPlannedEnd)*1 != filterEndDate) return false;
-				return true;
-			}		
-			function filterTeamCommitsRowsByFn(fn){
-				/** NOTE: using the CSS team-report-hidden-grid-row for display requires us to make fixed grid heights */
-				_.each(me.CustomTeamCommitsStore.getRange(), function(item, index){
-					if(fn(item)) me.TeamCommitsGrid.view.removeRowCls(index, 'team-report-hidden-grid-row '); 
-					else me.TeamCommitsGrid.view.addRowCls(index, 'team-report-hidden-grid-row ');
-				});
-			}
-						
-			var columnCfgs = [{
+			var teamCommitsColumns = [{
 				text:'MoSCoW',
 				dataIndex:'PortfolioItemMoSCoW',
 				tdCls: 'moscow-cell',
 				width:100,
-				editor:false,
 				sortable:true,
-				draggable:false,
-				resizable:false,
 				doSort: function(direction){
 					this.up('grid').getStore().sort({
 						sorterFn: function(item1, item2){
@@ -1580,41 +1306,16 @@
 					if(val == 'Won\'t Have') meta.tdCls += ' wont-have';
 					return val || 'Undefined'; 
 				},
-				layout:'hbox',
-				items: [{	
-					id:'team-commits-moscow-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['MoSCoW'],
-						data: [
-							{MoSCoW: 'All'},
-							{MoSCoW:'Must Have'},
-							{MoSCoW:'Should Have'},
-							{MoSCoW:'Could Have'},
-							{MoSCoW:'Won\'t Have'},
-							{MoSCoW:'Undefined'}
-						]
-					}),
-					displayField: 'MoSCoW',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.MoSCoW == 'All') filterMoSCoW = null; 
-							else filterMoSCoW = selected[0].data.MoSCoW;
-							filterTeamCommitsRowsByFn(teamCommitsFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]		
+				items: [{ 
+					xtype: 'intelgridcolumnfilter',
+					sortFn: function(moscow){ return MoSCoWRanks.indexOf(moscow); },
+					convertDisplayFn: function(val){ if(val === '') return 'Undefined'; else return val; }
+				}]
 			},{
 				text:'ID', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:60,
-				editor:false,
 				sortable:true,
-				draggable:false,
-				resizable:false,
 				renderer:function(portfolioItemFormattedID, meta, teamCommitsRecord){
 					var portfolioItem = me.PortfolioItemStore.findExactRecord('FormattedID', portfolioItemFormattedID);
 					if(teamCommitsRecord.data.Expected) meta.tdCls += ' manager-expected-cell';
@@ -1628,118 +1329,61 @@
 			},{
 				text: me.PortfolioItemTypes[0],
 				dataIndex:'PortfolioItemName',
-				flex:1,
-				editor:false,
-				draggable:false,
-				resizable:false
+				flex:1
 			},{
-				text: me.PortfolioItemTypes[me.PortfolioItemTypes.length - 1], 
+				text: me.PortfolioItemTypes.slice(-1)[0], 
 				dataIndex:'TopPortfolioItemName',
 				width:90,
-				editor:false,
-				draggable:false,
-				resizable:false,
-				layout:'hbox',
-				items:[{
-					id:'team-commits-top-portfolio-item-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['TopPortfolioItemName'],
-						data: [{TopPortfolioItemName:'All'}].concat(_.map(_.sortBy(_.union(_.values(me.PortfolioItemMap)), 
-							function(topPortfolioItemName){ return topPortfolioItemName; }), 
-							function(topPortfolioItemName){ return {TopPortfolioItemName: topPortfolioItemName}; }))
-					}),
-					displayField: 'TopPortfolioItemName',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.TopPortfolioItemName == 'All') filterTopPortfolioItem = null; 
-							else filterTopPortfolioItem = selected[0].data.TopPortfolioItemName;
-							filterTeamCommitsRowsByFn(teamCommitsFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items: [{ xtype: 'intelgridcolumnfilter' }]
 			},{
 				text:'Stories', 
 				dataIndex:'PortfolioItemObjectID',
 				sortable:true, 
-				editor:false,
-				draggable:false,
-				resizable:false,
 				doSort: function(direction){
 					this.up('grid').getStore().sort({
 						sorterFn: function(item1, item2){
-							var diff = me._getStoryCount(item1.data.PortfolioItemObjectID) - me._getStoryCount(item2.data.PortfolioItemObjectID);
+							var diff = me.getStoryCount(item1.data.PortfolioItemObjectID) - me.getStoryCount(item2.data.PortfolioItemObjectID);
 							if(diff === 0) return 0;
 							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
 						}
 					});
 				},
 				width:70,
-				renderer:function(oid){ return me._getStoryCount(oid); }
+				renderer:function(oid){ return me.getStoryCount(oid); }
 			},{
 				text:'Plan Estimate', 
 				dataIndex:'PortfolioItemObjectID',
 				sortable:true, 
-				editor:false,
-				draggable:false,
-				resizable:false,
 				doSort: function(direction){
 					var ds = this.up('grid').getStore();
 					var field = this.getSortParam();
 					ds.sort({
-						sorterFn: function(item1, item2){ //sort by stories for this team in each portfolioItem
-							var diff = me._getStoriesEstimate(item1.data.PortfolioItemObjectID) - me._getStoriesEstimate(item2.data.PortfolioItemObjectID);
+						sorterFn: function(item1, item2){
+							var diff = me.getStoriesEstimate(item1.data.PortfolioItemObjectID) - me.getStoriesEstimate(item2.data.PortfolioItemObjectID);
 							if(diff === 0) return 0;
 							return (direction=='ASC' ? 1 : -1) * (diff > 0 ? 1 : -1);
 						}
 					});
 				},
 				width:70,
-				renderer:function(oid){ return me._getStoriesEstimate(oid); }
+				renderer:function(oid){ return me.getStoriesEstimate(oid); }
 			},{
 				text:'Planned End',
 				dataIndex:'PortfolioItemPlannedEnd',
 				sortable:true, 
-				editor:false,
-				draggable:false,
-				resizable:false,
 				width:100,
-				renderer: function(ed){ return (ed ? 'ww' + me._getWorkweek(new Date(ed)) : '-'); },
+				renderer: function(dateVal){ return dateVal ? 'ww' + me.getWorkweek(new Date(dateVal)) : '-'; },
 				layout:'hbox',
-				items: [{	
-					id:'team-commits-end-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
-						data: [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.PortfolioItemStore.getRange(),
-							function(portfolioItem){ return me._roundDateDownToWeekStart(portfolioItem.data.PlannedEndDate)*1; })),
-							function(date){ return date; }),
-							function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }))
-					}),
-					displayField: 'Workweek',
-					valueField: 'DateVal',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.DateVal === 0) filterEndDate = null; 
-							else filterEndDate = selected[0].data.DateVal;
-							filterTeamCommitsRowsByFn(teamCommitsFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined; }
+				}]
 			},{
 				dataIndex:'Commitment',
 				text:'Commitment',	
 				width:100,
 				tdCls: 'intel-editor-cell',	
 				sortable:true, 
-				draggable:false,
-				resizable:false,
 				editor:{
 					xtype:'intelfixedcombo',
 					store: Ext.create('Ext.data.Store', {
@@ -1753,46 +1397,17 @@
 					}),
 					displayField: 'Commitment'
 				},	
-				layout:'hbox',
-				items: [{	
-					id:'team-commits-commitment-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Commitment'],
-						data: [
-							{Commitment: 'All'},
-							{Commitment:'Undecided'},
-							{Commitment:'N/A'},
-							{Commitment:'Committed'},
-							{Commitment:'Not Committed'}
-						]
-					}),
-					displayField: 'Commitment',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.Commitment == 'All') filterCommitment = null; 
-							else filterCommitment = selected[0].data.Commitment;
-							filterTeamCommitsRowsByFn(teamCommitsFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]	
+				items: [{ xtype: 'intelgridcolumnfilter' }]
 			},{
 				text:'Objective', 
 				dataIndex:'Objective',
 				flex:1,
 				tdCls: 'intel-editor-cell',	
-				editor: 'inteltextarea',
-				draggable:false,
-				resizable:false,
-				sortable:false,
-				renderer: function(val){ return val || '-'; }
+				editor: 'inteltextarea'
 			}];
 
 			me.TeamCommitsGrid = me.down('#tcVelBoxLeft').add({
-				xtype: 'rallygrid',
+				xtype: 'grid',
 				cls: 'team-report-grid team-commits-grid rally-grid',
 				header: {
 					layout: 'hbox',
@@ -1811,35 +1426,32 @@
 						items:[{
 							xtype:'button',
 							text:'Remove Filters',
+							cls: 'intel-button',
 							width:110,
-							listeners:{
-								click: function(){
-									filterMoSCoW = null;
-									filterTopPortfolioItem = null;
-									filterCommitment = null;
-									filterEndDate = null; 
-									filterTeamCommitsRowsByFn(function(){ return true; });
-									Ext.getCmp('team-commits-moscow-filter').setValue('All');
-									Ext.getCmp('team-commits-top-portfolio-item-filter').setValue('All');
-									Ext.getCmp('team-commits-commitment-filter').setValue('All');
-									Ext.getCmp('team-commits-end-filter').setValue('All');
-								}
+							listeners:{ 
+								click: function(){ 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.TeamCommitsGrid), 'clearFilters'); 
+									me.TeamCommitsGrid.store.fireEvent('refresh', me.TeamCommitsGrid.store);
+								} 
 							}
 						}]
 					}]
 				},
 				height:410,
 				scroll:'vertical',
-				columnCfgs: columnCfgs,
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: teamCommitsColumns
+				},
 				disableSelection: true,
-				plugins: [ 'fastcellediting' ],
+				plugins: [ 'intelcellediting' ],
 				viewConfig:{
-					xtype:'scrolltableview',
+					xtype:'inteltableview',
 					stripeRows:true,
 					preserveScrollOnRefresh:true,
-					getRowClass: function(teamCommitsRecord, index, rowParams, store){
+					getRowClass: function(teamCommitsRecord){
 						var val = teamCommitsRecord.data.Commitment || 'Undecided',
-							outputClasses = teamCommitsFilter(teamCommitsRecord) ? '' : ' team-report-hidden-grid-row ';
+							outputClasses = '';
 						if(val == 'N/A') return outputClasses + ' team-commits-grey-row ';
 						else if(val == 'Committed') return outputClasses + ' team-commits-green-row ';
 						else if(val == 'Not Committed') return outputClasses + ' team-commits-red-row ';
@@ -1847,23 +1459,22 @@
 					}
 				},
 				listeners: {
-					sortchange: function(){ filterTeamCommitsRowsByFn(teamCommitsFilter); },
-					beforeedit: function(){ me._isEditingTeamCommits = true; },
-					canceledit: function(){ me._isEditingTeamCommits = false; },
+					beforeedit: function(){ me.isEditingTeamCommits = true; },
+					canceledit: function(){ me.isEditingTeamCommits = false; },
 					edit: function(editor, e){
 						var grid = e.grid, teamCommitsRecord = e.record,
 							field = e.field, value = e.value, originalValue = e.originalValue;						
 						if(value === originalValue) {
-							me._isEditingTeamCommits = false;
+							me.isEditingTeamCommits = false;
 							return; 
 						}
 						else if(field != 'Objective' && !value){ 
 							teamCommitsRecord.set(field, originalValue); 
-							me._isEditingTeamCommits = false;
+							me.isEditingTeamCommits = false;
 							return; 
 						}
 						else if(field==='Objective'){
-							value = me._htmlEscape(value);			
+							value = me.htmlEscape(value);			
 							teamCommitsRecord.set(field, value);
 						}
 						var tc = {
@@ -1871,15 +1482,15 @@
 							Objective: teamCommitsRecord.data.Objective 
 						};	
 						me.TeamCommitsGrid.setLoading("Saving");
-						me._enqueue(function(unlockFunc){
-							me._loadPortfolioItemByOrdinal(teamCommitsRecord.data.PortfolioItemObjectID, 0).then(function(realPortfolioItem){
-								if(realPortfolioItem) return me._setTeamCommit(realPortfolioItem, tc);
+						me.enqueue(function(unlockFunc){
+							me.loadPortfolioItemByOrdinal(teamCommitsRecord.data.PortfolioItemObjectID, 0).then(function(realPortfolioItem){
+								if(realPortfolioItem) return me.setTeamCommit(realPortfolioItem, tc);
 							})
-							.fail(function(reason){ me._alert('ERROR', reason); })
+							.fail(function(reason){ me.alert('ERROR', reason); })
 							.then(function(){ 
 								unlockFunc();
 								me.TeamCommitsGrid.setLoading(false);
-								me._isEditingTeamCommits = false;
+								me.isEditingTeamCommits = false;
 							})
 							.done();
 						}, 'Queue-Main');
@@ -1888,10 +1499,10 @@
 				showRowActionsColumn:false,
 				showPagingToolbar:false,
 				enableEditing:false,
-				store: me.CustomTeamCommitsStore
+				store: teamCommitsStore
 			});	
 		},		
-		_loadVelocityGrid: function() {
+		renderVelocityGrid: function() {
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
@@ -1902,9 +1513,9 @@
 			var iterationGroupTotals = _.sortBy(_.map(me.IterationStore.getRecords(), function(iteration) {
 				var iName = iteration.data.Name;
 				return {    
-					Name:iName, 
+					Name: iName, 
 					PlannedVelocity: iteration.data.PlannedVelocity || 0,
-					RealVelocity:_.reduce((iterationGroups[iName] || []), function(sum, us) { 
+					RealVelocity: _.reduce((iterationGroups[iName] || []), function(sum, us) { 
 						return sum + 
 							(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
 								us.data.PlanEstimate : 
@@ -1913,18 +1524,17 @@
 				};
 			}), 'Name');
 			
-			me.CustomVelocityStore = Ext.create('Intel.data.FastStore', {
+			var velocityStore = Ext.create('Intel.lib.component.Store', {
 				data: iterationGroupTotals,
 				model:'IntelVelocity',
 				autoSync:true,
 				limit:Infinity,
 				disableMetaChangeEvent: true,
 				proxy: {
-					type:'fastsessionproxy',
+					type:'intelsessionstorage',
 					id:'VelocityProxy' + Math.random()
 				},
 				intelUpdate: function(){
-					var velocityStore = me.CustomVelocityStore;
 					velocityStore.suspendEvents(true);
 					_.each(velocityStore.getRange(), function(velocityRecord){
 						var iterationName = velocityRecord.data.Name,
@@ -1938,13 +1548,10 @@
 				}
 			});
 			
-			var columnCfgs = [{	
+			var velocityColumns = [{	
 				text: 'Iteration',
 				dataIndex: 'Name', 
 				flex: 1,
-				editor:false,
-				draggable:false,
-				resizable:false,
 				sortable:true,
 				renderer:function(iterationName, meta, velocityRecord){
 					var iteration = me.IterationStore.findExactRecord('Name', iterationName);
@@ -1960,8 +1567,6 @@
 				width:80,
 				tdCls: 'intel-editor-cell',
 				editor:'textfield',
-				draggable:false,
-				resizable:false,
 				sortable:true,
 				tooltip:'(Planned Velocity)',
 				tooltipType:'title',
@@ -1973,9 +1578,6 @@
 				text: 'Actual Load',
 				dataIndex: 'RealVelocity',
 				width:80,
-				editor:false,
-				draggable:false,
-				resizable:false,
 				sortable:true,
 				tooltip:'(Plan Estimate)',
 				tooltipType:'title',
@@ -1985,25 +1587,16 @@
 					return realVel;
 				}
 			}];		
-			var totalsColumnCfgs = [{	
+			var velocityTotalColumns = [{	
 				flex: 1,
-				editor:false,
-				draggable:false,
-				resizable:false,
 				renderer:function(name, meta, velocityRecord){ return '<b>TOTAL</b>'; }
 			},{
 				width:80,
-				editor:false,
-				draggable:false,
-				resizable:false,
 				renderer:function(){
 					return _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0);
 				}
 			},{
 				width:80,
-				editor:false,
-				draggable:false,
-				resizable:false,
 				renderer:function(value, meta){
 					var planned = _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0),
 						real = _.reduce(me.IterationStore.getRecords(), function(bigSum, iteration){
@@ -2021,20 +1614,20 @@
 			}];
 			
 			me.VelocityGrid = me.down('#tcVelBoxRight').add({
-				xtype: 'rallygrid',
+				xtype: 'grid',
 				cls: 'team-report-grid velociy-grid rally-grid',
 				title: "Velocity",
 				viewConfig: {
 					stripeRows: true,
 					preserveScrollOnRefresh:true
 				},
-				plugins: ['fastcellediting'],
+				plugins: ['intelcellediting'],
 				listeners: {
 					beforeedit: function(editor, e){
-						me._isEditingVelocity = true;
+						me.isEditingVelocity = true;
 						return true;
 					},
-					canceledit: function(){ me._isEditingVelocity = false; },
+					canceledit: function(){ me.isEditingVelocity = false; },
 					edit: function(editor, e){
 						var grid = e.grid,
 							velocityRecord = e.record,
@@ -2043,7 +1636,7 @@
 						
 						if(value.length===0 || isNaN(value) || (value*1<0) || (value*1 === originalValue*1)) { 
 							velocityRecord.set('PlannedVelocity', originalValue);
-							me._isEditingVelocity = false; 
+							me.isEditingVelocity = false; 
 							return; 
 						}
 						value = value*1 || 0; //value*1 || null to remove the 0's from teams
@@ -2051,15 +1644,15 @@
 							iteration = me.IterationStore.findExactRecord('Name', iterationName); //we don't need the most recent iteration here
 						iteration.set('PlannedVelocity', value);
 						me.VelocityGrid.setLoading("Saving");
-						me._enqueue(function(unlockFunc){
+						me.enqueue(function(unlockFunc){
 							iteration.save({ 
 								callback: function(record, operation, success){
 									if(!success){
-										me._alert('ERROR', 'Could not modify Iteration');
+										me.alert('ERROR', 'Could not modify Iteration');
 										velocityRecord.set('PlannedVelocity', originalValue);
 									} 
 									else velocityRecord.set('PlannedVelocity', value);
-									me._isEditingVelocity = false;
+									me.isEditingVelocity = false;
 									me.VelocityGrid.setLoading(false);
 									me.VelocityTotalsGrid.view.refreshNode(0);
 									unlockFunc();
@@ -2072,11 +1665,14 @@
 				showPagingToolbar: false,
 				showRowActionsColumn:false,
 				disableSelection: true,
-				columnCfgs: columnCfgs,
-				store: me.CustomVelocityStore
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: velocityColumns
+				},
+				store: velocityStore
 			});
 			me.VelocityTotalsGrid = me.down('#tcVelBoxRight').add({
-				xtype: 'rallygrid',
+				xtype: 'grid',
 				cls: 'team-report-grid velociy-grid rally-grid',
 				showPagingToolbar: false,
 				showRowActionsColumn:false,
@@ -2087,16 +1683,19 @@
 					preserveScrollOnRefresh:true
 				},
 				enableEditing:false,
-				columnCfgs:totalsColumnCfgs,
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: velocityTotalColumns
+				},
 				store: Ext.create('Ext.data.Store', {
 					model:'IntelVelocity',
 					data: [{Name:'', PlannedVelocity:0, RealVelocity:0}]
 				})
 			});
 		},
-		_loadMiniDataIntegrityGrid: function(){
+		renderMiniDataIntegrityGrid: function(){
 			var me=this,
-				columnCfgs = [{
+				columns = [{
 					dataIndex:'title',
 					flex:1,
 					renderer:function(val, meta){ 
@@ -2120,7 +1719,7 @@
 				}];
 			
 			me.DataIntegrityGrid = me.down('#tcVelBoxRight').add({
-				xtype: 'rallygrid',
+				xtype: 'grid',
 				cls: 'team-report-grid mini-data-integrity-grid rally-grid',
 				header: {
 					items: [{
@@ -2135,13 +1734,24 @@
 					stripeRows: false,
 					preserveScrollOnRefresh:true
 				},
-				columnCfgs:columnCfgs,
+				columns: {
+					defaults: {
+						text:'',
+						resizable: false,
+						draggable: false,
+						sortable: false,
+						editor: false,
+						menuDisabled: true,
+						renderer: function(val){ return val || '-'; }
+					},
+					items: columns
+				},
 				store: Ext.create('Ext.data.Store', {
 					fields:[
 						{name: 'title', type: 'string'},
 						{name: 'userStories', type: 'auto'}
 					],
-					data: me._getMiniDataIntegrityStoreData()
+					data: me.getMiniDataIntegrityStoreData()
 				}),
 				enableEditing:false,
 				showPagingToolbar: false,
@@ -2150,555 +1760,36 @@
 				disableSelection: true
 			});
 		},
-		_loadRisksGrid: function(){
-			var me = this,
-				defaultRenderer = function(val){ return val || '-'; };		
-			
-			/****************************** STORES FOR THE DROPDOWNS  ***********************************************/	
-			me.PortfolioItemFIDStore = Ext.create('Ext.data.Store', {
-				fields: ['FormattedID'],
-				data: _.map(me.PortfolioItemStore.getRange(), function(item){ return {'FormattedID': item.data.FormattedID}; }),
-				sorters: { property: 'FormattedID' }
-			});	
-			me.PortfolioItemNameStore = Ext.create('Ext.data.Store', {
-				fields: ['Name'],
-				data: _.map(me.PortfolioItemStore.getRange(), function(item){ return {'Name': item.data.Name }; }),
-				sorters: { property: 'Name' }
-			});
-			
-			/****************************** RISKS STUFF  ***********************************************/		
-			me.CustomRisksStore = Ext.create('Intel.data.FastStore', { 
-				data: Ext.clone(me.RisksParsedData),
-				autoSync:true,
-				model:'IntelRisk',
-				limit:Infinity,
-				disableMetaChangeEvent: true,
-				proxy: {
-					type:'fastsessionproxy',
-					id:'RiskProxy' + Math.random()
-				},
-				sorters: [function riskSorter(o1, o2){ return o1.data.RiskID > o2.data.RiskID ? -1 : 1; }],
-				intelUpdate: function(){
-					var riskStore = me.CustomRisksStore, 
-						riskRecords = riskStore.getRange(),
-						realRisksData = me.RisksParsedData.slice(), //'real' risks list
-						remoteChanged = false; //if someone else updated this while it was idle on our screen	
-					riskStore.suspendEvents(true); //batch
-					_.each(riskRecords, function(riskRecord){
-						var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, realRisksData),
-							dirtyType = me._getDirtyType(riskRecord, realRiskData);
-						if(dirtyType === 'New' || dirtyType === 'Edited'){} //we don't want to remove any pending changes on a record							
-						else if(dirtyType == 'Deleted') // the riskRecord was deleted by someone else, and we arent editing it
-							riskStore.remove(riskRecord);
-						else { //we are not editing it and it still exists and it was edited somewhere else, so update current copy
-							_.each(realRiskData, function(value, field){
-								if(!_.isEqual(riskRecord.data[field], value)) remoteChanged = true;
-							});
-							if(remoteChanged){
-								riskRecord.beginEdit();
-								_.each(realRiskData, function(value, field){ riskRecord.set(field, realRiskData[field]); });
-								riskRecord.endEdit();
-							}
-						}
-					});
-					_.each(realRisksData, function(realRiskData){ //add all the new risks that other people have added since first load
-						riskStore.add(Ext.create('IntelRisk', Ext.clone(realRiskData)));
-					});
-					riskStore.resumeEvents();
-				}
-			});
-			
-			var filterFID = null, 
-				filterName = null, 
-				filterStatus = null, 
-				filterCheckpoint = null;
-			function riskGridFilter(riskRecord){
-				if(filterFID && riskRecord.data.PortfolioItemFormattedID != filterFID) return false;
-				if(filterName && riskRecord.data.PortfolioItemName != filterName) return false;
-				if(filterStatus && riskRecord.data.Status != filterStatus) return false;
-				if(filterCheckpoint && me._roundDateDownToWeekStart(riskRecord.data.Checkpoint)*1 != filterCheckpoint) return false;
-				return true;
-			}		
-			function filterRisksRowsByFn(fn){
-				_.each(me.CustomRisksStore.getRange(), function(item, index){
-					if(fn(item)) me.RisksGrid.view.removeRowCls(index, 'team-report-hidden-grid-row');
-					else me.RisksGrid.view.addRowCls(index, 'team-report-hidden-grid-row');
-				});
-			}
-			function removeFilters(){
-				filterFID = null;
-				filterName = null;
-				filterStatus = null;
-				filterCheckpoint = null; 
-				filterRisksRowsByFn(function(){ return true; });
-				Ext.getCmp('risk-fid-filter').setValue('All');
-				Ext.getCmp('risk-name-filter').setValue('All');
-				Ext.getCmp('risk-status-filter').setValue('All');
-				Ext.getCmp('risk-checkpoint-filter').setValue('All');
-			}
-			
-			function getFIDfilterOptions(){
-				return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
-					function(r){ return r.data.PortfolioItemFormattedID; })), 
-					function(f){ return f; }), 
-					function(f){ return {FormattedID:f}; }));
-			}
-			function getNameFilterOptions(){
-				return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(), 
-					function(r){ return r.data.PortfolioItemName; })), 
-					function(f){ return f; }), 
-					function(n){ return {Name:n}; }));
-			}
-			function getCheckpointFilterOptions(){
-				return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomRisksStore.getRange(),
-					function(risk){ return me._roundDateDownToWeekStart(risk.data.Checkpoint)*1; })),
-					function(date){ return date; }),
-					function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
-			}
-			function updateFilterOptions(){
-				var fidStore = Ext.getCmp('risk-fid-filter').getStore(),
-					nameStore = Ext.getCmp('risk-name-filter').getStore(),
-					checkpointStore = Ext.getCmp('risk-checkpoint-filter').getStore();
-				fidStore.removeAll();
-				fidStore.add(getFIDfilterOptions());
-				nameStore.removeAll();
-				nameStore.add(getNameFilterOptions());
-				checkpointStore.removeAll();
-				checkpointStore.add(getCheckpointFilterOptions());
-			}
-			
-			var columnCfgs = [{
-				text:'#',
-				dataIndex:'PortfolioItemFormattedID',
-				tdCls: 'intel-editor-cell',	
-				width:80,
-				editor:{
-					xtype:'intelcombobox',
-					width:80,
-					store: me.PortfolioItemFIDStore,
-					displayField: 'FormattedID'
-				},			
-				resizable:false,
-				draggable:false,
-				sortable:true,
-				renderer:defaultRenderer,
-				layout:'hbox',
-				items:[{	
-					id:'risk-fid-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['FormattedID'],
-						data: getFIDfilterOptions()
-					}),
-					displayField: 'FormattedID',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.FormattedID == 'All') filterFID = null; 
-							else filterFID = selected[0].data.FormattedID;
-							filterRisksRowsByFn(riskGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
-			},{
-				text: me.PortfolioItemTypes[0], 
-				dataIndex:'PortfolioItemName',
-				tdCls: 'intel-editor-cell',	
-				flex:1,
-				editor:{
-					xtype:'intelcombobox',
-					store: me.PortfolioItemNameStore,
-					displayField: 'Name'
-				},
-				resizable:false,
-				draggable:false,
-				sortable:true,
-				renderer:defaultRenderer,
-				layout:'hbox',
-				items:[{	
-					id:'risk-name-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Name'],
-						data: getNameFilterOptions()
-					}),
-					displayField: 'Name',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.Name == 'All') filterName = null; 
-							else filterName = selected[0].data.Name;
-							filterRisksRowsByFn(riskGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]		
-			},{
-				text:'Risk Description (If This...)', 
-				dataIndex:'Description',
-				tdCls: 'intel-editor-cell',	
-				flex:1,
-				editor: 'inteltextarea',
-				resizable:false,
-				draggable:false,
-				sortable:false,
-				renderer:defaultRenderer	
-			},{
-				text:'Impact (Then this...)', 
-				dataIndex:'Impact',
-				tdCls: 'intel-editor-cell',	
-				flex:1,
-				resizable:false,
-				draggable:false,
-				sortable:false,
-				editor: 'inteltextarea',
-				renderer:defaultRenderer
-			},{
-				text:'Mitigation Plan', 
-				dataIndex:'MitigationPlan',
-				tdCls: 'intel-editor-cell',	
-				flex:1,
-				resizable:false,
-				draggable:false,
-				sortable:false,
-				editor: 'inteltextarea',
-				renderer:defaultRenderer
-			},{
-				text:'Status',
-				dataIndex:'Status',
-				tdCls: 'intel-editor-cell',	
-				width:100,		
-				tooltip:'(ROAM)',
-				tooltipType:'title',		
-				editor:{
-					xtype:'intelfixedcombo',
-					store: Ext.create('Ext.data.Store', {
-						fields: ['Status'],
-						data:[
-							{Status:'Undefined'},
-							{Status:'Resolved'},
-							{Status:'Owned'},
-							{Status:'Accepted'},
-							{Status:'Mitigated'}
-						]
-					}),
-					displayField:'Status'
-				},
-				resizable:false,
-				draggable:false,
-				sortable:true,
-				renderer:function(val, meta){
-					meta.tdCls += (val==='Undefined' ? ' risks-grid-error-cell' : '');
-					return val || '-';
-				},	
-				layout:'hbox',
-				items: [{	
-					id:'risk-status-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Status'],
-						data: [
-							{Status: 'All'},
-							{Status:'Undefined'},
-							{Status:'Resolved'},
-							{Status:'Owned'},
-							{Status:'Accepted'},
-							{Status:'Mitigated'}
-						]
-					}),
-					displayField: 'Status',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.Status == 'All') filterStatus = null; 
-							else filterStatus = selected[0].data.Status;
-							filterRisksRowsByFn(riskGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]		
-			},{
-				text:'Contact', 
-				dataIndex:'Contact',
-				tdCls: 'intel-editor-cell',	
-				flex:1,
-				editor: 'inteltextarea',
-				sortable:false,
-				resizable:false,
-				draggable:false,
-				renderer:defaultRenderer		
-			},{
-				text:'Checkpoint',	
-				dataIndex:'Checkpoint',
-				tdCls: 'intel-editor-cell',	
-				width:90,
-				resizable:false,	
-				draggable:false,			
-				editor:{
-					xtype:'intelfixedcombo',
-					width:80,
-					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
-						data: me.WorkweekData
-					}),
-					displayField: 'Workweek',
-					valueField: 'DateVal'
-				},
-				sortable:true,
-				renderer:function(date){ return date ? 'ww' + me._getWorkweek(date) : '-'; },	
-				layout:'hbox',
-				items: [{	
-					id:'risk-checkpoint-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
-						data: getCheckpointFilterOptions()
-					}),
-					displayField: 'Workweek',
-					valueField: 'DateVal',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.DateVal === 0) filterCheckpoint = null; 
-							else filterCheckpoint = selected[0].data.DateVal;
-							filterRisksRowsByFn(riskGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]		
-			},{
-				text:'',
-				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, riskRecord, row, col){
-					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice()),
-						dirtyType = me._getDirtyType(riskRecord, realRiskData),
-						clickFnName = 'Click' + riskRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType !== 'Edited') return;
-					meta.tdAttr = 'title="Undo"';
-					window[clickFnName] = function(){
-						var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice());
-						riskRecord.beginEdit();
-						_.each(realRiskData, function(value, field){ riskRecord.set(field, value); });
-						riskRecord.endEdit();
-						updateFilterOptions();
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
-				}
-			},{
-				text:'',
-				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, riskRecord, row, col){
-					var realRiskData = me._spliceRiskFromList(riskRecord.data.RiskID, me.RisksParsedData.slice()),
-						dirtyType = me._getDirtyType(riskRecord, realRiskData),
-						clickFnName = 'Click' + riskRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType !== 'New' && dirtyType !== 'Edited') return;
-					meta.tdAttr = 'title="Save Risk"';
-					window[clickFnName] = function(){
-						if(!riskRecord.data.PortfolioItemFormattedID || !riskRecord.data.PortfolioItemName){
-							me._alert('ERROR', 'You must set the ' + me.PortfolioItemTypes[0] + ' affected by this Risk'); return; } 
-						else if(!riskRecord.data.Checkpoint){
-							me._alert('ERROR', 'You must set the Checkpoint for this Risk'); return; }
-						else if(!riskRecord.data.Description){
-							me._alert('ERROR', 'You must set the Description for this Risk'); return; }
-						else if(!riskRecord.data.Impact){
-							me._alert('ERROR', 'You must set the Impact for this Risk'); return; }
-						else if(!riskRecord.data.Status){
-							me._alert('ERROR', 'You must set the Status for this Risk'); return; }
-						else if(!riskRecord.data.Contact){
-							me._alert('ERROR', 'You must set the Contact for this Risk'); return; }
-						
-						me.RisksGrid.setLoading("Saving Risk");
-						me._enqueue(function(unlockFunc){
-							var portfolioItemFormattedID = riskRecord.data.PortfolioItemFormattedID,
-								newPortfolioItemRecord = me.PortfolioItemStore.findExactRecord('FormattedID', portfolioItemFormattedID);
-							Q((newPortfolioItemRecord.data.ObjectID != riskRecord.data.PortfolioItemObjectID) ?
-								me._loadPortfolioItemByOrdinal(newPortfolioItemRecord.data.ObjectID, 0).then(function(portfolioItemRecord){ 
-									newPortfolioItemRecord = portfolioItemRecord; 
-								}) :
-								null
-							)
-							.then(function(){ 
-								return riskRecord.data.PortfolioItemObjectID ? 
-									me._loadPortfolioItemByOrdinal(riskRecord.data.PortfolioItemObjectID, 0) : null;
-							})
-							.then(function(oldPortfolioItemRecord){							
-								newPortfolioItemRecord = newPortfolioItemRecord || oldPortfolioItemRecord;
-								var oldRealRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);
-								if(oldRealRiskData && (oldPortfolioItemRecord.data.ObjectID !== newPortfolioItemRecord.data.ObjectID))
-									return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
-							})
-							.then(function(){ return me._addRisk(newPortfolioItemRecord, riskRecord.data, me.ProjectRecord, me.RisksParsedData); })
-							.then(function(){
-								riskRecord.beginEdit();
-								riskRecord.set('Edited', false);
-								riskRecord.set('PortfolioItemObjectID', newPortfolioItemRecord.data.ObjectID);
-								riskRecord.endEdit();
-							})
-							.fail(function(reason){ me._alert('ERROR:', reason  || ''); })
-							.then(function(){ 
-								unlockFunc();
-								me.RisksGrid.setLoading(false);
-								updateFilterOptions();
-							})
-							.done();
-						}, 'Queue-Main');
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-floppy-o"></i></div>';
-				}
-			},{
-				text:'',
-				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, riskRecord, row, col){
-					var clickFnName = 'Click' + riskRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					meta.tdAttr = 'title="Delete Risk"';
-					window[clickFnName] = function(){
-						me._confirm('Confirm', 'Delete Risk?', function(msg){
-							if(msg.toLowerCase() !== 'yes') return;
-							me.RisksGrid.setLoading("Deleting Risk");
-							me._enqueue(function(unlockFunc){
-								Q(riskRecord.data.PortfolioItemObjectID ? 
-									me._loadPortfolioItemByOrdinal(riskRecord.data.PortfolioItemObjectID, 0) : 
-									null)
-								.then(function(oldPortfolioItemRecord){					
-									var oldRealRiskData = me._getRealRiskData(oldPortfolioItemRecord, riskRecord.data.RiskID);
-									if(oldRealRiskData) return me._removeRisk(oldPortfolioItemRecord, oldRealRiskData, me.ProjectRecord, me.RisksParsedData);
-								})
-								.fail(function(reason){ me._alert('ERROR:', reason); })
-								.then(function(){
-									unlockFunc();
-									me.CustomRisksStore.remove(riskRecord);
-									me.RisksGrid.setLoading(false);
-									updateFilterOptions();
-								})
-								.done();
-							}, 'Queue-Main');
-						});
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-trash"></i></div>';
-				}
-			}];
-
-			me.RisksGrid = me.add({
-				xtype: 'rallygrid',
-				cls: 'team-report-grid risks-grid rally-grid',
-				header: {
-					layout: 'hbox',
-					items: [{
-						xtype:'text',
-						cls:'team-report-grid-header-text',
-						width:200,
-						text:"RISKS"
-					},{
-						xtype:'container',
-						flex:1000,
-						layout:{
-							type:'hbox',
-							pack:'end'
-						},
-						items:[{
-							xtype:'button',
-							text:'+ Add Risk',
-							id: 'addRiskButton',
-							width:80,
-							listeners:{
-								click: function(){
-									if(!me.PortfolioItemStore.first()) me._alert('ERROR', 'No ' + me.PortfolioItemTypes[0] + 's for this Release!');
-									else if(me.CustomRisksStore) {
-										removeFilters();
-										var model = Ext.create('IntelRisk', {
-											RiskID: "RI" + (new Date() * 1) + '' + (Math.random() * 100 >> 0),
-											PortfolioItemObjectID: '',
-											PortfolioItemFormattedID: '',
-											PortfolioItemName: '',
-											Description: '',
-											Impact: '',
-											MitigationPlan: '',
-											Urgency: '',
-											Status: '',
-											Contact: '',
-											Checkpoint: '',
-											Edited:true
-										});
-										me.CustomRisksStore.insert(0, [model]);
-										me.RisksGrid.view.getEl().setScrollTop(0);
-										me.RisksGrid.getSelectionModel().select(model);
-									}
-								}
-							}
-						},{
-							xtype:'button',
-							text:'Remove Filters',
-							width:110,
-							listeners:{ click: removeFilters }
-						}]
-					}]
-				},
+		renderRisksGrid: function(){
+			this.RisksGrid = this.add({
+				xtype: 'intelriskgrid',
+				id: 'risk-grid',
 				height:360,
-				scroll:'vertical',
-				columnCfgs: columnCfgs,
-				plugins: [ 'fastcellediting' ],
-				viewConfig:{
-					xtype:'scrolltableview',
-					stripeRows:true,
-					preserveScrollOnRefresh:true,
-					getRowClass: function(item){ return riskGridFilter(item) ? '' : 'team-report-hidden-grid-row'; 
-					}
-				},
-				listeners: {
-					sortchange: function(){ filterRisksRowsByFn(riskGridFilter); },
-					edit: function(editor, e){			
-						var grid = e.grid,
-							risksRecord = e.record,
-							field = e.field,
-							value = e.value,
-							originalValue = e.originalValue;
-							
-						if(value === originalValue) return; 
-						else if(!value && field != 'MitigationPlan') { risksRecord.set(field, originalValue); return; }
-						else if(['Description', 'Impact', 'Contact', 'MitigationPlan'].indexOf(field)>-1) {
-							value = me._htmlEscape(value);			
-							risksRecord.set(field, value);
-						}
-
-						var previousEdit = risksRecord.data.Edited;
-						risksRecord.set('Edited', true);
-						
-						var portfolioItemRecord;
-						if(field === 'PortfolioItemName'){
-							portfolioItemRecord = me.PortfolioItemStore.findExactRecord('Name', value);
-							if(!portfolioItemRecord){
-								risksRecord.set('PortfolioItemName', originalValue);
-								risksRecord.set('Edited', previousEdit);
-							} else risksRecord.set('PortfolioItemFormattedID', portfolioItemRecord.data.FormattedID);
-						} else if(field === 'PortfolioItemFormattedID'){
-							portfolioItemRecord = me.PortfolioItemStore.findExactRecord('FormattedID', value);
-							if(!portfolioItemRecord) {
-								risksRecord.set('PortfolioItemFormattedID', originalValue);
-								risksRecord.set('Edited', previousEdit); 
-							} else risksRecord.set('PortfolioItemName', portfolioItemRecord.data.Name);
-						} 
-						updateFilterOptions();
-					}
-				},
-				disableSelection: true,
-				showRowActionsColumn:false,
-				showPagingToolbar:false,
-				enableEditing:false,
-				store: me.CustomRisksStore
-			});	
-		},	
-		_loadDependenciesGrids: function(){
-			var me = this,
-				defaultRenderer = function(val){ return val || '-'; };
+				releaseRecord: this.ReleaseRecord,
+				scrumGroupRootRecord: this.ScrumGroupRootRecord,
+				projectRecords: [this.ProjectRecord],
+				portfolioItemRecords: this.PortfolioItemStore.getRange(),
+				risks: this.Risks,
+				visibleColumns: [
+					'PortfolioItemFormattedID',
+					'PortfolioItemName',
+					'Description',
+					'Impact',
+					'MitigationPlan',
+					'Status',
+					'RiskLevel',
+					'Checkpoint',
+					'Owner',
+					'Submitter',
+					'_undoButton',
+					'_saveButton',
+					'_copyButton',
+					'_deleteButton'
+				]
+			});
+		},
+		renderDependenciesGrids: function(){
+			var me = this;
 			
 			function dependencySorter(o1, o2){ return o1.data.DependencyID > o2.data.DependencyID ? -1 : 1; } //new come first
 			function predecessorItemSorter(o1, o2){ return o1.data.PredecessorItemID > o2.data.PredecessorItemID ? -1 : 1; } //new come first
@@ -2719,25 +1810,25 @@
 			me.PrececessorItemStores = {};
 			me.PredecessorItemGrids = {};
 			
-			me.CustomPredecessorStore = Ext.create('Intel.data.FastStore', { 
+			var predecessorStore = Ext.create('Intel.lib.component.Store', {
 				data: Ext.clone(me.DependenciesParsedData.Predecessors),
 				autoSync:true,
 				model:'IntelPredecessorDependency',
 				limit:Infinity,
 				disableMetaChangeEvent: true,
 				proxy: {
-					type:'fastsessionproxy',
+					type:'intelsessionstorage',
 					id:'IntelPredecessorDependencyProxy' + Math.random()
 				},
 				sorters:[dependencySorter],
 				intelUpdate: function(){ 
-					var predecessorStore = me.CustomPredecessorStore, 
+					var predecessorStore = this, 
 						realPredecessorsData = me.DependenciesParsedData.Predecessors.slice(); 
 					predecessorStore.suspendEvents(true);
 					_.each(predecessorStore.getRange(), function(predecessorRecord){
 						var dependencyID = predecessorRecord.data.DependencyID,
-							realPredecessorData = me._spliceDependencyFromList(dependencyID, realPredecessorsData),	
-							dirtyType = me._getDirtyType(predecessorRecord, realPredecessorData),
+							realPredecessorData = me.spliceDependencyFromList(dependencyID, realPredecessorsData),	
+							dirtyType = me.getDirtyType(predecessorRecord, realPredecessorData),
 							predecessorItemStore = me.PrececessorItemStores[dependencyID],
 							predecessorItemGrid = me.PredecessorItemGrids[dependencyID],
 							remoteChanged = false;
@@ -2772,7 +1863,7 @@
 						}				
 						if(!predecessorRecord.data.PredecessorItems.length) {
 							//DO NOT SET EDITED==true, because it is already true! only new or edited will ever have preds.length==0
-							predecessorRecord.set('PredecessorItems', [me._newPredecessorItem()]); 
+							predecessorRecord.set('PredecessorItems', [me.newPredecessorItem()]); 
 							if(predecessorItemStore) predecessorItemStore.intelUpdate();
 						}
 					});
@@ -2787,68 +1878,10 @@
 					predecessorStore.resumeEvents();
 				}
 			});
-
-			var filterPredUserStoryFormattedID = null, 
-				filterPredUserStoryName = null, 
-				filterPredNeededBy = null;
-			function predecessorGridFilter(predecessorRecord){
-				if(filterPredUserStoryFormattedID && predecessorRecord.data.UserStoryFormattedID != filterPredUserStoryFormattedID) return false;
-				if(filterPredUserStoryName && predecessorRecord.data.UserStoryName != filterPredUserStoryName) return false;
-				if(filterPredNeededBy && me._roundDateDownToWeekStart(predecessorRecord.data.NeededBy)*1 != filterPredNeededBy) return false;
-				return true;
-			}
-			function filterPredecessorRowsByFn(fn){
-				_.each(me.CustomPredecessorStore.getRange(), function(item, index){
-					if(fn(item)) me.PredecessorGrid.view.removeRowCls(index, 'team-report-hidden-grid-row');
-					else me.PredecessorGrid.view.addRowCls(index, 'team-report-hidden-grid-row');
-				});
-			}
-			function removePredecessorFilters(){
-				filterPredUserStoryFormattedID = null;
-				filterPredUserStoryName = null;
-				filterPredNeededBy = null; 
-				filterPredecessorRowsByFn(function(){ return true; });
-				Ext.getCmp('predecessor-us-formattedid-filter').setValue('All');
-				Ext.getCmp('predecessor-us-name-filter').setValue('All');
-				Ext.getCmp('predecessor-needed-by-filter').setValue('All');
-			}
-			
-			function getPredecessorFormattedIDFilterOptions(){
-				return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredecessorStore.getRange(), 
-					function(r){ return r.data.UserStoryFormattedID; })), 
-					function(f){ return f; }), 
-					function(f){ return {FormattedID:f}; }));
-			}
-			function getPredecessorNameFilterOptions(){
-				return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredecessorStore.getRange(), 
-					function(r){ return r.data.UserStoryName; })), 
-					function(f){ return f; }), 
-					function(n){ return {Name:n}; }));
-			}
-			function getPredecessorNeededByFilterOptions(){
-				return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomPredecessorStore.getRange(),
-					function(r){ return me._roundDateDownToWeekStart(r.data.NeededBy)*1; })),
-					function(date){ return date; }),
-					function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
-			}
-			function updatePredecessorFilterOptions(){
-				var fidStore = Ext.getCmp('predecessor-us-formattedid-filter').getStore(),
-					nameStore = Ext.getCmp('predecessor-us-name-filter').getStore(),
-					cpStore = Ext.getCmp('predecessor-needed-by-filter').getStore();
-				fidStore.removeAll();
-				fidStore.add(getPredecessorFormattedIDFilterOptions());
-				nameStore.removeAll();
-				nameStore.add(getPredecessorNameFilterOptions());
-				cpStore.removeAll();
-				cpStore.add(getPredecessorNeededByFilterOptions());
-			}
-			
-			var predecessorColumnCfgs = [{
+			var predecessorColumns = [{
 				text:'#', 
 				dataIndex:'UserStoryFormattedID',
 				width:90,
-				resizable:false,
-				draggable:false,
 				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
@@ -2857,32 +1890,11 @@
 					store: me.UserStoryFIDStore,
 					displayField: 'FormattedID'
 				},
-				renderer: defaultRenderer,
-				layout:'hbox',
-				items:[{
-					id:'predecessor-us-formattedid-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['FormattedID'],
-						data: getPredecessorFormattedIDFilterOptions()
-					}),
-					displayField: 'FormattedID',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.FormattedID == 'All') filterPredUserStoryFormattedID = null; 
-							else filterPredUserStoryFormattedID = selected[0].data.FormattedID;
-							filterPredecessorRowsByFn(predecessorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items:[{ xtype:'intelgridcolumnfilter' }]
 			},{
 				text:'UserStory', 
 				dataIndex:'UserStoryName',
-				flex:1,
-				resizable:false,
-				draggable:false,			
+				flex:1,		
 				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
@@ -2890,129 +1902,80 @@
 					store: me.UserStoryNameStore,
 					displayField: 'Name'
 				},
-				renderer: defaultRenderer,
-				layout:'hbox',
-				items:[{
-					id:'predecessor-us-name-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Name'],
-						data: getPredecessorNameFilterOptions()
-					}),
-					displayField: 'Name',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.Name == 'All') filterPredUserStoryName = null; 
-							else filterPredUserStoryName = selected[0].data.Name;
-							filterPredecessorRowsByFn(predecessorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]	
+				items:[{ xtype:'intelgridcolumnfilter' }]	
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
 				flex:1,
-				resizable:false,	
-				draggable:false,		
-				sortable:false,
 				tdCls: 'intel-editor-cell',
-				editor: 'inteltextarea',
-				renderer: defaultRenderer			
+				editor: 'inteltextarea'
 			},{
 				text:'Needed By',			
 				dataIndex:'NeededBy',
 				width:90,
-				resizable:false,
-				draggable:false,
-				sortable:true,
 				tdCls: 'intel-editor-cell',		
 				editor:{
 					xtype:'intelfixedcombo',
 					width:80,
 					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
+						fields: ['Workweek', 'DateVal'],
 						data: me.WorkweekData
 					}),
 					displayField: 'Workweek',
 					valueField: 'DateVal'
 				},
-				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');},
-				layout:'hbox',
-				items:[{
-					id:'predecessor-needed-by-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
-						data: getPredecessorNeededByFilterOptions()
-					}),
-					displayField: 'Workweek',
-					valueField: 'DateVal',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.DateVal === 0) filterPredNeededBy = null; 
-							else filterPredNeededBy = selected[0].data.DateVal;
-							filterPredecessorRowsByFn(predecessorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');},
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined; }
+				}]
 			},{
-				text:'',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, predecessorRecord, row, col){
-					var dependencyID = predecessorRecord.data.DependencyID,
-						clickFnName = 'Click' + predecessorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
+				renderer: function(value, meta, predecessorRecord){
+					var id = Ext.id(), dependencyID = predecessorRecord.data.DependencyID;
 					meta.tdAttr = 'title="Add Team"';
-					window[clickFnName] = function(){
-						if(me.PrececessorItemStores[dependencyID]) {
-							var predecessorStore = me.CustomPredecessorStore,
-								predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
-								newItem = me._newPredecessorItem();
-							me.PrececessorItemStores[dependencyID].insert(0, [Ext.create('IntelPredecessorItem', newItem)]);
-							predecessorRecord.set('PredecessorItems', predecessorRecord.data.PredecessorItems.concat([newItem]));
-							predecessorRecord.set('Edited', true);	
-						}
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-plus"></i></div>';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							if(me.PrececessorItemStores[dependencyID]) {
+								var predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
+									newItem = me.newPredecessorItem();
+								me.PrececessorItemStores[dependencyID].insert(0, [Ext.create('IntelPredecessorItem', newItem)]);
+								predecessorRecord.set('PredecessorItems', predecessorRecord.data.PredecessorItems.concat([newItem]));
+								predecessorRecord.set('Edited', true);	
+							}
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-plus"></i></div>';
 				}
 			},{
 				text:'Teams Depended On',
 				dataIndex:'DependencyID',
-				xtype:'fastgridcolumn',
+				xtype:'intelcomponentcolumn',
 				html:	'<div class="predecessor-items-grid-header" style="width:10px !important;"></div>' +
 						'<div class="predecessor-items-grid-header" style="width:110px !important;">Team Name</div>' +
 						'<div class="predecessor-items-grid-header" style="width:95px  !important;">Supported</div>' +
 						'<div class="predecessor-items-grid-header" style="width:70px  !important;">#</div>' +
 						'<div class="predecessor-items-grid-header" style="width:130px !important;">User Story</div>',
 				width:450,
-				resizable:false,
-				draggable:false,
-				sortable:false,
 				renderer: function(dependencyID){
-					var predecessorStore = me.CustomPredecessorStore,
-						predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
+					var predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
 						predecessorItems = predecessorRecord.data.PredecessorItems;
 					if(!me.PrececessorItemStores[dependencyID]){
-						me.PrececessorItemStores[dependencyID] = Ext.create('Intel.data.FastStore', { 
+						me.PrececessorItemStores[dependencyID] = Ext.create('Intel.lib.component.Store', {
 							model:'IntelPredecessorItem',
 							data: predecessorItems,
 							autoSync:true,
 							limit:Infinity,
 							disableMetaChangeEvent: true,
 							proxy: {
-								type:'fastsessionproxy',
+								type:'intelsessionstorage',
 								id:'PredecessorItem-' + dependencyID + '-proxy' + Math.random()
 							},
 							sorters:[predecessorItemSorter],
 							intelUpdate: function(){
-								var predecessorStore = me.CustomPredecessorStore,
-									predecessorItemStore = me.PrececessorItemStores[dependencyID],
+								var predecessorItemStore = me.PrececessorItemStores[dependencyID],
 									predecessorItems = predecessorItemStore.getRange(),
 									predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
 									realPredecessorItemsData = predecessorRecord.data.PredecessorItems.slice();
@@ -3040,7 +2003,7 @@
 								});	
 								
 								if(predecessorItemStore.getRange().length===0) {
-									var newItem = me._newPredecessorItem();
+									var newItem = me.newPredecessorItem();
 									predecessorItemStore.add(Ext.create('IntelPredecessorItem', newItem));
 									predecessorRecord.data.PredecessorItems.push(newItem);
 								}
@@ -3116,41 +2079,50 @@
 					},{
 						resizable:false,
 						width:24,
-						renderer: function(value, meta, predecessorItemRecord, row, col){
-							var clickFnName = 'Click' + predecessorItemRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
+						renderer: function(value, meta, predecessorItemRecord){
+							var id = Ext.id();
 							meta.tdAttr = 'title="Delete Team"';
-							window[clickFnName] = function(){
-								var predecessorStore = me.CustomPredecessorStore,
-									predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
-									realPredecessorItems = predecessorRecord.data.PredecessorItems.slice(),
-									predecessorItemStore = me.PrececessorItemStores[dependencyID];	
-									
-								predecessorItemStore.suspendEvents(true);
-								realPredecessorItems = _.filter(realPredecessorItems, function(realPredecessorItem){
-									return realPredecessorItem.PredecessorItemID !== predecessorItemRecord.data.PredecessorItemID;
+							setTimeout(function whenRendered(){
+								var el = Ext.get(id);
+								if(el) el.on('click', function(){
+									var predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
+										realPredecessorItems = predecessorRecord.data.PredecessorItems.slice(),
+										predecessorItemStore = me.PrececessorItemStores[dependencyID];	
+										
+									predecessorItemStore.suspendEvents(true);
+									realPredecessorItems = _.filter(realPredecessorItems, function(realPredecessorItem){
+										return realPredecessorItem.PredecessorItemID !== predecessorItemRecord.data.PredecessorItemID;
+									});
+									predecessorItemStore.remove(predecessorItemRecord);							
+									if(!realPredecessorItems.length){
+										var newItem = me.newPredecessorItem();
+										predecessorItemStore.add(Ext.create('IntelPredecessorItem', newItem));
+										realPredecessorItems.push(newItem);
+									}
+									predecessorRecord.set('Edited', true);
+									predecessorRecord.set('PredecessorItems', realPredecessorItems);
+									predecessorItemStore.resumeEvents();
 								});
-								predecessorItemStore.remove(predecessorItemRecord);							
-								if(!realPredecessorItems.length){
-									var newItem = me._newPredecessorItem();
-									predecessorItemStore.add(Ext.create('IntelPredecessorItem', newItem));
-									realPredecessorItems.push(newItem);
-								}
-								predecessorRecord.set('Edited', true);
-								predecessorRecord.set('PredecessorItems', realPredecessorItems);
-								predecessorItemStore.resumeEvents();
-							};
-							return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-minus"></i></div>';
+								else setTimeout(whenRendered, 10);
+							}, 20);
+							return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-minus"></i></div>';
 						}
 					}];
 					
 					return {
-						xtype: 'rallygrid',
+						xtype: 'grid',
 						cls:'team-report-grid predecessor-items-grid rally-grid',
-						plugins: [ 'fastcellediting' ],
-						viewConfig: { stripeRows:false },
+						plugins: [ 'intelcellediting' ],
+						viewConfig: { 
+							xtype: 'inteltableview',
+							stripeRows:false
+						},
 						width:450,
 						manageHeight:false,
-						columnCfgs: predecessorItemColumnCfgs,
+						columns: {
+							defaults: COLUMN_DEFAULTS,
+							items: predecessorItemColumnCfgs
+						},
 						listeners: {
 							mousedown: swallowEventHandler,
 							mousemove: swallowEventHandler,
@@ -3169,7 +2141,6 @@
 									field = e.field,
 									value = e.value,
 									originalValue = e.originalValue,
-									predecessorStore = me.CustomPredecessorStore,
 									predecessorRecord = predecessorStore.getAt(predecessorStore.findExact('DependencyID', dependencyID)),
 									realPredecessorItems = predecessorRecord.data.PredecessorItems;
 								if(value === originalValue) return;										
@@ -3183,12 +2154,12 @@
 											return realPredecessorItem.PredecessorProjectObjectID == projectRecord.data.ObjectID;
 										});
 										if(realPredecessorItem){
-											me._alert('ERROR', value + ' already included in this dependency');
+											me.alert('ERROR', value + ' already included in this dependency');
 											predecessorItemRecord.set('PredecessorProjectObjectID', originalValue);
 											return;
 										}
 										if(projectRecord.data.ObjectID === me.ProjectRecord.data.ObjectID){
-											me._alert('ERROR', 'You cannot depend on yourself');
+											me.alert('ERROR', 'You cannot depend on yourself');
 											predecessorItemRecord.set('PredecessorProjectObjectID', originalValue);
 											return;
 										}
@@ -3209,201 +2180,198 @@
 						disableSelection: true,
 						scroll:false,
 						hideHeaders:true,
-						showRowActionsColumn:false,
-						showPagingToolbar:false,
 						enableEditing:false,
 						store: me.PrececessorItemStores[dependencyID]
 					};
 				}
 			},{
-				text:'',
 				dataIndex:'Edited',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, predecessorRecord, row, col){
-					var dependencyID = predecessorRecord.data.DependencyID,
-						realPredecessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice()),
-						dirtyType = me._getDirtyType(predecessorRecord, realPredecessorData),
-						clickFnName = 'Click' + predecessorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType !== 'Edited') return ''; 
+				renderer: function(value, meta, predecessorRecord){
+					var id = Ext.id(),
+						dependencyID = predecessorRecord.data.DependencyID,
+						realPredecessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice()),
+						dirtyType = me.getDirtyType(predecessorRecord, realPredecessorData);
+					if(dirtyType !== 'Edited') return '';
 					meta.tdAttr = 'title="Undo"';
-					window[clickFnName] = function(){
-						var realPredecessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice());
-						predecessorRecord.beginEdit();
-						_.each(realPredecessorData, function(value, field){
-							if(field === 'PredecessorItems') predecessorRecord.set(field, value || [me._newPredecessorItem()]);
-							else predecessorRecord.set(field, value);
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){ 
+							var realPredecessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice());
+							predecessorRecord.beginEdit();
+							_.each(realPredecessorData, function(value, field){
+								if(field === 'PredecessorItems') predecessorRecord.set(field, value || [me.newPredecessorItem()]);
+								else predecessorRecord.set(field, value);
+							});
+							predecessorRecord.endEdit();
+							me.PrececessorItemStores[dependencyID].intelUpdate();
 						});
-						predecessorRecord.endEdit();
-						me.PrececessorItemStores[dependencyID].intelUpdate();
-						updatePredecessorFilterOptions();
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-undo"></i></div>';
 				}
 			},{
-				text:'',
 				dataIndex:'Edited',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, predecessorRecord, row, col){
-					var dependencyID = predecessorRecord.data.DependencyID,
-						realPredecessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice()),
-						dirtyType = me._getDirtyType(predecessorRecord, realPredecessorData),
-						clickFnName = 'Click' + predecessorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType === 'New') dirtyType = 'Save';
-					else if(dirtyType === 'Edited') dirtyType = 'Save';
-					else return ''; //don't render it!
-					meta.tdAttr = 'title="' + dirtyType + ' Dependency"';
-					window[clickFnName] = function(){
-						//validate fields first
-						if(!predecessorRecord.data.UserStoryFormattedID || !predecessorRecord.data.UserStoryName){
-							me._alert('ERROR', 'A UserStory is not selected'); return; }
-						if(!predecessorRecord.data.Description){
-							me._alert('ERROR', 'The description is empty'); return; }
-						if(!predecessorRecord.data.NeededBy){
-							me._alert('ERROR', 'Select When the dependency is needed by'); return; }
-						var predecessorItems = predecessorRecord.data.PredecessorItems;
-						if(!predecessorItems.length){
-							me._alert('ERROR', 'You must specify a team you depend on'); return; }
-						if(_.find(predecessorItems, function(p){ return !p.PredecessorProjectObjectID; })){
-							me._alert('ERROR', 'All Team Names must be valid'); return; }
-						
-						me.PredecessorGrid.setLoading("Saving Dependency");						
-						me._enqueue(function(unlockFunc){
-							var localPredecessorData = Ext.clone(predecessorRecord.data);
-							/** NOTE ON ERROR HANDLING: we do NOT proceed at all if permissions are insufficient to edit a project, 
-									or a project has no user stories to attach to. We first edit all the successors fields and collections 
-									for the teams we depend upon, and then we edit the predecessor field on THIS user story.
-									If a collection sync fails, it retries 4 times, and then it gives up. */
-							me._getOldAndNewUserStoryRecords(localPredecessorData, me.UserStoriesInRelease).then(function(records){
-								var oldUserStoryRecord = records[0], 
-									newUserStoryRecord = records[1],
-									realPredecessorData = me._getRealDependencyData(oldUserStoryRecord, localPredecessorData.DependencyID, 'Predecessors'),
-									predecessorItemsArrays = me._getPredecessorItemArrays(localPredecessorData, realPredecessorData);
+				renderer: function(value, meta, predecessorRecord){
+					var id = Ext.id(), 
+						dependencyID = predecessorRecord.data.DependencyID,
+						realPredecessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Predecessors.slice()),
+						dirtyType = me.getDirtyType(predecessorRecord, realPredecessorData);
+					if(dirtyType != 'New' && dirtyType != 'Edited') return;
+					meta.tdAttr = 'title="Save Dependency"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							//validate fields first
+							if(!predecessorRecord.data.UserStoryFormattedID || !predecessorRecord.data.UserStoryName){
+								me.alert('ERROR', 'A UserStory is not selected'); return; }
+							if(!predecessorRecord.data.Description){
+								me.alert('ERROR', 'The description is empty'); return; }
+							if(!predecessorRecord.data.NeededBy){
+								me.alert('ERROR', 'Select When the dependency is needed by'); return; }
+							var predecessorItems = predecessorRecord.data.PredecessorItems;
+							if(!predecessorItems.length){
+								me.alert('ERROR', 'You must specify a team you depend on'); return; }
+							if(_.find(predecessorItems, function(p){ return !p.PredecessorProjectObjectID; })){
+								me.alert('ERROR', 'All Team Names must be valid'); return; }
+							
+							me.PredecessorGrid.setLoading("Saving Dependency");						
+							me.enqueue(function(unlockFunc){
+								var localPredecessorData = Ext.clone(predecessorRecord.data);
+								/** NOTE ON ERROR HANDLING: we do NOT proceed at all if permissions are insufficient to edit a project, 
+										or a project has no user stories to attach to. We first edit all the successors fields and collections 
+										for the teams we depend upon, and then we edit the predecessor field on THIS user story.
+										If a collection sync fails, it retries 4 times, and then it gives up. */
+								me.getOldAndNewUserStoryRecords(localPredecessorData, me.UserStoriesInRelease).then(function(records){
+									var oldUserStoryRecord = records[0], 
+										newUserStoryRecord = records[1],
+										realPredecessorData = me.getRealDependencyData(oldUserStoryRecord, localPredecessorData.DependencyID, 'Predecessors'),
+										predecessorItemsArrays = me.getPredecessorItemArrays(localPredecessorData, realPredecessorData);
+										
+									/** checking and setting this here because the successors NEED the objectID of this userStory */
+									if(!newUserStoryRecord){
+										return Q.reject('User Story ' + localPredecessorData.UserStoryFormattedID + ' does not exist');
+									}
+									localPredecessorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;
 									
-								/** checking and setting this here because the successors NEED the objectID of this userStory */
-								if(!newUserStoryRecord){
-									return Q.reject('User Story ' + localPredecessorData.UserStoryFormattedID + ' does not exist');
-								}
-								localPredecessorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;
-								
-								return me._getAddedPredecessorItemCallbacks(
-									predecessorItemsArrays.added, 
-									localPredecessorData,
-									me.ProjectRecord,
-									me.ProjectsWithTeamMembers,
-									me.ProjectRecord,
-									me.DependenciesParsedData)
-								.then(function(addedCallbacks){	
-									return me._getUpdatedPredecessorItemCallbacks(
-											predecessorItemsArrays.updated, 
-											localPredecessorData,
-											me.ProjectRecord,
-											me.ProjectsWithTeamMembers,
-											me.ProjectRecord,
-											me.DependenciesParsedData).then(function(updatedCallbacks){
-										return me._getRemovedPredecessorItemCallbacks(
-												predecessorItemsArrays.removed, 
+									return me.getAddedPredecessorItemCallbacks(
+										predecessorItemsArrays.added, 
+										localPredecessorData,
+										me.ProjectRecord,
+										me.ProjectsWithTeamMembers,
+										me.ProjectRecord,
+										me.DependenciesParsedData)
+									.then(function(addedCallbacks){	
+										return me.getUpdatedPredecessorItemCallbacks(
+												predecessorItemsArrays.updated, 
+												localPredecessorData,
+												me.ProjectRecord,
+												me.ProjectsWithTeamMembers,
+												me.ProjectRecord,
+												me.DependenciesParsedData).then(function(updatedCallbacks){
+											return me.getRemovedPredecessorItemCallbacks(
+													predecessorItemsArrays.removed, 
+													localPredecessorData,
+													me.ProjectRecord,
+													me.ProjectsWithTeamMembers,
+													me.ProjectRecord,
+													me.DependenciesParsedData).then(function(removedCallbacks){
+												var promise = Q();
+												_.each(removedCallbacks, function(callback){ promise = promise.then(callback); });
+												_.each(addedCallbacks, function(callback){ promise = promise.then(callback); });
+												_.each(updatedCallbacks, function(callback){ promise = promise.then(callback); });
+												
+												promise = promise.then(function(){
+													var newPredecessorItems = predecessorItemsArrays.added.concat(predecessorItemsArrays.updated);
+													predecessorRecord.beginEdit();
+													predecessorRecord.set('UserStoryObjectID', newUserStoryRecord.data.ObjectID);
+													/** NOTE: added and updated predecessorItemsArrays DO GET MUTATED before here! */
+													predecessorRecord.set('PredecessorItems', newPredecessorItems);
+												});
+												
+												if(realPredecessorData && (oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)){
+													promise = promise.then(function(){
+														return me.removePredecessor(oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
+													});
+												}
+												return promise
+													.then(function(){ 
+														return me.addPredecessor(newUserStoryRecord, localPredecessorData, me.ProjectRecord, me.DependenciesParsedData); 
+													})
+													.then(function(){ 
+														predecessorRecord.set('Edited', false);
+													})
+													.fail(function(reason){ me.alert('ERROR', reason); })
+													.then(function(){	predecessorRecord.endEdit(); });
+											});
+										});
+									});
+								})
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){
+									unlockFunc();
+									me.PredecessorGrid.setLoading(false);
+								})
+								.done();
+							}, 'Queue-Main');
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-floppy-o"></i></div>';
+				}
+			},{
+				width:24,
+				renderer: function(value, meta, predecessorRecord){
+					var id = Ext.id();
+					meta.tdAttr = 'title="Delete Dependency"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							me.confirm('Confirm', 'Delete Dependency?', function(msg){
+								if(msg.toLowerCase() !== 'yes') return;		
+								me.PredecessorGrid.setLoading("Deleting Dependency");							
+								me.enqueue(function(unlockFunc){
+									var localPredecessorData = predecessorRecord.data;
+									me.getOldAndNewUserStoryRecords(localPredecessorData, me.UserStoriesInRelease).then(function(records){
+										var oldUserStoryRecord = records[0],
+											realPredecessorData = me.getRealDependencyData(oldUserStoryRecord, localPredecessorData.DependencyID, 'Predecessors'),
+											predecessorItemsArrays = me.getPredecessorItemArrays(localPredecessorData, realPredecessorData), 
+											itemsToRemove = predecessorItemsArrays.removed.concat(predecessorItemsArrays.updated);
+										return me.getRemovedPredecessorItemCallbacks(
+												itemsToRemove, 
 												localPredecessorData,
 												me.ProjectRecord,
 												me.ProjectsWithTeamMembers,
 												me.ProjectRecord,
 												me.DependenciesParsedData).then(function(removedCallbacks){
 											var promise = Q();
-											_.each(removedCallbacks, function(callback){ promise = promise.then(callback); });
-											_.each(addedCallbacks, function(callback){ promise = promise.then(callback); });
-											_.each(updatedCallbacks, function(callback){ promise = promise.then(callback); });
-											
-											promise = promise.then(function(){
-												var newPredecessorItems = predecessorItemsArrays.added.concat(predecessorItemsArrays.updated);
-												predecessorRecord.beginEdit();
-												predecessorRecord.set('UserStoryObjectID', newUserStoryRecord.data.ObjectID);
-												/** NOTE: added and updated predecessorItemsArrays DO GET MUTATED before here! */
-												predecessorRecord.set('PredecessorItems', newPredecessorItems);
-											});
-											
-											if(realPredecessorData && (oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)){
+											_.each(removedCallbacks, function(callback){ promise = promise.then(callback); });													
+											if(realPredecessorData){
 												promise = promise.then(function(){
-													return me._removePredecessor(oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
+													return me.removePredecessor(oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
 												});
 											}
-											return promise
-												.then(function(){ 
-													return me._addPredecessor(newUserStoryRecord, localPredecessorData, me.ProjectRecord, me.DependenciesParsedData); 
-												})
-												.then(function(){ predecessorRecord.set('Edited', false); })
-												.fail(function(reason){ me._alert('ERROR:', reason); })
-												.then(function(){	predecessorRecord.endEdit(); });
 										});
-									});
-								});
-							})
-							.fail(function(reason){ me._alert('ERROR:', reason); })
-							.then(function(){
-								unlockFunc();
-								updatePredecessorFilterOptions();
-								me.PredecessorGrid.setLoading(false);
-							})
-							.done();
-						}, 'Queue-Main');
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-floppy-o"></i></div>';
-				}
-			},{
-				text:'',
-				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, predecessorRecord, row, col){
-					var clickFnName = 'Click' + predecessorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;	
-					meta.tdAttr = 'title="Delete Dependency"';
-					window[clickFnName] = function(){
-						me._confirm('Confirm', 'Delete Dependency?', function(msg){
-							if(msg.toLowerCase() !== 'yes') return;		
-							me.PredecessorGrid.setLoading("Deleting Dependency");							
-							me._enqueue(function(unlockFunc){
-								var localPredecessorData = predecessorRecord.data;
-								me._getOldAndNewUserStoryRecords(localPredecessorData, me.UserStoriesInRelease).then(function(records){
-									var oldUserStoryRecord = records[0],
-										realPredecessorData = me._getRealDependencyData(oldUserStoryRecord, localPredecessorData.DependencyID, 'Predecessors'),
-										predecessorItemsArrays = me._getPredecessorItemArrays(localPredecessorData, realPredecessorData), 
-										itemsToRemove = predecessorItemsArrays.removed.concat(predecessorItemsArrays.updated);
-									return me._getRemovedPredecessorItemCallbacks(
-											itemsToRemove, 
-											localPredecessorData,
-											me.ProjectRecord,
-											me.ProjectsWithTeamMembers,
-											me.ProjectRecord,
-											me.DependenciesParsedData).then(function(removedCallbacks){
-										var promise = Q();
-										_.each(removedCallbacks, function(callback){ promise = promise.then(callback); });													
-										if(realPredecessorData){
-											promise = promise.then(function(){
-												return me._removePredecessor(oldUserStoryRecord, realPredecessorData, me.ProjectRecord, me.DependenciesParsedData);
-											});
-										}
-									});
-								})
-								.then(function(){ me.CustomPredecessorStore.remove(predecessorRecord); })
-								.fail(function(reason){ me._alert('ERROR', reason); })
-								.then(function(){
-									unlockFunc();
-									updatePredecessorFilterOptions();
-									me.PredecessorGrid.setLoading(false);
-								})
-								.done();
-							}, 'Queue-Main');
+									})
+									.then(function(){ predecessorStore.remove(predecessorRecord); })
+									.fail(function(reason){ me.alert('ERROR', reason); })
+									.then(function(){
+										unlockFunc();
+										me.PredecessorGrid.setLoading(false);
+									})
+									.done();
+								}, 'Queue-Main');
+							});
 						});
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-trash"></i></div>';
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-trash"></i></div>';
 				}
 			}];
-
 			me.PredecessorGrid = me.add({
-				xtype: 'rallygrid',
-				cls: 'team-report-grid predecessors-grid rally-grid',
+				xtype: 'grid',
+				cls: 'team-report-grid predecessor-grid rally-grid',
 				header: {
 					layout: 'hbox',
 					items: [{
@@ -3422,11 +2390,11 @@
 							xtype:'button',
 							text:'+ Add Dependency',
 							id: 'addDependencyButton',
+							cls: 'intel-button add-new-button',
 							listeners:{
 								click: function(){
-									if(!me.UserStoriesInRelease.length) me._alert('ERROR', 'No User Stories for this Release!');
-									else if(me.CustomPredecessorStore) {
-										removePredecessorFilters();
+									if(!me.UserStoriesInRelease.length) me.alert('ERROR', 'No User Stories for this Release!');
+									else if(me.PredecessorGrid.store) {
 										var model = Ext.create('IntelPredecessorDependency', {
 											DependencyID: 'DP' + (new Date() * 1) + '' + (Math.random() * 100 >> 0),
 											UserStoryObjectID:'',
@@ -3435,36 +2403,42 @@
 											Description: '',
 											NeededBy: '',
 											Status: '',
-											PredecessorItems:[me._newPredecessorItem()],
+											PredecessorItems:[me.newPredecessorItem()],
 											Edited:true
 										});
-										me.CustomPredecessorStore.insert(0, [model]);	
+										
+										_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.PredecessorGrid), 'clearFilters');
+										me.PredecessorGrid.store.insert(0, [model]);	
 										me.PredecessorGrid.view.getEl().setScrollTop(0);
+										me.PredecessorGrid.store.fireEvent('refresh', me.PredecessorGrid.store);
 									}
 								}
 							}
 						},{
 							xtype:'button',
 							text:'Remove Filters',
-							width:110,
-							listeners:{ click: removePredecessorFilters }
+							cls: 'intel-button',
+							listeners:{ 
+								click: function(){ 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.PredecessorGrid), 'clearFilters'); 
+									me.PredecessorGrid.store.fireEvent('refresh', me.PredecessorGrid.store);
+								}
+							}
 						}]
 					}]
 				},
 				height:400,
 				scroll:'vertical',
-				columnCfgs: predecessorColumnCfgs,
-				plugins: [ 'fastcellediting' ],
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: predecessorColumns
+				},
+				plugins: [ 'intelcellediting' ],
 				viewConfig:{
-					xtype:'scrolltableview',
-					stripeRows:true,
-					preserveScrollOnRefresh:true,
-					getRowClass: function(predecessorRecord){ 
-						if(!predecessorGridFilter(predecessorRecord)) return 'team-report-hidden-grid-row'; 
-					}
+					xtype:'inteltableview',
+					preserveScrollOnRefresh:true
 				},
 				listeners: {
-					sortchange: function(){ filterPredecessorRowsByFn(predecessorGridFilter); },
 					edit: function(editor, e){		
 						/** NOTE: none of the record.set() operations will get reflected until the proxy calls 'record.endEdit()',
 							to improve performance.**/			
@@ -3476,7 +2450,7 @@
 						if(value === originalValue) return; 
 						else if(!value) { predecessorRecord.set(field, originalValue); return; }
 						if(field === 'Description') {
-							value = me._htmlEscape(value);			
+							value = me.htmlEscape(value);			
 							predecessorRecord.set(field, value);
 						}
 
@@ -3497,36 +2471,32 @@
 								predecessorRecord.set('Edited', previousEdit);
 							} else predecessorRecord.set('UserStoryName', userStoryRecord.data.Name);
 						}
-						updatePredecessorFilterOptions();
 					}
 				},
 				disableSelection: true,
-				showRowActionsColumn:false,
-				showPagingToolbar:false,
 				enableEditing:false,
-				store: me.CustomPredecessorStore
+				store: predecessorStore
 			});	
 		
 		/**************************************************** SUCCESSORS STUFF *******************************************************************/	
-			me.CustomSuccessorStore = Ext.create('Intel.data.FastStore', { 
+			var successorStore = Ext.create('Intel.lib.component.Store', {
 				data: Ext.clone(me.DependenciesParsedData.Successors),
 				autoSync:true,
 				model:'IntelSuccessorDependency',
 				proxy: {
-					type: 'fastsessionproxy',
+					type: 'intelsessionstorage',
 					id:'IntelSuccessorProxy' + Math.random()
 				},
 				limit:Infinity,
 				disableMetaChangeEvent: true,
 				sorters:[dependencySorter],
 				intelUpdate: function(){
-					var successorStore = me.CustomSuccessorStore,
-						realSuccessorsData = me.DependenciesParsedData.Successors.slice(),
+					var realSuccessorsData = me.DependenciesParsedData.Successors.slice(),
 						remoteChanged = false; //if someone else updated this while it was idle on our screen
 					successorStore.suspendEvents(true);
 					_.each(successorStore.getRange(), function(successorRecord){
-						var realSuccessorData = me._spliceDependencyFromList(successorRecord.data.DependencyID, realSuccessorsData),
-							dirtyType = me._getDirtyType(successorRecord, realSuccessorData);
+						var realSuccessorData = me.spliceDependencyFromList(successorRecord.data.DependencyID, realSuccessorsData),
+							dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
 						if(dirtyType === 'Edited'){} //we don't want to remove any pending changes								
 						else if(dirtyType === 'Deleted' || dirtyType === 'New') successorStore.remove(successorRecord);
 						else {
@@ -3546,143 +2516,20 @@
 					successorStore.resumeEvents();
 				}
 			});
-			
-			var filterSuccReqTeamName = null, 
-				filterSuccReqUserStoryFormattedID = null, 
-				filterSuccReqUserStoryName = null, 
-				filterSuccNeededBy = null,
-				filterSuccSupported = null, 
-				filterSuccUserStoryFormattedID = null, 
-				filterSuccUserStoryName = null;
-			function successorGridFilter(r){
-				var successorUserStory = me.DependenciesHydratedUserStories[r.data.SuccessorUserStoryObjectID] || {data:{}};
-				if(filterSuccReqTeamName && me.ProjectsWithTeamMembers[r.data.SuccessorProjectObjectID].data.Name != filterSuccReqTeamName) return false;
-				if(filterSuccReqUserStoryFormattedID && successorUserStory.data.FormattedID != filterSuccReqUserStoryFormattedID) return false;
-				if(filterSuccReqUserStoryName && successorUserStory.data.Name != filterSuccReqUserStoryName) return false;
-				if(filterSuccNeededBy && me._roundDateDownToWeekStart(r.data.NeededBy)*1 != filterSuccNeededBy) return false;
-				if(filterSuccSupported && r.data.Supported != filterSuccSupported) return false;
-				if(filterSuccUserStoryFormattedID && (!r.data.Supported || r.data.UserStoryFormattedID != filterSuccUserStoryFormattedID)) return false;
-				if(filterSuccUserStoryName && (!r.data.Supported || r.data.UserStoryName != filterSuccUserStoryName)) return false;
-				return true;
-			}
-			function filterSuccessorRowsByFn(fn){
-				_.each(me.CustomSuccessorStore.getRange(), function(item, index){
-					if(fn(item)) me.SuccessorGrid.view.removeRowCls(index, 'team-report-hidden-grid-row');
-					else me.SuccessorGrid.view.addRowCls(index, 'team-report-hidden-grid-row');
-				});
-			}
-			function removeSuccessorFilter(){
-				filterSuccReqTeamName = null;
-				filterSuccReqUserStoryFormattedID = null;
-				filterSuccReqUserStoryName = null;
-				filterSuccNeededBy = null; 
-				filterSuccSupported = null;
-				filterSuccUserStoryFormattedID = null;
-				filterSuccUserStoryName = null;
-				filterSuccessorRowsByFn(function(){ return true; });
-				Ext.getCmp('successor-requestor-team-name-filter').setValue('All');
-				Ext.getCmp('successor-requestor-userstory-formattedid-filter').setValue('All');
-				Ext.getCmp('successor-requestor-userstory-name-filter').setValue('All');
-				Ext.getCmp('successor-needed-by-filter').setValue('All');
-				Ext.getCmp('successor-supported-filter').setValue('All');
-				Ext.getCmp('successor-us-formattedid-filter').setValue('All');
-				Ext.getCmp('successor-us-name-filter').setValue('All');
-			}
-			
-			function getSuccessorRequestorTeamNameOptions(){
-				return [{TeamName: 'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccessorStore.getRange(), 
-					function(r){ return me.ProjectsWithTeamMembers[r.data.SuccessorProjectObjectID].data.Name; })),
-					function(teamName){ return teamName; }), 
-					function(teamName){ return {TeamName:teamName}; }));
-			}		
-			function getSuccessorRequestorUserStoryFormattedIDFilterOptions(){
-				return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.union(_.map(_.filter(me.CustomSuccessorStore.getRange(), 
-					function(r){ return me.DependenciesHydratedUserStories[r.data.SuccessorUserStoryObjectID]; }),
-					function(r){ return me.DependenciesHydratedUserStories[r.data.SuccessorUserStoryObjectID].data.FormattedID; })),
-					function(f){ return f; }), 
-					function(f){ return {FormattedID:f}; }));
-			}
-			function getSuccessorRequestorUserStoryNameFilterOptions(){
-				return [{Name: 'All'}].concat(_.map(_.sortBy(_.union(_.map(_.filter(me.CustomSuccessorStore.getRange(), 
-					function(r){ return me.DependenciesHydratedUserStories[r.data.SuccessorUserStoryObjectID]; }),
-					function(r){ return me.DependenciesHydratedUserStories[r.data.SuccessorUserStoryObjectID].data.Name; })),
-					function(n){ return n; }), 
-					function(n){ return {Name:n}; }));
-			}
-			function getSuccessorNeededByFilterOptions(){
-				return [{DateVal:0, Workweek:'All'}].concat(_.map(_.sortBy(_.union(_.map(me.CustomSuccessorStore.getRange(),
-					function(r){ return me._roundDateDownToWeekStart(r.data.NeededBy)*1; })),
-					function(date){ return date; }),
-					function(date){ return {DateVal:date, Workweek:'ww' + me._getWorkweek(date)}; }));
-			}
-			function getSuccessorFormattedIDFilterOptions(){
-				return [{FormattedID: 'All'}].concat(_.map(_.sortBy(_.filter(_.union(_.map(me.CustomSuccessorStore.getRange(), 
-					function(r){ return r.data.Supported == 'Yes' ? r.data.UserStoryFormattedID : ''; })), 
-					function(f){ return f !== ''; }),
-					function(f){ return f; }), 
-					function(f){ return {FormattedID:f}; }));
-			}
-			function getSuccessorNameFilterOptions(){
-				return [{Name: 'All'}].concat(_.map(_.sortBy(_.filter(_.union(_.map(me.CustomSuccessorStore.getRange(), 
-					function(r){ return r.data.Supported == 'Yes' ? r.data.UserStoryName : ''; })), 
-					function(f){ return f !== ''; }),
-					function(f){ return f; }), 
-					function(n){ return {Name:n}; }));
-			}
-			function updateSuccessorFilterOptions(){
-				var teamStore = Ext.getCmp('successor-requestor-team-name-filter').getStore(),
-					reqFidStore = Ext.getCmp('successor-requestor-userstory-formattedid-filter').getStore(),
-					reqNameStore = Ext.getCmp('successor-requestor-userstory-name-filter').getStore(),
-					neededByStore = Ext.getCmp('successor-needed-by-filter').getStore(),
-					fidStore = Ext.getCmp('successor-us-formattedid-filter').getStore(),
-					nameStore = Ext.getCmp('successor-us-name-filter').getStore();
-				teamStore.removeAll();
-				teamStore.add(getSuccessorRequestorTeamNameOptions());
-				reqFidStore.removeAll();
-				reqFidStore.add(getSuccessorRequestorUserStoryFormattedIDFilterOptions());
-				reqNameStore.removeAll();
-				reqNameStore.add(getSuccessorRequestorUserStoryNameFilterOptions());
-				neededByStore.removeAll();
-				neededByStore.add(getSuccessorNeededByFilterOptions());
-				fidStore.removeAll();
-				fidStore.add(getSuccessorFormattedIDFilterOptions());
-				nameStore.removeAll();
-				nameStore.add(getSuccessorNameFilterOptions());
-			}
-			
-			var successorColumnCfgs = [{
+			var successorColumns = [{
 				text:'Requested By',
 				dataIndex:'SuccessorProjectObjectID',
 				width:160,
-				resizable:false,
-				draggable:false,
 				sortable:true,
 				renderer: function(projectOID){ return me.ProjectsWithTeamMembers[projectOID].data.Name; },
-				layout:'hbox',
-				items:[{
-					id:'successor-requestor-team-name-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['TeamName'],
-						data: getSuccessorRequestorTeamNameOptions()
-					}),
-					displayField: 'TeamName',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.TeamName == 'All') filterSuccReqTeamName = null; 
-							else filterSuccReqTeamName = selected[0].data.TeamName;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){return me.ProjectsWithTeamMembers[oid].data.Name; }
+				}]
 			},{
 				text:'Req #',
 				dataIndex:'SuccessorUserStoryObjectID',
 				width:90,
-				resizable:false,
-				draggable:false,
 				sortable:true,
 				renderer: function(userStoryObjectID){
 					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
@@ -3691,100 +2538,49 @@
 							userStory.data.ObjectID + '" target="_blank">' + userStory.data.FormattedID + '</a>';
 					} else return '?';
 				},
-				layout:'hbox',
-				items:[{
-					id:'successor-requestor-userstory-formattedid-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['FormattedID'],
-						data: getSuccessorRequestorUserStoryFormattedIDFilterOptions()
-					}),
-					displayField: 'FormattedID',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.FormattedID == 'All') filterSuccReqUserStoryFormattedID = null; 
-							else filterSuccReqUserStoryFormattedID = selected[0].data.FormattedID;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){
+						var userStory = me.DependenciesHydratedUserStories[oid];
+						return userStory ? userStory.data.FormattedID : undefined;
 					}
-				}, {xtype:'container', width:5}]
+				}]
 			},{
 				text:'Req UserStory',
 				dataIndex:'SuccessorUserStoryObjectID',
 				flex:1,
-				resizable:false,
-				draggable:false,
 				sortable:true,
 				renderer: function(userStoryObjectID){
 					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
 					if(userStory) return userStory.data.Name;
 					else return '?';
 				},
-				layout:'hbox',
-				items:[{
-					id:'successor-requestor-userstory-name-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Name'],
-						data: getSuccessorRequestorUserStoryNameFilterOptions()
-					}),
-					displayField: 'Name',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.Name == 'All') filterSuccReqUserStoryName = null; 
-							else filterSuccReqUserStoryName = selected[0].data.Name;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){
+						var userStory = me.DependenciesHydratedUserStories[oid];
+						return userStory ? userStory.data.Name : undefined;
 					}
-				}, {xtype:'container', width:5}]	
+				}]
 			},{
 				text:'Dependency Description', 
 				dataIndex:'Description',
-				flex:1,
-				resizable:false,
-				draggable:false,
-				editor: false,
-				sortable:false					
+				flex:1
 			},{
 				text:'Needed By',
 				dataIndex:'NeededBy',
 				width:80,
-				resizable:false,
-				draggable:false,
-				editor: false,
 				sortable:true,
-				renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');},
-				layout:'hbox',
-				items:[{
-					id:'successor-needed-by-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						model:'WorkweekDropdown',
-						data: getSuccessorNeededByFilterOptions()
-					}),
-					displayField: 'Workweek',
-					valueField: 'DateVal',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.DateVal === 0) filterSuccNeededBy = null; 
-							else filterSuccNeededBy = selected[0].data.DateVal;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]			
+				renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');},
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined; }
+				}]
 			},{
 				text:'Supported',					
 				dataIndex:'Supported',
 				width:90,
-				resizable:false,
-				draggable:false,
+				sortable:true,
 				tdCls: 'intel-editor-cell',
 				editor:{
 					xtype:'intelfixedcombo',
@@ -3804,38 +2600,11 @@
 					else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
 					return val;
 				},
-				sortable:true,
-				layout:'hbox',
-				items:[{
-					id:'successor-supported-filter',
-					xtype:'intelfixedcombo',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Sup'],
-						data: [
-							{Sup: 'All'},
-							{Sup: 'Yes'}, 
-							{Sup: 'No'}, 
-							{Sup: 'Undefined'}
-						]
-					}),
-					displayField: 'Sup',
-					value:'All',
-					listeners:{
-						focus: function(combo) { combo.expand(); },
-						select: function(combo, selected){
-							if(selected[0].data.Sup === 'All') filterSuccSupported = null; 
-							else filterSuccSupported = selected[0].data.Sup;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items:[{ xtype:'intelgridcolumnfilter' }]
 			},{
 				text:'Sup #', 
 				dataIndex:'UserStoryFormattedID',
 				width:90,
-				resizable:false,
-				draggable:false,
 				editor:{
 					xtype:'intelcombobox',
 					width:120,
@@ -3847,31 +2616,11 @@
 					if(record.data.Supported == 'Yes') meta.tdCls += ' intel-editor-cell';
 					return val || '-'; 
 				},	
-				layout:'hbox',
-				items:[{
-					id:'successor-us-formattedid-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['FormattedID'],
-						data: getSuccessorFormattedIDFilterOptions()
-					}),
-					displayField: 'FormattedID',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.FormattedID == 'All') filterSuccUserStoryFormattedID = null; 
-							else filterSuccUserStoryFormattedID = selected[0].data.FormattedID;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]
+				items:[{ xtype:'intelgridcolumnfilter' }]
 			},{
 				text:'Sup UserStory', 
 				dataIndex:'UserStoryName',
 				flex:1,
-				resizable:false,
-				draggable:false,
 				editor:{
 					xtype:'intelcombobox',
 					store: me.UserStoryNameStore,
@@ -3882,142 +2631,123 @@
 					if(record.data.Supported == 'Yes') meta.tdCls += ' intel-editor-cell';
 					return val || '-'; 
 				},	
-				layout:'hbox',
-				items:[{
-					id:'successor-us-name-filter',
-					xtype:'intelcombobox',
-					flex:1,
-					store: Ext.create('Ext.data.Store', {
-						fields:['Name'],
-						data: getSuccessorNameFilterOptions()
-					}),
-					displayField: 'Name',
-					value:'All',
-					listeners:{
-						select: function(combo, selected){
-							if(selected[0].data.Name == 'All') filterSuccUserStoryName = null; 
-							else filterSuccUserStoryName = selected[0].data.Name;
-							filterSuccessorRowsByFn(successorGridFilter);
-						}
-					}
-				}, {xtype:'container', width:5}]	
+				items:[{ xtype:'intelgridcolumnfilter' }]
 			},{
-				text:'',
 				dataIndex:'Edited',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, successorRecord, row, col){		
-					var clickFnName = 'Click' + successorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;	
+				renderer: function(value, meta, successorRecord){		
+					var id = Ext.id();
 					if(!successorRecord.data.UserStoryFormattedID) return '';
-					meta.tdAttr = 'title="' + 'Remove User Story' + '"';
-					window[clickFnName] = function(){
-						successorRecord.beginEdit(true);
-						successorRecord.set('Edited', true);
-						successorRecord.set('Assigned', false);
-						successorRecord.set('UserStoryFormattedID', '');
-						successorRecord.set('UserStoryName', '');
-						successorRecord.endEdit();
-						updateSuccessorFilterOptions();
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-minus"></i></div>';
+					meta.tdAttr = 'title="Remove User Story"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							successorRecord.beginEdit(true);
+							successorRecord.set('Edited', true);
+							successorRecord.set('Assigned', false);
+							successorRecord.set('UserStoryFormattedID', '');
+							successorRecord.set('UserStoryName', '');
+							successorRecord.endEdit();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-minus"></i></div>';
 				}
 			},{
-				text:'',
 				dataIndex:'Edited',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, successorRecord, row, col){	
-					var dependencyID = successorRecord.data.DependencyID,
-						realSuccessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
-						dirtyType = me._getDirtyType(successorRecord, realSuccessorData),
-						clickFnName = 'Click' + successorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType !== 'Edited') return '';
+				renderer: function(value, meta, successorRecord){	
+					var id = Ext.id(), 
+						dependencyID = successorRecord.data.DependencyID,
+						realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
+						dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
+					if(dirtyType !== 'Edited') return;
 					meta.tdAttr = 'title="Undo"';
-					window[clickFnName] = function(){
-						var realSuccessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice());	
-						successorRecord.beginEdit(true);
-						_.each(realSuccessorData, function(value, field){ successorRecord.set(field, value); });
-						successorRecord.endEdit();
-						updateSuccessorFilterOptions();
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							var realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice());	
+							successorRecord.beginEdit(true);
+							_.each(realSuccessorData, function(value, field){ successorRecord.set(field, value); });
+							successorRecord.endEdit();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-undo"></i></div>';
 				}
 			},{
-				text:'',
 				dataIndex:'Edited',
 				width:24,
-				resizable:false,
-				draggable:false,
-				renderer: function(value, meta, successorRecord, row, col){
-					var dependencyID = successorRecord.data.DependencyID,
-						realSuccessorData = me._spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
-						dirtyType = me._getDirtyType(successorRecord, realSuccessorData),
-						clickFnName = 'Click' + successorRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
-					if(dirtyType !== 'Edited') return '';
+				renderer: function(value, meta, successorRecord){
+					var id = Ext.id(), 
+						dependencyID = successorRecord.data.DependencyID,
+						realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
+						dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
+					if(dirtyType != 'Edited') return;
 					meta.tdAttr = 'title="Save Dependency"';
-					window[clickFnName] = function(){
-						if(!successorRecord.data.Supported){
-							me._alert('ERROR', 'You must set the Supported field.'); return; }
-						me.SuccessorGrid.setLoading("Saving Dependency");						
-						me._enqueue(function(unlockFunc){
-							var successorData = successorRecord.data, 
-								oldUserStoryRecord, 
-								newUserStoryRecord,
-								realSuccessorData;
-							me._getOldAndNewUserStoryRecords(successorData, me.UserStoryStore.getRange()).then(function(records){
-								oldUserStoryRecord = records[0];
-								newUserStoryRecord = records[1];
-								
-								realSuccessorData = me._getRealDependencyData(oldUserStoryRecord, successorData.DependencyID, 'Successors');
-								if(!realSuccessorData) return Q.reject({SuccessorDeletedDependency:true, message:'Successor removed this dependency'});
-								
-								successorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;	
-								successorData.SuccessorUserStoryObjectID = realSuccessorData.SuccessorUserStoryObjectID;
-								
-								return me._updateSuccessor(
-										newUserStoryRecord, 
-										successorData, 
-										me.ProjectRecord,
-										me.ProjectsWithTeamMembers, 
-										me.ProjectRecord, 
-										me.DependenciesParsedData)
-								.then(function(){							
-									if(oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)
-										return me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							if(!successorRecord.data.Supported){
+								me.alert('ERROR', 'You must set the Supported field.'); return; }
+							me.SuccessorGrid.setLoading("Saving Dependency");						
+							me.enqueue(function(unlockFunc){
+								var successorData = successorRecord.data, 
+									oldUserStoryRecord, 
+									newUserStoryRecord,
+									realSuccessorData;
+								me.getOldAndNewUserStoryRecords(successorData, me.UserStoryStore.getRange()).then(function(records){
+									oldUserStoryRecord = records[0];
+									newUserStoryRecord = records[1];
+									
+									realSuccessorData = me.getRealDependencyData(oldUserStoryRecord, successorData.DependencyID, 'Successors');
+									if(!realSuccessorData) return Q.reject({SuccessorDeletedDependency:true, message:'Successor removed this dependency'});
+									
+									successorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;	
+									successorData.SuccessorUserStoryObjectID = realSuccessorData.SuccessorUserStoryObjectID;
+									
+									return me.updateSuccessor(
+											newUserStoryRecord, 
+											successorData, 
+											me.ProjectRecord,
+											me.ProjectsWithTeamMembers, 
+											me.ProjectRecord, 
+											me.DependenciesParsedData)
+									.then(function(){							
+										if(oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)
+											return me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
+									})
+									.then(function(){ return me.addSuccessor(newUserStoryRecord, successorData, me.ProjectRecord, me.DependenciesParsedData); })
+									.then(function(){ successorRecord.set('Edited', false); });
 								})
-								.then(function(){ return me._addSuccessor(newUserStoryRecord, successorData, me.ProjectRecord, me.DependenciesParsedData); })
-								.then(function(){ successorRecord.set('Edited', false); });
-							})
-							.fail(function(reason){
-								if(reason.SuccessorDeletedDependency){
-									me._alert('ERROR', reason.message + '. Deleting this dependency now');
-									if(realSuccessorData){
-										me._removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData)
-											.then(function(){ me.CustomSuccessorStore.remove(successorRecord); })
-											.fail(function(reason){ me._alert('ERROR', reason); })
-											.done();
+								.fail(function(reason){
+									if(reason.SuccessorDeletedDependency){
+										me.alert('ERROR', reason.message + '. Deleting this dependency now');
+										if(realSuccessorData){
+											me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData)
+												.then(function(){ successorStore.remove(successorRecord); })
+												.fail(function(reason){ me.alert('ERROR', reason); })
+												.done();
+										}
+										else successorStore.remove(successorRecord);
 									}
-									else me.CustomSuccessorStore.remove(successorRecord);
-								}
-								else me._alert('ERROR', reason);
-							})
-							.then(function(){
-								unlockFunc();
-								updateSuccessorFilterOptions();
-								me.SuccessorGrid.setLoading(false);
-							})
-							.done();
-						}, 'Queue-Main');
-					};
-					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-floppy-o"></i></div>';
+									else me.alert('ERROR', reason);
+								})
+								.then(function(){
+									unlockFunc();
+									me.SuccessorGrid.setLoading(false);
+								})
+								.done();
+							}, 'Queue-Main');
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-floppy-o"></i></div>';
 				}
 			}];
-			
 			me.SuccessorGrid = me.add({
-				xtype: 'rallygrid',
-				cls: 'team-report-grid successors-grid rally-grid',
+				xtype: 'grid',
+				cls: 'team-report-grid successor-grid rally-grid',
 				header: {
 					layout: 'hbox',
 					items: [{
@@ -4035,25 +2765,29 @@
 						items:[{
 							xtype:'button',
 							text:'Remove Filters',
+							cls:'intel-button',
 							width:110,
-							listeners:{ click: removeSuccessorFilter }
+							listeners:{ 
+								click: function(){ 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.SuccessorGrid), 'clearFilters'); 
+									me.SuccessorGrid.store.fireEvent('refresh', me.SuccessorGrid.store);
+								}
+							}
 						}]
 					}]
 				},
 				height:400,
 				scroll:'vertical',
-				columnCfgs: successorColumnCfgs,
-				plugins: [ 'fastcellediting' ],
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: successorColumns
+				},
+				plugins: [ 'intelcellediting' ],
 				viewConfig:{
-					xtype:'scrolltableview',
-					stripeRows:true,
-					preserveScrollOnRefresh:true,
-					getRowClass: function(successorRecord){ 
-						if(!successorGridFilter(successorRecord)) return 'team-report-hidden-grid-row'; 
-					}
+					xtype:'inteltableview',
+					preserveScrollOnRefresh:true
 				},
 				listeners: {
-					sortchange: function(){ filterSuccessorRowsByFn(successorGridFilter); },
 					beforeedit: function(editor, e){
 						var successorRecord = e.record;
 						if(successorRecord.data.Supported != 'Yes' && e.field != 'Supported') 
@@ -4103,14 +2837,13 @@
 								successorRecord.set('UserStoryName', '');
 							}
 						}
-						updateSuccessorFilterOptions();
 					}
 				},
 				disableSelection: true,
 				showRowActionsColumn:false,
 				showPagingToolbar:false,
 				enableEditing:false,
-				store: me.CustomSuccessorStore
+				store: successorStore
 			});	
 		}	
 	});

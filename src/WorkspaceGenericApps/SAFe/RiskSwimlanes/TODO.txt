@@ -25,7 +25,9 @@ TODO:
 	
 	
 	tuesday: 8 hours
-	
+	wednesday: 9.5 hours
+	thrusday: 6.5 hours + 3 hours + 1 hour + 4.5 hour
+	friday: 3 + 3 + 2
 	
 TODO:
 	DONE 1) fix the promise stuff so that when we render swimlanes that everything gets halted until the _loadSwimlaneAgreements finishes. otherwise there will be a 

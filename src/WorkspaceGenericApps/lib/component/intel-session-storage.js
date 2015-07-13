@@ -8,8 +8,9 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('Intel.lib.override.SessionStorage', {
+	Ext.define('Intel.lib.component.SessionStorage', {
 		extend: 'Ext.data.proxy.SessionStorage',
+		alias: ['proxy.intelsessionstorage'],
 		constructor: function(cfg) {
 			this.callParent(arguments);
 		},

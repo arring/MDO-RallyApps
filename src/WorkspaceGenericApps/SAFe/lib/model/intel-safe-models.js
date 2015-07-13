@@ -26,23 +26,6 @@
 			{name: 'Objective', type:'string'}
 		]
 	});
-	Ext.define('IntelRisk', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'RiskID', type:'string'},
-			{name: 'PortfolioItemObjectID', type:'number'},
-			{name: 'PortfolioItemFormattedID',  type: 'string'}, //can be different than PortfolioItemObjectID
-			{name: 'PortfolioItemName', type:'string'}, //can be different than PortfolioItemObjectID
-			{name: 'Description', type: 'string'}, 
-			{name: 'Impact', type: 'string'},	
-			{name: 'MitigationPlan', type: 'string'},					
-			{name: 'Urgency', type: 'string'},
-			{name: 'Status', type: 'string'},
-			{name: 'Contact', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Edited', type: 'boolean'}
-		]
-	});
 
 	Ext.define('IntelPredecessorItem', {
 		extend: 'Ext.data.Model',
@@ -64,6 +47,7 @@
 			{name: 'UserStoryName',  type: 'string'}, //can be different than UserStoryObjectID
 			{name: 'Description', type: 'string'},
 			{name: 'NeededBy', type: 'number'},
+			{name: 'Plan', type:'string'},
 			{name: 'Status', type:'string'},
 			{name: 'PredecessorItems', type: 'auto'}, 
 			{name: 'Edited', type: 'boolean'}
@@ -88,27 +72,6 @@
 	});	
 
 	/************************* USED FOR RISKS/DEPS AND SWIMLANE(RISKS ONLY) VIEW *********************************************/
-
-	Ext.define('IntelRiskForTracking', {
-		extend: 'Ext.data.Model',
-		fields: [
-			{name: 'RiskID', type:'string'},
-			{name: 'PortfolioItemObjectID', type:'number'},
-			{name: 'PortfolioItemFormattedID',  type: 'string'},
-			{name: 'PortfolioItemName', type:'string'},
-			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'ProjectObjectID', type:'number'},
-			{name: 'Description', type: 'string'},
-			{name: 'Impact', type: 'string'},	
-			{name: 'MitigationPlan', type: 'string'},					
-			{name: 'Urgency', type: 'string'},
-			{name: 'Status', type: 'string'},
-			{name: 'Contact', type: 'string'},
-			{name: 'Checkpoint', type: 'number'},
-			{name: 'Edited', type: 'boolean'}
-		]
-	});
-
 	Ext.define('IntelPredecessorDependencyForTracking', {
 		extend: 'Ext.data.Model',
 		fields: [
@@ -120,6 +83,7 @@
 			{name: 'ProjectObjectID', type:'number'},
 			{name: 'Description', type: 'string'},
 			{name: 'NeededBy', type: 'number'},
+			{name: 'Plan', type:'string'},
 			{name: 'Status', type:'string'},
 			{name: 'PredecessorItems', type: 'auto'}, 
 			{name: 'Edited', type: 'boolean'}

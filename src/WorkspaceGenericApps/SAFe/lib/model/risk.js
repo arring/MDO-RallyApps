@@ -65,6 +65,7 @@
 	/*************************** Risk Model Definition **********************************/
 	Ext.define('Intel.SAFe.lib.model.Risk', {
 		extend: 'Ext.data.Model',
+		idProperty: 'RiskID',
 		fields: [
 			{name: 'RiskID', type:'auto'},
 			{name: 'ReleaseName', type:'auto'},
