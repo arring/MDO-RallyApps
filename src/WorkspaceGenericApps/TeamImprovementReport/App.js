@@ -1,6 +1,4 @@
 (function() {
-	// TODO: Investigate use of single promise anonymous funcitons e.g.
-	// Using then(me.{function name}) instead of then(funciton() {return me.{funciton name}})
 	var Ext = window.Ext4 || window.Ext;
 	
 	Ext.define('ContinuousImprovementReport', {
@@ -12,53 +10,6 @@
 			'IframeResize',
 			'Teams'
 		],
-		// Commented out for large changeset
-		/*items: [
-			{
-				xtype: 'container',
-				id: 'controls-container',
-				layout: 'column',
-				items: [
-					{
-						xtype: 'container',
-						id: 'general-controls-container',
-						columnWidth: 0.49
-					},
-					{
-						xtype: 'container',
-						id: 'backlog-chart-controls-container',
-						columnWidth: 0.49,
-						layout: 'hbox'
-					}
-				]
-			},
-			{
-				xtype: 'container',
-				id: 'chart-container',
-				items: [
-					{
-						xtype: 'container',
-						id: 'state-chart-container',
-						columnWidth: 0.24
-					},
-					{
-						xtype: 'container',
-						id: 'percentage-chart-container',
-						columnWidth: 0.24
-					},
-					{
-						xtype: 'container',
-						id: 'backlog-chart-container',
-						columnWidth: 0.49
-					}
-				],
-				layout: 'column'
-			},
-			{
-				xtype: 'container',
-				id: 'grid-container'
-			}
-		],*/
 		items: [
 			{
 				xtype: 'container',
@@ -80,6 +31,20 @@
 						id: 'backlog-chart-controls-container',
 						columnWidth: 0.84,
 						layout: 'hbox'
+					},
+					{
+						xtype: 'button',
+						id: 'create-story-button',
+						text: '+',
+						style: {
+							float: 'right'
+						},
+						listeners: {
+							click: function() {
+								// TODO: Add default values or change to custom form
+								Rally.nav.Manager.create('HierarchicalRequirement');
+							}
+						}
 					}
 				]
 			},
@@ -140,24 +105,25 @@
 			})
 			// Get current release, team info, and load portfolio project
 			.then(function(projectRecord) {
-				me.Project = projectRecord;
+				me.ProjectRecord = projectRecord;
 			
 				// Extract team info from current project
-				me.Team = me._getTeamInfo(me.Project);
+				me.Team = me._getTeamInfo(me.ProjectRecord);
 				if (!me.Team) {
 					throw 'You must be scoped to a scrum';
 				}
-				console.log(me.Team);
 				
 				// Load release records
-				return me._loadAllReleases(me.Project).then(function(releaseRecords) {
-					me.ReleaseRecords = releaseRecords;
-					return me._getScopedRelease(releaseRecords, me.Project.data.ObjectID, null);
+				return me._loadAllReleases(me.ProjectRecord).then(function(releaseRecords) {
+					// TODO: THIS IS BROKEN, DOES NOT ACCOUNT FOR DIFFERENT TIMES BETWEEN RELEASES
+					me.ReleaseRecords = _.uniq(_.filter(releaseRecords, function(release) {return (/^Q\d{3}/).test(release.data.Name);}), function(release) {return release.data.Name.slice(0,4);});
+					return me._getScopedRelease(me.ReleaseRecords, me.ProjectRecord.data.ObjectID, null);
 				});
 			})
 			// Save current release then load the train portfolio project
 			.then(function(release) {
 				me.CurrentRelease = release;
+				me.FilterRelease = release;
 				return me._loadProjectByName(me.Team.Train + ' POWG Portfolios');
 			})
 			// Get all products under the portfolio project
@@ -181,13 +147,10 @@
 			// Load all features then stories under all milestones
 			.then(function (milestoneStore) {
 				me.Milestones = milestoneStore.getRange();
-				console.log(me.Milestones);
 				return me._loadStories();
 			})
 			// Load the UI
-			.then(function() {
-				return me._loadUI();
-			})
+			.then(me._loadUI.bind(me))
 			// Catch-all fail function
 			.fail(function(reason) {
 				me.setLoading(false);
@@ -208,9 +171,7 @@
 			me._loadControls();
 			
 			// Load other UI components
-			return me._loadCharts().then(function() {
-				return me._loadGrid();
-			}).then(function() {
+			return me._loadCharts().then(me._loadGrid.bind(me)).then(function() {
 				me.setLoading(false);
 			});
 		},
@@ -240,82 +201,6 @@
 					data: me.Iterations,
 					model: 'Iteration'
 				}),
-				iterationRadio = Ext.create('Ext.form.field.Radio', {
-					id: 'iteration-radio-box',
-					name: 'filter-type',
-					boxLabel: 'Iteration',
-					labelWidth: 50,
-					checked: true,
-					listeners: {
-						change: me._backlogFilterTypeChanged,
-						scope: me
-					}
-				}),
-				dateRadio = Ext.create('Ext.form.field.Radio', {
-					id: 'date-radio-box',
-					name: 'filter-type',
-					boxLabel: 'Date',
-					labelWidth: 50,
-					checked: false,
-					listeners: {
-						change: me._backlogFilterTypeChanged,
-						scope: me
-					}
-				}),
-				startIterationCombo = Ext.create('Rally.ui.combobox.ComboBox', {
-					displayField: 'Name',
-					id: 'start-iteration-combo-box',
-					fieldLabel: 'Start:',
-					labelWidth: 50,
-					labelAlign: 'right',
-					store: iterationStore,
-					padding: '0 0 0 15',
-					listeners: {
-						select: me._rangeChanged,
-						scope: me
-					},
-					value: me.Iterations[0],
-					valueField: 'StartDate'
-				}),
-				endIterationCombo = Ext.create('Rally.ui.combobox.ComboBox', {
-					displayField: 'Name',
-					id: 'end-iteration-combo-box',
-					fieldLabel: 'End:',
-					labelWidth: 50,
-					labelAlign: 'right',
-					store: iterationStore,
-					padding: '0 0 0 15',
-					listeners: {
-						select: me._rangeChanged,
-						scope: me
-					},
-					value: me.Iterations[me.Iterations.length - 1],
-					valueField: 'EndDate'
-				}),
-				startDatePicker = Ext.create('Rally.ui.DateField', {
-					fieldLabel: 'Start:',
-					labelAlign: 'right',
-					labelWidth: 50,
-					id: 'start-date-picker',
-					padding: '0 0 0 15',
-					listeners: {
-						select: me._rangeChanged,
-						scope: me
-					},
-					value: new Date(me.Iterations[0].data.StartDate)
-				}),
-				endDatePicker = Ext.create('Rally.ui.DateField', {
-					fieldLabel: 'End:',
-					labelAlign: 'right',
-					labelWidth: 50,
-					id: 'end-date-picker',
-					padding: '0 0 0 15',
-					listeners: {
-						select: me._rangeChanged,
-						scope: me
-					},
-					value: new Date(me.Iterations[me.Iterations.length - 1].data.EndDate)
-				}),
 				dataFieldsStore = Ext.create('Ext.data.Store', {
 					fields: ['DisplayName', 'PropertyName'],
 					data: [
@@ -324,86 +209,178 @@
 						{DisplayName: 'Accepted Stories', PropertyName: 'accepted'},
 						{DisplayName: 'Backlog Delta', PropertyName: 'delta'}
 					]
-				}),
-				dataFieldCombo = Ext.create('Ext.form.field.ComboBox', {
-					store: dataFieldsStore,
-					fieldLabel: 'Data:',
-					labelAlign: 'right',
-					labelWidth: 50,
-					padding: '0 0 0 15',
-					displayField: 'DisplayName',
-					valueField: 'PropertyName',
-					listeners: {
-						select: me._dataFieldSelected,
-						scope: me
-					},
-					value: 'size'
 				});
 			
 			// Store controls in me for use in listeners
-			me.IterationRadio = iterationRadio;
-			me.DateRadio = dateRadio;
-			me.StartIterationCombo = startIterationCombo;
-			me.EndIterationCombo = endIterationCombo;
-			me.StartDatePicker = startDatePicker;
-			me.EndDatePicker = endDatePicker;
-			me.DataFieldCombo = dataFieldCombo;
+			me.IterationRadio = Ext.create('Ext.form.field.Radio', {
+				id: 'iteration-radio-box',
+				name: 'filter-type',
+				boxLabel: 'Iteration',
+				labelWidth: 50,
+				checked: true,
+				listeners: {
+					change: me._backlogFilterTypeChanged,
+					scope: me
+				}
+			});
+			me.DateRadio = dateRadio = Ext.create('Ext.form.field.Radio', {
+				id: 'date-radio-box',
+				name: 'filter-type',
+				boxLabel: 'Date',
+				labelWidth: 50,
+				checked: false,
+				listeners: {
+					change: me._backlogFilterTypeChanged,
+					scope: me
+				}
+			});
+			me.ReleaseRadio = Ext.create('Ext.form.field.Radio', {
+				id: 'release-radio-box',
+				name: 'filter-type',
+				boxLabel: 'Release',
+				labelWidth: 50,
+				checked: false,
+				listeners: {
+					change: me._backlogFilterTypeChanged,
+					scope: me
+				}
+			});
+			me.StartIterationCombo = Ext.create('Rally.ui.combobox.ComboBox', {
+				displayField: 'Name',
+				id: 'start-iteration-combo-box',
+				fieldLabel: 'Start:',
+				labelWidth: 50,
+				labelAlign: 'right',
+				store: iterationStore,
+				padding: '0 0 0 15',
+				listeners: {
+					select: me._rangeChanged,
+					scope: me
+				},
+				value: me.Iterations[0],
+				valueField: 'StartDate'
+			});
+			me.EndIterationCombo = Ext.create('Rally.ui.combobox.ComboBox', {
+				displayField: 'Name',
+				id: 'end-iteration-combo-box',
+				fieldLabel: 'End:',
+				labelWidth: 50,
+				labelAlign: 'right',
+				store: iterationStore,
+				padding: '0 0 0 15',
+				listeners: {
+					select: me._rangeChanged,
+					scope: me
+				},
+				value: me.Iterations[me.Iterations.length - 1],
+				valueField: 'EndDate'
+			});
+			me.StartDatePicker = Ext.create('Rally.ui.DateField', {
+				hidden: true,
+				fieldLabel: 'Start:',
+				labelAlign: 'right',
+				labelWidth: 50,
+				id: 'start-date-picker',
+				padding: '0 0 0 15',
+				listeners: {
+					select: me._rangeChanged,
+					scope: me
+				},
+				value: new Date(me.Iterations[0].data.StartDate)
+			});
+			me.EndDatePicker = Ext.create('Rally.ui.DateField', {
+				hidden: true,
+				fieldLabel: 'End:',
+				labelAlign: 'right',
+				labelWidth: 50,
+				id: 'end-date-picker',
+				padding: '0 0 0 15',
+				listeners: {
+					select: me._rangeChanged,
+					scope: me
+				},
+				value: new Date(me.Iterations[me.Iterations.length - 1].data.EndDate)
+			});
+			me.ReleasePicker = Ext.create('IntelReleasePicker', {
+				hidden: true,
+				labelWidth: 50,
+				labelAlign: 'right',
+				fieldLabel: 'Release',
+				releases: me.ReleaseRecords,
+				currentRelease: me.FilterRelease,
+				listeners: {
+					select: me._rangeChanged,
+					scope: me
+				}
+			});
+			me.DataFieldCombo = Ext.create('Ext.form.field.ComboBox', {
+				store: dataFieldsStore,
+				fieldLabel: 'Data:',
+				labelAlign: 'right',
+				labelWidth: 50,
+				padding: '0 0 0 15',
+				displayField: 'DisplayName',
+				valueField: 'PropertyName',
+				listeners: {
+					select: me._redrawBacklogChart,
+					scope: me
+				},
+				value: 'size'
+			});
 			
 			// Set initial values used
-			me.StartingIteration = me.Iterations[0];
-			me.EndingIteration = me.Iterations[me.Iterations.length - 1];
-			me.StartingDate = new Date(me.Iterations[0].data.StartDate);
-			me.EndingDate = new Date(me.Iterations[me.Iterations.length - 1].data.EndDate);
-			me.isFilteringByIteration = true;
+			me.FilterBy = 'Iteration';
+			me.FilterStartDate = me.Iterations[0].data.StartDate;
+			me.FilterEndDate = me.Iterations[me.Iterations.length - 1].data.EndDate;
 			
 			// Push all relevant controls onto array for efficient adding
-			backlogControls.push(iterationRadio, dateRadio, startIterationCombo, endIterationCombo, dataFieldCombo);
+			backlogControls.push(me.IterationRadio, me.DateRadio, me.ReleaseRadio, me.StartIterationCombo, me.EndIterationCombo, me.StartDatePicker, me.EndDatePicker, me.ReleasePicker, me.DataFieldCombo);
 			
 			// Add components
 			return me.down('#backlog-chart-controls-container').add(backlogControls);
 		},
 		
 		/*
-		 *	Fires when the data field is changed
-		 */
-		_dataFieldSelected: function() {
-			var me = this;
-			me._redrawBacklogChart();
-		},
-		
-		/*
 		 *	Fires when the filter type for the backlog chart is changed
-		 *	NOTE: The chart DOES NOT need to be redrawn, as the values for the combo boxes will be set appropriately
 		 */
-		_backlogFilterTypeChanged: function() {
+		_backlogFilterTypeChanged: function(radio) {
 			var me = this,
 				controlsContainer = me.down('#backlog-chart-controls-container');
 			
 			// Set the global variable
-			me.isFilteringByIteration = me.IterationRadio.getValue();
+			if (me.IterationRadio.getValue()) me.FilterBy = 'Iteration';
+			else if (me.DateRadio.getValue()) me.FilterBy = 'Date';
+			else me.FilterBy = 'Release';
 			
-			// Remove pickers and add other set
-			if (me.isFilteringByIteration) {
-				controlsContainer.remove(me.StartDatePicker, false);
-				controlsContainer.remove(me.EndDatePicker, false);
-				controlsContainer.remove(me.DataFieldCombo, false);
-				controlsContainer.add(me.StartIterationCombo);
-				controlsContainer.add(me.EndIterationCombo);
-				controlsContainer.add(me.DataFieldCombo);
+			// Hide all filter controls
+			me.StartIterationCombo.hide();
+			me.EndIterationCombo.hide();
+			me.StartDatePicker.hide();
+			me.EndDatePicker.hide();
+			me.ReleasePicker.hide();
+			
+			if (me.FilterBy === 'Iteration') {
+				me.StartIterationCombo.show();
+				me.EndIterationCombo.show();
 				
-				me.StartIterationCombo.setValue(me.StartingIteration);
-				me.EndIterationCombo.setValue(me.EndingIteration);
+				// TODO: Possibly change the dates to match iteration after setting combo
+				me.StartIterationCombo.setValue(_.find(me.Iterations, function(iteration) {return iteration.data.EndDate >= me.FilterStartDate;}));
+				me.EndIterationCombo.setValue(_.find(me.Iterations, function(iteration) {return iteration.data.StartDate >= me.FilterEndDate;}));
+			}
+			else if (me.FilterBy === 'Date') {
+				me.StartDatePicker.show();
+				me.EndDatePicker.show();
+
+				me.StartDatePicker.setValue(me.FilterStartDate);
+				me.EndDatePicker.setValue(me.FilterEndDate);
 			}
 			else {
-				controlsContainer.remove(me.StartIterationCombo, false);
-				controlsContainer.remove(me.EndIterationCombo, false);
-				controlsContainer.remove(me.DataFieldCombo, false);
-				controlsContainer.add(me.StartDatePicker);
-				controlsContainer.add(me.EndDatePicker);
-				controlsContainer.add(me.DataFieldCombo);
+				me.ReleasePicker.show();
 				
-				me.StartDatePicker.setValue(me.StartingDate);
-				me.EndDatePicker.setValue(me.EndingDate);
+				me.FilterRelease = _.find(me.ReleaseRecords, function(release) {return me.FilterStartDate >= release.data.ReleaseStartDate && me.FilterStartDate <= release.data.ReleaseDate;});
+				me.ReleasePicker.setValue(me.FilterRelease);
+
+				me._redrawBacklogChart();
 			}
 		},
 		
@@ -412,19 +389,20 @@
 		 */
 		_rangeChanged: function() {
 			var me = this;
-			
-			if (me.isFilteringByIteration) {
-				me.StartingIteration = _.find(me.Iterations, function(iteration) {return iteration.data.StartDate == me.StartIterationCombo.getValue();});
-				me.EndingIteration = _.find(me.Iterations, function(iteration) {return iteration.data.EndDate == me.EndIterationCombo.getValue();});
-				me.StartingDate = new Date(me.StartingIteration.data.StartDate);
-				me.EndingDate = new Date(me.EndingIteration.data.EndDate);
+
+			if (me.FilterBy === 'Iteration') {
+				me.FilterStartDate = me.StartIterationCombo.getValue();
+				me.FilterEndDate = me.EndIterationCombo.getValue();
+			}
+			else if (me.FilterBy === 'Date') {
+				me.FilterStartDate = me.StartDatePicker.getValue();
+				me.FilterEndDate = me.EndDatePicker.getValue();
 			}
 			else {
-				// TODO: Ending iteration is horribly wrong, gets one iteration ahead
-				me.StartingIteration = _.find(me.Iterations, function(iteration) {return new Date(iteration.data.StartDate) >= me.StartDatePicker.getValue();});
-				me.EndingIteration = _.findLast(me.Iterations, function(iteration) {return new Date(iteration.data.EndDate) <= me.EndDatePicker.getValue();});
-				me.StartingDate = me.StartDatePicker.getValue();
-				me.EndingDate = me.EndDatePicker.getValue();
+				var release = _.find(me.ReleaseRecords, function(release) {return me.ReleasePicker.getValue() === release.data.Name;});
+				me.FilterRelease = release;
+				me.FilterStartDate = release.data.ReleaseStartDate;
+				me.FilterEndDate = release.data.ReleaseDate;
 			}
 			
 			me._redrawBacklogChart();
@@ -438,6 +416,9 @@
 				dataField = me.DataFieldCombo.getValue(),
 				data = me._filterBacklogPointsToRange(me._getBacklogChartData(dataField)),
 				chartConfig = me._getBacklogChartConfig(data);
+				
+			// Set new series name
+			chartConfig.series[0].name = me.DataFieldCombo.getRawValue() + ' Over Time';
 			
 			// Remove old chart
 			$('#backlog-chart-container').empty();
@@ -487,7 +468,6 @@
 			// Create promise array for loading stories
 			for (var i in featureStores) {
 				var features = featureStores[i].getRange();
-				console.log('Features', features);
 				for (var j in features) {
 					storyPromises.push(me._loadStoriesByFeature(features[j]));
 				}
@@ -575,7 +555,7 @@
 					filters: [storyFilter],
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: me.Project.data._ref
+						project: me.ProjectRecord.data._ref
 					}
 				};
 			var store = Ext.create('Rally.data.wsapi.Store', storeConfig);
@@ -590,7 +570,7 @@
 			var me = this;
 			me.ReleaseCheck = Ext.create('Rally.ui.CheckboxField', {
 				checked: false,
-				fieldLabel: 'All releases: ',
+				fieldLabel: 'All releases',
 				listeners: {
 					change: me._releaseCheckboxChanged,
 					scope: me
@@ -653,7 +633,7 @@
 			
 			// Create object for fast counting
 			var stateCounts = {};
-			_.forEach(stateData, function(datum, index) {
+			_.each(stateData, function(datum, index) {
 				stateCounts[datum.name] = stateData[index];
 			});
 			
@@ -685,7 +665,7 @@
 					filters: [me.ReleaseFilter],
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
-						project: me.Project.data._ref,
+						project: me.ProjectRecord.data._ref,
 						projectScopeUp: false,
 						projectScopeDown: true
 					}
@@ -716,10 +696,10 @@
 			
 			// Find the extremes of dates
 			_.each(me.StoryStore.getRange(), function(story) {
-				var creationDate = new Date(story.data.CreationDate),
-					acceptedDate = new Date(story.data.AcceptedDate),
-					iterationStartDate = story.data.Iteration ? new Date(story.data.Iteration.StartDate) : new Date();
-					iterationEndDate = story.data.Iteration ? new Date(story.data.Iteration.EndDate) : new Date(null);
+				var creationDate = story.data.CreationDate,
+					acceptedDate = story.data.AcceptedDate,
+					iterationStartDate = story.data.Iteration ? story.data.Iteration.StartDate : new Date();
+					iterationEndDate = story.data.Iteration ? story.data.Iteration.EndDate : new Date(null);
 				if (creationDate < firstDate) firstDate = creationDate;
 				if (iterationStartDate < firstDate)firstDate = iterationStartDate;
 				if (acceptedDate > lastDate) lastDate = acceptedDate;
@@ -780,27 +760,20 @@
 		 */
 		_filterBacklogPointsToRange: function(points) {
 			var me = this,
-				rangeStartDate,
-				rangeEndDate,
 				startIndex = 0,
 				endIndex = points.length - 1;
-				
-			// Set the appropriate date range
-			if (me.isFilteringByIteration) {
-				rangeStartDate = new Date(me.StartingIteration.data.StartDate);
-				rangeEndDate = new Date(me.EndingIteration.data.EndDate);
+
+			if (me.FilterBy !== 'Release') {
+				while (startIndex < points.length && points[startIndex].endDate < me.FilterStartDate) {
+					startIndex++;
+				}
+				while (endIndex >= 0 && points[endIndex].startDate > me.FilterEndDate) {
+					endIndex--;
+				}
 			}
 			else {
-				rangeStartDate = me.StartingDate;
-				rangeEndDate = me.EndingDate;
-			}
-			
-			// Find start and stop indexes
-			while (startIndex < points.length && points[startIndex].startDate < rangeStartDate) {
-				startIndex++;
-			}
-			while (endIndex >= 0 && points[endIndex].endDate > rangeEndDate) {
-				endIndex--;
+				startIndex = _.findIndex(points, function(point) {return point.name.slice(0, 4) === me.FilterRelease.data.Name.slice(0,4);});
+				endIndex = _.findLastIndex(points, function(point) {return point.name.slice(0, 4) === me.FilterRelease.data.Name.slice(0,4);});
 			}
 			
 			return points.slice(startIndex, endIndex + 1);
@@ -817,8 +790,8 @@
 				iterationNameRegExp = /^Q\d+_s\d+/;
 			// Create data objects for all iterations for the deltas and the totals
 			_.each(me.Iterations, function(iteration) {
-				var iterationStartDate = new Date(iteration.data.StartDate),
-					iterationEndDate = new Date(iteration.data.EndDate);
+				var iterationStartDate = iteration.data.StartDate,
+					iterationEndDate = iteration.data.EndDate;
 				backlogData.push({
 					name: iteration.data.Name.match(iterationNameRegExp)[0],
 					delta: 0,
@@ -836,8 +809,8 @@
 			
 			// Calculate stories added, accepted, and delta per iteration
 			_.each(me.StoryStore.getRange(), function(story) {
-				var storyCreationDate = new Date(story.data.CreationDate),
-					storyAcceptedDate = new Date(story.data.AcceptedDate);
+				var storyCreationDate = story.data.CreationDate,
+					storyAcceptedDate = story.data.AcceptedDate;
 					
 				// Accounts for stories written before planned iterations
 				if (storyCreationDate < backlogData[0].startDate) storyTotal++;
@@ -866,26 +839,7 @@
 				backlogData[j].size = storyTotal;
 				backlogData[j].y = backlogData[j][dataField];
 			}
-			
-			me.BacklogData = backlogData;
-			
 			return backlogData;
-		},
-		
-		/*
-		 *	Creates a new data set from the old using a different property
-		 */
-		_extractData: function(originalData, yPropertyName, otherPropertyNames) {
-			var data = [];
-			for (var i in originalData) {
-				var point = {y: originalData[i][yPropertyName]};
-				for (var j in otherPropertyNames) {
-					point[otherPropertyNames[j]] = originalData[i][otherPropertyNames[j]];
-				}
-				data.push(point);
-			}
-			
-			return data;
 		},
 		
 		/*
@@ -895,7 +849,7 @@
 			var me = this;
 			return {
 				chart: {
-					height:(me.getHeight() > 1100) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
+					height:(me.getHeight() > 700) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
 					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -938,7 +892,7 @@
 			var me = this;
 			return {
 				chart: {
-					height: (me.getHeight() > 1100) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
+					height: (me.getHeight() > 700) ? (me.getHeight()*0.32 >> 0) : (me.getHeight()*0.45),
 					width: (me.getWidth()/4 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -976,6 +930,11 @@
 		_loadIterationBreakdown: function(e) {
 			var point = e.point,
 				me = this,
+				configs = [
+					{title: 'Backlogged Stories', field: 'backloggedStories'},
+					{title: 'Created Stories', field: 'createdStories'},
+					{title: 'Accepted Stories', field: 'acceptedStories'}
+				],
 				breakdownContainer = Ext.create('Ext.container.Container', {
 					id: 'breakdown-container',
 					items: [
@@ -988,68 +947,29 @@
 									me.down('#storygrid').show();
 								}
 							}
-						},
-						{
-							xtype: 'rallygrid',
-							title: 'Backlogged Stories',
-							columnCfgs: [
-								'FormattedID',
-								'Name',
-								'Owner'
-							],
-							pagingToolbarCfg: {
-								pageSizes: [5, 10],
-								autoRender: true,
-								resizable: false
-							},
-							store: Ext.create('Rally.data.custom.Store', {
-								model: me.UserStory,
-								autoLoad: false,
-								data: point.backloggedStories,
-								pageSize: 5
-							})
-						},
-						{
-							xtype: 'rallygrid',
-							title: 'Created Stories',
-							columnCfgs: [
-								'FormattedID',
-								'Name',
-								'Owner'
-							],
-							pagingToolbarCfg: {
-								pageSizes: [5, 10],
-								autoRender: true,
-								resizable: false
-							},
-							store: Ext.create('Rally.data.custom.Store', {
-								model: me.UserStory,
-								autoLoad: false,
-								data: point.createdStories,
-								pageSize: 5
-							})
-						},
-						{
-							xtype: 'rallygrid',
-							title: 'Accepted Stories',
-							columnCfgs: [
-								'FormattedID',
-								'Name',
-								'Owner'
-							],
-							pagingToolbarCfg: {
-								pageSizes: [5, 10],
-								autoRender: true,
-								resizable: false
-							},
-							store: Ext.create('Rally.data.custom.Store', {
-								model: me.UserStory,
-								autoLoad: false,
-								data: point.acceptedStories,
-								pageSize: 5
-							})
 						}
-					]
+					].concat(_.map(configs, function(config) {
+						return {
+							xtype: 'rallygrid',
+							title: config.title,
+							columnCfgs: [
+								'FormattedID',
+								'Name',
+								'Owner'
+							],
+							pagingToolbarCfg: {
+								pageSizes: [5, 10],
+								autoRender: true,
+								resizable: false
+							},
+							store: Ext.create('Rally.data.custom.Store', {
+								model: me.UserStory,
+								autoLoad: false,
+								data: point[config.field],
+								pageSize: 5
+							})
+						};
+					}))
 				});
 			
 			me.down('#storygrid').hide();
@@ -1064,7 +984,7 @@
 			var me = this;
 			return {
 				chart: {
-					height: (me.getHeight() > 1100) ? (me.getHeight()*0.64 >> 0) : (me.getHeight()*0.5),
+					height: (me.getHeight() > 700) ? (me.getHeight()*0.64 >> 0) : (me.getHeight()*0.5),
 					// width: (me.getWidth()/2 >> 0),
 					plotBackgroundColor: null,
 					plotBorderWidth: 0,
@@ -1075,7 +995,7 @@
 				series: [
 					{
 						type: 'column',
-						name: 'Backlog Over Time',
+						name: 'Backlog Size Over Time',
 						data: data,
 						tooltip: {
 							pointFormatter: function() {
@@ -1125,12 +1045,12 @@
 					autoLoad: false,
 					model: me.UserStory,
 					data: me.StoryStore.getRange(),
-					pageSize: (me.getHeight() > 1100 ? 25 : 10)
+					pageSize: (me.getHeight() > 700 ? 20 : 10)
 					
 				}),
 				sortableColumns: true,
 				pagingToolbarCfg: {
-					pageSizes: [10, 15, 25, 100],
+					pageSizes: [10, 20, 25, 100],
 					autoRender: true,
 					resizable: false
 				},
