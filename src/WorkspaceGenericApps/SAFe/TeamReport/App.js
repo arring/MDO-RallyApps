@@ -1780,7 +1780,6 @@
 					'RiskLevel',
 					'Checkpoint',
 					'Owner',
-					'Submitter',
 					'_undoButton',
 					'_saveButton',
 					'_copyButton',

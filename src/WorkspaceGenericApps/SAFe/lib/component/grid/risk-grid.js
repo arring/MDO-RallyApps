@@ -336,7 +336,13 @@
 						}]
 					};
 				case 'RiskLevel':
-					var riskLevelOptions = RiskModel.getRiskLevelOptions();
+					var riskLevelOptions = RiskModel.getRiskLevelOptions(),
+						displayMap = {
+							High: 'High-Staff Help',
+							Medium: 'Medium-CE Help',
+							Low: 'Low-Team Managed'
+						},
+						storeOptions = _.map(riskLevelOptions, function(item){ return [item, displayMap[item]]; });
 					return {
 						text:'Risk Level',
 						dataIndex:'RiskLevel',
@@ -344,12 +350,14 @@
 						width:100,			
 						editor:{
 							xtype:'intelfixedcombo',
-							store: riskLevelOptions
+							store: storeOptions
 						},
 						sortable:true,
 						doSort: makeDoSortFn(function(record){ return riskLevelOptions.indexOf(record.data.RiskLevel); }),
+						renderer: function(item){ return displayMap[item]; },
 						items:[{ 
 							xtype:'intelgridcolumnfilter',
+							convertDisplayFn: function(item){ return displayMap[item]; },
 							sortFn: function(riskLevel){ return riskLevelOptions.indexOf(riskLevel); }
 						}]
 					};
@@ -516,7 +524,8 @@
 								if(el) el.on('click', function(){
 									grid.setLoading("Copying Risk");
 									grid.isEditing = true;
-									RiskDb.create(grid._generateRiskID(), record.data)
+									var currentUserOID = Rally.environment.getContext().getUser().ObjectID;
+									RiskDb.create(grid._generateRiskID(), _.merge({}, record.data, {SubmitterObjectID: currentUserOID}))
 										.then(function(newRiskJSON){ 
 											grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== newRiskJSON.RiskID; }).concat([newRiskJSON]);
 											grid.risksMap[newRiskJSON.RiskID] = newRiskJSON;
