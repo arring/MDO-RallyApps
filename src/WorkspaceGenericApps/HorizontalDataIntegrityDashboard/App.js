@@ -30,7 +30,7 @@
 		 *		Horizontal bar for a pie chart and heat map (the 'ribbon')
 		 *		Two columns (referred to as Left and Right) for grids
 		 */
-		items:[{ 
+		items:[{
 			xtype: 'container',
 			id: 'controlsContainer',
 			layout:'hbox'
@@ -136,7 +136,6 @@
 			.then(function() {
 				// Add remaining properties to the heatmap expansion button
 				me._initializeExpandHeatmapButton();
-				
 				// Load remaining UI components
 				return me._loadUI();
 			})
@@ -144,7 +143,8 @@
 			.fail(function(msg) {
 				me.setLoading(false);
 				me._alert('Error', msg || 'Unknown error');
-			});
+			})
+			.done();
 		},
 		
 		/**************************************** Overrides ***************************************/
@@ -390,8 +390,8 @@
 		_createStoryFilter: function(projects){			
 			var me = this,
 				releaseName = me.CurrentRelease.data.Name,
-				releaseDate = new Date(me.CurrentRelease.data.ReleaseDate).toISOString(),
-				releaseStartDate = new Date(me.CurrentRelease.data.ReleaseStartDate).toISOString(),
+				releaseDate = me.CurrentRelease.data.ReleaseDate.toISOString(),
+				releaseStartDate = me.CurrentRelease.data.ReleaseStartDate.toISOString(),
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),// this will ONLY get leaf-stories (good)
 				// Filter for user stories that in iteration not a release
 				inIterationButNotReleaseFilter =
@@ -432,7 +432,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				filter,
 				fetchFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
-					'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
+					'Release', 'ReleaseStartDate', 'ReleaseDate', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
 				promises = [];
 			
@@ -458,16 +458,15 @@
 			
 			// Do promises then compile stories into one store
 			return Q.all(promises).then(function(stores) {
-				var store = Ext.create('Rally.data.custom.Store', {
+				me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
 					autoLoad: false,
 					model: me.UserStory,
-					pageSize: 200
+					pageSize: 200,
+					data: []
 				});
 				for (var i = 0; i < stores.length; i++) {
-					store.add(stores[i].getRange());
+					me.UserStoryStore.add(stores[i].getRange());
 				}
-				me.UserStoryStore = store;
-				return store;
 			});
 		},
 		
@@ -595,19 +594,28 @@
 		 */
 		_getTeamPickerValues: function() {
 			var me = this;
-			return [{Type:'All'}].concat(
-				// In English: get all unique function keywords from the active scrums and sort them alphabetically
-				_.sortBy(
-					_.uniq(
-						_.map(
-							_.reduce(me.LeafProjects, function(a, project) {return a.concat(me._getTeamInfo(project).KeyWords);}, []),
-							function(type) {return {Type: type};}
+			if (me.isHorizontalView) {
+				return [{Type:'All'}].concat(
+					// In English: get all unique function keywords from the active scrums and sort them alphabetically
+					_.sortBy(
+						_.uniq(
+							_.map(
+								_.reduce(me.LeafProjects, function(a, project) {return a.concat(me._getTeamInfo(project).KeyWords);}, []),
+								function(type) {return {Type: type};}
+							),
+							function(key) {return key.Type;}
 						),
 						function(key) {return key.Type;}
-					),
+					)
+				);
+			}
+			else {
+				return [{Type: 'All'}].concat(_.sortBy(_.map(me.LeafProjects, function(project) {
+						return {Type: project.data.Name};
+					}),
 					function(key) {return key.Type;}
-				)
-			);
+				));
+			}
 		},
 		
 		/*
@@ -1216,7 +1224,7 @@
 						editor:false,
 						renderer:function(val, meta, record){
 							var day = 1000*60*60*24;
-							return (new Date()*1 - new Date(record.data.Blocker.CreationDate)*1)/day>>0;
+							return (now - record.data.Blocker.CreationDate)/day>>0;
 						}
 					}]),
 					side: 'Left',
@@ -1254,7 +1262,7 @@
 						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						if(item.data.Children.Count === 0) return false;
 						var pe = item.data.PlanEstimate;
-						return pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
+						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
 				},{
 					showIfLeafProject:true,
@@ -1287,9 +1295,16 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){ 
+						/* DEBUG origional version
 						if(!item.data.Iteration || item.data.Release) return false;
-						return new Date(item.data.Iteration.StartDate) < releaseDate && 
-							new Date(item.data.Iteration.EndDate) > releaseStartDate;
+						return item.data.Iteration.StartDate < releaseDate && 
+							item.data.Iteration.EndDate > releaseStartDate;
+						*/
+						return item.data.Iteration &&
+							((item.data.Release &&
+							(new Date(item.data.Release.ReleaseStartDate) > new Date(item.data.Iteration.EndDate) ||
+							new Date(item.data.Release.ReleaseDate) < new Date(item.data.Iteration.StartDate))) ||
+							(!item.data.Release && new Date(item.data.Iteration.StartDate) <= releaseDate && new Date(item.data.Iteration.EndDate) >= releaseStartDate));
 					}
 				},{
 					showIfLeafProject:true,
@@ -1331,7 +1346,7 @@
 						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
 							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 						if(item.data.ScheduleState == 'Accepted') return false;
-						return new Date(item.data[lowestPortfolioItemType].PlannedEndDate) < new Date(item.data.Iteration.StartDate);
+						return item.data[lowestPortfolioItemType].PlannedEndDate < item.data.Iteration.StartDate;
 					}
 				},{
 					showIfLeafProject:false,
@@ -1567,33 +1582,6 @@
 		},
 		
 		/**************************************** Utility Functions *******************************/
-		/*
-		 *	Takes an array of values, a property name, and an optional operator and returns an or filter
-		 */
-		_createOrFilter: function(values, propertyName, operator) {
-			// Check for valid arguments
-			if (typeof propertyName != 'string' || !values || !values.length || values.length <= 0) throw '_createOIDFilter: Invalid arguments';
-			var op = operator || '=',
-				// Initialize filter
-				filter = Ext.create('Rally.data.wsapi.Filter', {
-					property: propertyName,
-					operator: op,
-					value: values[0]
-				}),
-				nextFilter;
-				
-			// Or remaining filters
-			for (var i = 1; i < values.length; i++) {
-				nextFilter = Ext.create('Rally.data.wsapi.Filter', {
-					property: propertyName,
-					operator: op,
-					value: values[i]
-				});
-				filter = nextFilter.or(filter);
-			}
-			return filter;
-		},
-		
 		/*
 		 *	Creates a dummy project record with only necessary data fields populated
 		 */
