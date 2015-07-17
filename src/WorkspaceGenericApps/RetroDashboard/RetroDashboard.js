@@ -238,7 +238,8 @@
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
-			var me = this, releaseName = me.ReleaseRecord.data.Name;	
+			var me = this, releaseName = me.ReleaseRecord.data.Name;
+			me._releaseFields =  ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project']			
 			me.ReleasesWithNameHash ={};
 			return me._loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
 				.then(function(releaseRecords){
@@ -254,6 +255,7 @@
 			
 			me.LowestPortfolioItemsHash = {};
 			me.PortfolioItemsInReleaseStore = null;
+			me._portfolioItemFields =['Name','ObjectID','FormattedID','Release','PlannedEndDate']
 			
 			//NOTE: we are loading ALL lowestPortfolioItems b/c sometimes we run into issues where
 			//userstories in one release are under portfolioItems in another release (probably a user
@@ -281,12 +283,20 @@
 				releaseEnd = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
 				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
-			me.AllSnapshots = [];
+				me.AllSnapshots = [];
+				me.TeamStores = {};
+				var projectId = "";
+/* 			var release _.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
+				var projectId = _.filter(project,function(p){
+					return 
+					
+				})
+			}); */
 			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
 				var parallelLoaderConfig = {
 					context:{ 
 						workspace: me.getContext().getGlobalContext().getWorkspace()._ref,
-						project: null
+						project: project.data._ref,
 					},
 					compress:true,
 					findConfig: { 
@@ -302,15 +312,18 @@
 				return me._parallelLoadLookbackStore(parallelLoaderConfig).then(function(snapshotStore){ 
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
+						projectId = snapshot.data.Project;
 						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
 								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName)) &&
 							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
 					});
+					if(!me.TeamStores[projectId]) me.TeamStores[projectId] = [];
+					me.TeamStores[projectId] = me.TeamStores[projectId].concat(records);
 					me.AllSnapshots = me.AllSnapshots.concat(records);
 				});	
 			}));
 		},    
-		_loadUserStoriesforPortfolioItems: function(){
+/* 		_loadUserStoriesforPortfolioItems: function(){
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				parallelLoaderConfig = {
@@ -333,6 +346,55 @@
 						me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID] = userStoryStore.getRange();
 					});
 			}));            
+		}, */
+		_getUserStoryFilter: function(){			
+			var me = this,
+				releaseName = me.ReleaseRecord.data.Name,
+				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),// this will ONLY get leaf-stories (good)
+				inIterationButNotReleaseFilter =
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
+				userStoryProjectFilter;
+			if(!me.ScrumGroupRootRecord) //scoped outside scrum group
+				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { 
+					property: 'Project.ObjectID', 
+					value: me.CurrentScrum.data.ObjectID 
+				});
+			else if(me.LeafProjects && Object.keys(me.LeafProjects).length) //load all US within scrum group
+				userStoryProjectFilter = _.reduce(me.LeafProjects, function(filter, projectData, projectOID){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Project.ObjectID', value: projectOID});
+					if(filter) return filter.or(newFilter);
+					else return newFilter;
+				}, null);
+			else throw "No scrums were found!";
+
+			return Rally.data.wsapi.Filter.and([
+				userStoryProjectFilter, 
+				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
+			]);
+		},				
+		_getStories: function(){
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
+				config = {
+					model: 'HierarchicalRequirement',
+					filters: [me._getUserStoryFilter()],
+					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
+							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
+							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
+					context:{ 
+						workspace:me.getContext().getWorkspace()._ref, 
+						project:null 
+					}
+				};
+			return me._parallelLoadWsapiStore(config).then(function(store){
+				me.UserStoryStore = store;
+				return store;
+			});
 		},
 		_buildScopeToReleaseStore: function(){
 			var me = this,
@@ -366,7 +428,16 @@
 					new Date(userStorySnapshot.data._ValidTo) > finalTargetDate && 
 					!!userStorySnapshot.data[lowestPortfolioItemType];
 				});
-		
+				me.WsapiUserStoryMap = {};
+				me.WsapiUserStoryMap = _.reduce(me.UserStoryStore.getRange(), function(hash, r,key){
+					if(r.data.Feature !=null){
+						var featureID = r.data.Feature.ObjectID;
+						hash[r.data.Feature.ObjectID] = _.filter(me.UserStoryStore.getRange(),function(f){
+							if(f.data.Feature !=null) 
+								return f.data.Feature.ObjectID ===featureID  });
+							}
+						return hash;
+				}, {});
 			_.each(me.PortfolioItemsInReleaseStore.getRange(), function(portfolioItemRecord,key){
 				var scopeToReleaseGridRow = {},
 					releaseStartSnapshots =[],
@@ -577,7 +648,8 @@
 			}
 			
 			
-			me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount ;
+			/* me.initialAddedDaysCount = !(me.initialAddedDaysCount) ? 6 : me.initialAddedDaysCount ; */
+			me.initialAddedDaysCount = (typeof(me.initialAddedDaysCount) === "undefined") ? 6 : me.initialAddedDaysCount ;
 			_.each(aggregateChartData.series,function(f){
 				if(f.name==="Accepted"){
 					total.finalAccepted = total.finalAccepted + f.data[aggregateChartData.categories.length - 1];
@@ -1010,14 +1082,21 @@
 			me.setLoading('Loading Data');
 			//load all the child release to get the user story snap shots
 			//get the portfolioItems from wsapi
+			console.log("loading release and portfolioItem start", new Date());
 			return Q.all([
 				me._loadAllChildReleases(),
-				me._getPortfolioItems()	
+				me._getPortfolioItems()			
 			])
 			.then(function(){
+							return Q.all([me._getStories()
+								])
+			})
+			.then(function(store){
 				//check if the release start date is set in preference
 				//if saved in preference load it 
 				//need to do before loading the snapshots
+				console.log(store);
+				console.log("loading release and portfolioItem done", new Date());
 				me._loadAppsPreference().then(function(appsPref){
 				//loading it again if you have multiple tab open for the same app 
 				//and changing date from different tab
@@ -1026,16 +1105,21 @@
 					me._setUserPreferenceReleaseStartDate();
 				});
 			})
-			.then(function(){ return me._loadSnapshotStores(); })
+			.then(function(){ 
+			console.log("loading _loadSnapshotStores start ", new Date());
+			return me._loadSnapshotStores(); })
 			.then(function() {  
 				//load all the user story snap shot for release
 				//load all the user stories for the release portfolioItems
+				console.log("loading _loadSnapshotStores done ", new Date());
+				console.log("loading _loadUserStoriesforPortfolioItems start ", new Date());
 				me._buildCumulativeFlowChart();
 				me._buildRetroChart();
 				me._hideHighchartsLinks();
-				return me._loadUserStoriesforPortfolioItems();
+				/* return me._loadUserStoriesforPortfolioItems(); */
 			})
 			.then(function(){ 
+				console.log("loading _loadUserStoriesforPortfolioItems done ", new Date());
 				if(me.AllSnapshots.length === 0 ){
 					me.setLoading(false);
 					me._alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
@@ -1043,6 +1127,7 @@
 				}else{
 					me._buildScopeToReleaseStore();
 					me._buildScopeToReleaseGrid();
+						console.log("loading _buildScopeToReleaseStore,_buildScopeToReleaseGrid done all ", new Date());
 					me.setLoading(false);
 				}
 			})
@@ -1055,6 +1140,7 @@
 		launch: function() {
 			var me = this;
 			me.setLoading('Loading Configuration');
+			me._projectFields = ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
 			me._configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
