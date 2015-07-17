@@ -397,8 +397,9 @@
 				inIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })),
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '!=', value: releaseName })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.Name', operator: 'contains', value: releaseName}).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }))),
 				projectFilter;
 				
 			// There must be leaf projects in order to create a valid filter
@@ -1224,7 +1225,7 @@
 						editor:false,
 						renderer:function(val, meta, record){
 							var day = 1000*60*60*24;
-							return (now - record.data.Blocker.CreationDate)/day>>0;
+							return (now - new Date(record.data.Blocker.CreationDate))/day>>0;
 						}
 					}]),
 					side: 'Left',
@@ -1294,17 +1295,13 @@
 						tdCls:'editor-cell'
 					}]),
 					side: 'Right',
-					filterFn:function(item){ 
-						/* DEBUG origional version
-						if(!item.data.Iteration || item.data.Release) return false;
+					filterFn:function(item){
+						/* if(!item.data.Iteration || item.data.Release) return false;
 						return item.data.Iteration.StartDate < releaseDate && 
-							item.data.Iteration.EndDate > releaseStartDate;
-						*/
-						return item.data.Iteration &&
-							((item.data.Release &&
-							(new Date(item.data.Release.ReleaseStartDate) > new Date(item.data.Iteration.EndDate) ||
-							new Date(item.data.Release.ReleaseDate) < new Date(item.data.Iteration.StartDate))) ||
-							(!item.data.Release && new Date(item.data.Iteration.StartDate) <= releaseDate && new Date(item.data.Iteration.EndDate) >= releaseStartDate));
+							item.data.Iteration.EndDate > releaseStartDate; */
+						if (!item.data.Iteration) return false;
+						return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
+							(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 					}
 				},{
 					showIfLeafProject:true,
