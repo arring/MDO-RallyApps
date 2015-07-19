@@ -29,15 +29,18 @@
     "url": "https://github.com/arring/MDO-RallyApps/issues"
   },
   "homepage": "https://github.com/arring/MDO-RallyApps",
-	"scripts": {
-		"build": "node scripts/build.js",
-		"lint": "echo linting is currently a no-op",
-		"test": "testing is currently a no-op"
-	},
+  "scripts": {
+    "build": "node scripts/build.js",
+    "lint": "echo linting is currently a no-op",
+    "test": "testing is currently a no-op"
+  },
   "dependencies": {
     "lodash": "^3.6.0",
     "q": "^1.2.0",
     "rally": "^0.2.0",
     "shelljs": "^0.4.0"
+  },
+  "devDependencies": {
+    "node-extjs4": "^0.1.1"
   }
 }

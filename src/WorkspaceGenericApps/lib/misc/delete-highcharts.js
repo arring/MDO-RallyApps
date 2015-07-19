@@ -1,7 +1,8 @@
-(function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	//i bet your wondering what this file is used for. its used for sanity dashboard when built with sm-rab
-	delete window.Highcharts;
-	delete window.HighchartsAdapter;
-}());
+/**
+	SUMMARY:
+		This file is used for Data Integrity Dashboard when built with sm-rab, since Rally's outer environment
+		uses super old Highcharts, and we want to use the most recent Highcharts. Make sure to place this 
+		file before the Highcharts library in the sm-config.json
+*/
+delete window.Highcharts;
+delete window.HighchartsAdapter;

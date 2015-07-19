@@ -43,7 +43,7 @@ method.
 
 ### WSAPI NOTES
 
-- DO NOT USE PROJECTSCOPEDOWN FOR ANYTHING! It sometimes does not work correctly. Itsbetter to first get the Train -> then get the child projects from it (usually by getting all projects and then filtering by ones under the Train Project) -> then create a query with a bunch of (project.ObjectID = ...) OR'ed together. 
+- DO NOT USE PROJECTSCOPEDOWN FOR ANYTHING! It sometimes does not work correctly. Its better to first get the Train -> then get the child projects from it (usually by getting all projects and then filtering by ones under the Train Project) -> then create a query with a bunch of (project.ObjectID = ...) OR'ed together. 
 	
 - Sometimes we want to get the stories in a Release. The way I currently Do that is a query similar to this: ((Release.Name = X) OR (DirectChildrenCount = 0) AND ((Release.Name = null) AND (Feature.Release.Name = X))). We need the DirectChildrenCount = 0 or else we will double count parent UserStories's PlanEstimates.
 	

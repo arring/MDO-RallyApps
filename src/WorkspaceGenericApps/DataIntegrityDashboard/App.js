@@ -2,17 +2,17 @@
 	var Ext = window.Ext4 || window.Ext;
 
 	/************************** Data Integrity Dashboard *****************************/
-	Ext.define('DataIntegrityDashboard', {
-		extend: 'IntelRallyApp',
+	Ext.define('Intel.DataIntegrityDashboard', {
+		extend: 'Intel.lib.IntelRallyApp',
 		cls:'app',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'ParallelLoader',
-			'UserAppsPreference',
-			'DataIntegrityDashboardObjectIDPreference'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.DataIntegrityDashboardObjectIDPreference'
 		],	
 		minWidth:1100,
 		items:[{ 
@@ -50,7 +50,7 @@
 				cls:'grids-right'
 			}]
 		}],
-		_colors: [
+		colors: [
 			'#AAAAAA', //GRAY
 			'#2ECC40', //GREEN
 			'#7FDBFF', //AQUA
@@ -61,10 +61,10 @@
 			'#0074D9' //BLUE
 		],
 		
-		_userAppsPref: 'intel-SAFe-apps-preference',
+		userAppsPref: 'intel-SAFe-apps-preference',
 		
 		/***************************************************** Store Loading ************************************************/		
-		_getUserStoryFilter: function(){			
+		getUserStoryFilter: function(){			
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
@@ -94,12 +94,12 @@
 				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
 			]);
 		},				
-		_getStories: function(){
+		getStories: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
 					model: 'HierarchicalRequirement',
-					filters: [me._getUserStoryFilter()],
+					filters: [me.getUserStoryFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 							'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
@@ -108,24 +108,24 @@
 						project:null 
 					}
 				};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
 				return store;
 			});
 		},
-		_getLowestPortfolioItemFilter: function(){			
+		getLowestPortfolioItemFilter: function(){			
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName });
 			return releaseNameFilter;
 		},	
-		_getLowestPortfolioItems: function(){
+		getLowestPortfolioItems: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 			if(!me.ScrumGroupRootRecord) return Q();
 			var config = {
 				model: 'PortfolioItem/' + lowestPortfolioItem,
-				filters: [me._getLowestPortfolioItemFilter()],
+				filters: [me.getLowestPortfolioItemFilter()],
 				fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'Release', 
 					'Description', 'FormattedID', 'UserStories'],
 				context: {
@@ -134,14 +134,14 @@
 					projectScopeDown: true
 				}
 			};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.LowestPortfolioItemStore = store;
 				return store;
 			});
 		},
 		
 		/******************************************************* Reloading ************************************************/	
-		_removeAllItems: function(){
+		removeAllItems: function(){
 			var me = this;
 			Ext.getCmp('pie').removeAll();
 			Ext.getCmp('heatmap').removeAll();
@@ -150,31 +150,31 @@
 			var indicator = Ext.getCmp('integrityIndicator');
 			if(indicator) indicator.destroy();
 		},
-		_redrawEverything: function(){
+		redrawEverything: function(){
 			var me=this;
 			
-			me._removeAllItems();
+			me.removeAllItems();
 			me.setLoading('Loading Grids and Charts');
-			return me._buildGrids()
+			return me.renderGrids()
 				.then(function(){ 
 					return Q.all([ //these 2 need grids to exist to make their calculations
-						me._buildRibbon(),
-						me._buildIntegrityIndicator()
+						me.renderRibbon(),
+						me.renderIntegrityIndicator()
 					]);
 				})
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
 		},
-		_reloadEverything:function(){
+		reloadEverything:function(){
 			var me=this;
 			
-			if(!me.ReleasePicker) me._loadReleasePicker();
-			if(!me.ScrumPicker) me._loadScrumPicker();
+			if(!me.ReleasePicker) me.renderReleasePicker();
+			if(!me.ScrumPicker) me.renderScrumPicker();
 
 			me.setLoading('Loading Stores');
 			return Q.all([
-					me._getStories(),
-					me._getLowestPortfolioItems()
+					me.getStories(),
+					me.getLowestPortfolioItems()
 				])
 				.then(function(){
 					if(me.LowestPortfolioItemStore){
@@ -189,13 +189,13 @@
 						});
 					}
 				})
-				.then(function(){ me._redrawEverything(); })
+				.then(function(){ me.redrawEverything(); })
 				.fail(function(reason){ return Q.reject(reason); })
 				.then(function(){ me.setLoading(false); });
 		},
 
 		/********************************************************** tooltip functions **************************************/
-		_clearToolTip: function(){
+		clearToolTip: function(){
 			var me = this;
 			if(me.tooltip){
 				me.tooltip.panel.hide();
@@ -205,45 +205,45 @@
 				me.tooltip = null;
 			}
 		},	
-		_addScrollEventListener: function(){
+		addScrollEventListener: function(){
 			var me=this;
 			setTimeout(function addScrollListener(){
-				if(me.getEl()) me.getEl().dom.addEventListener('scroll', function(){ me._clearToolTip(); });
+				if(me.getEl()) me.getEl().dom.addEventListener('scroll', function(){ me.clearToolTip(); });
 				else setTimeout(addScrollListener, 10);
 			}, 0);
 		},
 		
 		/******************************************************* LAUNCH *****************************************************/
-		launch: function() {
+		launch: function(){
 			var me=this; 
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
-			me._addScrollEventListener();
-			me._setDataIntegrityDashboardObjectID();
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.addScrollEventListener();
+			me.setDataIntegrityDashboardObjectID();
 			me.setLoading('Loading Configuration');
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //two streams
-						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord){
 									me.ScrumGroupRootRecord = scrumGroupRootRecord;
 									return Q.all([
-										me._loadAllLeafProjects(me.ScrumGroupRootRecord).then(function(leafProjects){
+										me.loadAllLeafProjects(me.ScrumGroupRootRecord).then(function(leafProjects){
 											me.LeafProjects = leafProjects;
 											if(_.find(me.LeafProjects, function(p){ return p.data.ObjectID == me.ProjectRecord.data.ObjectID; }))
 												me.CurrentScrum = me.ProjectRecord;
 											else me.CurrentScrum = null;
 										}),
-										me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
+										me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
 											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 											var topPortfolioItemType = me.PortfolioItemTypes.slice(-1).pop();
-											return me._loadPortfolioItemsOfType(scrumGroupPortfolioProject, topPortfolioItemType);
+											return me.loadPortfolioItemsOfType(scrumGroupPortfolioProject, topPortfolioItemType);
 										})
 										.then(function(topPortfolioItemStore){ 
 											me.TopPortfolioItems = topPortfolioItemStore.getRange(); 
@@ -252,46 +252,46 @@
 								} 
 								else me.CurrentScrum = me.ProjectRecord;
 							}),
-						me._loadAppsPreference() /********* 2 ************/
+						me.loadAppsPreference() /********* 2 ************/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
-								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
 					]);
 				})
-				.then(function(){ return me._reloadEverything(); })
+				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason);
+					me.alert('ERROR', reason);
 				})
 				.done();
 		},
 
 		/******************************************************* NAV CONTROLS ************************************************/
-		_releasePickerSelected: function(combo, records){
+		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-			me._clearToolTip();
+			me.clearToolTip();
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._saveAppsPreference(me.AppsPref)
-				.then(function(){ return me._reloadEverything(); })
+			me.saveAppsPreference(me.AppsPref)
+				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){
-					me._alert('ERROR', reason);
+					me.alert('ERROR', reason);
 					me.setLoading(false);
 				})
 				.done();
 		},
-		_loadReleasePicker: function(){
+		renderReleasePicker: function(){
 			var me=this;
 			me.ReleasePicker = Ext.getCmp('controlsContainer').add({
 				xtype:'intelreleasepicker',
@@ -301,20 +301,20 @@
 				currentRelease: me.ReleaseRecord,
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._releasePickerSelected.bind(me)
+					select: me.releasePickerSelected.bind(me)
 				}
 			});
 		},	
-		_scrumPickerSelected: function(combo, records){
+		scrumPickerSelected: function(combo, records){
 			var me=this, recordName = records[0].data.Name;
 			if((!me.CurrentScrum && recordName == 'All') || (me.CurrentScrum && me.CurrentScrum.data.Name == recordName)) return;
-			me._clearToolTip();
+			me.clearToolTip();
 			if(recordName == 'All') me.CurrentScrum = null;
 			else me.CurrentScrum = _.find(me.LeafProjects, function(p){ return p.data.Name == recordName; });
-			return me._redrawEverything();
+			return me.redrawEverything();
 			
 		},
-		_loadScrumPicker: function(){
+		renderScrumPicker: function(){
 			var me=this;
 			if(!me.ScrumGroupRootRecord) return; //don't show for scrums not in scrum-group
 			me.ScrumPicker = Ext.getCmp('controlsContainer').add({
@@ -332,35 +332,35 @@
 				displayField:'Name',
 				value:me.CurrentScrum ? me.CurrentScrum.data.Name : 'All',
 				listeners: {
-					select: me._scrumPickerSelected.bind(me)
+					select: me.scrumPickerSelected.bind(me)
 				}
 			});
 		},
 	
 		/*********************************************** Story/Point util for projects ************************************/	
-		_getProjectStoriesForGrid: function(project, grid){
+		getProjectStoriesForGrid: function(project, grid){
 			return _.filter(grid.originalConfig.data, function(story){
 				return story.data.Project.ObjectID == project.data.ObjectID;
 			});
 		},
-		_getProjectStoriesForRelease: function(project, grid){
+		getProjectStoriesForRelease: function(project, grid){
 			return _.filter(grid.originalConfig.totalStories, function(story){
 				return story.data.Project.ObjectID == project.data.ObjectID;
 			});
 		},
-		_getProjectPointsForGrid: function(project, grid){
-			return _.reduce(this._getProjectStoriesForGrid(project, grid), function(sum, story){
+		getProjectPointsForGrid: function(project, grid){
+			return _.reduce(this.getProjectStoriesForGrid(project, grid), function(sum, story){
 				return sum + story.data.PlanEstimate;
 			}, 0);
 		},		
-		_getProjectPointsForRelease: function(project, grid){
-			return _.reduce(this._getProjectStoriesForRelease(project, grid), function(sum, story){
+		getProjectPointsForRelease: function(project, grid){
+			return _.reduce(this.getProjectStoriesForRelease(project, grid), function(sum, story){
 				return sum + story.data.PlanEstimate;
 			}, 0);
 		},
 		
 		/************************************************* Render integrity indicator *****************************************/
-		_buildIntegrityIndicator: function(){
+		renderIntegrityIndicator: function(){
 			var me=this,
 				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
 					return grid.originalConfig.model == 'UserStory'; 
@@ -399,7 +399,7 @@
 		},
 		
 		/******************************************************* Render Ribbon ************************************************/	
-		_onHeatmapClick: function(point, scrum, grid){
+		onHeatmapClick: function(point, scrum, grid){
 			var me=this,
 				panelWidth=320,
 				rect = point.graphic.element.getBoundingClientRect(),
@@ -407,15 +407,15 @@
 				topSide = rect.top,
 				x = point.x,
 				y = point.y,
-				storyDen = me._getProjectStoriesForRelease(scrum, grid).length,
-				storyNum = me._getProjectStoriesForGrid(scrum, grid).length,
-				pointDen = (100*me._getProjectPointsForRelease(scrum, grid)>>0)/100,
-				pointNum = (100*me._getProjectPointsForGrid(scrum, grid)>>0)/100,
+				storyDen = me.getProjectStoriesForRelease(scrum, grid).length,
+				storyNum = me.getProjectStoriesForGrid(scrum, grid).length,
+				pointDen = (100*me.getProjectPointsForRelease(scrum, grid)>>0)/100,
+				pointNum = (100*me.getProjectPointsForGrid(scrum, grid)>>0)/100,
 				storyPer = (10000*storyNum/storyDen>>0)/100,
 				pointPer = (10000*pointNum/pointDen>>0)/100;
 				
-			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y) return me._clearToolTip();
-			me._clearToolTip();
+			if(me.tooltip && me.tooltip.x == x && me.tooltip.y == y) return me.clearToolTip();
+			me.clearToolTip();
 			me.tooltip = {
 				x:x,
 				y:y,
@@ -490,11 +490,11 @@
 								id:'heatmap-tooltip-goto-button',
 								text:'GO TO THIS GRID',
 								handler: function(){
-									me._clearToolTip();
+									me.clearToolTip();
 									if(!me.CurrentScrum || me.CurrentScrum.data.ObjectID != scrum.data.ObjectID){
 										me.CurrentScrum = scrum;
 										me.ScrumPicker.setValue(scrum.data.Name);
-										me._redrawEverything()
+										me.redrawEverything()
 											.then(function(){ 
 												me.setLoading('Loading Grids and Charts');
 												setTimeout(function(){
@@ -512,7 +512,7 @@
 							cls:'intel-tooltip-close',
 							text:'X',
 							width:20,
-							handler: function(){ me._clearToolTip(); }
+							handler: function(){ me.clearToolTip(); }
 						}]
 					}],
 					listeners:{
@@ -538,7 +538,7 @@
 				}
 			});	
 		},	
-		_getHeatMapConfig: function() { 
+		getHeatMapConfig: function() { 
 			var me=this,
 				highestNum = 0,
 				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
@@ -549,7 +549,7 @@
 				selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
 			_.each(userStoryGrids, function(grid, gindex) {
 				_.each(_.sortBy(me.LeafProjects, function(p){ return p.data.Name; }), function(project, pindex){
-					var gridCount = me._getProjectStoriesForGrid(project, grid).length;
+					var gridCount = me.getProjectStoriesForGrid(project, grid).length;
 					highestNum = Math.max(gridCount, highestNum);
 					chartData.push([pindex, gindex, gridCount]);
 				});
@@ -563,8 +563,8 @@
 					me.CurrentScrum = scrum;
 					me.ScrumPicker.setValue(scrum.data.Name);
 				}
-				me._clearToolTip();
-				me._redrawEverything();
+				me.clearToolTip();
+				me.redrawEverything();
 			};
 			window[selectIdFunctionName] = function(gridId){
 				Ext.get(gridId).scrollIntoView(me.el);
@@ -604,7 +604,7 @@
 							var text = this.value,
 								index = _.indexOf(this.axis.categories, text),
 								gridID = userStoryGrids[index].originalConfig.id,
-								styleAttr='style="background-color:' + me._colors[userStoryGrids.length - index - 1] + '"';
+								styleAttr='style="background-color:' + me.colors[userStoryGrids.length - index - 1] + '"';
 							return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' + 
 												selectIdFunctionName + '(\'' + gridID +  '\')">' + text + '</div>';
 						},
@@ -624,7 +624,7 @@
 									var point = this,
 										scrum = _.sortBy(me.LeafProjects, function(p){ return p.data.Name; })[point.x],
 										grid = userStoryGrids[point.y];
-									me._onHeatmapClick(point, scrum, grid);
+									me.onHeatmapClick(point, scrum, grid);
 								}
 							}
 						}
@@ -646,7 +646,7 @@
 				}]  
 			};
 		},
-		_getPieChartConfig: function() { 
+		getPieChartConfig: function() { 
 			var me=this,
 				chartData = _.map(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid) { 
 					return {
@@ -674,7 +674,7 @@
 					plotBorderWidth: 0,
 					plotShadow: false
 				},
-				colors: me._colors,
+				colors: me.colors,
 				title: { text: null },
 				tooltip: { enabled:false },
 				plotOptions: {
@@ -715,21 +715,21 @@
 				}]
 			};
 		},	
-		_hideHighchartsLinks: function(){ 
+		hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
 		},
-		_buildRibbon: function() {
+		renderRibbon: function() {
 			var me=this;
-			$('#pie').highcharts(me._getPieChartConfig());
-			if(!me.ScrumGroupRootRecord) me._hideHighchartsLinks(); //DONT show the heatmap for non-scrum-group scrums
+			$('#pie').highcharts(me.getPieChartConfig());
+			if(!me.ScrumGroupRootRecord) me.hideHighchartsLinks(); //DONT show the heatmap for non-scrum-group scrums
 			else {
-				$('#heatmap').highcharts(me._getHeatMapConfig());
-				me._hideHighchartsLinks();
+				$('#heatmap').highcharts(me.getHeatMapConfig());
+				me.hideHighchartsLinks();
 			}
 		},
 		
 		/******************************************************* Render GRIDS ********************************************************/
-		_getFilteredStories: function(){
+		getFilteredStories: function(){
 			/** gets the stories in this release for the scoped scrum or the scrum-group **/
 			var me=this; 
 			if(me.ScrumGroupRootRecord){
@@ -740,10 +740,10 @@
 			}
 			else return me.UserStoryStore.getRange();
 		},
-		_getFilteredLowestPortfolioItems: function(){ 
+		getFilteredLowestPortfolioItems: function(){ 
 			return this.LowestPortfolioItemStore ? this.LowestPortfolioItemStore.getRange(): [];
 		},
-		_addGrid: function(gridConfig){
+		addGrid: function(gridConfig){
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				randFunctionName = '_scrollToTop' + (Math.random()*10000>>0);
@@ -808,10 +808,10 @@
 				);
 			return grid;
 		},	
-		_buildGrids: function() { 
+		renderGrids: function() { 
 			var me = this,
-				filteredStories = me._getFilteredStories(),
-				filteredLowestPortfolioItems = me._getFilteredLowestPortfolioItems(),
+				filteredStories = me.getFilteredStories(),
+				filteredLowestPortfolioItems = me.getFilteredLowestPortfolioItems(),
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
@@ -999,10 +999,10 @@
 					gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Stories' : lowestPortfolioItemType + 's')] = list;
 					gridConfig.totalCount = list.length;
 					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100;
-					return me._addGrid(gridConfig);
+					return me.addGrid(gridConfig);
 				}
 			}))
-			.fail(function(reason){ me._alert('ERROR:', reason); });
+			.fail(function(reason){ me.alert('ERROR:', reason); });
 		}
 	});
 }());

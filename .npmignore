@@ -4,4 +4,3 @@ scripts/get-project-oids/config.json
 scripts/get-project-oids/output*
 deploy
 App-debug.html
-
