@@ -71,7 +71,7 @@
 			else return pos+1;
 		},
 		
-		/** items is an array of snapshot records
+		/** items is an array of snapshot records*/
 		runCalculation:function(items){
 			if(!this.scheduleStates || !this.startDate || !this.endDate) throw 'invalid constructor config';
 			var dates = this._getDates(), day=1000*60*60*24,

@@ -745,9 +745,7 @@
 								currentReleaseRecord = records[0];
 								me.setLoading('Loading Data');
 								me.loadPortfolioItemsByRelease(releaseName, [currentScrumGroup]).then(function(portfolioItemMap){
-									//if(shouldShowScrumGroupPicker)
-										currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
-									//else currentPortfolioItemRecords = [].concat.apply([], _.pluck(portfolioItemMap, 'PortfolioItems');
+									currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
 									updateComponents();
 								})
 								.fail(function(reason){ me.alert('ERROR', reason); })
@@ -1020,17 +1018,13 @@
 				modal.setLoading('Loading Data');
 				if(isExistingRisk){
 					currentReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name === oldRiskJSON.ReleaseName; });
-					//if(shouldShowScrumGroupPicker){
 					currentScrumGroup = _.find(me.AllScrumGroupRootRecords, function(sgr){
 						return me.getScrumGroupName(sgr) === oldRiskJSON.Train; 
 					});
-					//}
 				}
 				me.loadPortfolioItemsByRelease(currentReleaseRecord.data.Name, [currentScrumGroup])
 					.then(function(portfolioItemMap){
-						//if(shouldShowScrumGroupPicker)
-							currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
-						//else currentPortfolioItemRecords = [].concat.apply([], _.pluck(portfolioItemMap, 'PortfolioItems');
+						currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
 						updateComponents();
 					})
 					.fail(function(reason){ me.alert('ERROR', reason); })

@@ -1,18 +1,18 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
-	Ext.define('RetroDashboard', {
-		extend: 'IntelRallyApp',
+	Ext.define('Intel.RetroDashboard', {
+		extend: 'Intel.lib.IntelRallyApp',
 		componentCls: 'app',
 		requires: [
-			'FastCumulativeFlowCalculator'
+			'Intel.lib.chart.FastCumulativeFlowCalculator'
 		],
 		mixins: [
-			'PrettyAlert',
-			'UserAppsPreference',
-			'IntelWorkweek',
-			'CumulativeFlowChartMixin',
-			'ParallelLoader'
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.CumulativeFlowChartMixin',
+			'Intel.lib.mixin.ParallelLoader'
 		],
 		items:[{
 			xtype: 'container', //outside container has dropdown and the donut container
@@ -81,7 +81,7 @@
 									'<li><b>Final Workload</b> is the total points for user stories at the Release End Date',
 									'<li><b>Initial Commit</b> is the total points for user stories at the Release Start Date</ul>'
 									].join('\n');
-								Rally.getApp()._alert('Information on Data Calculations',html);
+								Rally.getApp().alert('Information on Data Calculations',html);
 							}
 						}
 					}
@@ -140,8 +140,11 @@
 				}]
 			}]
 		}],
-			
-		_userAppsPref: 'intel-retro-dashboard',	//dont share release scope settings with other apps	
+		
+		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'], //override intel-rally-app		
+		portfolioItemFields: ['Name','ObjectID','FormattedID','Release','PlannedEndDate'], //override intel-rally-app
+		releaseFields:  ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'], //override intel-rally-app
+		userAppsPref: 'intel-retro-dashboard',	//dont share release scope settings with other apps	
 		
 		/****************************************************** RELEASE PICKER ********************************************************/
 		_releasePickerSelected: function(combo, records){
@@ -153,7 +156,10 @@
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			me._reloadEverything();
+			me._reloadEverything()
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
+				.done();
 		},
 		_buildReleasePicker: function(){
 			var me = this;
@@ -203,33 +209,33 @@
 						me.AppsPref.projs[pid] = me.AppsPref.projs[pid] || {};
 						me.AppsPref.projs[pid][rid] =  me.AppsPref.projs[pid][rid] || {};
 						me.AppsPref.projs[pid][rid].ReleaseStartDate = txtValue;
-						me._saveAppsPreference(me.AppsPref)
-						.then(function(){ 
-							me.releaseStartDateChanged = true;
-							me.datePickerDate = txtValue;
-							var date1 = me.ReleaseRecord.data.ReleaseStartDate,
-								date2 = new Date(me.datePickerDate),
-								_1day = 1000 * 60 * 60 * 24 ; 
-							var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
-							//taking sample 7 days before and after the release
-							//data for calculating scope change
-							//commit to accept original and final calculation
-							me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
-							me._buildCumulativeFlowChart(); 
-							me._buildRetroChart();
-							me._hideHighchartsLinks();
-							me._buildScopeToReleaseStore();
-							me._buildScopeToReleaseGrid();
-							me.setLoading(false);
-						})
-						.fail(function(reason){
-							me._alert('ERROR', reason);
-							me.setLoading(false);
-						})
-						.done();
+						me.saveAppsPreference(me.AppsPref)
+							.then(function(){ 
+								me.releaseStartDateChanged = true;
+								me.datePickerDate = txtValue;
+								var date1 = me.ReleaseRecord.data.ReleaseStartDate,
+									date2 = new Date(me.datePickerDate),
+									_1day = 1000 * 60 * 60 * 24 ; 
+								var daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );
+								//taking sample 7 days before and after the release
+								//data for calculating scope change
+								//commit to accept original and final calculation
+								me.initialAddedDaysCount = me.releaseStartDateChanged && daysCountDifference>0 ? daysCountDifference : 6; 
+								me._buildCumulativeFlowChart(); 
+								me._buildRetroChart();
+								me._hideHighchartsLinks();
+								me._buildScopeToReleaseStore();
+								me._buildScopeToReleaseGrid();
+							})
+							.fail(function(reason){ me.alert('ERROR', reason); })
+							.then(function(){ me.setLoading(false); })
+							.done();
 						
 					}else{
-						me._alert("Date Validation Note:","The entered date should be between Release start date(" + releaseSampleDataDate.toLocaleDateString() +") and Release end date("+ maxDate.toLocaleDateString() +").");
+						me.alert(
+							"Date Validation Note:",
+							"The entered date should be between Release start date(" + releaseSampleDataDate.toLocaleDateString() +") and Release end date("+ maxDate.toLocaleDateString() +")."
+						);
 					}
 				}
 			}];	
@@ -239,9 +245,8 @@
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		_loadAllChildReleases: function(){ 
 			var me = this, releaseName = me.ReleaseRecord.data.Name;
-			me._releaseFields =  ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project']			
 			me.ReleasesWithNameHash ={};
-			return me._loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
+			return me.loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 						hash[rr.data.ObjectID] = true;
@@ -250,17 +255,15 @@
 				});
 		},
 		_getPortfolioItems: function(){
-			var me=this,
-				releaseName = me.ReleaseRecord.data.Name;
+			var me=this, releaseName = me.ReleaseRecord.data.Name;
 			
 			me.LowestPortfolioItemsHash = {};
 			me.PortfolioItemsInReleaseStore = null;
-			me._portfolioItemFields =['Name','ObjectID','FormattedID','Release','PlannedEndDate']
 			
 			//NOTE: we are loading ALL lowestPortfolioItems b/c sometimes we run into issues where
 			//userstories in one release are under portfolioItems in another release (probably a user
 			// mistake). And this messes up the numbers in the topPortfolioItem filter box
-			return me._loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, me.PortfolioItemTypes[0])
+			return me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, me.PortfolioItemTypes[0])
 				.then(function(portfolioItemStore){
 					var portfolioItemsInRelease = _.filter(portfolioItemStore.getRange(), function(pi){ return (pi.data.Release || {}).Name == releaseName; });
 					me.PortfolioItemsInReleaseStore = Ext.create('Rally.data.wsapi.Store', {
@@ -286,7 +289,7 @@
 				me.AllSnapshots = [];
 				me.TeamStores = {};
 				var projectId = "";
-/* 			var release _.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
+			/* var release _.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
 				var projectId = _.filter(project,function(p){
 					return 
 					
@@ -296,7 +299,7 @@
 				var parallelLoaderConfig = {
 					context:{ 
 						workspace: me.getContext().getGlobalContext().getWorkspace()._ref,
-						project: project.data._ref,
+						project: project.data._ref
 					},
 					compress:true,
 					findConfig: { 
@@ -309,7 +312,7 @@
 					fetch: ['ScheduleState', 'PlanEstimate', 'Release', lowestPortfolioItemType, '_ValidFrom', '_ValidTo', 'ObjectID'],
 					hydrate: ['ScheduleState']
 				};   
-				return me._parallelLoadLookbackStore(parallelLoaderConfig).then(function(snapshotStore){ 
+				return me.parallelLoadLookbackStore(parallelLoaderConfig).then(function(snapshotStore){ 
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
 						projectId = snapshot.data.Project;
@@ -323,7 +326,7 @@
 				});	
 			}));
 		},    
-/* 		_loadUserStoriesforPortfolioItems: function(){
+		/* _loadUserStoriesforPortfolioItems: function(){
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				parallelLoaderConfig = {
@@ -341,7 +344,7 @@
 					property: lowestPortfolioItemType + '.ObjectID', 
 					value: portfolioItemRecord.data.ObjectID
 				});               
-				return me._parallelLoadWsapiStore(_.merge({filters: [portfolioItemFilter]}, parallelLoaderConfig))
+				return me.parallelLoadWsapiStore(_.merge({filters: [portfolioItemFilter]}, parallelLoaderConfig))
 					.then(function(userStoryStore){ 
 						me.WsapiUserStoryMap[portfolioItemRecord.data.ObjectID] = userStoryStore.getRange();
 					});
@@ -391,7 +394,7 @@
 						project:null 
 					}
 				};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
 				return store;
 			});
@@ -429,14 +432,15 @@
 					!!userStorySnapshot.data[lowestPortfolioItemType];
 				});
 				me.WsapiUserStoryMap = {};
-				me.WsapiUserStoryMap = _.reduce(me.UserStoryStore.getRange(), function(hash, r,key){
-					if(r.data.Feature !=null){
+				me.WsapiUserStoryMap = _.reduce(me.UserStoryStore.getRange(), function(hash, r, key){
+					if(r.data.Feature !== null){
 						var featureID = r.data.Feature.ObjectID;
 						hash[r.data.Feature.ObjectID] = _.filter(me.UserStoryStore.getRange(),function(f){
-							if(f.data.Feature !=null) 
-								return f.data.Feature.ObjectID ===featureID  });
-							}
-						return hash;
+							if(f.data.Feature !== null) 
+								return f.data.Feature.ObjectID === featureID; 
+						});
+					}
+					return hash;
 				}, {});
 			_.each(me.PortfolioItemsInReleaseStore.getRange(), function(portfolioItemRecord,key){
 				var scopeToReleaseGridRow = {},
@@ -552,7 +556,7 @@
 					header: "% Complete<br/> @ Release Start " + me.InitialTargetDate,
 					dataIndex: "completedAtStart",
 					flex:2,
-					xtype:'fastgridcolumn',
+					xtype:'intelcomponentcolumn',
 					tdCls: 'iconCell',
 					resizable:false,
 					draggable:false,
@@ -568,7 +572,7 @@
 					header:"% Complete<br/>@ Release End " + me.CompleteFinalTargetDate,
 					dataIndex: "completedAtEnd",
 					flex:2,
-					xtype:'fastgridcolumn',
+					xtype:'intelcomponentcolumn',
 					tdCls: 'iconCell',
 					resizable:false,
 					draggable:false,
@@ -592,7 +596,7 @@
 					header: lowestPortfolioItemType + " Scope Change",
 					dataIndex: "growth",
 					flex:2,
-					xtype:'fastgridcolumn',
+					xtype:'intelcomponentcolumn',
 					tdCls: 'iconCell',
 					resizable:false,
 					draggable:false,
@@ -614,7 +618,7 @@
 		},
 		_buildCumulativeFlowChart: function(){
 			var me = this,
-				calc = Ext.create('FastCumulativeFlowCalculator',{
+				calc = Ext.create('Intel.lib.chart.FastCumulativeFlowCalculator',{
 					scheduleStates:me.ScheduleStates,
 					startDate: me.ReleaseRecord.data.ReleaseStartDate,
 					endDate: me.ReleaseRecord.data.ReleaseDate
@@ -624,7 +628,7 @@
 			//using jquery to use the high charts
 			//uses ChartUpdater mixin
 			//uses IntelWorkweek mixin
-			var aggregateChartData = me._updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), {trendType:'Last2Sprints'}),
+			var aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), {trendType:'Last2Sprints'}),
 				datemap = aggregateChartData.datemap;
 
 			//retro dashboard calculation
@@ -694,7 +698,7 @@
 			
 			me.total = total;
 
-			$("#retroChart").highcharts(Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
+			$("#retroChart").highcharts(Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 				chart: {
 					height: 400,
 					width: me.getWidth()*0.42>>0,
@@ -713,7 +717,7 @@
 				},
 				xAxis:{
 					categories: aggregateChartData.categories,
-					tickInterval: me._getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44),
+					tickInterval: me.getCumulativeFlowChartTicks(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate, me.getWidth()*0.44),
 					plotLines: [{
 						color: '#58FAF4', // Color value
 						dashStyle: 'shortdash', // Style of the plot line. Default to solid
@@ -748,7 +752,7 @@
 				},
 				series: aggregateChartData.series
 			}));
-			me._setCumulativeFlowChartDatemap($("#retroChart").children()[0].id, datemap);
+			me.setCumulativeFlowChartDatemap($("#retroChart").children()[0].id, datemap);
 		},  
 		_hideHighchartsLinks: function(){
 			$('.highcharts-container > svg > text:last-child').hide();
@@ -1085,19 +1089,15 @@
 			console.log("loading release and portfolioItem start", new Date());
 			return Q.all([
 				me._loadAllChildReleases(),
-				me._getPortfolioItems()			
+				me._getPortfolioItems(),
+				me._getStories()
 			])
 			.then(function(){
-							return Q.all([me._getStories()
-								])
-			})
-			.then(function(store){
 				//check if the release start date is set in preference
 				//if saved in preference load it 
 				//need to do before loading the snapshots
-				console.log(store);
 				console.log("loading release and portfolioItem done", new Date());
-				me._loadAppsPreference().then(function(appsPref){
+				return me.loadAppsPreference().then(function(appsPref){
 				//loading it again if you have multiple tab open for the same app 
 				//and changing date from different tab
 				//you will be able to see the right away
@@ -1106,9 +1106,10 @@
 				});
 			})
 			.then(function(){ 
-			console.log("loading _loadSnapshotStores start ", new Date());
-			return me._loadSnapshotStores(); })
-			.then(function() {  
+				console.log("loading _loadSnapshotStores start ", new Date());
+				return me._loadSnapshotStores(); 
+			})
+			.then(function(){  
 				//load all the user story snap shot for release
 				//load all the user stories for the release portfolioItems
 				console.log("loading _loadSnapshotStores done ", new Date());
@@ -1121,47 +1122,39 @@
 			.then(function(){ 
 				console.log("loading _loadUserStoriesforPortfolioItems done ", new Date());
 				if(me.AllSnapshots.length === 0 ){
-					me.setLoading(false);
-					me._alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
+					me.alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
 					return;     
 				}else{
 					me._buildScopeToReleaseStore();
 					me._buildScopeToReleaseGrid();
-						console.log("loading _buildScopeToReleaseStore,_buildScopeToReleaseGrid done all ", new Date());
-					me.setLoading(false);
+					console.log("loading _buildScopeToReleaseStore,_buildScopeToReleaseGrid done all ", new Date());
 				}
-			})
-			.fail(function(reason){
-				me.setLoading(false);           
-				me._alert('ERROR', reason);
-			})
-			.done();   
+			});
 		},   
 		launch: function() {
 			var me = this;
 			me.setLoading('Loading Configuration');
-			me._projectFields = ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'],
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ //two streams
-						me._projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
+						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord){
 									me.ScrumGroupRootRecord = scrumGroupRootRecord;
 									return Q.all([
-										me._loadAllLeafProjects(me.ScrumGroupRootRecord)
+										me.loadAllLeafProjects(me.ScrumGroupRootRecord)
 											.then(function(leafProjects){
 												me.LeafProjects = leafProjects;
 												if(_.find(leafProjects, function(p){ return p.data.ObjectID == me.ProjectRecord.data.ObjectID; }))
 													me.CurrentScrum = me.ProjectRecord;
 												else me.CurrentScrum = null;
 											}),
-										me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 											.then(function(scrumGroupPortfolioProject){
 												me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 											})
@@ -1169,31 +1162,27 @@
 								} 
 								else me.CurrentScrum = me.ProjectRecord;
 							}),				
-						me._loadAppsPreference() /******** load stream 2 *****/
+						me.loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var oneYear = 1000*60*60*24*365;
 								var endDate = new Date();
-								return me._loadReleasesBetweenDates(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
+								return me.loadReleasesBetweenDates(me.ProjectRecord, (new Date()*1 - oneYear), endDate);
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
 								//scope the release to current release
 								// me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref)
-								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, null);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, null);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
 					]);
 				})
-				.then(function(){ 
-					me._buildReleasePicker(); 
-				})
+				.then(function(){ me._buildReleasePicker(); })
 				.then(function(){ return me._reloadEverything(); })
-				.fail(function(reason){
-					me.setLoading(false);
-					me._alert('ERROR', reason);
-				})
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
 				.done();
 		}
 	});

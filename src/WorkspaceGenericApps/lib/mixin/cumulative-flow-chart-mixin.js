@@ -16,7 +16,7 @@
 
 	var ChartsTooltipDatemap = {}, //closure variable that maps the x values to date strings -- per chart
 		RSquaredMap = {},
-		defaultCFCConfig: {
+		defaultCFCConfig = {
 			chart: {
 				defaultSeriesType: "area",
 				zoomType: "xy"
