@@ -2,18 +2,18 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define("PortfolioChartAndGrid", {
-		extend: 'IntelRallyApp',
+	Ext.define("Intel.PortfolioNavigator.ChartAndGrid", {
+		extend: 'Intel.lib.IntelRallyApp',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IntelWorkweek',
-			'AsyncQueue',
-			'ParallelLoader',
-			'CumulativeFlowChartMixin'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.AsyncQueue',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.CumulativeFlowChartMixin'
 		],
 		requires:[
-			'FastCumulativeFlowCalculator'
+			'Intel.lib.chart.FastCumulativeFlowCalculator'
 		],
 		cls: "portfolio-cfd-app",
 		items: [{
@@ -33,7 +33,7 @@
 		}],
 			
 		/******************************** stores/data ***********************************************/
-		_loadGridStore: function() {
+		loadGridStore: function() {
 			var me=this,
 				piLevel = me.CurrentPortfolioItem.self.ordinal,
 				filters = [], sorters = [];
@@ -67,9 +67,9 @@
 					value:me.CurrentPortfolioItem.data.ObjectID
 				}])
 			});
-			return me._reloadStore(store);
+			return me.reloadStore(store);
 		},
-		_loadChartStore: function(){	
+		loadChartStore: function(){	
 			var me = this,
 				grid = Ext.getCmp('grid'),
 				piRecord = me.CurrentPortfolioItem;
@@ -92,7 +92,7 @@
 						fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID'],
 						hydrate: ['ScheduleState']
 					};
-					return me._parallelLoadLookbackStore(parallelLoaderConfig);
+					return me.parallelLoadLookbackStore(parallelLoaderConfig);
 				}))
 				.then(function(stores){
 					var items = _.reduce(stores, function(d, store){ return d.concat(store.getRange()); }, []);
@@ -123,22 +123,22 @@
 					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID'],
 					hydrate: ['ScheduleState']
 				};
-				return me._parallelLoadLookbackStore(parallelLoaderConfig);
+				return me.parallelLoadLookbackStore(parallelLoaderConfig);
 			}
 		},
 		
 		/********************************* Chart utility funcs *************************************************/
-		_getChartStartDate: function(){
+		getChartStartDate: function(){
 			var me=this,
 				piData = me.CurrentPortfolioItem.data;
 			return new Date(piData.PlannedStartDate || piData.ActualStartDate || new Date().toString());
 		},
-		_getChartEndDate: function(){
+		getChartEndDate: function(){
 			var me=this,
 				piData = me.CurrentPortfolioItem.data;
 			return new Date(piData.PlannedEndDate || piData.ActualEndDate || new Date().toString());
 		},
-		_getChartTitle: function(){
+		getChartTitle: function(){
 			var me=this,
 				piData = me.CurrentPortfolioItem.data,
 				widthPerCharacter = 10,
@@ -156,13 +156,13 @@
 				margin: 30
 			};
 		},
-		_getChartSubtitle: function(){
+		getChartSubtitle: function(){
 			var me=this,
 				piData = me.CurrentPortfolioItem.data,
 				widthPerCharacter = 6,
 				totalCharacters = (me.getWidth()-20)/widthPerCharacter>>0,
-				startDateString = ' (' + me._dateToStringDisplay(me._getChartStartDate()) + ')', startDateType = '',
-				endDateString = ' (' + me._dateToStringDisplay(me._getChartEndDate()) + ')', endDateType = '',
+				startDateString = ' (' + me.dateToStringDisplay(me.getChartStartDate()) + ')', startDateType = '',
+				endDateString = ' (' + me.dateToStringDisplay(me.getChartEndDate()) + ')', endDateType = '',
 				template = Ext.create("Ext.XTemplate",
 					'<tpl>' +
 						'<span>{startDateString}</span>' +
@@ -179,13 +179,13 @@
 				else if(piData.ActualStartDate) startDateType = 'ActualStartDate';
 				startDateString = (!startDateType ? 'No start day set.' : 
 					(startDateType==='PlannedStartDate' ? 'Planned' : 'Actual') + ' Start: WW' + 
-					me._getWorkweek(new Date(piData[startDateType])) + startDateString);
+					me.getWorkweek(new Date(piData[startDateType])) + startDateString);
 					
 				if(piData.PlannedEndDate) endDateType = 'PlannedEndDate';
 				else if(piData.ActualEndDate) endDateType = 'ActualEndDate';
 				endDateString = (!endDateType ? 'No end day set.' : 
 					(endDateType==='PlannedEndDate' ? 'Planned' : 'Actual') + ' End: WW' + 
-					me._getWorkweek(new Date(piData[endDateType])) + endDateString);
+					me.getWorkweek(new Date(piData[endDateType])) + endDateString);
 			}
 			var formattedTitle = template.apply({
 				startDateString: startDateString,
@@ -198,65 +198,62 @@
 				align: "center"
 			};
 		},
-		_dateToStringDisplay: function(date){ 
+		dateToStringDisplay: function(date){ 
 			return Ext.Date.format(date, 'm/d/Y'); 
-		},
-		_dateToString: function(date){ 
-			return Ext.Date.format(date, 'Y-m-d\\TH:i:s.u\\Z'); 
 		},
 	
 		/********************************* refreshing/reloading **************************************/
-		_hideHighchartsLinks: function(){ 
+		hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
 		},
-		_reloadEverything: function() {
+		reloadEverything: function() {
 			var me = this;
-			me._enqueue(function(unlockFunc){	
-				me._buildHeader();
-				me._buildGrid()
-					.then(function(){ return me._buildChart(); })
+			me.enqueue(function(unlockFunc){	
+				me.renderHeader();
+				me.renderGrid()
+					.then(function(){ return me.renderChart(); })
 					.then(function(){ 
 						me.doLayout();
-						me._hideHighchartsLinks(); 
+						me.hideHighchartsLinks(); 
 					})
-					.fail(function(reason){ me._alert('ERROR', reason); })
+					.fail(function(reason){ me.alert('ERROR', reason); })
 					.then(function(){ unlockFunc(); })
 					.done();
 			});
 		},	
 		
 		/******************************************** launch and config/setup ************************************************/
-		_subscribeToBus: function(){
+		subscribeToBus: function(){
 			var me=this;
 			me.subscribe(me, 'portfoliotreeitemselected', function(treeItem){		
 				me.CurrentPortfolioItem = treeItem.getRecord();
-				me._reloadEverything();
+				me.reloadEverything();
 			});
 		},
 		launch: function () {
 			var me = this;
 			me.ShowGrid = false;
 			me.OnlyStoriesInCurrentProject = false;
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getGlobalContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return me._loadRandomUserStory(me.ProjectRecord);
+					return me.loadRandomUserStory(me.ProjectRecord);
 				})
 				.then(function(userStory){
 					me.HasUserStories = !!userStory;
-					me._subscribeToBus();
-					me._reloadEverything();
+					me.subscribeToBus();
+					me.reloadEverything();
 				})
-				.fail(function(reason){ me._alert('ERROR', reason); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.done();
 		},
 
 		/************************************* header components and event functions **************************************/	
-		_buildShowGridCheckbox: function() {
+		renderShowGridCheckbox: function() {
 			var me=this;
 			if(me.ShowGridCheckbox) me.ShowGridCheckbox.destroy();
 			me.ShowGridCheckbox = Ext.getCmp('navbar').add({
@@ -267,7 +264,7 @@
 					change: {
 						fn: function(checkbox){
 							me.ShowGrid = checkbox.getValue();
-							setTimeout(function(){ me._reloadEverything(); }, 0);
+							setTimeout(function(){ me.reloadEverything(); }, 0);
 						}
 					}
 				},
@@ -275,19 +272,19 @@
 				id: 'show-grid-checkbox'
 			});
 		},
-		_buildCurrentProjectOnlyCheckbox: function(){
+		renderCurrentProjectOnlyCheckbox: function(){
 			var me=this;
 			if(me.CurrentProjectOnlyCheckbox) me.CurrentProjectOnlyCheckbox.destroy();
 			me.CurrentProjectOnlyCheckbox = Ext.getCmp('navbar').add({
 				xtype:'rallycheckboxfield',
 				boxLabel: 'Filter User Stories in Current Project',
 				value: me.OnlyStoriesInCurrentProject,
-				hidden: !me.CurrentPortfolioItem || me.CurrentPortfolioItem.self.ordinal > 0 || !me.HasUserStories || !me.ShowGrid,
+				hidden: !me.CurrentPortfolioItem || me.CurrentPortfolioItem.self.ordinal > 0 || !me.HasUserStories,
 				listeners: {
 					change: {
 						fn: function(checkbox){
 							me.OnlyStoriesInCurrentProject = checkbox.getValue();
-							setTimeout(function(){ me._reloadEverything(); }, 0);
+							setTimeout(function(){ me.reloadEverything(); }, 0);
 						}
 					}
 				},
@@ -295,14 +292,14 @@
 				id: 'current-project-only-checkbox'
 			});
 		},
-		_buildHeader: function(){
+		renderHeader: function(){
 			var me=this;
-			me._buildShowGridCheckbox();
-			me._buildCurrentProjectOnlyCheckbox();
+			me.renderShowGridCheckbox();
+			me.renderCurrentProjectOnlyCheckbox();
 		},
 		
 		/************************************************* render functions ***********************************************/			
-		_buildGrid: function(){
+		renderGrid: function(){
 			var me=this,
 				gridContainer = Ext.getCmp('gridContainer'),
 				grid = Ext.getCmp('grid');
@@ -311,7 +308,7 @@
 			if(!me.ShowGrid || !me.CurrentPortfolioItem) return Q();
 			
 			gridContainer.setLoading('Loading Data');
-			return me._loadGridStore().then(function(store){
+			return me.loadGridStore().then(function(store){
 				var grid = gridContainer.add({
 					xtype: 'rallygrid',
 					id:'grid',
@@ -372,12 +369,12 @@
 					showPagingToolbar: false,
 					listeners:{
 						selectionchange: function(){ 
-							me._enqueue(function(unlockFunc){	
-								me._buildChart().then(function(){ 
+							me.enqueue(function(unlockFunc){	
+								me.renderChart().then(function(){ 
 									me.doLayout();
-									me._hideHighchartsLinks(); 
+									me.hideHighchartsLinks(); 
 								})
-								.fail(function(reason){ me._alert('ERROR', reason); })
+								.fail(function(reason){ me.alert('ERROR', reason); })
 								.then(function(){ unlockFunc(); })
 								.done();
 							});
@@ -388,20 +385,20 @@
 				grid.getSelectionModel().selectAll(true);
 			});
 		},
-		_buildChart: function() {
+		renderChart: function() {
 			var me = this;
 			if(!me.CurrentPortfolioItem) return Q();
 			Ext.getCmp('portfolioItemChart').setLoading('Loading Data');
-			return me._loadChartStore().then(function(store){
-				var calc = Ext.create('FastCumulativeFlowCalculator', {
-						startDate: me._getChartStartDate(),
-						endDate: me._getChartEndDate(),
+			return me.loadChartStore().then(function(store){
+				var calc = Ext.create('Intel.lib.chart.FastCumulativeFlowCalculator', {
+						startDate: me.getChartStartDate(),
+						endDate: me.getChartEndDate(),
 						scheduleStates: me.ScheduleStates
 					}),
 					updateOptions = {trendType:'LastSprint'},		
-					chartData = me._updateCumulativeFlowChartData(calc.runCalculation(store.getRange()), updateOptions),
+					chartData = me.updateCumulativeFlowChartData(calc.runCalculation(store.getRange()), updateOptions),
 					portfolioItemChart = $('#portfolioItemChart-innerCt').highcharts(
-						Ext.Object.merge({}, me._defaultCumulativeFlowChartConfig, me._getCumulativeFlowChartColors(), {
+						Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 							chart: { height:400 },
 							legend:{
 								enabled:true,
@@ -409,16 +406,16 @@
 								width:500,
 								itemWidth:100
 							},
-							title: me._getChartTitle(),
-							subtitle: me._getChartSubtitle(),
+							title: me.getChartTitle(),
+							subtitle: me.getChartSubtitle(),
 							xAxis:{
 								categories: chartData.categories,
-								tickInterval: me._getCumulativeFlowChartTicks(me._getChartStartDate(), me._getChartEndDate(), me.getWidth()-20)
+								tickInterval: me.getCumulativeFlowChartTicks(me.getChartStartDate(), me.getChartEndDate(), me.getWidth()-20)
 							},
 							series: chartData.series
 						})
 					)[0];
-				me._setCumulativeFlowChartDatemap(portfolioItemChart.childNodes[0].id, chartData.datemap);
+				me.setCumulativeFlowChartDatemap(portfolioItemChart.childNodes[0].id, chartData.datemap);
 				me.doLayout();
 				Ext.getCmp('portfolioItemChart').setLoading(false);
 			});

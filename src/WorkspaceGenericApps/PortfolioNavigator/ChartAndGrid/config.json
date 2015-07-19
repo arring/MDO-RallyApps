@@ -1,0 +1,25 @@
+{
+   "name": "Portfolio Chart And Grid",
+   "className": "Intel.PortfolioNavigator.ChartAndGrid",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc3",
+   "javascript": [
+      "https://code.jquery.com/jquery-2.1.3.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "https://code.highcharts.com/highcharts.js",
+      "../../lib/intel-rally-app.js",
+      "../../lib/mixin/window-listener.js",
+      "../../lib/mixin/iframe-resize.js",
+      "../../lib/mixin/pretty-alert.js",
+      "../../lib/mixin/intel-workweek.js",
+      "../../lib/mixin/parallel-loader.js",
+      "../../lib/mixin/async-queue.js",
+      "../../lib/mixin/cumulative-flow-chart-mixin.js",
+      "../../lib/chart/fast-cumulative-flow-calculator.js",
+      "App.js"
+   ],
+   "css": [
+      "../../lib/css/base.css",
+      "app.css"
+   ]
+}
