@@ -109,6 +109,9 @@ SUMMARY:
 		setDisplayFields: function(displayFields){
 			this.displayFields = displayFields;
 			this._reRenderCard();
+		},
+		doHighlight: function(){
+			this.el.down('.swimlane-card-content').highlight("8dc63f", { attr: 'backgroundColor', duration: 1000 });
 		}
 	});
 }());

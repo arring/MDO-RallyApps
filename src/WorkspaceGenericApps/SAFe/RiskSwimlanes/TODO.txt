@@ -7,9 +7,9 @@ Allen's Decision:
 TODO LATER: 
 	- add cool field picker for the cards
 	- add cool filter picker for the cards
-	- test user combobox 
-	- test key value db thoroughly
-	- test risk db thoroughly
+	DONE - test user combobox 
+	DONE - test key value db thoroughly
+	DONE - test risk db thoroughly
 	
 TODO:
 	DONE - add colors to cards 
@@ -21,14 +21,9 @@ TODO:
 	DONE - add train filter for cards 
 	- add product filter for cards 
 	- add horizontal filter for cards 
-	- stop it from jumping to the top when you make an edit on a card
-	
-	
-	tuesday: 8 hours
-	wednesday: 9.5 hours
-	thrusday: 6.5 hours + 3 hours + 1 hour + 4.5 hour
-	friday: 3 + 3 + 2
-	
+	DONE - stop it from jumping to the top when you make an edit on a card
+		> stopped having problems for no reason...keep an eye out
+
 TODO:
 	DONE 1) fix the promise stuff so that when we render swimlanes that everything gets halted until the _loadSwimlaneAgreements finishes. otherwise there will be a 
 		race condition

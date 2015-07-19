@@ -10,7 +10,8 @@
 */
 
 (function(){
-	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
+	var VALID_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/,
+		RiskDb = Intel.SAFe.lib.resource.RiskDb,
 		RiskModel = Intel.SAFe.lib.model.Risk;
 
 	Ext.define('Intel.SAFe.RiskSwimlanes', {
@@ -63,17 +64,149 @@
 		
 		userAppsPref: 'intel-SAFe-apps-preference',
 		
+		/**___________________________________ CONFIG/SETTINGS ___________________________________*/
+		config: {
+			defaultSettings: {
+				'Enable-Groups': false,
+				Groups: ''
+			}
+		},				
+		getSettingsFields: function() {
+			if(!Rally.getApp().getContext().getPermissions().isWorkspaceOrSubscriptionAdmin()) return [];
+			else return [{
+				name: 'Enable-Groups',
+				xtype:'rallycheckboxfield',
+				id: 'EnableGroupsCheckbox',
+				label: 'Enable Horizontal Groupings',
+				labelWidth: 120,
+				bubbleEvents: ['change'] 
+			},{
+				xtype:'container',
+				id: 'GroupingInstructions',
+				html:[
+					'<hr/>',
+					'<div>',
+						'<b>Set The Horizontal Groupings</b>',
+						'<p>Group Columns By keywords. Syntax is:</p>',
+						'<div style="padding-left:5px;">',
+							'<p>GroupName1:keyword1,keyword2,keyword3;</p>',
+							'<p>GroupName2:keyword1,keyword2;</p>',
+							'<p>...</p>',
+						'</div>',
+					'</div>'
+				].join('\n'),
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else field.show();
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue) this.hide();
+							else this.show();
+						}
+					}
+				}
+			},{
+				name: 'Groups',
+				xtype:'textarea',
+				id: 'GroupingTextarea',
+				label: 'Column Groups',
+				labelWidth: 120, width:500, height:150,
+				resizable:true,
+				resizeHandles:'se s e',
+				bubbleEvents: ['change'],
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else field.show();
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue) this.hide();
+							else this.show();
+						}
+					}
+				}
+			},{
+				xtype:'container',
+				id: 'SyntaxNotifier',
+				listeners:{
+					added: function(field, form){
+						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
+						else {
+							field.show();
+							setTimeout(function setInitialColor(){
+								var el = field.getEl(),
+									goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+									badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>',
+									textElContainer = form.down('#GroupingTextarea');
+								if(el && textElContainer && textElContainer.getEl().down('textarea')){
+									if(textElContainer.getEl().down('textarea').getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
+									else el.setHTML(badHTML);
+								}
+								else setTimeout(setInitialColor, 10);
+							}, 0);
+						}
+					}
+				},
+				handlesEvents: {
+					change: function(item, itemValue) {
+						if(item.id == 'EnableGroupsCheckbox'){
+							if(!itemValue){
+								this.hide();
+								return;
+							}
+							else this.show();
+						}
+						var el = this.getEl(),
+							textEl = this.up('form').down('#GroupingTextarea').getEl().down('textarea'),
+							goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+							badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
+						if(textEl.getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
+						else el.setHTML(badHTML);
+					}
+				}
+			}];
+		},
+		
 		/**___________________________________ UTIL FUNCS ___________________________________*/	
 		formatUserName: function(user){
 			return user ? ((user.data.LastName + ', ' + user.data.FirstName) || user.data.UserName) : '?';
 		},
 		getCardFilter: function(){
-			var defaultFilter = new Ext.util.Filter({filterFn: function(){ return true; } }),
+			var me = this,
+				defaultFilter = new Ext.util.Filter({filterFn: function(){ return true; } }),
 				ownerFilterValue = Ext.ComponentQuery.query('#filterByOwnerDropdown')[0].getValue(),
+				topPortfolioItemFilterValue = Ext.ComponentQuery.query('#filterByTopPortfolioItemDropdown')[0].getValue(),
+				horizontalFilterValue = Ext.ComponentQuery.query('#filterByHorizontalDropdown')[0].getValue(),
 				ownerFilter = ownerFilterValue ? 
 					new Ext.util.Filter({filterFn:function(card){ return card.getData().OwnerObjectID === ownerFilterValue; } }) :
+					defaultFilter,
+				topPortfolioItemFilter = topPortfolioItemFilterValue ? 
+					new Ext.util.Filter({filterFn:function(card){ 
+						var portfolioItemObjectID = card.getData().PortfolioItemObjectID;
+						return _.some(me.PortfolioItemMap, function(scrumGroupData){
+							return scrumGroupData.PortfolioItemMap[portfolioItemObjectID] === topPortfolioItemFilterValue;
+						}); 
+					} }) :
+					defaultFilter,
+				horizontalFilter = horizontalFilterValue ? 
+					new Ext.util.Filter({filterFn:function(card){ 
+						var project = me.ProjectsWithTeamMembers[card.getData().ProjectObjectID],
+							projectName = project && project.data.Name;
+						return projectName && _.some(me.HorizontalGroups[horizontalFilterValue], function(nameContains){
+							return new RegExp(nameContains).test(projectName);
+						}); 
+					} }) :
 					defaultFilter;
-			return new Ext.util.Filter({ filterFn: Ext.util.Filter.createFilterFn([ownerFilter])});
+			return new Ext.util.Filter({ 
+				filterFn: Ext.util.Filter.createFilterFn([ownerFilter, topPortfolioItemFilter, horizontalFilter])
+			});
 		},
 		addOwnerAndSubmitterAndTrain: function(riskJSON){
 			var me = this,
@@ -96,32 +229,68 @@
 		},
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		loadPortfolioItemsByRelease: function(releaseName){
+		_loadPortfolioItemsOfTypeInRelease: function(releaseName, portfolioProjectOID, type){
+			if(!portfolioProjectOID || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
 			var me=this,
-				scrumGroupRootRecords = me.ScrumGroupRootRecord ? [me.ScrumGroupRootRecord] : me.AllScrumGroupRootRecords;
-			me.ScrumGroupPortfolioMap = {};
-			return Q.all(_.map(scrumGroupRootRecords, function(scrumGroupRootRecord){
-				var portfolioProjectOID = me.getPortfolioOIDForScrumGroupRootProjectRecord(scrumGroupRootRecord),
-					portfolioRef = '/project/' + portfolioProjectOID,
-					store = Ext.create('Rally.data.wsapi.Store', {
-						model: 'PortfolioItem/' + me.PortfolioItemTypes[0],
-						limit: Infinity,
-						disableMetaChangeEvent: true,
-						remoteSort: false,
-						fetch: ['Name', 'FormattedID', 'ObjectID'],
-						filters:[{ property:'Release.Name', value:releaseName}],
-						context:{
-							project: portfolioRef,
-							projectScopeDown: true,
-							projectScopeUp:false
-						}
-					});
-				return me.reloadStore(store).then(function(store){ 
-					me.ScrumGroupPortfolioMap[scrumGroupRootRecord.data.ObjectID] = store.getRange(); 
-					return store.getRange();
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'PortfolioItem/' + type,
+					limit: Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: me.portfolioItemFields,
+					filters:[{ property:'Release.Name', value:releaseName}],
+					context:{
+						project: '/project/' + portfolioProjectOID,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
 				});
+			return me.reloadStore(store);
+		},	
+		loadPortfolioItemsByRelease: function(releaseName, scrumGroupRootRecords){
+			/** 
+				scrumGroupPortfolioMap = {
+					<scrumGroupOID>: {
+						PortfolioItems: [records],
+						PortfolioItemMap: {
+							<lowPortfolioItemOID>: <highPOrtfolioItemName>
+						}
+					}
+				}
+			**/
+			var me=this;
+			var scrumGroupPortfolioMap = {};
+			return Q.all(_.map(scrumGroupRootRecords, function(scrumGroupRootRecord){
+				var portfolioProjectOID = me.getPortfolioOIDForScrumGroupRootProjectRecord(scrumGroupRootRecord);
+				return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+							me.loadPortfolioItemsOfType({data: {_ref: '/project/' + portfolioProjectOID}}, type) : 
+							me._loadPortfolioItemsOfTypeInRelease(releaseName, portfolioProjectOID, type)
+						);
+					}))
+					.then(function(portfolioItemStores){
+						var portfolioItemStore = portfolioItemStores[0];
+						var portfolioItemMap = {};
+						_.each(portfolioItemStore.getRange(), function(lowPortfolioItem){
+							var ordinal = 0, 
+								parentPortfolioItem = lowPortfolioItem,
+								getParentRecord = function(child, parentList){
+									return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
+								};
+							while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
+								parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
+								++ordinal;
+							}
+							if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
+								portfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
+						});
+						scrumGroupPortfolioMap[scrumGroupRootRecord.data.ObjectID] = {
+							PortfolioItems: portfolioItemStore.getRange(),
+							PortfolioItemMap: portfolioItemMap
+						};
+					});
 			}))
-			.then(function(portfolioItemsLists){ return Array.prototype.concat.apply([], portfolioItemsLists); });
+			.then(function(){ return scrumGroupPortfolioMap; });
 		},	
 		loadRisks: function(){
 			var me=this, 
@@ -159,10 +328,14 @@
 		updateRiskUsers: function(risks){
 			var me = this;
 			return me.loadUsers(risks).then(function(){
-				var previousOwnerObjectID = me.FilterByOwnerDropdown.getValue();
+				var previousOwnerObjectID = me.FilterByOwnerDropdown.getValue(),
+					previousPortfolioItem = me.FilterByTopPortfolioItemDropdown.getValue(),
+					previousHorizontal = me.FilterByHorizontalDropdown.getValue();
 				me.down('#toolsbarLeft').removeAll();
 				me.renderAddRiskButton();
 				me.renderFilterByOwnerDropdown(previousOwnerObjectID);
+				me.renderFilterByTopPortfolioItemDropdown(previousPortfolioItem);
+				me.renderFilterByHorizontalDropdown(previousHorizontal);
 			});
 		},
 		
@@ -179,9 +352,13 @@
 			me.down('#toolsbarRight').removeAll();
 		},
 		reloadData: function(){
-			var me = this;
-			return Q.all([me.loadRisks(), me.loadPortfolioItemsByRelease(me.ReleaseRecord.data.Name)])
-				.then(function(results){ me.PortfolioItemsInRelease = results[1]; })
+			var me = this,
+				scrumGroupRootRecords = me.ScrumGroupRootRecord ? [me.ScrumGroupRootRecord] : me.AllScrumGroupRootRecords;
+			return Q.all([me.loadRisks(), me.loadPortfolioItemsByRelease(me.ReleaseRecord.data.Name, scrumGroupRootRecords)])
+				.then(function(results){ 
+					me.PortfolioItemMap = results[1]; 
+					me.PortfolioItemsInRelease = [].concat.apply([], _.pluck(me.PortfolioItemMap, 'PortfolioItems'));
+				})
 				.then(function(){ return me.loadUsers(me.InitialRisks); });
 		},	
 		reloadEverything: function(){
@@ -195,6 +372,8 @@
 					me.renderScrumGroupPicker();
 					me.renderAddRiskButton();
 					me.renderFilterByOwnerDropdown();
+					me.renderFilterByTopPortfolioItemDropdown();
+					me.renderFilterByHorizontalDropdown();
 					me.renderShowAggrementsCheckbox();
 				})
 				.then(function(){ me.renderSwimlanes(); })
@@ -208,6 +387,16 @@
 			me.setLoading('Loading configuration');
 			me.ShowAgreements = false;
 			Q.onerror = function(reason){ me.alert('ERROR', reason); };
+			var enableHorizontalGroups = me.getSetting('Enable-Groups');
+			var horizontalGroups = enableHorizontalGroups && me.getSetting('Groups').match(VALID_GROUPING_SYNTAX) && me.getSetting('Groups');
+			if(horizontalGroups){
+				me.HorizontalGroups = _.reduce(horizontalGroups.trim().split(';'), function(map, line){
+					if(!line.length) return map;
+					var split = line.trim().split(':');
+					map[split[0]] = split[1].split(',');
+					return map;
+				}, {});
+			}
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
@@ -369,6 +558,49 @@
 				}
 			});
 		},
+		renderFilterByTopPortfolioItemDropdown: function(value){
+			var me=this,
+				options = ['Clear Filter'].concat(_.sortBy(_.keys(_.reduce(me.PortfolioItemMap, 
+					function(map, item){
+						_.each(item.PortfolioItemMap, function(topPortfolioItem){ map[topPortfolioItem] = 1; });
+						return map;
+					},{})),
+					function(name){ return name; }));
+			me.FilterByTopPortfolioItemDropdown = me.down('#toolsbarLeft').add({
+				xtype: 'intelfixedcombobox',
+				id: 'filterByTopPortfolioItemDropdown',
+				emptyText: 'Filter By ' + me.PortfolioItemTypes.slice(-1)[0],
+				store: options,
+				value: value,
+				listeners: {
+					select: function(combo, newValues){
+						if(combo.getValue() === 'Clear Filter') combo.setValue('');
+						me.RiskSwimlanes.clearFilters();
+						me.RiskSwimlanes.addFilter(me.getCardFilter());
+					}
+				}
+			});
+		},
+		renderFilterByHorizontalDropdown: function(value){
+			var me=this,
+				options = ['Clear Filter'].concat(_.sortBy(_.keys(me.HorizontalGroups), function(name){ return name; }));
+			if(me.HorizontalGroups){
+				me.FilterByHorizontalDropdown = me.down('#toolsbarLeft').add({
+					xtype: 'intelfixedcombobox',
+					id: 'filterByHorizontalDropdown',
+					emptyText: 'Filter By Horizontal',
+					store: options,
+					value: value,
+					listeners: {
+						select: function(combo, newValues){
+							if(combo.getValue() === 'Clear Filter') combo.setValue('');
+							me.RiskSwimlanes.clearFilters();
+							me.RiskSwimlanes.addFilter(me.getCardFilter());
+						}
+					}
+				});
+			}
+		},
 		renderShowAggrementsCheckbox: function(){
 			var me = this;
 			me.ShowAgreementsCheckbox = me.down('#toolsbarRight').add({
@@ -426,6 +658,7 @@
 					return me.updateRiskUsers(_.invoke(me.RiskSwimlanes.getCards(), 'getData')).then(function(){
 						if(newRiskJSON.ReleaseName !== me.ReleaseRecord.data.Name) card.destroy();
 						else card.setData(me.addOwnerAndSubmitterAndTrain(newRiskJSON));
+						card.doHighlight();
 					});
 				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
@@ -434,11 +667,13 @@
 		},
 		onCardCopy: function(card){
 			var me = this,
-				newRiskJSON = _.merge(card.getData(), {RiskID: me.generateRiskID(card.getData())});
+				newRiskJSON = _.merge({}, card.getData(), {RiskID: me.generateRiskID(card.getData())});
 			me.setLoading('Copying Risk');
 			RiskDb.create(newRiskJSON.RiskID, newRiskJSON)
 				.then(function(newRiskJSON){
-					me.RiskSwimlanes.createCard(me.addOwnerAndSubmitterAndTrain(newRiskJSON), newRiskJSON.Status, newRiskJSON.RiskLevel); 
+					var card = me.RiskSwimlanes.createCard(
+						me.addOwnerAndSubmitterAndTrain(newRiskJSON), newRiskJSON.Status, newRiskJSON.RiskLevel); 
+					card.doHighlight();
 				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
@@ -453,6 +688,7 @@
 					card.setColName(newRiskJSON.Status);
 					card.setRowName(newRiskJSON.RiskLevel);
 					card.setData(me.addOwnerAndSubmitterAndTrain(newRiskJSON));
+					card.doHighlight();
 				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
@@ -508,9 +744,10 @@
 								if(releaseName === currentReleaseRecord.data.Name) return;
 								currentReleaseRecord = records[0];
 								me.setLoading('Loading Data');
-								me.loadPortfolioItemsByRelease(releaseName).then(function(portfolioItems){
-									if(shouldShowScrumGroupPicker) currentPortfolioItemRecords = me.ScrumGroupPortfolioMap[currentScrumGroup.data.ObjectID];
-									else currentPortfolioItemRecords = portfolioItems;
+								me.loadPortfolioItemsByRelease(releaseName, [currentScrumGroup]).then(function(portfolioItemMap){
+									//if(shouldShowScrumGroupPicker)
+										currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
+									//else currentPortfolioItemRecords = [].concat.apply([], _.pluck(portfolioItemMap, 'PortfolioItems');
 									updateComponents();
 								})
 								.fail(function(reason){ me.alert('ERROR', reason); })
@@ -545,7 +782,7 @@
 								var scrumGroupObjectID = records[0].data.ObjectID;
 								if(scrumGroupObjectID === currentScrumGroup.data.ObjectID) return;
 								currentScrumGroup = records[0];
-								currentPortfolioItemRecords = me.ScrumGroupPortfolioMap[currentScrumGroup.data.ObjectID];
+								currentPortfolioItemRecords = me.PortfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
 								updateComponents();
 							}
 						}
@@ -783,16 +1020,17 @@
 				modal.setLoading('Loading Data');
 				if(isExistingRisk){
 					currentReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name === oldRiskJSON.ReleaseName; });
-					if(shouldShowScrumGroupPicker){
-						currentScrumGroup = _.find(me.AllScrumGroupRootRecords, function(sgr){
-							return me.getScrumGroupName(sgr) === oldRiskJSON.Train; 
-						});
-					}
+					//if(shouldShowScrumGroupPicker){
+					currentScrumGroup = _.find(me.AllScrumGroupRootRecords, function(sgr){
+						return me.getScrumGroupName(sgr) === oldRiskJSON.Train; 
+					});
+					//}
 				}
-				me.loadPortfolioItemsByRelease(currentReleaseRecord.data.Name)
-					.then(function(portfolioItems){ 
-						if(shouldShowScrumGroupPicker) currentPortfolioItemRecords = me.ScrumGroupPortfolioMap[currentScrumGroup.data.ObjectID];
-						else currentPortfolioItemRecords = portfolioItems;
+				me.loadPortfolioItemsByRelease(currentReleaseRecord.data.Name, [currentScrumGroup])
+					.then(function(portfolioItemMap){
+						//if(shouldShowScrumGroupPicker)
+							currentPortfolioItemRecords = portfolioItemMap[currentScrumGroup.data.ObjectID].PortfolioItems;
+						//else currentPortfolioItemRecords = [].concat.apply([], _.pluck(portfolioItemMap, 'PortfolioItems');
 						updateComponents();
 					})
 					.fail(function(reason){ me.alert('ERROR', reason); })

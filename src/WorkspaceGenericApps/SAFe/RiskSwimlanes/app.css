@@ -9,7 +9,9 @@
 		background-color: #00a9e0;
 		border-color: #00a9e0; }
 		
-	#filterByOwnerDropdown {
+	#filterByOwnerDropdown,
+	#filterByTopPortfolioItemDropdown,
+	#filterByHorizontalDropdown {
 		margin-left:20px; }
 
 

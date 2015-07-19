@@ -1,5 +1,6 @@
 (function(){
 	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
+		RiskModel = Intel.SAFe.lib.model.Risk,
 		RALLY_MAX_STRING_SIZE = 32768,
 		COLUMN_DEFAULTS = {
 			text:'',
@@ -1780,11 +1781,28 @@
 					'RiskLevel',
 					'Checkpoint',
 					'Owner',
-					'_undoButton',
-					'_saveButton',
-					'_copyButton',
-					'_deleteButton'
-				]
+					'UndoButton',
+					'SaveButton',
+					'CopyButton',
+					'DeleteButton'
+				],
+				_getNewRow: function(){
+					var grid = this;
+					return Ext.create(RiskModel, {
+						RiskID: grid._generateRiskID(),
+						ReleaseName: grid.releaseRecord.data.Name,
+						PortfolioItemObjectID: 0,
+						ProjectObjectID: grid.projectRecords.length === 1 ? grid.projectRecords[0].data.ObjectID : 0,
+						Description: '',
+						Impact: '',
+						MitigationPlan: '',
+						RiskLevel: 'Low', //override
+						Status: '',
+						OwnerObjectID: 0,
+						SubmitterObjectID: Rally.environment.getContext().getUser().ObjectID,
+						Checkpoint: 0
+					});
+				}
 			});
 		},
 		renderDependenciesGrids: function(){

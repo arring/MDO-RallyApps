@@ -4,22 +4,25 @@
 
 	DEPENDENCIES: 
 		Intel.lib.resource.KeyValueDb
-		Intel.lib.component.GridColumnFilter
 		Intel.lib.mixin.IntelWorkweek
 		Intel.lib.mixin.PrettyAlert
+		Intel.lib.component.GridColumnFilter
 		Intel.lib.component.UserPicker
 		Intel.lib.component.TextArea
 		Intel.lib.component.ComboBox
 		Intel.lib.component.FixedComboBox
 		Intel.lib.component.TableView
 		Intel.lib.component.SessionStorage
+		Intel.lib.component.CellEditing
 		Intel.SAFe.lib.resource.RiskDb
 		Intel.SAFe.lib.model.Risk
+		risk-grid.css
 				
 		Font-Awesome
 		Q
 		lodash
 		jquery
+		
 */
 
 (function(){
@@ -87,7 +90,10 @@
 					renderer: function(val){ return val || '-'; },
 					layout:'hbox'
 				},
-				items: grid.visibleColumns.map(function(colType){ return grid._getColumnCfg(colType); })
+				items: grid.visibleColumns.map(function(colType){ 
+					if(grid['_get' + colType + 'Column']) return grid['_get' + colType + 'Column'](colType); 
+					else return {xtype:'displayfield', value:'Invalid: ' + colType};
+				})
 			};
 		},
 		_getStore: function(){
@@ -127,21 +133,7 @@
 							click: function(){
 								if(!grid.portfolioItemRecords.length) grid.alert('ERROR', 'No ' + grid._getPortfolioItemType() + 's found.');
 								else {
-									var model = Ext.create(RiskModel, {
-										RiskID: grid._generateRiskID(),
-										ReleaseName: grid.releaseRecord.data.Name,
-										PortfolioItemObjectID: 0,
-										ProjectObjectID: grid.projectRecords.length === 1 ? grid.projectRecords[0].data.ObjectID : 0,
-										Description: '',
-										Impact: '',
-										MitigationPlan: '',
-										RiskLevel: '',
-										Status: '',
-										OwnerObjectID: 0,
-										SubmitterObjectID: Rally.environment.getContext().getUser().ObjectID,
-										Checkpoint: 0
-									});
-									
+									var model = grid._getNewRow();
 									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', grid), 'clearFilters');
 									grid.store.add(model);
 									model.setDirty();
@@ -189,405 +181,446 @@
 			};
 		},
 		
-		_getColumnCfg: function(colType){
+		_getPortfolioItemFormattedIDColumn: function(){
 			var grid = this,
-				workweekData = grid._getWorkweekData(),
-				portfolioItemFIDStore = grid._getPortfolioItemFIDStore(),
-				portfolioItemNameStore = grid._getPortfolioItemNameStore(),
-				projectNameStore = grid._getProjectNameStore(),
-				makeDoSortFn = function(fn){
-					return function(direction){
-						grid.store.sort({
-							sorterFn: function(r1, r2){
-								var val1 = fn(r1), val2 = fn(r2);
-								return (direction=='ASC' ? 1 : -1) * ((val1 < val2) ? -1 : (val1 === val2 ? 0 : 1));
-							}
-						});
-					};
+				oidToFID = function(oid){ 
+					return grid.portfolioItemRecordMap[oid] ? grid.portfolioItemRecordMap[oid].data.FormattedID : '-'; 
 				};
-				
-			switch(colType){
-				case 'PortfolioItemFormattedID': 
-					var oidToPIFID = function(oid){ return grid.portfolioItemRecordMap[oid] ? grid.portfolioItemRecordMap[oid].data.FormattedID : '-'; };
-					return {
-						text:'#',
-						dataIndex:'PortfolioItemObjectID',
-						tdCls: 'intel-editor-cell',	
-						width:80,
-						editor:{
-							xtype:'intelcombobox',
-							width:80,
-							store: portfolioItemFIDStore,
-							displayField: 'FormattedID',
-							valueField: 'ObjectID'
-						},			
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return oidToPIFID(record.data.PortfolioItemObjectID); }),
-						renderer: function(oid){ return oidToPIFID(oid); },
-						items:[{ 
-							xtype:'intelgridcolumnfilter', 
-							sortFn: function(oid, fid){ return fid; },
-							convertDisplayFn: function(oid){ return oidToPIFID(oid); }
-						}]
-					};
-				case 'PortfolioItemName':
-					var oidToPIName = function(oid){ return grid.portfolioItemRecordMap[oid] ? grid.portfolioItemRecordMap[oid].data.Name : '-'; };
-					return {
-						text: grid._getPortfolioItemType(),
-						dataIndex:'PortfolioItemObjectID',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor:{
-							xtype:'intelcombobox',
-							flex:1,
-							store: portfolioItemNameStore,
-							displayField: 'Name',
-							valueField: 'ObjectID'
-						},			
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return oidToPIName(record.data.PortfolioItemObjectID); }),
-						renderer: function(oid){ return oidToPIName(oid); },
-						items:[{ 
-							xtype:'intelgridcolumnfilter', 
-							sortFn: function(oid, name){ return name; },
-							convertDisplayFn: function(oid){ return oidToPIName(oid); }
-						}]
-					};
-				case 'TopPortfolioItemName':
-					var oidToTopPIName = function(oid){ return grid.topPortfolioItemMap[oid] || '-'; };
-					return {
-						text: grid._getTopPortfolioItemType(),
-						dataIndex:'PortfolioItemObjectID',
-						width: 100,		
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return oidToTopPIName(record.data.PortfolioItemObjectID); }),
-						renderer: function(oid){ return oidToTopPIName(oid); },
-						items:[{ 
-							xtype:'intelgridcolumnfilter', 
-							sortFn: function(topPI){ return topPI; },
-							convertDisplayFn: function(oid){ return oidToTopPIName(oid); },
-							convertValueFn: function(oid){ return oidToTopPIName(oid); },
-							filterFn: function(topPI, oid){ return topPI === oidToTopPIName(oid); }
-						}]
-					};
-				case 'OwningProject':
-					var oidToProjectName = function(oid){ return grid.projectRecordMap[oid] ? grid.projectRecordMap[oid].data.Name : '-'; };
-					return {
-						text: 'Team',
-						dataIndex:'ProjectObjectID',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor:{
-							xtype:'intelcombobox',
-							flex:1,
-							store: projectNameStore,
-							displayField: 'Name',
-							valueField: 'ObjectID'
-						},			
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return oidToProjectName(record.data.ProjectObjectID); }),
-						renderer: function(oid){ return oidToProjectName(oid); },
-						items:[{ 
-							xtype:'intelgridcolumnfilter', 
-							sortFn: function(oid, name){ return name; },
-							convertDisplayFn: function(oid){ return oidToProjectName(oid); }
-						}]
-					};
-				case 'Description':
-					return {
-						text:'Risk Description (If This...)', 
-						dataIndex:'Description',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor: 'inteltextarea'
-					};
-				case 'Impact':
-					return {
-						text:'Impact (Then this...)', 
-						dataIndex:'Impact',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor: 'inteltextarea'
-					};
-				case 'MitigationPlan':
-					return {
-						text:'Mitigation/ Prevention Plan', 
-						dataIndex:'MitigationPlan',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor: 'inteltextarea'
-					};
-				case 'Status':
-					var statusOptions = RiskModel.getStatusOptions();
-					return {
-						text:'Status',
-						dataIndex:'Status',
-						tdCls: 'intel-editor-cell',	
-						width:100,			
-						editor:{
-							xtype:'intelfixedcombo',
-							store: statusOptions
-						},
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return statusOptions.indexOf(record.data.Status); }),
-						items:[{ 
-							xtype:'intelgridcolumnfilter',
-							sortFn: function(status){ return statusOptions.indexOf(status); }
-						}]
-					};
-				case 'RiskLevel':
-					var riskLevelOptions = RiskModel.getRiskLevelOptions(),
-						displayMap = {
-							High: 'High-Staff Help',
-							Medium: 'Medium-CE Help',
-							Low: 'Low-Team Managed'
-						},
-						storeOptions = _.map(riskLevelOptions, function(item){ return [item, displayMap[item]]; });
-					return {
-						text:'Risk Level',
-						dataIndex:'RiskLevel',
-						tdCls: 'intel-editor-cell',	
-						width:100,			
-						editor:{
-							xtype:'intelfixedcombo',
-							store: storeOptions
-						},
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ return riskLevelOptions.indexOf(record.data.RiskLevel); }),
-						renderer: function(item){ return displayMap[item]; },
-						items:[{ 
-							xtype:'intelgridcolumnfilter',
-							convertDisplayFn: function(item){ return displayMap[item]; },
-							sortFn: function(riskLevel){ return riskLevelOptions.indexOf(riskLevel); }
-						}]
-					};
-				case 'Checkpoint':
-					return {
-						text:'Checkpoint',	
-						dataIndex:'Checkpoint',
-						tdCls: 'intel-editor-cell',	
-						width:90,
-						editor:{
-							xtype:'intelfixedcombo',
-							width:80,
-							store: Ext.create('Ext.data.Store', {
-								fields: ['DateVal', 'Workweek'],
-								data: workweekData
-							}),
-							displayField: 'Workweek',
-							valueField: 'DateVal'
-						},
-						sortable:true,
-						renderer:function(dateVal){ return dateVal ? 'ww' + grid.getWorkweek(dateVal) : '-'; },	
-						items:[{ 
-							xtype:'intelgridcolumnfilter',
-							convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + grid.getWorkweek(dateVal) : undefined; }
-						}]
-					};
-				case 'Owner':
-					return {
-						text:'Owner', 
-						dataIndex:'OwnerObjectID',
-						tdCls: 'intel-editor-cell',	
-						flex:1,
-						editor: {
-							xtype: 'inteluserpicker',
-							emptyText: 'Select Owner',
-							valueField: 'ObjectID'
-						}, 
-						renderer: function(oid){
-							if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-							else {
-								var id = Ext.id();
-								grid._getUserByObjectID(oid)
-									.then(function(user){
-										var el = Ext.get(id);
-										if(user && el) el.setHTML(grid._formatUserName(user)); 
-									})
-									.fail(function(reason){ grid.alert('ERROR', reason); })
-									.done();
-								return '<div id="' + id + '">?</div>';
-							}
-						},
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ 
-							var oid = record.data.OwnerObjectID;
-							if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-							else return oid;
-						}),
-						items:[{ 
-							xtype:'intelgridcolumnfilter',
-							sortFn: function(oid, name){ return name; },
-							convertDisplayFn: function(oid){ 
-								if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-								else return grid._getUserByObjectID(oid).then(function(user){ return grid._formatUserName(user); }); 
-							}
-						}]
-					};
-				case 'Submitter':
-					return {
-						text:'Submitter', 
-						dataIndex:'SubmitterObjectID',
-						flex:1,
-						renderer: function(oid){
-							if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-							else {
-								var id = Ext.id();
-								grid._getUserByObjectID(oid)
-									.then(function(user){ 
-										var el = Ext.get(id);
-										if(user && el) el.setHTML(grid._formatUserName(user)); 
-									})
-									.fail(function(reason){ grid.alert('ERROR', reason); })
-									.done();
-								return '<div id="' + id + '">?</div>';
-							}
-						},
-						sortable:true,
-						doSort: makeDoSortFn(function(record){ 
-							var oid = record.data.SubmitterObjectID;
-							if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-							else return oid;
-						}),
-						items:[{ 
-							xtype:'intelgridcolumnfilter',
-							sortFn: function(oid, name){ return name; },
-							convertDisplayFn: function(oid){
-								if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
-								else return grid._getUserByObjectID(oid).then(function(user){ return grid._formatUserName(user); }); 
-							}
-						}]
-					};
-				case '_undoButton':
-					return {
-						width:24,
-						renderer: function(value, meta, record){
-							var id = Ext.id();
-							if(!grid._isRiskEdited(record)) return;
-							meta.tdAttr = 'title="Undo"';
-							setTimeout(function whenRendered(){
+			return {
+				text:'#',
+				dataIndex:'PortfolioItemObjectID',
+				tdCls: 'intel-editor-cell',	
+				width:80,
+				editor:{
+					xtype:'intelcombobox',
+					width:80,
+					store: grid._getPortfolioItemFIDStore(),
+					displayField: 'FormattedID',
+					valueField: 'ObjectID'
+				},			
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return oidToFID(record.data.PortfolioItemObjectID); }),
+				renderer: function(oid){ return oidToFID(oid); },
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					sortFn: function(oid, fid){ return fid; },
+					convertDisplayFn: function(oid){ return oidToFID(oid); }
+				}]
+			};
+		},
+		_getPortfolioItemNameColumn: function(){
+			var grid = this,
+				oidToName = function(oid){ 
+					return grid.portfolioItemRecordMap[oid] ? grid.portfolioItemRecordMap[oid].data.Name : '-'; 
+				};
+			return {
+				text: grid._getPortfolioItemType(),
+				dataIndex:'PortfolioItemObjectID',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					flex:1,
+					store: grid._getPortfolioItemNameStore(),
+					displayField: 'Name',
+					valueField: 'ObjectID'
+				},			
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return oidToName(record.data.PortfolioItemObjectID); }),
+				renderer: function(oid){ return oidToName(oid); },
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					sortFn: function(oid, name){ return name; },
+					convertDisplayFn: function(oid){ return oidToName(oid); }
+				}]
+			};
+		},
+		_getTopPortfolioItemNameColumn: function(){
+			var grid = this,
+				oidToTopPIName = function(oid){ return grid.topPortfolioItemMap[oid] || '-'; };
+			return {
+				text: grid._getTopPortfolioItemType(),
+				dataIndex:'PortfolioItemObjectID',
+				width: 100,		
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return oidToTopPIName(record.data.PortfolioItemObjectID); }),
+				renderer: function(oid){ return oidToTopPIName(oid); },
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					sortFn: function(topPI){ return topPI; },
+					convertDisplayFn: function(oid){ return oidToTopPIName(oid); },
+					convertValueFn: function(oid){ return oidToTopPIName(oid); },
+					filterFn: function(topPI, oid){ return topPI === oidToTopPIName(oid); }
+				}]
+			};
+		},
+		_getOwningProjectColumn: function(){
+			var grid = this,
+				oidToProjectName = function(oid){ return grid.projectRecordMap[oid] ? grid.projectRecordMap[oid].data.Name : '-'; };
+			return {
+				text: 'Team',
+				dataIndex:'ProjectObjectID',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					flex:1,
+					store: grid._getProjectNameStore(),
+					displayField: 'Name',
+					valueField: 'ObjectID'
+				},			
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return oidToProjectName(record.data.ProjectObjectID); }),
+				renderer: function(oid){ return oidToProjectName(oid); },
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					sortFn: function(oid, name){ return name; },
+					convertDisplayFn: function(oid){ return oidToProjectName(oid); }
+				}]
+			};
+		},
+		_getDescriptionColumn: function(){
+			return {
+				text:'Risk Description (If This...)', 
+				dataIndex:'Description',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'inteltextarea'
+			};
+		},
+		_getImpactColumn: function(){
+			return {
+				text:'Impact (Then this...)', 
+				dataIndex:'Impact',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'inteltextarea'
+			};
+		},
+		_getMitigationPlanColumn: function(){
+			return {
+				text:'Mitigation/ Prevention Plan', 
+				dataIndex:'MitigationPlan',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'inteltextarea'
+			};
+		},
+		_getStatusColumn: function(){
+			var grid = this,
+				statusOptions = RiskModel.getStatusOptions();
+			return {
+				text:'Status',
+				dataIndex:'Status',
+				tdCls: 'intel-editor-cell',	
+				width:100,			
+				editor:{
+					xtype:'intelfixedcombo',
+					store: statusOptions
+				},
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return statusOptions.indexOf(record.data.Status); }),
+				items:[{ 
+					xtype:'intelgridcolumnfilter',
+					sortFn: function(status){ return statusOptions.indexOf(status); }
+				}]
+			};
+		},
+		_getRiskLevelColumn: function(){
+			var grid = this,
+				riskLevelOptions = RiskModel.getRiskLevelOptions(),
+				displayMap = {
+					High: 'High-Staff Help',
+					Medium: 'Medium-CE Help',
+					Low: 'Low-Team Managed'
+				},
+				storeOptions = _.map(riskLevelOptions, function(item){ return [item, displayMap[item]]; });
+			return {
+				text:'Risk Level',
+				dataIndex:'RiskLevel',
+				tdCls: 'intel-editor-cell',	
+				width:100,			
+				editor:{
+					xtype:'intelfixedcombo',
+					store: storeOptions
+				},
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ return riskLevelOptions.indexOf(record.data.RiskLevel); }),
+				renderer: function(item){ return displayMap[item]; },
+				items:[{ 
+					xtype:'intelgridcolumnfilter',
+					convertDisplayFn: function(item){ return displayMap[item]; },
+					sortFn: function(riskLevel){ return riskLevelOptions.indexOf(riskLevel); }
+				}]
+			};
+		},
+		_getCheckpointColumn: function(){
+			var grid = this;
+			return {
+				text:'Checkpoint',	
+				dataIndex:'Checkpoint',
+				tdCls: 'intel-editor-cell',	
+				width:90,
+				editor:{
+					xtype:'intelfixedcombo',
+					width:80,
+					store: Ext.create('Ext.data.Store', {
+						fields: ['DateVal', 'Workweek'],
+						data: grid._getWorkweekData()
+					}),
+					displayField: 'Workweek',
+					valueField: 'DateVal'
+				},
+				sortable:true,
+				renderer:function(dateVal){ return dateVal ? 'ww' + grid.getWorkweek(dateVal) : '-'; },	
+				items:[{ 
+					xtype:'intelgridcolumnfilter',
+					convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + grid.getWorkweek(dateVal) : undefined; }
+				}]
+			};
+		},
+		_getOwnerColumn: function(){
+			var grid = this;
+			return {
+				text:'Owner', 
+				dataIndex:'OwnerObjectID',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: {
+					xtype: 'inteluserpicker',
+					emptyText: 'Select Owner',
+					valueField: 'ObjectID'
+				}, 
+				renderer: function(oid){
+					if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+					else {
+						var id = Ext.id();
+						grid._getUserByObjectID(oid)
+							.then(function(user){
 								var el = Ext.get(id);
-								if(el){
-									el.on('click', function(){ 
-										record.reject(); 
-										grid.store.fireEvent('refresh', grid.store);
-									});
+								if(user && el) el.setHTML(grid._formatUserName(user)); 
+							})
+							.fail(function(reason){ grid.alert('ERROR', reason); })
+							.done();
+						return '<div id="' + id + '">?</div>';
+					}
+				},
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ 
+					var oid = record.data.OwnerObjectID;
+					if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+					else return oid;
+				}),
+				items:[{ 
+					xtype:'intelgridcolumnfilter',
+					sortFn: function(oid, name){ return name; },
+					convertDisplayFn: function(oid){ 
+						if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+						else return grid._getUserByObjectID(oid).then(function(user){ return grid._formatUserName(user); }); 
+					}
+				}]
+			};
+		},
+		_getSubmitterColumn: function(){
+			var grid = this;
+			return {
+				text:'Submitter', 
+				dataIndex:'SubmitterObjectID',
+				flex:1,
+				renderer: function(oid){
+					if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+					else {
+						var id = Ext.id();
+						grid._getUserByObjectID(oid)
+							.then(function(user){ 
+								var el = Ext.get(id);
+								if(user && el) el.setHTML(grid._formatUserName(user)); 
+							})
+							.fail(function(reason){ grid.alert('ERROR', reason); })
+							.done();
+						return '<div id="' + id + '">?</div>';
+					}
+				},
+				sortable:true,
+				doSort: grid._makeDoSortFn(function(record){ 
+					var oid = record.data.SubmitterObjectID;
+					if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+					else return oid;
+				}),
+				items:[{ 
+					xtype:'intelgridcolumnfilter',
+					sortFn: function(oid, name){ return name; },
+					convertDisplayFn: function(oid){
+						if(grid.userCache[oid]) return grid._formatUserName(grid.userCache[oid]);
+						else return grid._getUserByObjectID(oid).then(function(user){ return grid._formatUserName(user); }); 
+					}
+				}]
+			};
+		},
+		_getUndoButtonColumn: function(){
+			var grid = this;
+			return {
+				width:24,
+				renderer: function(value, meta, record){
+					var id = Ext.id();
+					if(!grid._isRiskEdited(record)) return;
+					meta.tdAttr = 'title="Undo"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el){
+							el.on('click', function(){ 
+								record.reject(); 
+								grid.store.fireEvent('refresh', grid.store);
+							});
+						}
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-undo"></i></div>';
+				}
+			};
+		},
+		_getSaveButtonColumn: function(){
+			var grid = this;
+			return {
+				width:24,
+				renderer: function(value, meta, record){
+					var id = Ext.id(), riskID = record.data.RiskID;
+					if(!grid._isRiskEdited(record) && !grid._isRiskNew(record)) return;
+					meta.tdAttr = 'title="Save Risk"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							grid.setLoading("Saving Risk");
+							grid.isEditing = true;
+							RiskDb.get(riskID)
+								.then(function(realRiskJSON){
+									if(realRiskJSON) return RiskDb.update(riskID, _.merge(realRiskJSON, record.getChanges()));
+									else return RiskDb.create(riskID, record.data);
+								})
+								.then(function(newRiskJSON){ 
+									record.commit(); 
+									grid._highlightRow(grid.store.indexOf(record));
+									grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== riskID; }).concat([newRiskJSON]);
+									grid.risksMap[riskID] = newRiskJSON;
+								})
+								.fail(function(reason){ grid.alert('ERROR', reason); })
+								.then(function(){ 
+									grid.setLoading(false); 
+									grid.isEditing = false;
+								})
+								.done();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-floppy-o"></i></div>';
+				}
+			};
+		},
+		_getCopyButtonColumn: function(){
+			var grid = this;
+			return {
+				width:24,
+				renderer: function(value, meta, record){
+					var id = Ext.id(), riskID = record.data.RiskID;
+					meta.tdAttr = 'title="Copy Risk"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							grid.setLoading("Copying Risk");
+							grid.isEditing = true;
+							var currentUserOID = Rally.environment.getContext().getUser().ObjectID;
+							RiskDb.create(grid._generateRiskID(), _.merge({}, record.data, {SubmitterObjectID: currentUserOID}))
+								.then(function(newRiskJSON){ 
+									grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== newRiskJSON.RiskID; }).concat([newRiskJSON]);
+									grid.risksMap[newRiskJSON.RiskID] = newRiskJSON;
+									
+									var model = Ext.create(RiskModel, newRiskJSON);
+									grid.store.add(model);
+									model.commit();
+										
+									grid.store.fireEvent('refresh', grid.store);
+									grid.view.getEl().setScrollTop(0);
+									grid._highlightRow(0);
+								})
+								.fail(function(reason){ grid.alert('ERROR', reason); })
+								.then(function(){ 
+									grid.setLoading(false); 
+									grid.isEditing = false;
+								})
+								.done();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-copy"></i></div>';
+				}
+			};
+		},
+		_getDeleteButtonColumn: function(){
+			var grid = this;
+			return {
+				width:24,
+				renderer: function(value, meta, record){
+					var id = Ext.id(), riskID = record.data.RiskID;
+					meta.tdAttr = 'title="Delete Risk"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							grid.isEditing = true;
+							grid.confirm('Delete Risk', 'Are you sure?', function(msg){
+								if(msg !== 'yes'){
+									grid.isEditing = false;
+									return;
 								}
-								else setTimeout(whenRendered, 10);
-							}, 20);
-							return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-undo"></i></div>';
-						}
-					};
-				case '_saveButton':
-					return {
-						width:24,
-						renderer: function(value, meta, record){
-							var id = Ext.id(), riskID = record.data.RiskID;
-							if(!grid._isRiskEdited(record) && !grid._isRiskNew(record)) return;
-							meta.tdAttr = 'title="Save Risk"';
-							setTimeout(function whenRendered(){
-								var el = Ext.get(id);
-								if(el) el.on('click', function(){
-									grid.setLoading("Saving Risk");
-									grid.isEditing = true;
-									RiskDb.get(riskID)
-										.then(function(realRiskJSON){
-											if(realRiskJSON) return RiskDb.update(riskID, _.merge(realRiskJSON, record.getChanges()));
-											else return RiskDb.create(riskID, record.data);
-										})
-										.then(function(newRiskJSON){ 
-											record.commit(); 
-											grid._highlightRow(grid.store.indexOf(record));
-											grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== riskID; }).concat([newRiskJSON]);
-											grid.risksMap[riskID] = newRiskJSON;
-										})
-										.fail(function(reason){ grid.alert('ERROR', reason); })
-										.then(function(){ 
-											grid.setLoading(false); 
-											grid.isEditing = false;
-										})
-										.done();
-								});
-								else setTimeout(whenRendered, 10);
-							}, 20);
-							return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-floppy-o"></i></div>';
-						}
-					};
-				case '_copyButton':
-					return {
-						width:24,
-						renderer: function(value, meta, record){
-							var id = Ext.id(), riskID = record.data.RiskID;
-							meta.tdAttr = 'title="Copy Risk"';
-							setTimeout(function whenRendered(){
-								var el = Ext.get(id);
-								if(el) el.on('click', function(){
-									grid.setLoading("Copying Risk");
-									grid.isEditing = true;
-									var currentUserOID = Rally.environment.getContext().getUser().ObjectID;
-									RiskDb.create(grid._generateRiskID(), _.merge({}, record.data, {SubmitterObjectID: currentUserOID}))
-										.then(function(newRiskJSON){ 
-											grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== newRiskJSON.RiskID; }).concat([newRiskJSON]);
-											grid.risksMap[newRiskJSON.RiskID] = newRiskJSON;
-											
-											var model = Ext.create(RiskModel, newRiskJSON);
-											grid.store.add(model);
-											model.commit();
-												
-											grid.store.fireEvent('refresh', grid.store);
-											grid.view.getEl().setScrollTop(0);
-											grid._highlightRow(0);
-										})
-										.fail(function(reason){ grid.alert('ERROR', reason); })
-										.then(function(){ 
-											grid.setLoading(false); 
-											grid.isEditing = false;
-										})
-										.done();
-								});
-								else setTimeout(whenRendered, 10);
-							}, 20);
-							return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-copy"></i></div>';
-						}
-					};
-				case '_deleteButton':
-					return {
-						width:24,
-						renderer: function(value, meta, record){
-							var id = Ext.id(), riskID = record.data.RiskID;
-							meta.tdAttr = 'title="Delete Risk"';
-							setTimeout(function whenRendered(){
-								var el = Ext.get(id);
-								if(el) el.on('click', function(){
-									grid.isEditing = true;
-									grid.confirm('Delete Risk', 'Are you sure?', function(msg){
-										if(msg !== 'yes'){
-											grid.isEditing = false;
-											return;
-										}
-										grid.setLoading("Deleting Risk");
-										RiskDb['delete'](riskID)
-											.then(function(){ 
-												grid.store.remove(record);
-												grid.store.fireEvent('refresh', grid.store);
-												grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== riskID; });
-												delete grid.risksMap[riskID];
-											})
-											.fail(function(reason){ grid.alert('ERROR', reason); })
-											.then(function(){ 
-												grid.setLoading(false); 
-												grid.isEditing = false;
-											})
-											.done();
-									});
-								});
-								else setTimeout(whenRendered, 10);
-							}, 20);
-							return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-trash"></i></div>';
-						}
-					};
-				default: return {xtype:'displayfield', value:'Invalid: ' + colType};
-			}
+								grid.setLoading("Deleting Risk");
+								RiskDb['delete'](riskID)
+									.then(function(){ 
+										grid.store.remove(record);
+										grid.store.fireEvent('refresh', grid.store);
+										grid.risks = _.filter(grid.risks, function(r){ return r.RiskID !== riskID; });
+										delete grid.risksMap[riskID];
+									})
+									.fail(function(reason){ grid.alert('ERROR', reason); })
+									.then(function(){ 
+										grid.setLoading(false); 
+										grid.isEditing = false;
+									})
+									.done();
+							});
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-trash"></i></div>';
+				}
+			};
+		},
+		
+		_getNewRow: function(){
+			var grid = this;
+			return Ext.create(RiskModel, {
+				RiskID: grid._generateRiskID(),
+				ReleaseName: grid.releaseRecord.data.Name,
+				PortfolioItemObjectID: 0,
+				ProjectObjectID: grid.projectRecords.length === 1 ? grid.projectRecords[0].data.ObjectID : 0,
+				Description: '',
+				Impact: '',
+				MitigationPlan: '',
+				RiskLevel: '',
+				Status: '',
+				OwnerObjectID: 0,
+				SubmitterObjectID: Rally.environment.getContext().getUser().ObjectID,
+				Checkpoint: 0
+			});
+		},
+		_makeDoSortFn: function(fn){
+			var grid = this;
+			return function(direction){
+				grid.store.sort({
+					sorterFn: function(r1, r2){
+						var val1 = fn(r1), val2 = fn(r2);
+						return (direction=='ASC' ? 1 : -1) * ((val1 < val2) ? -1 : (val1 === val2 ? 0 : 1));
+					}
+				});
+			};
 		},
 		_getPortfolioItemType: function(){
 			return this.portfolioItemType || 
