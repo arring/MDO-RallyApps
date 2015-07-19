@@ -1,7 +1,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 	
-	Ext.define('Rally.apps.portfoliohierarchy.FittedPortfolioItemTreeItem', {
+	Ext.define('Intel.PortfolioNavigator.PortfolioHierarchy.FittedPortfolioItemTreeItem', {
 		extend: 'Rally.ui.tree.PortfolioItemTreeItem',
 		alias: 'widget.fittedportfolioitemtreeitem',
 

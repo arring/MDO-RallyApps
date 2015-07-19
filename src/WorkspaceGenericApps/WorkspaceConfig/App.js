@@ -1,18 +1,18 @@
 /** this app is used to configure the scrum-groups and portfolio locations in the workspace **/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		KeyValueDb = Intel.lib.resources.KeyValueDb;
+		KeyValueDb = Intel.lib.resource.KeyValueDb;
 		
-	Ext.define('WorkspaceConfiguration', {
-		extend: 'IntelRallyApp',
+	Ext.define('Intel.WorkspaceConfiguration', {
+		extend: 'Intel.lib.IntelRallyApp',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IframeResize'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize'
 		],
 
 		/************************************************** UTIL FUNCS **********************************************/
-		_getScrumGroupPortfolioStoreData: function(){
+		getScrumGroupPortfolioStoreData: function(){
 			var me=this;
 			return _.map(me.ScrumGroupConfig, function(scrumGroupConfig){
 				return {
@@ -28,16 +28,16 @@
 		/******************************************************* LAUNCH ********************************************************/	
 		launch: function(){
 			var me = this;
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
 				me.setLoading(false);
-				me._alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
+				me.alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
 				return;
 			} 
-			me._configureIntelRallyApp()
-				.then(function(){ return me._loadAllProjects(); })
+			me.configureIntelRallyApp()
+				.then(function(){ return me.loadAllProjects(); })
 				.then(function(allProjects){
 					me.AllProjects = allProjects;
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
@@ -51,18 +51,18 @@
 				})
 				.then(function(){
 					me.setLoading(false);
-					me._renderChooseDatabaseProject();
-					me._renderScrumGroupPortfolioGrid();
+					me.renderChooseDatabaseProject();
+					me.renderScrumGroupPortfolioGrid();
 				})
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason);
+					me.alert('ERROR', reason);
 				})
 				.done();
 		},
 
 		/************************************************************* RENDER *******************************************/
-		_renderChooseDatabaseProject: function(){
+		renderChooseDatabaseProject: function(){
 			var me = this;
 			me.add({
 				xtype:'container',
@@ -89,7 +89,7 @@
 						me.setLoading('Saving');
 						KeyValueDb.setDatabaseProjectOID(newProjectOID)
 							.then(function(){ me.DatabaseProjectObjectID = newProjectOID; })
-							.fail(function(reason){ me._alert(reason); })
+							.fail(function(reason){ me.alert(reason); })
 							.then(function(){ me.setLoading(false); })
 							.done();
 					}
@@ -97,12 +97,18 @@
 			});
 		},
 		
-		_renderScrumGroupPortfolioGrid: function(){
+		renderScrumGroupPortfolioGrid: function(){
 			var me = this;
 			
 			me.ScrumGroupPortfolioConfigStore = Ext.create('Ext.data.Store', { 
-				model:'ScrumGroupPortfolioConfigItem',
-				data: me._getScrumGroupPortfolioStoreData()
+				fields: [
+					{name:'ScrumGroupRootProjectOID', type:'number'}, 
+					{name:'ScrumGroupName', type:'string'}, 
+					{name:'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'}, 
+					{name:'PortfolioProjectOID', type:'number'}, 
+					{name:'IsTrain', type:'boolean'}
+				],
+				data: me.getScrumGroupPortfolioStoreData()
 			});
 
 			var columnCfgs = [{
@@ -180,7 +186,7 @@
 			},{
 				text:'',
 				width:160,
-				xtype:'fastgridcolumn',
+				xtype:'intelcomponentcolumn',
 				tdCls: 'iconCell',
 				resizable:false,
 				draggable:false,
@@ -218,7 +224,7 @@
 							margin:'0 10 0 0',
 							listeners:{
 								click: function(){
-									var model = Ext.create('ScrumGroupPortfolioConfigItem', {
+									var model = Ext.create(me.ScrumGroupPortfolioConfigStore.getProxy().getModel(), {
 										ScrumGroupRootProjectOID: 0,
 										ScrumGroupName: '',
 										ScrumGroupAndPortfolioLocationTheSame: true,
@@ -236,7 +242,7 @@
 							listeners:{
 								click: function(){
 									me.ScrumGroupPortfolioConfigStore.removeAll();
-									me.ScrumGroupPortfolioConfigStore.add(me._getScrumGroupPortfolioStoreData());
+									me.ScrumGroupPortfolioConfigStore.add(me.getScrumGroupPortfolioStoreData());
 								}
 							}
 						},{
@@ -278,19 +284,19 @@
 										
 									/***************** run data integrity checks before saving *************************/
 									if(badScrumGroupRootOID) 
-										me._alert('ERROR', 'You must select a valid Scrum Group Root Project!');
+										me.alert('ERROR', 'You must select a valid Scrum Group Root Project!');
 									else if(badPortfolioOID) 
-										me._alert('ERROR', 'You must select a valid Portfolio Project!');
+										me.alert('ERROR', 'You must select a valid Portfolio Project!');
 									else if(badScrumGroupName) 
-										me._alert('ERROR', 'Found an invalid Scrum Group Name!');
+										me.alert('ERROR', 'Found an invalid Scrum Group Name!');
 									else if(conflictingScrumGroupProject) 
-										me._alert('ERROR', 'A project is used for more than 1 Scrum Group!');
+										me.alert('ERROR', 'A project is used for more than 1 Scrum Group!');
 									else if(conflictingScrumGroupName) 
-										me._alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
+										me.alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
 									else {
 										me.ScrumGroupPortfolioConfigGrid.setLoading('Saving Config');
-										me._saveScrumGroupConfig(scrumGroupData)
-											.fail(function(reason){ me._alert(reason); })
+										me.saveScrumGroupConfig(scrumGroupData)
+											.fail(function(reason){ me.alert(reason); })
 											.then(function(){ me.ScrumGroupPortfolioConfigGrid.setLoading(false); })
 											.done();
 									}
