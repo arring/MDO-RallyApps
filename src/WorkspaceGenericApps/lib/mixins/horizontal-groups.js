@@ -26,14 +26,14 @@
 		'Analog DV 1': 'Other', 'EVG 1': 'Other', 'QRE Qual 1': 'Other'
 	};
 
-	Ext.define('HorizontalGroups', {
-		requires: ['Teams'],
+	Ext.define('Intel.lib.mixin.HorizontalGroups', {
+		requires: ['Intel.lib.mixin.Teams'],
 	
-		_getHorizontalGroups: function() {
+		getHorizontalGroups: function() {
 			return HorizontalGroups;
 		},
 		
-		_getAllTeams: function() {
+		getAllTeams: function() {
 			teams = [];
 			for (var i in HorizontalGroups) {
 				teams = teams.concat(HorizontalGroups[i]);
@@ -41,15 +41,15 @@
 			return teams;
 		},
 		
-		_isInGroup: function(project, group, info) {
+		isInGroup: function(project, group, info) {
 			var me = this,
-				team = info || me._getTeamInfo(project);
+				team = info || me.getTeamInfo(project);
 			// return !!_.find(HorizontalGroups[group], function(team) {return team === teamNameAndNumber;});
 			return (TeamToGroupMap[team.Name] === group);
 		},
 		
-		_inWhichGroup: function(project) {
-			var team = me._getTeamInfo(project),
+		inWhichGroup: function(project) {
+			var team = me.getTeamInfo(project),
 				name = team.Type + ' ' + team.Number,
 				compareFn = function(n) {return n === name;};
 			for (var i in HorizontalGroups) {
@@ -59,7 +59,7 @@
 			}
 		},
 		
-		_filterProjectsByHorizontalGroup: function(projects, group) {
+		filterProjectsByHorizontalGroup: function(projects, group) {
 			var me = this,
 				filteredProjects = {};
 			if (!group || group === 'All' || group === '') {
@@ -67,7 +67,7 @@
 			}
 			else {
 				for (var i in projects) {
-					if (me._isInGroup(projects[i], group)) {
+					if (me.isInGroup(projects[i], group)) {
 						filteredProjects[projects[i].data.ObjectID] = projects[i];
 					}
 				}
@@ -75,7 +75,7 @@
 			}
 		},
 		
-		_filterMapByHorizontalGroup: function(map, group) {
+		filterMapByHorizontalGroup: function(map, group) {
 			var me = this,
 				filteredProjects = {};
 			if (!group || group === 'All' || group === '') {
@@ -93,14 +93,14 @@
 			return filteredProjects;
 		},
 		
-		_loadHorizontalGroup: function(group) {
-			return me._loadAllLeafProjects().then(function (projects) {
-				return me._filterProjectsByHorizontalGroup(projects, group);
+		loadHorizontalGroup: function(group) {
+			return me.loadAllLeafProjects().then(function (projects) {
+				return me.filterProjectsByHorizontalGroup(projects, group);
 			});
 		},
 		
-		_loadAllHorizontalGroups: function() {
-			return me._loadAllLeafProjects().then(function(projects) {
+		loadAllHorizontalGroups: function() {
+			return me.loadAllLeafProjects().then(function(projects) {
 				var groupedProjects = {
 					ACD: {},
 					DCD: {},
@@ -112,7 +112,7 @@
 					Other: {}
 				};
 				for (var i in projects) {
-					groupedProjects[me._inWhichGroup(projects[i])] = projects[i];
+					groupedProjects[me.inWhichGroup(projects[i])] = projects[i];
 				}
 				return groupedProjects;
 			});
