@@ -1,5 +1,7 @@
 /*
  *	Utility functions relating to horizontal groups
+ *	TODO: Change to use keywords AND Name (resolves Func Module/GT Module debate)
+ *	You can tell group by the FIRST keyword
  */
  (function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -85,7 +87,7 @@
 			}
 			else {
 				for (var i in map) {
-					if (me._isInGroup(map[i].project, group, map[i].info)) {
+					if (me.isInGroup(map[i].project, group, map[i].info)) {
 						filteredProjects[map[i].project.data.ObjectID] = map[i].project;
 					}
 				}
