@@ -11,12 +11,13 @@
 	],
 		// In English: matches a team type, maybe a number, a hyphen, a train name, and maybe a suffixed parenthetical
 		// Remembers the team type, associated keywords, the number or '', and the train name
+		// TODO: Fix this and make this faster
 		teamInfoRegExp = /^([A-Za-z\s\-]*[A-Za-z])\s+(?:\([A-Za-z\d\s]+\))?\s*(\d*)\s*-\s+([A-Za-z\s]*[A-Za-z]).*$/,
 		teamRegExp = /^[A-Za-z ]*[A-Za-z](?:\s\d)?\s-\s.+$/,
 		keywordSplitRegExp = /[\s\-]+/;
 	
-	Ext.define('Teams', {
-		_getTeamInfo: function(project) {
+	Ext.define('Intel.lib.mixin.Teams', {
+		getTeamInfo: function(project) {
 			var results = teamInfoRegExp.exec(project.data.Name),
 				team = {};
 			if (!results) {
@@ -31,28 +32,28 @@
 			return team;
 		},
 		
-		_createTeamInfoMap: function(teams) {
+		createTeamInfoMap: function(teams) {
 			var me = this,
 				map = {},
 				team;
 			for (var i in teams) {
 				map[teams[i].data.ObjectID] = {
 					project: teams[i],
-					info: me._getTeamInfo(teams[i])
+					info: me.getTeamInfo(teams[i])
 				};
 			}
 			return map;
 		},
 		
-		_isValidTeamProjectName: function(project) {
+		isValidTeamProjectName: function(project) {
 			return teamRegExp.test(project.data.Name) && project.data.Children.Count === 0;
 		},
 		
-		_isValidTeamType: function(type) {
+		isValidTeamType: function(type) {
 			return _.includes(teamTypes, type);
 		},
 		
-		_filterProjectsByTeamType: function(projects, type) {
+		filterProjectsByTeamType: function(projects, type) {
 			var me = this,
 				filter = new RegExp((!type || type === '' || type === 'All') ? '.*' : type),
 				filteredProjects = {};
