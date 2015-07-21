@@ -8,20 +8,20 @@
 
 	/************************** Data Integrity Dashboard *****************************/
 	Ext.define('DataIntegrityDashboard', {
-		extend: 'IntelRallyApp',
+		extend: 'Intel.lib.IntelRallyApp',
 		// Important! Allows the same code to be used for both the horizontal and the vertical versions of the app
 		settingsScope: 'workspace',
 		cls:'app',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'ParallelLoader',
-			'UserAppsPreference',
-			'DataIntegrityDashboardObjectIDPreference',
-			'Teams',
-			'HorizontalGroups'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.DataIntegrityDashboardObjectIDPreference',
+			'Intel.lib.mixin.Teams',
+			'Intel.lib.mixin.HorizontalGroups'
 		],
 		minWidth:1100,
 		/*
@@ -94,12 +94,12 @@
 		launch: function() {
 			var me = this;
 			// App configuration function calls
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
 			me._addScrollEventListener();
-			me._setDataIntegrityDashboardObjectID();
+			me.setDataIntegrityDashboardObjectID();
 			me.setLoading('Loading Configuration');
-			me._configureIntelRallyApp()
+			me.configureIntelRallyApp()
 			.then(function() {
 				// Get settings
 				me.isHorizontalView = me.getSetting('Horizontal');
@@ -112,7 +112,7 @@
 				me.ProjectRecord = me._createDummyProjectRecord(me.getContext().getProject());
 				
 				// Set up some configuration variables
-				me.HorizontalGroups = me._getHorizontalGroups();
+				me.HorizontalGroups = me.getHorizontalGroups();
 				me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);
 				
 				// Initialize filter variables
@@ -120,7 +120,7 @@
 					me.HorizontalGroup = me.Overrides.HorizontalGroup || 'ACD';
 				}
 				if (me.isScopedToScrum) {
-					me.TeamType = me._getTeamInfo(me.ProjectRecord).Type;
+					me.TeamType = me.getTeamInfo(me.ProjectRecord).Type;
 				}
 				else {
 					me.TeamType = me.Overrides.TeamName || '';
@@ -142,7 +142,7 @@
 			// Catch-all fail function
 			.fail(function(msg) {
 				me.setLoading(false);
-				me._alert('Error', msg || 'Unknown error');
+				me.alert('Error', msg || 'Unknown error');
 			})
 			.done();
 		},
@@ -202,8 +202,8 @@
 			}
 			else {
 				// Project needs to be fully loaded to use the parent field
-				return me._loadProject(me.ProjectRecord.data.ObjectID).then(function(project) {
-					return me._projectInWhichScrumGroup(project);
+				return me.loadProject(me.ProjectRecord.data.ObjectID).then(function(project) {
+					return me.projectInWhichScrumGroup(project);
 				}).then(function(scrumGroup) {
 					if (scrumGroup) {
 						if (scrumGroup.data.ObjectID === me.ProjectRecord.data.ObjectID) {
@@ -264,22 +264,22 @@
 					
 				// Fill array with promises for all leaf projects of each scrum group
 				for (var i = 0; i < me.ProjectGroups.length; i++) {
-					projectPromises.push(me._loadAllLeafProjects(me.ProjectGroups[i]).then(concatLeaves));
+					projectPromises.push(me.loadAllLeafProjects(me.ProjectGroups[i]).then(concatLeaves));
 				}
 				
 				// Do promises and filter projects down by group then team
 				return Q.all(projectPromises).then(function(groupArray) {
 					me.AllProjectsByGroup = groupArray;
 					// Cache team info
-					me.TeamInfoMap = me._createTeamInfoMap(allProjects);
+					me.TeamInfoMap = me.createTeamInfoMap(allProjects);
 					// Apply all necessary filters
-					me.LeafProjects = me._filterProjectsByTeamType(me._filterProjectsByHorizontalGroup(allProjects, me.HorizontalGroup), me.TeamType);
+					me.LeafProjects = me.filterProjectsByTeamType(me.filterProjectsByHorizontalGroup(allProjects, me.HorizontalGroup), me.TeamType);
 					me._sortLeafProjectsByGroup();
 				});
 			}
 			else {
 				// Apply all necessary filters
-				me.LeafProjects = me._filterProjectsByTeamType(me._filterMapByHorizontalGroup(me.TeamInfoMap, me.HorizontalGroup), me.TeamType);
+				me.LeafProjects = me.filterProjectsByTeamType(me.filterMapByHorizontalGroup(me.TeamInfoMap, me.HorizontalGroup), me.TeamType);
 				me._sortLeafProjectsByGroup();
 			}
 		},
@@ -301,7 +301,7 @@
 			
 			// Fill array with promises for all releases under each group after 12 weeks ago
 			for (var i = 0; i < me.ProjectGroups.length; i++) {
-				releasePromises.push(me._loadReleasesAfterGivenDate(me.ProjectGroups[i], (new Date()).getTime() - twelveWeeks).then(concatReleases));
+				releasePromises.push(me.loadReleasesAfterGivenDate(me.ProjectGroups[i], (new Date()).getTime() - twelveWeeks).then(concatReleases));
 			}
 			
 			return Q.all(releasePromises).then(function() {
@@ -310,7 +310,7 @@
 				});
 				// Set the current release to the release we're in or the closest release to the date
 				// Important! This sets the current release to an overridden value if necessary (that's why it's ridiculously long)
-				me.CurrentRelease = (me.isStandalone ? _.find(me.Releases, function(release) {return release.data.Name === me.Overrides.ReleaseName;}) : false) || me._getScopedRelease(me.Releases, null, null);
+				me.CurrentRelease = (me.isStandalone ? _.find(me.Releases, function(release) {return release.data.Name === me.Overrides.ReleaseName;}) : false) || me.getScopedRelease(me.Releases, null, null);
 			});
 		},
 		
@@ -359,7 +359,7 @@
 					}
 				});
 				
-				return me._reloadStore(store);
+				return me.reloadStore(store);
 			}
 			
 			// External definition to avoid declaring within loop
@@ -371,7 +371,7 @@
 			// Create a promise for the portfolio project of each scrum group
 			for (var i in me.PortfolioProjectObjectIDs) {
 				piPromises.push(
-					me._loadProject(me.PortfolioProjectObjectIDs[i]).then(loadStore).then(addRecordsToStore)
+					me.loadProject(me.PortfolioProjectObjectIDs[i]).then(loadStore).then(addRecordsToStore)
 				);
 			}
 			
@@ -454,7 +454,7 @@
 					},
 					pageSize: 200
 				};
-				promises.push(me._parallelLoadWsapiStore(config));
+				promises.push(me.parallelLoadWsapiStore(config));
 			}
 			
 			// Do promises then compile stories into one store
@@ -601,7 +601,7 @@
 					_.sortBy(
 						_.uniq(
 							_.map(
-								_.reduce(me.LeafProjects, function(a, project) {return a.concat(me._getTeamInfo(project).KeyWords);}, []),
+								_.reduce(me.LeafProjects, function(a, project) {return a.concat(me.getTeamInfo(project).KeyWords);}, []),
 								function(type) {return {Type: type};}
 							),
 							function(key) {return key.Type;}
@@ -889,7 +889,7 @@
 		_getFilteredLowestPortfolioItems: function(){ 
 			var me = this,
 				activeGroups = {},
-				activeProjects = me._filterProjectsByTeamType(me.LeafProjects, me.TeamType),
+				activeProjects = me.filterProjectsByTeamType(me.LeafProjects, me.TeamType),
 				portfolioItems = me.PortfolioItemStore.getRange(),
 				filteredPortfolioItems = [];
 				
@@ -1003,7 +1003,7 @@
 				
 			// Get the data for each scrum from each grid
 			_.each(userStoryGrids, function(grid, gindex) {
-				_.each(_.sortBy(me._filterProjectsByTeamType(me._filterProjectsByHorizontalGroup(me.LeafProjects, me.HorizontalGroup), me.TeamType), function(p){ return p.data.Name; }), function(project, pindex){
+				_.each(_.sortBy(me.filterProjectsByTeamType(me.filterProjectsByHorizontalGroup(me.LeafProjects, me.HorizontalGroup), me.TeamType), function(p){ return p.data.Name; }), function(project, pindex){
 					var gridCount = me._getProjectStoriesForGrid(project, grid).length;
 					highestNum = Math.max(gridCount, highestNum);
 					chartData.push([pindex, gindex, gridCount]);
@@ -1027,7 +1027,7 @@
 				colors: ['#AAAAAA'],
 				title: { text: null },
 				xAxis: {
-					categories: _.sortBy(_.map(me._filterProjectsByTeamType(me._filterProjectsByHorizontalGroup(me.LeafProjects, me.HorizontalGroup), me.TeamType), 
+					categories: _.sortBy(_.map(me.filterProjectsByTeamType(me.filterProjectsByHorizontalGroup(me.LeafProjects, me.HorizontalGroup), me.TeamType), 
 						function(project){ return project.data.Name; }),
 						function(p){ return p; }),
 					labels: {
@@ -1369,7 +1369,7 @@
 					return me._addGrid(gridConfig);
 				}
 			}))
-			.fail(function(reason){ me._alert('ERROR:', reason); });
+			.fail(function(reason){ me.alert('ERROR:', reason); });
 		},
 		
 		/**************************************** Event Handling **********************************/
@@ -1531,6 +1531,7 @@
 					}],
 					listeners:{
 						afterrender: function(panel){
+							// Move tooltip to left or right depending on space
 							panel.setPosition(showLeft ? leftSide-panelWidth : rightSide, topSide);
 						}
 					}
@@ -1546,6 +1547,7 @@
 					afterrender: function(panel){
 						setTimeout(function(){
 							panel.addCls('intel-tooltip-triangle');
+							// Move tooltip to left or right depending on space
 							panel.setPosition(showLeft ? leftSide - 10 : rightSide - 10, topSide);
 						}, 10);
 					}
