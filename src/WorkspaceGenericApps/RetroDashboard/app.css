@@ -25,19 +25,19 @@
 	padding-left:10px;
 	background-color: #cbdbef;
 }
-.appInfo{
+/* .appInfo{
 	float:right;
 	text-align:right;
 	font:bold;
 	font-weight: bold;
 	color: green;
-}
+} */
 .rui-triggerfield .icon-calendar {
   background-image: none;
   color: #888;
   font-size: 12px;
   padding: 3px 3px 5px 4px;
-}
+} 
 .chart-wrapper{
 	width:100%;
 }
@@ -51,8 +51,8 @@
 	border-bottom: solid #BFBFBF 1px;  
 	border-left: solid #BFBFBF 1px;  
 	border-right: solid #BFBFBF 1px;  
-	width: 100%;/*change the width percentage to change the size of the donut-wrapper
-	background-color:red;*/
+	width: 100%;/*change the width percentage to change the size of the donut-wrapper*/
+/* 	background-color:red; */
 }
 #cntInformation{
 	clear:both;
@@ -71,9 +71,10 @@
 	cursor: pointer;
 }
 .legendwrapper{
-	margin-top:-50px;
+	margin-top: -35px;
+/* 	border:red solid 1px; */
 	float: right;
-	width: 35%;
+	width: 40%;
 	text-align: center;
 }
 .mtargetwrapper{
@@ -173,8 +174,9 @@ div.sr-only {
 }
 .x-tab-default-override a{
 		border-color: #8db3e3;
+		background-color: #cbdbef;
     cursor: pointer;
 }
-.x-tab-bar .x-tab-active {
+.x-tab-default-top{
 	background-color:white !important;
 	}
