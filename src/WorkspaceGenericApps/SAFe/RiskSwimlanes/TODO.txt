@@ -19,8 +19,8 @@ TODO:
 	DONE - implement drag and drop
 	DONE - clean up the editor popup
 	DONE - add train filter for cards 
-	- add product filter for cards 
-	- add horizontal filter for cards 
+	DONE - add product filter for cards 
+	DONE - add horizontal filter for cards 
 	DONE - stop it from jumping to the top when you make an edit on a card
 		> stopped having problems for no reason...keep an eye out
 

@@ -864,16 +864,20 @@
 					};
 				},
 				getCheckpointDropdown = function(){
-					var workweekStore = Ext.create('Ext.data.Store', {
-						fields: ['DateVal', 'Workweek'],
-						data: me.getWorkweeksForDropdown(currentReleaseRecord.data.ReleaseStartDate, currentReleaseRecord.data.ReleaseDate)
-					});
+					var weeksInRelease = me.getWorkweeksForDropdown(currentReleaseRecord.data.ReleaseStartDate, currentReleaseRecord.data.ReleaseDate),
+						riskCheckpoint = me.roundDateDownToWeekStart(oldRiskJSON.Checkpoint)*1,
+						workweekStore = Ext.create('Ext.data.Store', {
+							fields: ['DateVal', 'Workweek'],
+							data: weeksInRelease
+						});
+					if(riskCheckpoint < weeksInRelease[0].DateVal) riskCheckpoint = weeksInRelease[0].DateVal;
+					if(riskCheckpoint > weeksInRelease[weeksInRelease.length-1].DateVal) riskCheckpoint = weeksInRelease[weeksInRelease.length-1].DateVal;
 					return {
 						xtype: 'intelfixedcombobox',
 						id: 'editRiskModal-Checkpoint',
 						emptyText: 'Select Checkpoint',
 						fieldLabel: 'Checkpoint',
-						value: _.find(workweekStore.getRange(), function(item){ return item.data.DateVal === oldRiskJSON.Checkpoint; }) || undefined,
+						value: _.find(workweekStore.getRange(), function(item){ return item.data.DateVal === riskCheckpoint; }) || undefined,
 						store: workweekStore,
 						displayField: 'Workweek',
 						valueField: 'DateVal'
