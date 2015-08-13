@@ -1266,6 +1266,7 @@
 		}
 	});
 }());
+
                 /** 
 	SUMMARY:
 		This mixin is used to communicate between apps the location of the data-integrity dashboard by
@@ -1307,210 +1308,6 @@
 			});
 			return deferred.promise;
 		}
-	});
-}());
-                (function() {
-	var Ext = window.Ext4 || window.Ext;
-	
-	var teamTypes = [
-		'Analog DV', 'Array', 'BI', 'Binsplit',
-		'Class TPI', 'CLK', 'EVG','Func Module',
-		'Fuse', 'GT Module', 'HTD', 'MIO', 'MIO CLK',
-		'MPV', 'PT', 'QRE Qual', 'Reliability', 'Scan',
-		'SIO', 'SIO MIO CLK', 'Sort Class TPI', 'Sort TD',
-		'Sort TPI', 'TVPV', 'Yield PHI'
-	],
-		// In English: matches a team type, maybe a number, a hyphen, a train name, and maybe a suffixed parenthetical
-		// Remembers the team type, associated keywords, the number or '', and the train name
-		// TODO: Fix this and make this faster
-		teamInfoRegExp = /^([A-Za-z\s\-]*[A-Za-z])\s+(?:\([A-Za-z\d\s]+\))?\s*(\d*)\s*-\s+([A-Za-z\s]*[A-Za-z]).*$/,
-		teamRegExp = /^[A-Za-z ]*[A-Za-z](?:\s\d)?\s-\s.+$/,
-		keywordSplitRegExp = /[\s\-]+/;
-	
-	Ext.define('Intel.lib.mixin.Teams', {
-		getTeamInfo: function(project) {
-			var results = teamInfoRegExp.exec(project.data.Name),
-				team = {};
-			if (!results) {
-				return null;
-			}
-			team.FullName = project.data.Name;
-			team.Type = results[1];
-			team.KeyWords = results[1].split(keywordSplitRegExp).concat('');
-			team.Number = (results[2] !== '' ? parseInt(results[2], 10) : 1);
-			team.Train = results[3];
-			team.Name = team.Type + ' ' + team.Number;
-			return team;
-		},
-		
-		createTeamInfoMap: function(teams) {
-			var me = this,
-				map = {},
-				team;
-			for (var i in teams) {
-				map[teams[i].data.ObjectID] = {
-					project: teams[i],
-					info: me.getTeamInfo(teams[i])
-				};
-			}
-			return map;
-		},
-		
-		isValidTeamProjectName: function(project) {
-			return teamRegExp.test(project.data.Name) && project.data.Children.Count === 0;
-		},
-		
-		isValidTeamType: function(type) {
-			return _.includes(teamTypes, type);
-		},
-		
-		filterProjectsByTeamType: function(projects, type) {
-			var me = this,
-				filter = new RegExp((!type || type === '' || type === 'All') ? '.*' : type),
-				filteredProjects = {};
-			for (var i in projects) {
-				if (filter.test(projects[i].data.Name)) {
-					filteredProjects[projects[i].data.ObjectID] = projects[i];
-				}
-			}
-			return filteredProjects;
-		},
-		
-		filterMapByTeamType: function(map, type) {
-			var me = this,
-				filter = new RegExp((!type || type === '' || type === 'All') ? '.*' : type),
-				filteredProjects = {};
-			for (var i in map) {
-				if (filter.test(map[i].project.data.Name)) {
-					filteredProjects[map[i].project.data.ObjectID] = map[i].project;
-				}
-			}
-			return filteredProjects;
-		}
-	});
-})();
-                /*
- *	Utility functions relating to horizontal groups
- *	TODO: Change to use keywords AND Name (resolves Func Module/GT Module debate)
- *	You can tell group by the FIRST keyword
- */
- (function(){
-	var Ext = window.Ext4 || window.Ext;
-
-	var HorizontalGroups = {
-		ACD: ['CLK 1', 'MIO 1', 'MIO CLK 1', 'CLK MIO 1' /*Incorrect scrum name in Rally*/, 'PT 1', 'PT 2', 'SIO 1', 'SIO 2', 'SIO MIO CLK 1', 'MIO-SIO 2'/*D.N.E. in TCD*/],
-		DCD: ['Array 1', 'Array 2', 'Func Module 1', 'Func Module 2', 'GT Module 1', 'HTD 1', 'Scan 1', 'Scan 2'],
-		MPV: ['MPV 1', 'MPV 2', 'MPV 3'],
-		PHI: ['Binsplit 1', 'Binsplit 2', 'Yield PHI 1'],
-		QRE: ['BI 1', 'Reliability 1'],
-		SCI: ['Fuse 1', 'Fuse 2', 'TVPV 1', 'TVPV 2'],
-		TPI: ['Class TPI 1', 'Sort Class TPI 1', 'Sort Class TPI 2', 'Sort Class TPI 3', 'Sort Class TPI 4', 'Sort Class TPI 5', 'Sort TD 1', 'Sort TPI 1'],
-		// The 1's are added for consistency with the other naming conventions
-		Other: ['Analog DV 1', 'EVG 1', 'QRE Qual 1']
-	};
-	var TeamToGroupMap = {
-		'CLK 1': 'ACD', 'MIO 1': 'ACD', 'MIO CLK 1': 'ACD', 'CLK MIO 1': 'ACD' /*Incorrect scrum name in Rally*/, 'PT 1': 'ACD', 'PT 2': 'ACD', 'SIO 1': 'ACD', 'SIO 2': 'ACD', 'SIO MIO CLK 1': 'ACD', 'MIO-SIO 2': 'ACD'/*D.N.E in TCD*/,
-		'Array 1': 'DCD', 'Array 2': 'DCD', 'Func Module 1': 'DCD', 'Func Module 2': 'DCD', 'GT Module 1': 'DCD', 'HTD 1': 'DCD', 'Scan 1': 'DCD', 'Scan 2': 'DCD',
-		'MPV 1': 'MPV', 'MPV 2': 'MPV', 'MPV 3': 'MPV',
-		'Binsplit 1': 'PHI', 'Binsplit 2': 'PHI', 'Yield PHI 1': 'PHI',
-		'BI 1': 'QRE', 'Reliability 1': 'QRE',
-		'Fuse 1': 'SCI', 'Fuse 2': 'SCI', 'TVPV 1': 'SCI', 'TVPV 2': 'SCI',
-		'Class TPI 1': 'TPI', 'Sort Class TPI 1': 'TPI', 'Sort Class TPI 2': 'TPI', 'Sort Class TPI 3': 'TPI', 'Sort Class TPI 4': 'TPI', 'Sort Class TPI 5': 'TPI', 'Sort TD 1': 'TPI', 'Sort TPI 1': 'TPI',
-		'Analog DV 1': 'Other', 'EVG 1': 'Other', 'QRE Qual 1': 'Other'
-	};
-
-	Ext.define('Intel.lib.mixin.HorizontalGroups', {
-		requires: ['Intel.lib.mixin.Teams'],
-	
-		getHorizontalGroups: function() {
-			return HorizontalGroups;
-		},
-		
-		getAllTeams: function() {
-			teams = [];
-			for (var i in HorizontalGroups) {
-				teams = teams.concat(HorizontalGroups[i]);
-			}
-			return teams;
-		},
-		
-		isInGroup: function(project, group, info) {
-			var me = this,
-				team = info || me.getTeamInfo(project);
-			// return !!_.find(HorizontalGroups[group], function(team) {return team === teamNameAndNumber;});
-			return (TeamToGroupMap[team.Name] === group);
-		},
-		
-		inWhichGroup: function(project) {
-			var team = me.getTeamInfo(project),
-				name = team.Type + ' ' + team.Number,
-				compareFn = function(n) {return n === name;};
-			for (var i in HorizontalGroups) {
-				if (_.find(HorizontalGroups[i], compareFn)) {
-					return i;
-				}
-			}
-		},
-		
-		filterProjectsByHorizontalGroup: function(projects, group) {
-			var me = this,
-				filteredProjects = {};
-			if (!group || group === 'All' || group === '') {
-				return projects;
-			}
-			else {
-				for (var i in projects) {
-					if (me.isInGroup(projects[i], group)) {
-						filteredProjects[projects[i].data.ObjectID] = projects[i];
-					}
-				}
-				return filteredProjects;
-			}
-		},
-		
-		filterMapByHorizontalGroup: function(map, group) {
-			var me = this,
-				filteredProjects = {};
-			if (!group || group === 'All' || group === '') {
-				for (var j in map) {
-					filteredProjects[map[j].project.data.ObjectID] = map[j].project;
-				}
-			}
-			else {
-				for (var i in map) {
-					if (me.isInGroup(map[i].project, group, map[i].info)) {
-						filteredProjects[map[i].project.data.ObjectID] = map[i].project;
-					}
-				}
-			}
-			return filteredProjects;
-		},
-		
-		loadHorizontalGroup: function(group) {
-			return me.loadAllLeafProjects().then(function (projects) {
-				return me.filterProjectsByHorizontalGroup(projects, group);
-			});
-		},
-		
-		loadAllHorizontalGroups: function() {
-			return me.loadAllLeafProjects().then(function(projects) {
-				var groupedProjects = {
-					ACD: {},
-					DCD: {},
-					MPV: {},
-					PHI: {},
-					QRE: {},
-					SCI: {},
-					TPI: {},
-					Other: {}
-				};
-				for (var i in projects) {
-					groupedProjects[me.inWhichGroup(projects[i])] = projects[i];
-				}
-				return groupedProjects;
-			});
-		}
-		
 	});
 }());
                 /** 
@@ -1614,6 +1411,7 @@
 		}
 	});
 }());
+
                 /*
  *	This is the hyper-optimized version of the Data Integrity Dashboard. It is capable of viewing
  *	integrity both horizontally and vertically. Use of lodash is minimized for the sake of reducing
@@ -2524,8 +2322,9 @@
 			}
 			
 			// If the portfolio item's project or that project's parent is an active scrum group, use it
+			//NOTE: portfolioItems[k].data.Project.Parent || {} because some people might not have access to the project's parent
 			for (var k in portfolioItems) {
-				if (activeGroups[portfolioItems[k].data.Project.Parent.ObjectID] || activeGroups[portfolioItems[k].data.Project.ObjectID]) {
+				if (activeGroups[portfolioItems[k].data.Project.ObjectID] || activeGroups[(portfolioItems[k].data.Project.Parent || {}).ObjectID]) {
 					filteredPortfolioItems.push(portfolioItems[k]);
 				}
 			}
@@ -3270,6 +3069,7 @@
 		}
 	});
 })();
+
 
             Rally.launchApp('DataIntegrityDashboard', {
                 name:"Data Integrity Dashboard",

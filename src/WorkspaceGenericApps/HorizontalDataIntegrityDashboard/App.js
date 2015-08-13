@@ -908,8 +908,9 @@
 			}
 			
 			// If the portfolio item's project or that project's parent is an active scrum group, use it
+			//NOTE: portfolioItems[k].data.Project.Parent || {} because some people might not have access to the project's parent
 			for (var k in portfolioItems) {
-				if (activeGroups[portfolioItems[k].data.Project.Parent.ObjectID] || activeGroups[portfolioItems[k].data.Project.ObjectID]) {
+				if (activeGroups[portfolioItems[k].data.Project.ObjectID] || activeGroups[(portfolioItems[k].data.Project.Parent || {}).ObjectID]) {
 					filteredPortfolioItems.push(portfolioItems[k]);
 				}
 			}
