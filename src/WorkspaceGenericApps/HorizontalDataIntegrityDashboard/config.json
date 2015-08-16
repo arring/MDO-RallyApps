@@ -17,6 +17,8 @@
       "../lib/mixin/user-apps-preference.js",
       "../lib/mixin/parallel-loader.js",
       "../lib/mixin/data-integrity-dashboard-objectid-preference.js",
+      "../lib/mixin/teams.js",
+      "../lib/mixin/horizontal-groups.js",
       "../lib/component/intel-combobox.js",
       "../lib/component/intel-fixed-combobox.js",
       "../lib/component/intel-release-picker.js",
