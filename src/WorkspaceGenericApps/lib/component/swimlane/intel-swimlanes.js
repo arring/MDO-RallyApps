@@ -64,6 +64,7 @@
 		rowNames: [],
 		colNames: [],
 		displayFields: [],
+		customDisplayFieldRenderers: {},
 		filters: [],
 		swimlaneAgreements: {},
 		cardOptions: ['edit', 'copy', 'delete'],
@@ -340,6 +341,7 @@
 		createCard: function(cardData, colName, rowName){
 			var newCard = Ext.create('Intel.lib.component.swimlane.SwimlaneCard', {
 				displayFields: this.displayFields,
+				customDisplayFieldRenderers: this.customDisplayFieldRenderers,
 				cardOptions: this.cardOptions,
 				parentSwimlanes: this,
 				colName: colName,

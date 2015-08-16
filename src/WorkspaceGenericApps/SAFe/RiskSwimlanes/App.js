@@ -227,6 +227,14 @@
 				scrumGroupRootRecord.data.ObjectID + '-' + 
 				(new Date()*1 + '' + (Math.random()*10000 >> 0));
 		},
+		getSwimlaneCardDisplayFields: function(){
+			return ['Owner', 'Description']
+				.concat(!this.ScrumGroupRootRecord ? ['Train'] : [])
+				.concat(this.ShowCheckpoints ? ['Checkpoint'] : []);
+		},
+		setWeeksInRelease: function(){
+			this.WeeksInRelease = this.getWorkweeksForDropdown(this.ReleaseRecord.data.ReleaseStartDate, this.ReleaseRecord.data.ReleaseDate);
+		},
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		_loadPortfolioItemsOfTypeInRelease: function(releaseName, portfolioProjectOID, type){
@@ -330,7 +338,7 @@
 			return me.loadUsers(risks).then(function(){
 				var previousOwnerObjectID = me.FilterByOwnerDropdown.getValue(),
 					previousPortfolioItem = me.FilterByTopPortfolioItemDropdown.getValue(),
-					previousHorizontal = me.FilterByHorizontalDropdown.getValue();
+					previousHorizontal = me.FilterByHorizontalDropdown && me.FilterByHorizontalDropdown.getValue();
 				me.down('#toolsbarLeft').removeAll();
 				me.renderAddRiskButton();
 				me.renderFilterByOwnerDropdown(previousOwnerObjectID);
@@ -374,6 +382,7 @@
 					me.renderFilterByOwnerDropdown();
 					me.renderFilterByTopPortfolioItemDropdown();
 					me.renderFilterByHorizontalDropdown();
+					me.renderShowCheckpointCheckbox();
 					me.renderShowAggrementsCheckbox();
 				})
 				.then(function(){ me.renderSwimlanes(); })
@@ -386,6 +395,7 @@
 			var me = this;
 			me.setLoading('Loading configuration');
 			me.ShowAgreements = false;
+			me.ShowCheckpoints = true;
 			Q.onerror = function(reason){ me.alert('ERROR', reason); };
 			var enableHorizontalGroups = me.getSetting('Enable-Groups');
 			var horizontalGroups = enableHorizontalGroups && me.getSetting('Groups').match(VALID_GROUPING_SYNTAX) && me.getSetting('Groups');
@@ -424,7 +434,10 @@
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
 								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) me.ReleaseRecord = currentRelease;
+								if(currentRelease){
+									me.ReleaseRecord = currentRelease;
+									me.setWeeksInRelease();
+								}
 								else return Q.reject('This project has no releases.');
 							}),
 						me.loadProjectsWithTeamMembers().then(function(projectsWithTeamMembers){
@@ -448,6 +461,7 @@
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
+			me.setWeeksInRelease();
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
@@ -601,6 +615,21 @@
 				});
 			}
 		},
+		renderShowCheckpointCheckbox: function(){
+			var me = this;
+			me.ShowCheckpointCheckbox = me.down('#toolsbarRight').add({
+				xtype: 'checkbox',
+				id:'showCheckpointsCheckbox',
+				fieldLabel: 'Show Checkpoints',
+				value: me.ShowCheckpoints,
+				listeners: {
+					change: function(combox, newVal){
+						me.ShowCheckpoints = newVal;
+						me.RiskSwimlanes.setDisplayFields(me.getSwimlaneCardDisplayFields());
+					}
+				}
+			});
+		},
 		renderShowAggrementsCheckbox: function(){
 			var me = this;
 			me.ShowAgreementsCheckbox = me.down('#toolsbarRight').add({
@@ -626,7 +655,14 @@
 				flex:1,
 				rowNames: RiskModel.getRiskLevelOptions(),
 				colNames: RiskModel.getStatusOptions(),
-				displayFields: showScrumGroupName ? ['Train', 'Owner', 'Description'] : ['Owner', 'Description'], //we call it Train here for now
+				displayFields: me.getSwimlaneCardDisplayFields(),
+				customDisplayFieldRenderers: {
+					Checkpoint: function(value){ 
+						if(value < me.WeeksInRelease[0].DateVal) value = me.WeeksInRelease[0].DateVal;
+						if(value > me.WeeksInRelease[me.WeeksInRelease.length-1].DateVal) value = me.WeeksInRelease[me.WeeksInRelease.length-1].DateVal;
+						return 'ww' + me.getWorkweek(value); 
+					}
+				},
 				onCardEdit: me.onCardEdit.bind(me),
 				onCardCopy: me.onCardCopy.bind(me),
 				onCardMove: me.onCardMove.bind(me),
@@ -654,7 +690,6 @@
 					me.setLoading('Updating Risk');
 					card.setColName(newRiskJSON.Status);
 					card.setRowName(newRiskJSON.RiskLevel);
-					card.setData(newRiskJSON);
 					return me.updateRiskUsers(_.invoke(me.RiskSwimlanes.getCards(), 'getData')).then(function(){
 						if(newRiskJSON.ReleaseName !== me.ReleaseRecord.data.Name) card.destroy();
 						else card.setData(me.addOwnerAndSubmitterAndTrain(newRiskJSON));

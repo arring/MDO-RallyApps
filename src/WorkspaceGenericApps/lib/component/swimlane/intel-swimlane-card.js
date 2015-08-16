@@ -25,6 +25,7 @@ SUMMARY:
 				cardID = card.id, 
 				cardOptions = card.cardOptions,
 				displayFields = card.displayFields,
+				customDisplayFieldRenderers = card.customDisplayFieldRenderers,
 				colNum = (card.parentSwimlanes.getColNames().indexOf(this.colName) + 1),
 				canEdit = cardOptions.indexOf('edit') > -1,
 				canCopy = cardOptions.indexOf('copy') > -1,
@@ -35,7 +36,12 @@ SUMMARY:
 					'<div class="color-bar"></div>',
 					'<div class="swimlane-card-content">',
 						_.map(displayFields, function(displayField){
-							return '<div class="card-field-label">' + displayField + ':</div><div class="card-field-value">' + cardData[displayField] + '</div>';
+							return [
+								'<div class="card-field-label">' + displayField + ':</div>',
+								'<div class="card-field-value">',
+									customDisplayFieldRenderers[displayField] ? customDisplayFieldRenderers[displayField](cardData[displayField]) : cardData[displayField],
+								'</div>'
+							].join('');
 						}).join('\n'),
 					'</div>',
 					'<div class="swimlane-card-tools">',
