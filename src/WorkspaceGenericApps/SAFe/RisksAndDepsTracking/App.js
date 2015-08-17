@@ -527,7 +527,7 @@
 							return {
 								xtype:'grid',
 								cls: 'risksdeps-grid duplicate-predecessors-grid rally-grid',
-								columnCfgs: [{
+								columns: [{
 									text:'#', 
 									dataIndex:'UserStoryFormattedID',
 									width:90,
@@ -555,7 +555,7 @@
 									dataIndex:'NeededBy',
 									width:90,
 									sortable:true,
-									renderer: function(date){ return (date ? 'ww' + me._getWorkweek(date) : '-');}
+									renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');}
 								},{
 									text:'Teams Depended On',
 									dataIndex:'DependencyID',
@@ -617,7 +617,7 @@
 											viewConfig: { stripeRows:false },
 											width:420,
 											manageHeight:false,
-											columnCfgs: predecessorItemColumnCfgs,
+											columns: predecessorItemColumnCfgs,
 											listeners: {
 												mousedown: swallowEventHandler,
 												mousemove: swallowEventHandler,
@@ -772,10 +772,10 @@
 					'Checkpoint',
 					'Owner',
 					'Submitter',
-					'_undoButton',
-					'_saveButton',
-					'_copyButton',
-					'_deleteButton'
+					'UndoButton',
+					'SaveButton',
+					'CopyButton',
+					'DeleteButton'
 				]
 			});
 		},
