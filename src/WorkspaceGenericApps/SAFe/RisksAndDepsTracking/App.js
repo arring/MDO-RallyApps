@@ -130,7 +130,7 @@
 					model:'HierarchicalRequirement',
 					filters: [me.getUserStoryFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'Release', 'FormattedID', lowestPortfolioItem, 'c_Dependencies'],
-					scope: {
+					context: {
 						project:me.ScrumGroupRootRecord.data._ref,
 						projectScopeDown:true,
 						projectScopeUp:false

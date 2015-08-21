@@ -158,7 +158,7 @@
 					filters: [me._getUserStoryFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType, 'c_Dependencies'],
-					scope: {
+					context: {
 						workspace: me.ScrumGroupRootRecord ? null : me.getContext().getWorkspace()._ref,
 						project: me.ScrumGroupRootRecord ? me.ScrumGroupRootRecord.data._ref : null,
 						projectScopeUp: false,

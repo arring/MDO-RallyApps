@@ -194,7 +194,7 @@
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 'DirectChildrenCount',					
 						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem, 'c_Dependencies'],
-					scope: {
+					context: {
 						project:me.ProjectRecord.data._ref,
 						projectScopeDown:false,
 						projectScopeUp:false
@@ -229,7 +229,7 @@
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'Description', 'Tasks', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 						'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
-					scope: {
+					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					}

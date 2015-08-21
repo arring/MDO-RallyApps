@@ -280,7 +280,7 @@
 						model: 'HierarchicalRequirement',
 						filters: filter ? [filter] : [],
 						fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType],
-						scope: {
+						context: {
 							workspace:me.getContext().getWorkspace()._ref,
 							project: null
 						}
