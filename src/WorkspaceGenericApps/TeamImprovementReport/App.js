@@ -43,10 +43,9 @@
 							click: function() {
 								var me = Rally.getApp();
 								Rally.nav.Manager.create('HierarchicalRequirement', {
-										Project: me.ProjectRecord.data._ref,
-										Release: me.CurrentRelease.data._ref
-									}
-								);
+									Project: me.ProjectRecord.data._ref,
+									Release: me.CurrentRelease.data._ref
+								});
 							}
 						}
 					}
