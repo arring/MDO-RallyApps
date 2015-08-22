@@ -15,23 +15,30 @@
 }
 #cntDatePickerWrapper{
 	margin-left:5px;
+
 }
-.appInfo{
+#datePickerWrapper{
+	border-top: solid #BFBFBF 1px;
+	border-left: solid #BFBFBF 1px;
+	border-right: solid #BFBFBF 1px;
+	padding-top:5px;
+	padding-left:10px;
+	background-color: #cbdbef;
+}
+/* .appInfo{
 	float:right;
 	text-align:right;
 	font:bold;
 	font-weight: bold;
 	color: green;
-}
+} */
 .rui-triggerfield .icon-calendar {
   background-image: none;
   color: #888;
   font-size: 12px;
   padding: 3px 3px 5px 4px;
-}
+} 
 .chart-wrapper{
-	margin-top: 10px;
-	padding: 10px;
 	width:100%;
 }
 .retrochart-wrapper{
@@ -41,29 +48,33 @@
 	/*change the width percentage to change the size of the donut-wrapper*/
 }
 .barchart-wrapper{
-	border: solid #BFBFBF 2px;  
-	width: 100%;/*change the width percentage to change the size of the donut-wrapper
-	background-color:red;*/
+	border-bottom: solid #BFBFBF 1px;  
+	border-left: solid #BFBFBF 1px;  
+	border-right: solid #BFBFBF 1px;  
+	width: 100%;/*change the width percentage to change the size of the donut-wrapper*/
+/* 	background-color:red; */
 }
-span#retroDonutScopeArrow-outerCt,span#retroDonutCaOriginalArrow-outerCt,span#retroDonutCaFinalArrow-outerCt {
-	 margin-top: 70px; 
-	 margin-left: 60px;
+#cntInformation{
+	clear:both;
+	float:right;
+	text-decoration:underline;
+	font-style:italic;
+	font-weight:bold;
+	color:green;
+	text-align:right;
+	border-top: solid #BFBFBF 1px; 
+	border-left: solid #BFBFBF 1px;  
+	border-right: solid #BFBFBF 1px;
+	width:100%;
 }
-#retroDonutScopeFooter,#retroDonutCaOriginalFooter,#retroDonutCaFinalFooter {
-	padding-top: 190px;
-	padding-left: 0px;
-	font-weight: bold;
-	font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, sans-serif;
+.help{
+	cursor: pointer;
 }
 .legendwrapper{
-	/* width: 100%;
-	text-align: center;
-	height: 20px;
-	padding-left: 70%;
-	margin-bottom:20px; */
-	margin-top:-50px;
+	margin-top: -35px;
+/* 	border:red solid 1px; */
 	float: right;
-	width: 35%;
+	width: 40%;
 	text-align: center;
 }
 .mtargetwrapper{
@@ -107,15 +118,13 @@ span#retroDonutScopeArrow-outerCt,span#retroDonutCaOriginalArrow-outerCt,span#re
 }
 #grid_header_hd{
 	color: #396295;
-	font-size: 16px;
+	font-size: 14px;
 	font-weight: bold;
-	cursor: pointer;
-	fill: #333333;
 }
 
 /* simple, float it right instead of left */
 .progress-right .progress-bar-r {
-    float: left;
+  float: left;
 	border:solid red 1px;
 	height: 20px;
 	text-align: left;
@@ -133,3 +142,41 @@ div.sr-only {
 /*   direction: rtl; */
   
 }
+.require-attention {
+	color:red;
+}
+.good-job {
+  color: #1ab058;
+  font-weight: bold;
+}
+.grd-ScrumHealth .x-panel-header {
+  background-color: whitesmoke;
+}
+.grd-ScrumHealth .x-panel-header-text {
+  color: #40d0ed;
+	font-weight:bold;
+}
+
+#grdScrumHealthHeader {
+	margin-top: 5px;
+	font-size: 12px;
+	text-align: center;
+}
+#grdScrumHealthHeader a{
+	color:black;
+	text-decoration:underline;
+}
+
+.x-tab-default-override {
+		border-bottom: 1px solid #deecfd;
+		background-color: #cbdbef;
+		border-color: #8db3e3;
+}
+.x-tab-default-override a{
+		border-color: #8db3e3;
+		background-color: #cbdbef;
+    cursor: pointer;
+}
+.x-tab-default-top{
+	background-color:white !important;
+	}
