@@ -1,8 +1,9 @@
-/** this app will probably get buggy if you have multiple projects with the name name or portfolioItems with the same name */
+/** 
+	this app will probably get buggy if you have multiple projects with the same name or portfolioItems with the same name
+	Because i never tested for that.
+*/
 (function(){
-	var Ext = window.Ext4 || window.Ext;
-
-	var VALID_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/,
+	var Ext = window.Ext4 || window.Ext,
 		COLUMN_DEFAULTS = {
 			text:'',
 			resizable: false,
@@ -12,11 +13,7 @@
 			menuDisabled: true,
 			renderer: function(val){ return val || '-'; },
 			layout: 'hbox'
-		},
-		RED_X_INTERCEPT = 40,	//color indicator code take from mdoproceffrpt/rally-release-color app
-		RED_X_SLOPE = 100/(100-RED_X_INTERCEPT),
-		YELLOW_X_INTERCEPT = 20,
-		YELLOW_X_SLOPE = 100/(100-YELLOW_X_INTERCEPT);
+		};
 	
 	Ext.define('Intel.SAFe.ArtCommitMatrix', {
 		extend: 'Intel.lib.IntelRallyApp',
@@ -27,7 +24,9 @@
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.RallyReleaseColor',
+			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		
 		layout: {
@@ -68,136 +67,7 @@
 		
 		userAppsPref: 'intel-SAFe-apps-preference',
 
-		/**___________________________________ CONFIG/SETTINGS ___________________________________*/
-		config: {
-			defaultSettings: {
-				'Enable-Groups': false,
-				Groups: ''
-			}
-		},				
-		getSettingsFields: function() {
-			if(!Rally.getApp().getContext().getPermissions().isWorkspaceOrSubscriptionAdmin()) return [];
-			else return [{
-				name: 'Enable-Groups',
-				xtype:'rallycheckboxfield',
-				id: 'EnableGroupsCheckbox',
-				label: 'Enable Column Groupings',
-				labelWidth: 120,
-				bubbleEvents: ['change'] 
-			},{
-				xtype:'container',
-				id: 'GroupingInstructions',
-				html:[
-					'<hr/>',
-					'<div>',
-						'<b>Set The Column Groupings</b>',
-						'<p>Group Columns By keywords. Syntax is:</p>',
-						'<div style="padding-left:5px;">',
-							'<p>GroupName1:keyword1,keyword2,keyword3;</p>',
-							'<p>GroupName2:keyword1,keyword2;</p>',
-							'<p>...</p>',
-						'</div>',
-					'</div>'
-				].join('\n'),
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else field.show();
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue) this.hide();
-							else this.show();
-						}
-					}
-				}
-			},{
-				name: 'Groups',
-				xtype:'textarea',
-				id: 'GroupingTextarea',
-				label: 'Column Groups',
-				labelWidth: 120, width:500, height:150,
-				resizable:true,
-				resizeHandles:'se s e',
-				bubbleEvents: ['change'],
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else field.show();
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue) this.hide();
-							else this.show();
-						}
-					}
-				}
-			},{
-				xtype:'container',
-				id: 'SyntaxNotifier',
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else {
-							field.show();
-							setTimeout(function setInitialColor(){
-								var el = field.getEl(),
-									goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
-									badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>',
-									textElContainer = form.down('#GroupingTextarea');
-								if(el && textElContainer && textElContainer.getEl().down('textarea')){
-									if(textElContainer.getEl().down('textarea').getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
-									else el.setHTML(badHTML);
-								}
-								else setTimeout(setInitialColor, 10);
-							}, 0);
-						}
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue){
-								this.hide();
-								return;
-							}
-							else this.show();
-						}
-						var el = this.getEl(),
-							textEl = this.up('form').down('#GroupingTextarea').getEl().down('textarea'),
-							goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
-							badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
-						if(textEl.getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
-						else el.setHTML(badHTML);
-					}
-				}
-			}];
-		},
-				
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: _loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					remoteSort:false,
-					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
-						'Project', 'PlannedEndDate', 'Parent', 'PortfolioItemType', 'Ordinal'],
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me.reloadStore(store);
-		},	
 		loadPortfolioItems: function(){ 
 			var me=this, deferred = Q.defer();
 			me.enqueue(function(done){
@@ -210,36 +80,13 @@
 					.then(function(portfolioItemStores){
 						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
 						me.PortfolioItemStore = portfolioItemStores[0];
-						
-						//make the mapping of lowest to highest portfolioItems
-						me.PortfolioItemMap = {};
-						_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
-							var ordinal = 0, 
-								parentPortfolioItemRecord = lowPortfolioItemRecord,
-								getParentRecord = function(child, parentList){
-									return _.find(parentList, function(parent){ 
-										return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
-									});
-								};
-							while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
-								parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
-								++ordinal;
-							}
-							if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
-								me.PortfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
-						});
+						me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
 						
 						//destroy the stores, so they get GCed
 						portfolioItemStores.shift();
 						while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
-						
-						//make a hash of portfolioitem Names
-						me.PortfolioItemNames = _.sortBy(_.map(me.PortfolioItemStore.getRange(), 
-							function(p){ return {Name: p.data.Name}; }),
-							function(p){ return p.Name; });
-						me.PortfolioItemNames = [{Name: 'All ' + me.PortfolioItemTypes.slice(-1).pop()}].concat(me.PortfolioItemNames);
 					})
-					.then(function(){ done(); deferred.resolve();})
+					.then(function(){ done(); deferred.resolve(); })
 					.fail(function(reason){ done(); deferred.reject(reason); })
 					.done();
 				}, 'PortfolioItemQueue');
@@ -435,28 +282,7 @@
 		getCellBackgroundColor: function(config){
 			var me=this;		
 			if(me.ViewMode == 'Normal' || config.userStoriesData.length === 0) return '';
-			else if(me.ViewMode == '% Done'){
-				/*	since releasePercentComplete (x value) and planEstimatePercentAccepted (y value) are between 0-100, 
-						we set up are algorithm in the x and y ranges of 0-100 as well */
-				var curDate = new Date()*1, 
-					relStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate)*1,
-					relEndDate = new Date(me.ReleaseRecord.data.ReleaseDate)*1,
-					releasePercentComplete = 100*(curDate - relStartDate)/(relEndDate - relStartDate),
-					planEstimatePercentAccepted = 100*(config.completedPoints / config.totalPoints),
-					redLineYValueAtX = (releasePercentComplete - RED_X_INTERCEPT)*RED_X_SLOPE,
-					yellowLineYValueAtX = (releasePercentComplete - YELLOW_X_INTERCEPT)*YELLOW_X_SLOPE;
-					
-				releasePercentComplete = (releasePercentComplete > 100 ? 100 : (releasePercentComplete < 0 ? 0 : releasePercentComplete));
-				redLineYValueAtX = redLineYValueAtX < 0 ? 0 : redLineYValueAtX;
-				yellowLineYValueAtX = yellowLineYValueAtX < 0 ? 0 : yellowLineYValueAtX;
-				
-				if(planEstimatePercentAccepted === 0) return 'white';
-				if(planEstimatePercentAccepted > 0 && releasePercentComplete < 0) return 'lightgray';
-				if(planEstimatePercentAccepted === 100) return 'gray';
-				if(planEstimatePercentAccepted > yellowLineYValueAtX) return 'green';
-				if(planEstimatePercentAccepted <= yellowLineYValueAtX && planEstimatePercentAccepted > redLineYValueAtX) return 'yellow';
-				if(planEstimatePercentAccepted <= redLineYValueAtX) return 'red';
-			}
+			else if(me.ViewMode == '% Done') return me.getRallyReleaseColor(me.ReleaseRecord, config.completedPoints, config.totalPoints);
 		},
 		getCellInnerHTML: function(config){
 			var me=this;			
@@ -690,8 +516,6 @@
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
-			me.EnableColumnGroups = me.getSetting('Enable-Groups');
-			me.ColumnGroups = me.EnableColumnGroups && me.getSetting('Groups').match(VALID_GROUPING_SYNTAX) && me.getSetting('Groups');
 			me.initGridResize();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
@@ -705,8 +529,8 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //3 streams
-						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ********/
+					return Q.all([
+						me.projectInWhichScrumGroup(me.ProjectRecord)
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
 									me.ScrumGroupRootRecord = scrumGroupRootRecord;
@@ -718,7 +542,7 @@
 								} 
 								else return Q.reject('You are not scoped to a valid project');
 							}),
-						me.loadAppsPreference() /********* 2 ********/
+						me.loadAppsPreference()
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
@@ -730,9 +554,13 @@
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							}),
-						me.loadProjectsWithTeamMembers(me.ProjectRecord) /******* 3 *********/
+						me.loadProjectsWithTeamMembers(me.ProjectRecord)
 							.then(function(projectsWithTeamMembers){ 
 								me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+							}),
+						me.loadAllChildrenProjects()
+							.then(function(allProjects){ 
+								me.AllProjects = allProjects; 
 							})
 					]);
 				})
@@ -1082,29 +910,30 @@
 					}
 				});
 			});
-			if(me.ColumnGroups){
-				var keywordMap = _.reduce(me.ColumnGroups.split(';'), function(map, row){
-					if(!row) return map;
-					var split = row.split(':'),
-						keywords = split[1].trim(),
-						groupName = split[0].trim();
-					_.each(keywords.split(','), function(keyword){ map[keyword.trim()] = groupName; });
-					return map;
-				}, {});
-				teamColumnCfgs = _.map(_.union(_.values(keywordMap)).concat(['OTHER']), function(groupName){
-					return {
-						text: groupName,
-						draggable:false,
-						menuDisabled:true,
-						sortable:false,
-						resizable:false,
-						columns: _.filter(teamColumnCfgs, function(cfg){ 
-							var matchedGroup = _.find(keywordMap, function(groupName, keyword){ return cfg.text.indexOf(keyword) > -1; });
-							if(groupName == 'OTHER') return !matchedGroup;
-							else return matchedGroup == groupName;							
-						})
-					};
-				});
+			if(me.HorizontalGroupingConfig.enabled){
+				var allTeamTypeInfos = me.getAllHorizontalTeamTypeInfos(me.AllProjects);
+				teamColumnCfgs = _.map(_.groupBy(_.sortBy(_.map(teamColumnCfgs, 
+					function(teamColumnCfg){
+						return {
+							teamTypeInfo: _.find(allTeamTypeInfos, function(tti){ return tti.projectRecord.data.Name === teamColumnCfg.text; }),
+							columnCfg: teamColumnCfg
+						};
+					}),
+					function(item){ 
+						var horizontal = item.teamTypeInfo.horizontal;
+						return (horizontal === 'null' ? '~~~' : horizontal) + item.teamTypeInfo.projectRecord.data.Name; 
+					}),
+					function(item){ return item.teamTypeInfo.horizontal; }),
+					function(items, horizontal){
+						return {
+							text: horizontal === 'null' ? 'OTHER' : horizontal,
+							draggable:false,
+							menuDisabled:true,
+							sortable:false,
+							resizable:false,
+							columns: _.pluck(items, 'columnCfg')
+						};
+					});
 			}
 			var columns = _.map(lockedColumns.concat(teamColumnCfgs), function(colDef){ return _.merge({}, COLUMN_DEFAULTS, colDef); });
 			

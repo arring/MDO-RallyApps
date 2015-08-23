@@ -7,7 +7,7 @@
 	var Ext = window.Ext4 || window.Ext;
 
 	/************************** Data Integrity Dashboard *****************************/
-	Ext.define('DataIntegrityDashboard', {
+	Ext.define('Intel.DataIntegrityDashboard', {
 		extend: 'Intel.lib.IntelRallyApp',
 		// Important! Allows the same code to be used for both the horizontal and the vertical versions of the app
 		settingsScope: 'workspace',

@@ -1,6 +1,6 @@
 {
    "name": "Data Integrity Dashboard",
-   "className": "DataIntegrityDashboard",
+   "className": "Intel.DataIntegrityDashboard",
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [

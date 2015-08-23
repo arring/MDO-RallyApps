@@ -1,0 +1,16 @@
+{
+   "name": "Health Dashboard",
+   "className": "Intel.HealthDashboard",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc3",
+   "javascript": [
+      "https://code.jquery.com/jquery-2.1.1.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/async/1.22/async.min.js",
+      "https://cdn.rawgit.com/Delapouite/lodash.math/master/lodash.math.js",
+      "App.js"
+   ],
+   "css": [
+      "app.css"
+   ]
+}
