@@ -10,8 +10,7 @@
 */
 
 (function(){
-	var VALID_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/,
-		RiskDb = Intel.SAFe.lib.resource.RiskDb,
+	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
 		RiskModel = Intel.SAFe.lib.model.Risk;
 
 	Ext.define('Intel.SAFe.RiskSwimlanes', {
@@ -22,7 +21,8 @@
 			'Intel.lib.mixin.PrettyAlert',
 			'Intel.lib.mixin.IframeResize',
 			'Intel.lib.mixin.IntelWorkweek',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		
 		layout: {
@@ -63,117 +63,7 @@
 		}],
 		
 		userAppsPref: 'intel-SAFe-apps-preference',
-		
-		/**___________________________________ CONFIG/SETTINGS ___________________________________*/
-		config: {
-			defaultSettings: {
-				'Enable-Groups': false,
-				Groups: ''
-			}
-		},				
-		getSettingsFields: function() {
-			if(!Rally.getApp().getContext().getPermissions().isWorkspaceOrSubscriptionAdmin()) return [];
-			else return [{
-				name: 'Enable-Groups',
-				xtype:'rallycheckboxfield',
-				id: 'EnableGroupsCheckbox',
-				label: 'Enable Horizontal Groupings',
-				labelWidth: 120,
-				bubbleEvents: ['change'] 
-			},{
-				xtype:'container',
-				id: 'GroupingInstructions',
-				html:[
-					'<hr/>',
-					'<div>',
-						'<b>Set The Horizontal Groupings</b>',
-						'<p>Group Columns By keywords. Syntax is:</p>',
-						'<div style="padding-left:5px;">',
-							'<p>GroupName1:keyword1,keyword2,keyword3;</p>',
-							'<p>GroupName2:keyword1,keyword2;</p>',
-							'<p>...</p>',
-						'</div>',
-					'</div>'
-				].join('\n'),
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else field.show();
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue) this.hide();
-							else this.show();
-						}
-					}
-				}
-			},{
-				name: 'Groups',
-				xtype:'textarea',
-				id: 'GroupingTextarea',
-				label: 'Column Groups',
-				labelWidth: 120, width:500, height:150,
-				resizable:true,
-				resizeHandles:'se s e',
-				bubbleEvents: ['change'],
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else field.show();
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue) this.hide();
-							else this.show();
-						}
-					}
-				}
-			},{
-				xtype:'container',
-				id: 'SyntaxNotifier',
-				listeners:{
-					added: function(field, form){
-						if(!form.down('#EnableGroupsCheckbox').value) field.hide();
-						else {
-							field.show();
-							setTimeout(function setInitialColor(){
-								var el = field.getEl(),
-									goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
-									badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>',
-									textElContainer = form.down('#GroupingTextarea');
-								if(el && textElContainer && textElContainer.getEl().down('textarea')){
-									if(textElContainer.getEl().down('textarea').getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
-									else el.setHTML(badHTML);
-								}
-								else setTimeout(setInitialColor, 10);
-							}, 0);
-						}
-					}
-				},
-				handlesEvents: {
-					change: function(item, itemValue) {
-						if(item.id == 'EnableGroupsCheckbox'){
-							if(!itemValue){
-								this.hide();
-								return;
-							}
-							else this.show();
-						}
-						var el = this.getEl(),
-							textEl = this.up('form').down('#GroupingTextarea').getEl().down('textarea'),
-							goodHTML = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
-							badHTML = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
-						if(textEl.getValue().match(VALID_GROUPING_SYNTAX)) el.setHTML(goodHTML);
-						else el.setHTML(badHTML);
-					}
-				}
-			}];
-		},
-		
+
 		/**___________________________________ UTIL FUNCS ___________________________________*/	
 		formatUserName: function(user){
 			return user ? ((user.data.LastName + ', ' + user.data.FirstName) || user.data.UserName) : '?';
@@ -197,11 +87,8 @@
 					defaultFilter,
 				horizontalFilter = horizontalFilterValue ? 
 					new Ext.util.Filter({filterFn:function(card){ 
-						var project = me.ProjectsWithTeamMembers[card.getData().ProjectObjectID],
-							projectName = project && project.data.Name;
-						return projectName && _.some(me.HorizontalGroups[horizontalFilterValue], function(nameContains){
-							return new RegExp(nameContains).test(projectName);
-						}); 
+						var projectRecord = me.ProjectsWithTeamMembers[card.getData().ProjectObjectID];
+						return projectRecord && me.isProjectInHorizontal(projectRecord, horizontalFilterValue);
 					} }) :
 					defaultFilter;
 			return new Ext.util.Filter({ 
@@ -237,61 +124,33 @@
 		},
 		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		_loadPortfolioItemsOfTypeInRelease: function(releaseName, portfolioProjectOID, type){
-			if(!portfolioProjectOID || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: 'PortfolioItem/' + type,
-					limit: Infinity,
-					disableMetaChangeEvent: true,
-					remoteSort:false,
-					fetch: me.portfolioItemFields,
-					filters:[{ property:'Release.Name', value:releaseName}],
-					context:{
-						project: '/project/' + portfolioProjectOID,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me.reloadStore(store);
-		},	
 		loadPortfolioItemsByRelease: function(releaseName, scrumGroupRootRecords){
 			/** 
 				scrumGroupPortfolioMap = {
 					<scrumGroupOID>: {
 						PortfolioItems: [records],
 						PortfolioItemMap: {
-							<lowPortfolioItemOID>: <highPOrtfolioItemName>
+							<lowPortfolioItemOID>: <highPortfolioItemName>
 						}
 					}
 				}
 			**/
-			var me=this;
-			var scrumGroupPortfolioMap = {};
+			var me=this,
+				fakeReleaseRecord = {data:{Name:releaseName}},
+				scrumGroupPortfolioMap = {};
 			return Q.all(_.map(scrumGroupRootRecords, function(scrumGroupRootRecord){
-				var portfolioProjectOID = me.getPortfolioOIDForScrumGroupRootProjectRecord(scrumGroupRootRecord);
+				var portfolioProjectOID = me.getPortfolioOIDForScrumGroupRootProjectRecord(scrumGroupRootRecord),
+					fakePortfolioProjectRecord = {data:{_ref:'/project/' + portfolioProjectOID}};
 				return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-							me.loadPortfolioItemsOfType({data: {_ref: '/project/' + portfolioProjectOID}}, type) : 
-							me._loadPortfolioItemsOfTypeInRelease(releaseName, portfolioProjectOID, type)
+							me.loadPortfolioItemsOfType(fakePortfolioProjectRecord, type) : 
+							me.loadPortfolioItemsOfTypeInRelease(fakeReleaseRecord, fakePortfolioProjectRecord, type)
 						);
 					}))
 					.then(function(portfolioItemStores){
-						var portfolioItemStore = portfolioItemStores[0];
-						var portfolioItemMap = {};
-						_.each(portfolioItemStore.getRange(), function(lowPortfolioItem){
-							var ordinal = 0, 
-								parentPortfolioItem = lowPortfolioItem,
-								getParentRecord = function(child, parentList){
-									return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
-								};
-							while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
-								parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
-								++ordinal;
-							}
-							if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
-								portfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
-						});
+						var portfolioItemStore = portfolioItemStores[0],
+							portfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
+						
 						scrumGroupPortfolioMap[scrumGroupRootRecord.data.ObjectID] = {
 							PortfolioItems: portfolioItemStore.getRange(),
 							PortfolioItemMap: portfolioItemMap
@@ -306,7 +165,7 @@
 			return Q.all(_.map(scrumGroupRootRecords, function(scrumGroupRootRecord){
 				return RiskDb.query('risk-' + me.ReleaseRecord.data.Name + '-' + scrumGroupRootRecord.data.ObjectID + '-');
 			}))
-			.then(function(riskLists){ me.InitialRisks = Array.prototype.concat.apply([], riskLists); });
+			.then(function(riskLists){ me.InitialRisks = [].concat.apply([], riskLists); });
 		},
 		loadUsers: function(risks){
 			var me = this,
@@ -325,11 +184,14 @@
 						model: 'User',
 						fetch: ['ObjectID', 'UserName', 'FirstName', 'LastName'],
 						filters: [userOIDFilter],
-						context: { workspace: me.getContext().getWorkspace()._ref }
+						context: { 
+							workspace: me.getContext().getWorkspace()._ref, 
+							project:null 
+						}
 					});
 				return me.reloadStore(store).then(function(store){ return store.getRange(); });
 			}))
-			.then(function(userLists){ me.UsersOnRisks = Array.prototype.concat.apply([], userLists); });
+			.then(function(userLists){ me.UsersOnRisks = [].concat.apply([], userLists); });
 		},
 
 		/**___________________________________ UPDATING, LOADING AND RELOADING ___________________________________*/
@@ -397,16 +259,6 @@
 			me.ShowAgreements = false;
 			me.ShowCheckpoints = true;
 			Q.onerror = function(reason){ me.alert('ERROR', reason); };
-			var enableHorizontalGroups = me.getSetting('Enable-Groups');
-			var horizontalGroups = enableHorizontalGroups && me.getSetting('Groups').match(VALID_GROUPING_SYNTAX) && me.getSetting('Groups');
-			if(horizontalGroups){
-				me.HorizontalGroups = _.reduce(horizontalGroups.trim().split(';'), function(map, line){
-					if(!line.length) return map;
-					var split = line.trim().split(':');
-					map[split[0]] = split[1].split(',');
-					return map;
-				}, {});
-			}
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
@@ -597,8 +449,8 @@
 		},
 		renderFilterByHorizontalDropdown: function(value){
 			var me=this,
-				options = ['Clear Filter'].concat(_.sortBy(_.keys(me.HorizontalGroups), function(name){ return name; }));
-			if(me.HorizontalGroups){
+				options = ['Clear Filter'].concat(_.sortBy(_.keys(me.HorizontalGroupingConfig.groups), function(name){ return name; }));
+			if(me.HorizontalGroupingConfig.enabled){
 				me.FilterByHorizontalDropdown = me.down('#toolsbarLeft').add({
 					xtype: 'intelfixedcombobox',
 					id: 'filterByHorizontalDropdown',

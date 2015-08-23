@@ -74,7 +74,7 @@
 				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
 							me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
-							me.loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
+							me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, type)
 						);
 					}))
 					.then(function(portfolioItemStores){

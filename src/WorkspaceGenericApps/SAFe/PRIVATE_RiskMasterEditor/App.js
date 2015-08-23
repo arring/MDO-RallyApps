@@ -2,7 +2,7 @@
 	var Ext = window.Ext4 || window.Ext,
 		RiskDb = Intel.SAFe.lib.resource.RiskDb;
 
-	Ext.define('RiskMasterEditor', {
+	Ext.define('Intel.SAFe.RiskMasterEditor', {
 		extend: 'Intel.lib.IntelRallyApp',
 		mixins: [
 			'Intel.lib.mixin.PrettyAlert'
@@ -73,7 +73,7 @@
 						clickFnName = 'Click' + gridRecord.id.replace(/\-/g, 'z').replace('Ext.data.Store.ImplicitModel', '') + 'Fn' + col;
 					meta.tdAttr = 'title="Undo"';
 					window[clickFnName] = function(){
-						gridRecord.set('RiskJSON', realRisk);
+						gridRecord.set('RiskJSON', JSON.stringify(realRisk, null, '  '));
 						gridRecord.commit();
 					};
 					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
@@ -145,7 +145,7 @@
 				enableEditing:true,
 				plugins: [Ext.create('Ext.grid.plugin.CellEditing', {clicksToEdit: 1})],
 				store: Ext.create('Rally.data.custom.Store', {
-					fields: ['RiskID', {name:'RiskJSON', type: 'auto'}],
+					fields: ['RiskID', 'RiskJSON'],
 					data: me.Risks.map(function(risk){ return {RiskID: risk.RiskID, RiskJSON: JSON.stringify(risk, null, '  ')}; })
 				})
 			});	

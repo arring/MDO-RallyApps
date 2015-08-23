@@ -1,18 +1,27 @@
 (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	RALLY_MAX_STRING_SIZE = 32768;
+	var Ext = window.Ext4 || window.Ext,
+		RALLY_MAX_STRING_SIZE = 32768,
+		COLUMN_DEFAULTS = {
+			text:'',
+			resizable: false,
+			draggable: false,
+			sortable: false,
+			editor: false,
+			menuDisabled: true,
+			renderer: function(val){ return val || '-'; },
+			layout: 'hbox'
+		};
 
-	Ext.define('CustomFieldEditor', {
-		extend: 'IntelRallyApp',
+	Ext.define('Intel.SAFe.CustomFieldEditor', {
+		extend: 'Intel.lib.IntelRallyApp',
 		mixins:[
-			'WindowListener',
-			'PrettyAlert',
-			'IframeResize',
-			'IntelWorkweek',
-			'AsyncQueue',
-			'ParallelLoader',
-			'UserAppsPreference'
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.IntelWorkweek',
+			'Intel.lib.mixin.AsyncQueue',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.UserAppsPreference'
 		],
 		
 		layout: {
@@ -53,10 +62,10 @@
 		}],
 		minWidth:910, /** thats when rally adds a horizontal scrollbar for a pagewide app */
 		
-		_userAppsPref: 'intel-SAFe-apps-preference',
+		userAppsPref: 'intel-SAFe-apps-preference',
 
 		/**___________________________________ DATA STORE METHODS ___________________________________*/		
-		_getPortfolioItemFilter: function(){
+		getPortfolioItemFilter: function(){
 			var me=this;
 			return Ext.create('Rally.data.wsapi.Filter', { 
 				property:'Release.Name',
@@ -77,49 +86,32 @@
 				}))
 			);
 		},			
-		_loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					remoteSort:false,
-					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_Risks', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
-						'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me._reloadStore(store);
-		},	
-		_loadPortfolioItems: function(){ 
+		loadPortfolioItems: function(){ 
 			var me=this;
 			if(me.ScrumGroupPortfolioProject){
-				return me._loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, me.PortfolioItemTypes[0])
-					.then(function(portfolioItemStore){
-						me.PortfolioItemStore = portfolioItemStore;
-					});
-			} else {
+				return me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, me.PortfolioItemTypes[0])
+				.then(function(portfolioItemStore){
+					me.PortfolioItemStore = portfolioItemStore;
+				});
+			} 
+			else {
 				var portfolioItemStore = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + me.PortfolioItemTypes[0],
 					limit:Infinity,
 					remoteSort:false,
-					fetch: me._portfolioItemFields,
+					fetch: me.portfolioItemFields,
 					context:{
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					},
-					filters:[me._getPortfolioItemFilter()]
+					filters:[me.getPortfolioItemFilter()]
 				});
-				return me._reloadStore(portfolioItemStore).then(function(portfolioItemStore){
+				return me.reloadStore(portfolioItemStore).then(function(portfolioItemStore){
 					me.PortfolioItemStore = portfolioItemStore;
 				});
 			}
 		},
-		_getUserStoryFilter: function(){
+		getUserStoryFilter: function(){
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				twoWeeks = 1000*60*60*24*7*2,
@@ -150,12 +142,12 @@
 				)
 			);
 		},
-		_loadUserStories: function(){	
+		loadUserStories: function(){	
 			var me=this, 
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				config = {
-					model: me.UserStory,
-					filters: [me._getUserStoryFilter()],
+					model: 'HierarchicalRequirement',
+					filters: [me.getUserStoryFilter()],
 					fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 'StartDate', 'EndDate', 'Iteration', 
 						'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType, 'c_Dependencies'],
 					context: {
@@ -165,49 +157,46 @@
 						projectScopeDown: true
 					}
 				};
-			return me._parallelLoadWsapiStore(config).then(function(store){
+			return me.parallelLoadWsapiStore(config).then(function(store){
 				me.UserStoryStore = store;
 				return store;
 			});
 		},
 		
 		/**___________________________________ MISC FUNCS ___________________________________*/	
-		_isJsonValid: function(str){
+		isJsonValid: function(str){
 			try{ JSON.parse(str); return true; }
 			catch(e){ return false; }
 		},
-		_atob: function(a){
+		atob: function(a){
 			try { return atob(a); }
 			catch(e){ return 'INVALID ATOB:\n' + a; }
 		},
-		_identity: function(a){ return a; },
+		identity: function(a){ return a; },
 		
 		/**___________________________________ Load/reloading ___________________________________*/
-		_showGrids: function(){
+		showGrids: function(){
 			var me=this;
-			me._loadGrid(me.PortfolioItemStore, 'MoSCoW', false);
-			me._loadGrid(me.PortfolioItemStore, 'TeamCommits', true);
-			me._loadGrid(me.PortfolioItemStore, 'Risks', true);
-			me._loadGrid(me.UserStoryStore, 'Dependencies', true);
+			me.loadGrid(me.PortfolioItemStore, 'MoSCoW', false);
+			me.loadGrid(me.PortfolioItemStore, 'TeamCommits', true);
+			me.loadGrid(me.PortfolioItemStore, 'Risks', true);
+			me.loadGrid(me.UserStoryStore, 'Dependencies', true);
 		},
-		_updateGrids: function(){
+		updateGrids: function(){
 			var me=this;
 			if(me.PortfolioItemStore){
-				if(me.TeamCommitsStore) me.TeamCommitsStore.intelUpdate();
-				if(me.RisksStore) me.RisksStore.intelUpdate();
+				if(me.TeamCommitsGrid && me.TeamCommitsGrid.store) me.TeamCommitsGrid.store.intelUpdate();
+				if(me.RisksGrid && me.RisksGrid.store) me.RisksGrid.store.intelUpdate();
 			}
 			if(me.UserStoryStore){
-				if(me.DependenciesStore) me.DependenciesStore.intelUpdate();
+				if(me.DependenciesGrid && me.DependenciesGrid.store) me.DependenciesGrid.store.intelUpdate();
 			}
 		},		
-		_reloadStores: function(){
+		reloadStores: function(){
 			var me=this;
-			return Q.all([
-				me._loadPortfolioItems(),
-				me._loadUserStories()
-			]);
+			return Q.all([me.loadPortfolioItems(), me.loadUserStories()]);
 		},		
-		_clearEverything: function(){
+		clearEverything: function(){
 			var me=this;	
 			
 			me.UserStoryStore = undefined;
@@ -217,31 +206,23 @@
 			me.TeamCommitsGrid = undefined;
 			me.DependenciesGrid = undefined;
 			
-			me.TeamCommitsStore = undefined;
-			me.RisksStore = undefined;
-			me.DependenciesStore = undefined;
-			
-
 			Ext.getCmp('gridsContainer').removeAll(); 
 		},
-		_reloadEverything:function(){
+		reloadEverything:function(){
 			var me = this;
 			me.setLoading("Loading Data");
-			me._enqueue(function(unlockFunc){
-				me._clearEverything();
+			me.enqueue(function(done){
+				me.clearEverything();
 				if(!me.ReleasePicker){ //draw these once, never remove them
-					me._loadReleasePicker();
-					me._loadScrumGroupPicker();
-					me._loadManualRefreshButton();
+					me.loadReleasePicker();
+					me.loadScrumGroupPicker();
+					me.loadManualRefreshButton();
 				}		
-				me._reloadStores()
-					.then(function(){ return me._updateGrids(); })
-					.then(function(){ return me._showGrids(); })
-					.fail(function(reason){ me._alert('ERROR', reason || ''); })
-					.then(function(){
-						me.setLoading(false);
-						unlockFunc();
-					})
+				me.reloadStores()
+					.then(function(){ return me.updateGrids(); })
+					.then(function(){ return me.showGrids(); })
+					.fail(function(reason){ me.alert('ERROR', reason); })
+					.then(function(){ me.setLoading(false); done(); })
 					.done();
 			}, 'Queue-Main');
 		},
@@ -250,35 +231,34 @@
 		launch: function(){
 			var me = this;
 			me.setLoading('Loading Configuration');
-			me._initDisableResizeHandle();
-			me._initFixRallyDashboard();
-			me._configureIntelRallyApp()
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
-					return me._loadProject(scopeProject.ObjectID);
+					return me.loadProject(scopeProject.ObjectID);
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
 					return Q.all([ 
-						me._loadAllProjects() /********* 1 ************/
+						me.loadAllProjects()
 							.then(function(allProjects){
 								me.AllProjects = allProjects;
 							}),
-						me._loadAllScrumGroups() /************ 2 **********/
-							.then(function(scrumGroupRootRecords){
-								me.ScrumGroupRootRecord = null;
-								me.AllScrumGroupRootRecords = scrumGroupRootRecords;
-								me.ScrumGroupNames = _.map(scrumGroupRootRecords, function(sgr){ return {Name: me._getScrumGroupName(sgr)}; });
-							}),
-						me._loadAppsPreference() /********* 3 ************/
+						me.loadAllScrumGroups().then(function(scrumGroupRootRecords){
+							me.ScrumGroupRootRecord = null;
+							me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+							me.ScrumGroupNames = _.map(scrumGroupRootRecords, function(sgr){ return {Name: me.getScrumGroupName(sgr)}; });
+						}),
+						me.loadAppsPreference()
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var _24Weeks = 1000*60*60*24*7*24;
-								return me._loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - _24Weeks));
+								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - _24Weeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me._getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
@@ -287,37 +267,38 @@
 				.then(function(){
 					var projectOID = me.ProjectRecord.data.ObjectID;
 					if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
-						me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; });
-						return me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-							.then(function(scrumGroupPortfolioProject){
-								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-							});
+						me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ 
+							return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; 
+						});
+						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+						.then(function(scrumGroupPortfolioProject){
+							me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+						});
 					} 
 				})
-				.then(function(){ return me._reloadEverything(); })
+				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){
 					me.setLoading(false);
-					me._alert('ERROR', reason || '');
+					me.alert('ERROR', reason);
 				})
 				.done();
 		},
 
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
-		_releasePickerSelected: function(combo, records){
+		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			me.WorkweekData = me._getWorkWeeksForDropdown(me.ReleaseRecord.data.ReleaseStartDate, me.ReleaseRecord.data.ReleaseDate);
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me._saveAppsPreference(me.AppsPref)
-				.then(function(){ me._reloadEverything(); })
-				.fail(function(reason){ me._alert('ERROR', reason || ''); })
+			me.saveAppsPreference(me.AppsPref)
+				.then(function(){ me.reloadEverything(); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
-		_loadReleasePicker: function(){
+		loadReleasePicker: function(){
 			var me=this;
 			me.ReleasePicker = me.down('#navbox_left').add({
 				xtype:'intelreleasepicker',
@@ -326,13 +307,13 @@
 				currentRelease: me.ReleaseRecord,
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._releasePickerSelected.bind(me)
+					select: me.releasePickerSelected.bind(me)
 				}
 			});
 		},	
-		_scrumGroupPickerSelected: function(combo, records){
+		scrumGroupPickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
-			if((me.ScrumGroupRootRecord && me._getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) || 
+			if((me.ScrumGroupRootRecord && me.getScrumGroupName(me.ScrumGroupRootRecord) == records[0].data.Name) || 
 				(!me.ScrumGroupRootRecord && records[0].data.Name == 'All')) return;
 			me.setLoading("Saving Preference");
 			if(records[0].data.Name === 'All'){
@@ -343,19 +324,19 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].ScrumGroup = me.ScrumGroupRootRecord ? me.ScrumGroupRootRecord.data.ObjectID : null;
 			Q.all([
-				me._saveAppsPreference(me.AppsPref),
-				Q(me.ScrumGroupRootRecord && me._loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+				me.saveAppsPreference(me.AppsPref),
+				Q(me.ScrumGroupRootRecord && me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 					.then(function(scrumGroupPortfolioProject){
 						me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 					})
 				)
 			])
-			.then(function(){ me._reloadEverything(); })
-			.fail(function(reason){ me._alert('ERROR', reason || ''); })
+			.then(function(){ me.reloadEverything(); })
+			.fail(function(reason){ me.alert('ERROR', reason); })
 			.then(function(){ me.setLoading(false); })
 			.done();
 		},	
-		_loadScrumGroupPicker: function(){
+		loadScrumGroupPicker: function(){
 			var me=this;
 			me.ScrumGroupPicker = me.down('#navbox_left').add({
 				xtype:'intelfixedcombo',
@@ -367,34 +348,34 @@
 				}),
 				displayField: 'Name',
 				fieldLabel: 'Portfolio:',
-				value: me.ScrumGroupRootRecord ? me._getScrumGroupName(me.ScrumGroupRootRecord) : 'All',
+				value: me.ScrumGroupRootRecord ? me.getScrumGroupName(me.ScrumGroupRootRecord) : 'All',
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
-					select: me._scrumGroupPickerSelected.bind(me)
+					select: me.scrumGroupPickerSelected.bind(me)
 				}
 			});
 		},	
-		_loadManualRefreshButton: function(){
+		loadManualRefreshButton: function(){
 			var me=this;
 			me.down('#navbox_right').add({
 				xtype:'button',
+				cls: 'intel-button',
 				text:'Refresh Data',
 				style:'margin: 5px 0 0 5px',
 				width:100,
 				listeners:{
-					click: me._reloadEverything.bind(me)
+					click: me.reloadEverything.bind(me)
 				}
 			});
 		},
 		
 		/**___________________________________ RENDER GRIDS ___________________________________*/	
-		_loadGrid: function(realStore, customFieldName, isB64encoded){
+		loadGrid: function(realStore, customFieldName, isB64encoded){
 			var me = this,
 				c_customFieldName = 'c_' + customFieldName,
-				customStoreName = customFieldName + 'Store',
 				customGridName = customFieldName + 'Grid', 
 				records = _.reduce(realStore.data.items, function(records, record){
-					var customFieldValue = me[isB64encoded ? '_atob' : '_identity'](record.data[c_customFieldName]);
+					var customFieldValue = me[isB64encoded ? 'atob' : 'identity'](record.data[c_customFieldName]);
 					if(customFieldValue){
 						records.push({
 							ItemFormattedID: record.data.FormattedID,
@@ -409,22 +390,21 @@
 
 			function sorterFn(o1, o2){ return o1.data.ItemFormattedID > o2.data.ItemFormattedID ? -1 : 1; }
 			
-			me[customStoreName] = Ext.create('Intel.data.FastStore', {
+			var customStore = Ext.create('Intel.lib.component.Store', {
 				data: records,
 				autoSync:true,
 				model: 'SAFeCustomFieldsEditorModel',
 				proxy: {
-					type:'fastsessionproxy',
+					type:'intelsessionstorage',
 					id:customFieldName + '-' + Math.random()
 				},
 				limit:Infinity,
 				sorters:[sorterFn],
 				intelUpdate: function(){ 
-					var customStore = me[customStoreName], 
-						unaccountedForRecords = customStore.getRange(),
+					var unaccountedForRecords = customStore.getRange(),
 						realRecords = realStore.getRange();
 					_.each(realRecords, function(realRecord){
-						var realFieldValue = me[isB64encoded ? '_atob' : '_identity'](realRecord.data[c_customFieldName]),
+						var realFieldValue = me[isB64encoded ? 'atob' : 'identity'](realRecord.data[c_customFieldName]),
 							customRecord = _.find(customStore.getRange(), function(customRecord){ 
 								return customRecord.data.ItemFormattedID == realRecord.data.FormattedID;
 							});
@@ -457,44 +437,28 @@
 				text:'ID', 
 				dataIndex:'ItemFormattedID',
 				width:80,
-				editor:false,
-				draggable:false,
 				sortable:true,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(val, meta){ meta.tdAttr = 'title="' + val + '"'; return val; }
 			},{
 				text:'Name', 
 				dataIndex:'ItemName',
 				width:120,
-				editor:false,
-				draggable:false,
 				sortable:true,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(val, meta){ meta.tdAttr = 'title="' + val + '"'; return val; }
 			},{
 				text:'Project', 
 				dataIndex:'ProjectName',
 				width:120,
-				editor:false,
-				draggable:false,
 				sortable:true,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(val, meta){ meta.tdAttr = 'title="' + val + '"'; return val; }
 			},{
 				dataIndex:'CustomFieldValue',
 				width:60,
 				text: (isB64encoded ? 'b64 length' : 'length'),
-				editor:false,
-				draggable:false,
 				sortable:true,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(json){ return isB64encoded ? btoa(json).length : json.length; }
 			},{
@@ -507,32 +471,23 @@
 					growMin:20,
 					growMax:350
 				},
-				draggable:false,
-				sortable:false,
-				resizable:false,
-				menuDisabled:true,
 				tdCls:'pre-wrap-cell intel-editor-cell',
 				cls:'header-cls'
 			},{
 				text:'',
 				width:24,
-				editor:false,
-				draggable:false,
-				sortable:false,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(value, meta, customRecord, row, col){
 					var realRecord = realStore.findExactRecord('FormattedID', customRecord.data.ItemFormattedID),
-						realFieldValue = me[isB64encoded ? '_atob' : '_identity'](realRecord.data[c_customFieldName]),
+						realFieldValue = me[isB64encoded ? 'atob' : 'identity'](realRecord.data[c_customFieldName]),
 						clickFnName = 'Click' + customRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
 					if(realFieldValue === customRecord.data.CustomFieldValue) return;
 					meta.tdAttr = 'title="Undo"';
 					window[clickFnName] = function(){
-						me._enqueue(function(unlockFunc){
+						me.enqueue(function(done){
 							customRecord.set('CustomFieldValue', realFieldValue);
 							customRecord.commit();
-							unlockFunc();
+							done();
 						}, 'Queue-Main');
 					};
 					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
@@ -540,31 +495,26 @@
 			},{
 				text:'',
 				width:24,
-				editor:false,
-				draggable:false,
-				sortable:false,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(value, meta, customRecord, row, col){
 					var realRecord = realStore.findExactRecord('FormattedID', customRecord.data.ItemFormattedID),
-						realFieldValue = me[isB64encoded ? '_atob' : '_identity'](realRecord.data[c_customFieldName]),
+						realFieldValue = me[isB64encoded ? 'atob' : 'identity'](realRecord.data[c_customFieldName]),
 						newFieldValue = customRecord.data.CustomFieldValue,
 						clickFnName = 'Click' + customRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
 					if(realFieldValue === newFieldValue) return;
 					meta.tdAttr = 'title="Save ' + c_customFieldName + '"';
 					window[clickFnName] = function(){
-						if(isB64encoded && !me._isJsonValid(newFieldValue))
-							return me._alert('ERROR', 'JSON is not valid');
+						if(isB64encoded && !me.isJsonValid(newFieldValue))
+							return me.alert('ERROR', 'JSON is not valid');
 						me[customGridName].setLoading("Saving item");
-						me._enqueue(function(unlockFunc){
+						me.enqueue(function(done){
 							realRecord.set(c_customFieldName, (isB64encoded ? btoa(newFieldValue) : newFieldValue));
 							realRecord.save({	
 								callback:function(record, operation, success){
-									if(!success) me._alert('ERROR', 'Failed to modify ' + realRecord.data.FormattedID);
+									if(!success) me.alert('ERROR', 'Failed to modify ' + realRecord.data.FormattedID);
 									else customRecord.commit();
 									me[customGridName].setLoading(false);
-									unlockFunc();
+									done();
 								}
 							});
 						}, 'Queue-Main');
@@ -574,26 +524,21 @@
 			},{
 				text:'',
 				width:24,
-				editor:false,
-				draggable:false,
-				sortable:false,
-				resizable:false,
-				menuDisabled:true,
 				cls:'header-cls',
 				renderer: function(value, meta, customRecord, row, col){
 					var clickFnName = 'Click' + customRecord.id.replace(/\-/g, 'z') + 'Fn' + col;
 					meta.tdAttr = 'title="Delete ' + c_customFieldName + '"';
 					window[clickFnName] = function(){
 						me[customGridName].setLoading("Deleting item");
-						me._enqueue(function(unlockFunc){
+						me.enqueue(function(done){
 							var realRecord = realStore.findExactRecord('FormattedID', customRecord.data.ItemFormattedID);
 							realRecord.set(c_customFieldName, '');
 							realRecord.save({	
 								callback:function(record, operation, success){
-									if(!success) me._alert('ERROR', 'Failed to modify ' + realRecord.data.FormattedID);
-									else me[customStoreName].remove(customRecord);
+									if(!success) me.alert('ERROR', 'Failed to modify ' + realRecord.data.FormattedID);
+									else me[customGridName].store.remove(customRecord);
 									me[customGridName].setLoading(false);
-									unlockFunc();
+									done();
 								}
 							});
 						}, 'Queue-Main');
@@ -603,22 +548,25 @@
 			}];
 			
 			me[customGridName] = me.down('#gridsContainer').add({
-				xtype: 'rallygrid',
+				xtype: 'grid',
 				title:customFieldName,
 				height:500,
 				cls: 'custom-field-grid rally-grid',
 				scroll:'vertical',
-				columnCfgs: columnCfgs,
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: columnCfgs
+				},
 				disableSelection: true,
-				plugins:['fastcellediting'],
+				plugins:['intelcellediting'],
 				viewConfig:{
-					xtype:'scrolltableview',
+					xtype:'inteltableview',
 					preserveScrollOnRefresh: true
 				},
 				showRowActionsColumn:false,
 				showPagingToolbar:false,
 				enableEditing:false,
-				store: me[customStoreName]
+				store: customStore
 			});	
 		}
 	});

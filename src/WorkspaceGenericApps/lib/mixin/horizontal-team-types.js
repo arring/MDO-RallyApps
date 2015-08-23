@@ -84,6 +84,9 @@
 				})
 			);
 		},
+		isProjectInHorizontal: function(projectRecord, horizontal){
+			return this._getHorizontalTeamTypeInfo(projectRecord).horizontal === horizontal;
+		},
 		getAllHorizontalTeamTypes: function(){
 			return [].concat.apply([], _.values(this.HorizontalGroupingConfig.groups));
 		},

@@ -501,8 +501,8 @@
 				});
 			return me.reloadStore(store);
 		},		
-		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
+		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
+			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
@@ -511,7 +511,7 @@
 					remoteSort:false,
 					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
 						'Project', 'PlannedEndDate', 'Parent', 'PortfolioItemType', 'Ordinal'],
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
+					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
 					context:{
 						project: portfolioProject.data._ref,
 						projectScopeDown: true,

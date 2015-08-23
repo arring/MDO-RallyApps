@@ -1,5 +1,6 @@
 (function(){
-	var RiskDb = Intel.SAFe.lib.resource.RiskDb,
+	var Ext = window.Ext4 || window.Ext,
+		RiskDb = Intel.SAFe.lib.resource.RiskDb,
 		RALLY_MAX_STRING_SIZE = 32768,
 		COLUMN_DEFAULTS = {
 			text:'',
@@ -61,49 +62,18 @@
 		userAppsPref: 'intel-SAFe-apps-preference',
 			
 		/**___________________________________ DATA STORE METHODS ___________________________________*/
-		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					remoteSort:false,
-					fetch: me._portfolioItemFields,
-					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
-			return me.reloadStore(store);
-		},	
 		loadPortfolioItems: function(){ 
 			var me=this;
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
-						me.loadPortfolioItemsOfTypeInRelease(me.ScrumGroupPortfolioProject, type)
-					);
-				}))
-				.then(function(portfolioItemStores){
-					me.PortfolioItemStore = portfolioItemStores[0];
-					me.PortfolioItemMap = {};
-					_.each(me.PortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
-						var ordinal = 0, 
-							parentPortfolioItem = lowPortfolioItem,
-							getParentRecord = function(child, parentList){
-								return _.find(parentList, function(parent){ return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; });
-							};
-						while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
-							parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
-							++ordinal;
-						}
-						if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
-							me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
-					});
-				});
+				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+					me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+					me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, type)
+				);
+			}))
+			.then(function(portfolioItemStores){
+				me.PortfolioItemStore = portfolioItemStores[0];
+				me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
+			});
 		},
 		getUserStoryFilter: function(){
 			var me=this,
@@ -296,7 +266,8 @@
 					.then(function(){ deferred.resolve(); })
 					.fail(function(reason){ deferred.reject(reason); })
 					.done();
-			} else deferred.resolve();
+			} 
+			else deferred.resolve();
 			
 			return deferred.promise;
 		},
