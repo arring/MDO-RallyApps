@@ -14,6 +14,8 @@
       "../../lib/mixin/async-queue.js",
       "../../lib/mixin/parallel-loader.js",
       "../../lib/mixin/user-apps-preference.js",
+      "../../lib/mixin/rally-release-color.js",
+      "../../lib/mixin/horizontal-team-types.js",
       "../../lib/component/intel-combobox.js",
       "../../lib/component/intel-fixed-combobox.js",
       "../../lib/component/intel-release-picker.js",

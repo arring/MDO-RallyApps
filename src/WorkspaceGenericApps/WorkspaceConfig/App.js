@@ -1,7 +1,8 @@
 /** this app is used to configure the scrum-groups and portfolio locations in the workspace **/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		KeyValueDb = Intel.lib.resource.KeyValueDb;
+		KeyValueDb = Intel.lib.resource.KeyValueDb,
+		VALID_HORIZONTAL_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/;
 		
 	Ext.define('Intel.WorkspaceConfiguration', {
 		extend: 'Intel.lib.IntelRallyApp',
@@ -23,6 +24,20 @@
 					IsTrain: scrumGroupConfig.IsTrain ? true : false
 				};
 			});
+		},
+		horizontalGroupingObjToString: function(obj){
+			return _.reduce(obj, function(str, keywords, horizontal){
+				var newStr = horizontal + ':' + keywords.join(',') + ';';
+				return str.length ? str + '\n' + newStr : newStr;
+			}, '');
+		},
+		horizontalGroupingStringToObj: function(str){
+			return _.reduce(str.split('\n'), function(obj, str){
+				if(!str.length) return obj;
+				var split = str.split(':');
+				obj[split[0]] = split[1].replace(';','').split(',');
+				return obj;
+			}, {});
 		},
 		
 		/******************************************************* LAUNCH ********************************************************/	
@@ -53,6 +68,7 @@
 					me.setLoading(false);
 					me.renderChooseDatabaseProject();
 					me.renderScrumGroupPortfolioGrid();
+					me.renderScrumHorizontalGroupingKeywords();
 				})
 				.fail(function(reason){
 					me.setLoading(false);
@@ -72,9 +88,9 @@
 			me.add({
 				xtype: 'intelcombobox',
 				width: 400,
-				labelWidth: 200,
-				margin:'5px 0 15px 0',
 				fieldLabel: 'Key-Value Database Project',
+				labelWidth: 200,
+				margin:'5px 0 20px 0',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Name', 'ObjectID'],
 					data: me.ProjectDataForStore
@@ -96,7 +112,6 @@
 				}
 			});
 		},
-		
 		renderScrumGroupPortfolioGrid: function(){
 			var me = this;
 			
@@ -111,7 +126,7 @@
 				data: me.getScrumGroupPortfolioStoreData()
 			});
 
-			var columnCfgs = [{
+			var columns = [{
 				text:'Scrum Group Root Project',
 				dataIndex:'ScrumGroupRootProjectOID',
 				tdCls: 'intel-editor-cell',	
@@ -221,7 +236,7 @@
 							xtype:'button',
 							text:'+ Add Scrum Group',
 							width:150,
-							margin:'0 10 0 0',
+							margin:'0 10px 0 0',
 							listeners:{
 								click: function(){
 									var model = Ext.create(me.ScrumGroupPortfolioConfigStore.getProxy().getModel(), {
@@ -238,7 +253,7 @@
 							xtype:'button',
 							text:'Undo changes',
 							width:110,
-							margin:'0 10 0 0',
+							margin:'0 10px 0 0',
 							listeners:{
 								click: function(){
 									me.ScrumGroupPortfolioConfigStore.removeAll();
@@ -305,10 +320,11 @@
 						}]
 					}]
 				},
-				margin:'10px 0 0 0',
-				height:600,
+				margin:'0 0 20px 0',
+				width:'95%',
+				height:400,
 				scroll:'vertical',
-				columns: columnCfgs,
+				columns: columns,
 				disableSelection: true,
 				plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 1 })],
 				viewConfig:{
@@ -334,6 +350,100 @@
 				enableEditing:false,
 				store: me.ScrumGroupPortfolioConfigStore
 			});	
+		},
+		renderScrumHorizontalGroupingKeywords: function(){
+			var me=this,
+				goodHTMLIndicator = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+				badHTMLIndicator = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
+				
+			function setIndicatorHTML(){
+				var indicatorEl = Ext.get('horizontalGroupingSyntaxNotifier'),
+					textareaParentEl = Ext.get('horizontalGroupingTextarea');
+				if(textareaParentEl && indicatorEl){
+					if(textareaParentEl.down('textarea').getValue().match(VALID_HORIZONTAL_GROUPING_SYNTAX)) 
+						indicatorEl.setHTML(goodHTMLIndicator);
+					else indicatorEl.setHTML(badHTMLIndicator);
+				}
+			}
+			
+			me.add({
+				xtype:'container',
+				id:'horizontalGroupingContainer',
+				margin:'0 0 50px 0',
+				items:[{
+					xtype:'text',
+					cls:'section-header-text',
+					text:"Horizontal Scrum Grouping Config"
+				},{
+					xtype:'checkbox',
+					id: 'enableHorizontalGroupingCheckbox',
+					fieldLabel: 'Enable Horizontal Scrum Groupings',
+					labelWidth: 200,
+					value: me.HorizontalGroupingConfig.enabled,
+					listeners: {
+						change: function(combo, newValue){
+							me.HorizontalGroupingConfig.enabled = newValue;
+							me.setLoading('Saving Preference');
+							me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.then(function(){ Ext.get('toggledHorizontalGroupingItems')[newValue ? 'show' : 'hide'](); })
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
+						}
+					}
+				},{
+					xtype:'container',
+					id: 'toggledHorizontalGroupingItems',
+					hidden: !me.HorizontalGroupingConfig.enabled,
+					border:false,
+					items: [{
+						xtype:'container',
+						id: 'horizontalGroupingInstructions',
+						border:false,
+						html:[
+							'<hr/>',
+							'<div>',
+								'<b>Set The Horizontal Groupings</b>',
+								'<p>Group Scrums into Horizontals By keywords. Syntax is:</p>',
+								'<div style="padding-left:5px;">',
+									'<p>HorizontalName1:keyword1,keyword2,keyword3;</p>',
+									'<p>HorizontalName2:keyword1,keyword2;</p>',
+									'<p>...</p>',
+								'</div>',
+							'</div>'
+						].join('\n')
+					},{
+						xtype:'textarea',
+						id: 'horizontalGroupingTextarea',
+						width:800, 
+						height:250,
+						value: me.horizontalGroupingObjToString(me.HorizontalGroupingConfig.groups),
+						listeners: { change: setIndicatorHTML }
+					},{
+						xtype:'container',
+						id: 'horizontalGroupingSyntaxNotifier',
+						listeners:{ added: function(){ setTimeout(setIndicatorHTML, 100); } }
+					},{
+						xtype:'button',
+						text:'Save Horizontal Grouping Config',
+						listeners:{ 
+							click: function(){
+								var textareaEl = Ext.get('horizontalGroupingTextarea').down('textarea');
+								if(!textareaEl.getValue().match(VALID_HORIZONTAL_GROUPING_SYNTAX)){
+									me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
+									return;
+								}
+								me.HorizontalGroupingConfig.groups = me.horizontalGroupingStringToObj(textareaEl.getValue());
+								me.setLoading('Saving Preference');
+								me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
+							}
+						}
+					}]
+				}]
+			});
 		}
 	});
 }());

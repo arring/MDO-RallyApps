@@ -8,17 +8,19 @@
 			- me.ScheduleStates: possible UserStory schedule States
 			- me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
 			- me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
+			- me.HorizontalGroupingConfig: the horizontal scrum groupings by keywords
 			- All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
 		
 	DEPENDENCIES:
 		Q promise library
 		
 	ISSUES:
-		sdk 2.0 does not work with the project function due to a bug in the sdk.
+		sdk 2.0 does not work with the project function due to a bug in the sdk. use sdk 2.0rc3
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config'; //preference to store portfolio locations config for workspace
+		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
 	
 	//increase timeouts to 2 minutes since rally can be slow sometimes
 	var timeout = 120000;
@@ -164,6 +166,32 @@
 			});
 			return deferred.promise;
 		},
+		_loadHorizontalGroupingConfig: function(){
+			/** HorizontalGroupingConfig is this:
+			{
+				enabled: boolean,
+				groups: {
+					<horizontal1Name>: ['keyword1', 'keyword2'],
+					<horizontal2Name>: ['keyword1', 'keyword2'],
+					...
+				}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[HorizontalGroupingConfigPrefName], horizontalGroupingConfig;
+					try{ horizontalGroupingConfig = JSON.parse(configString); }
+					catch(e){ horizontalGroupingConfig = {enabled:false, groups:{}}; }
+					me.HorizontalGroupingConfig = horizontalGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
@@ -176,12 +204,23 @@
 			});
 			return deferred.promise;
 		},
+		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
 		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
 			return Q.all([
 				me._loadPortfolioItemTypes().then(function(){ 
-				//HOLY PROGRAM BOARD BUG, BATMAN! (me._isUserStoryInRelease false for those who: (release == null && portfolioItrem.release.name == me.ReleaseRecord.data.Name)).
 					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
 					return Q.all([
 						me._loadModels(),
@@ -189,6 +228,7 @@
 					]);
 				}),
 				me._loadScrumGroupConfig(),
+				me._loadHorizontalGroupingConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -461,6 +501,25 @@
 				});
 			return me.reloadStore(store);
 		},		
+		loadPortfolioItemsOfTypeInRelease: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
+						'Project', 'PlannedEndDate', 'Parent', 'PortfolioItemType', 'Ordinal'],
+					filters:[{ property:'Release.Name', value:me.ReleaseRecord.data.Name}],
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store);
+		},
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
 			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
@@ -476,7 +535,26 @@
 		getPortfolioItemTypeStateByName: function(portfolioType, stateName){
 			return this.getPortfolioItemTypeStateByOrdinal(this.portfolioItemTypeToOrdinal(portfolioType), stateName);
 		},
-		
+		createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap: function(portfolioItemStores){
+			var portfolioItemMap = {};
+			_.each(portfolioItemStores[0].getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
+				var ordinal = 0, 
+					parentPortfolioItemRecord = lowPortfolioItemRecord,
+					getParentRecord = function(child, parentList){
+						return _.find(parentList, function(parent){ 
+							return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+						});
+					};
+				while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
+					parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
+					++ordinal;
+				}
+				if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+					portfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
+			});
+			return portfolioItemMap;
+		},
+			
 		/********************************************** Project Funcs ********************************************/
 		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
 		_storeItemsToProjTree: function(projects){
