@@ -36,7 +36,7 @@ URGENT TODO:
 	DONE - when you switch the release in the editor, you have to delete the old risk and then create a new risk!
 	DONE - move swimlanes and card into their own ux component
 
-DONE - fix the filter by owner box
+	DONE - fix the filter by owner box
 	DONE - when we delete a card, update the store in the filter by owner box
 	DONE - when we add a card, update the store in the filter by owner box
 	DONE - when we switch release, update combo
