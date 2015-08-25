@@ -16,7 +16,7 @@
       "../../lib/mixin/async-queue.js",
       "../../lib/mixin/parallel-loader.js",
       "../../lib/mixin/user-apps-preference.js",
-      "../../lib/mixin/data-integrity-dashboard-objectid-preference.js",
+      "../../lib/mixin/custom-app-objectid-register.js",
       "../../lib/vendor/component-column.js",
       "../../lib/component/intel-combobox.js",
       "../../lib/component/intel-fixed-combobox.js",

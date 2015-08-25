@@ -18,7 +18,8 @@
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		minWidth:910,
 		items:[{
@@ -43,19 +44,8 @@
 			width:'100%'
 		}],
 
-		userAppsPref: 'intel-Func-CFD', //dont share release scope settings with other apps	
+		userAppsPref: 'intel-Func-CFD',
 
-		/********************************************************** UTIL FUNC ******************************/
-		getTeamTypeAndNumber: function(scrumName){ //NOTE this assumes that your teamNames are "<TeamType> <Number> - <TrainName>"
-			var name = scrumName.split('-')[0],
-				teamType = name.split(/\d/)[0],
-				number = (teamType === name ? 1 : name.split(teamType)[1])*1;
-			return {
-				TeamType: teamType.trim(),
-				Number: number
-			};
-		},
-		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
 			var me = this;	
@@ -106,7 +96,7 @@
 		},
 		reloadEverything:function(){
 			var me=this;
-			me.setLoading('Loading Stores');		
+			me.setLoading('Loading Data');		
 			return me.loadAllProjectReleases()
 				.then(function(){ return me.loadSnapshotStores(); })
 				.then(function(){
@@ -138,9 +128,9 @@
 								me.LeafProjects = leafProjects;
 								if(!me.LeafProjects[me.ProjectRecord.data.ObjectID]) 
 									return Q.reject('You are not Scoped to a valid Project');
-								me.TeamType = me.getTeamTypeAndNumber(me.ProjectRecord.data.Name).TeamType;
-								me.ProjectsOfFunction = _.filter(me.LeafProjects, function(proj){
-									return me.getTeamTypeAndNumber(proj.data.Name).TeamType == me.TeamType; 
+								me.TeamType = me.getAllHorizontalTeamTypeInfos([me.ProjectRecord])[0].teamType;
+								me.ProjectsOfFunction = _.filter(me.LeafProjects, function(projectRecord){
+									return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
 								});
 							}),
 						me.loadAppsPreference()	/******** load stream 2 *****/
@@ -235,7 +225,7 @@
 			
 			/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
-					return projName.split('-')[1].trim() + projName; 
+					return (projName.split('-')[1] || '').trim() + projName; 
 				}),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){

@@ -23,7 +23,7 @@
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-			'Intel.lib.mixin.DataIntegrityDashboardObjectIDPreference',
+			'Intel.lib.mixin.CustomAppObjectIDRegister',
 			'Intel.SAFe.lib.mixin.DependenciesLib'
 		],
 		
@@ -710,8 +710,8 @@
 								}
 								else return Q.reject('This project has no releases.');
 							}),
-						me.getDataIntegrityDashboardObjectID().then(function(objectID){
-							me.DataIntegrityDashboardObjectID = objectID;
+						me.getCustomAppObjectID('Intel.DataIntegrityDashboard.Vertical').then(function(objectID){
+							me.VerticalDataIntegrityDashboardObjectID = objectID;
 						}),
 						RiskDb.initialize()
 					]);
@@ -1694,9 +1694,9 @@
 				header: {
 					items: [{
 						xtype:'container',
-						html: me.DataIntegrityDashboardObjectID ? 
+						html: me.VerticalDataIntegrityDashboardObjectID ? 
 							('<a class="mini-data-integrity-header" href="' + me.BaseUrl + '/#/' + me.ProjectRecord.data.ObjectID + 
-								'ud/custom/' + me.DataIntegrityDashboardObjectID + '" target="_blank">DATA INTEGRITY</a>') :
+								'ud/custom/' + me.VerticalDataIntegrityDashboardObjectID + '" target="_blank">DATA INTEGRITY</a>') :
 							'<span class="mini-data-integrity-header">DATA INTEGRITY</a>'
 					}]
 				},

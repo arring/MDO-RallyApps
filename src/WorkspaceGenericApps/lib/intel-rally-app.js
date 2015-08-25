@@ -43,7 +43,8 @@
 		
 		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
 		portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
-			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal'],
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal',
+			'PercentDoneByStoryPlanEstimate'],
 		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
@@ -509,8 +510,7 @@
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					remoteSort:false,
-					fetch: ['Name', 'ObjectID', 'FormattedID', 'c_TeamCommits', 'c_MoSCoW', 'Release', 
-						'Project', 'PlannedEndDate', 'Parent', 'PortfolioItemType', 'Ordinal'],
+					fetch: me.portfolioItemFields,
 					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
 					context:{
 						project: portfolioProject.data._ref,

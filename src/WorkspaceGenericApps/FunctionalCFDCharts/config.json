@@ -16,6 +16,7 @@
       "../lib/mixin/cumulative-flow-chart-mixin.js",
       "../lib/mixin/parallel-loader.js",
       "../lib/mixin/user-apps-preference.js",
+      "../lib/mixin/horizontal-team-types.js",
       "../lib/component/intel-fixed-combobox.js",
       "../lib/component/intel-release-picker.js",
       "../lib/chart/fast-cumulative-flow-calculator.js",

@@ -51,9 +51,10 @@
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
 			me.configureIntelRallyApp()
-				.then(me._getProjectAndTopPortfolioItem.bind(me))
 				.then(me._getCommitMatrixObjectID.bind(me))
+				.then(me._loadScrumGroupPortfolioProject.bind(me))
 				.then(me._getReleaseRecords.bind(me))
+				.then(me._loadPortfolioItems.bind(me))
 				.then(me._buildControls.bind(me))
 				.then(me._reload.bind(me))
 				.fail(function(reason) {
@@ -63,46 +64,6 @@
 				.done();
 		},
 		
-		/**************************************** Top PortfolioItem Loading *********************************/
-		/*
-		 *	Gets the top portfolio item and associated project
-		 */
-		_getProjectAndTopPortfolioItem: function() {
-			var me = this,
-				portfolioItemParam = window.parent.location.href.match(/portfolioItem=\d+/),
-				scrumGroupRootProjectOID = me.getContext().getProject().ObjectID,
-				portfolioProjectOID;
-
-			// Find the portfolio project OID
-			for (var i in me.ScrumGroupConfig) {
-				if(me.ScrumGroupConfig[i].ScrumGroupRootProjectOID === scrumGroupRootProjectOID) {
-					var sgc = me.ScrumGroupConfig[i];
-					if(sgc.ScrumGroupAndPortfolioLocationTheSame) portfolioProjectOID = sgc.ScrumGroupRootProjectOID;
-					else portfolioProjectOID = sgc.PortfolioProjectOID;
-					break;
-				}
-			}
-			if(!portfolioProjectOID) throw new Error('must scope to a valid project');
-			
-			// Load the portfolio project and the associated topPortfolioItems
-			return me.loadProject(portfolioProjectOID)
-			.then(function(portfolioProjectRecord){ 
-				me.PortfolioProjectRecord = portfolioProjectRecord;
-				return me.loadPortfolioItemsOfType(portfolioProjectRecord, me.PortfolioItemTypes.slice(-1)[0]); 
-			})
-			.then(function(topPortfolioItemRecords){
-				me.TopPortfolioItemRecords = topPortfolioItemRecords.getRange();
-				if(portfolioItemParam){
-					var topPortfolioItemOID = parseInt(portfolioItemParam[0].split('=')[1], 10);
-					me.TopPortfolioItemRecord = _.find(me.TopPortfolioItemRecords, function(topPortfolioItemRecord){
-						return topPortfolioItemRecord.data.ObjectID === topPortfolioItemOID;
-					});
-					if(!me.TopPortfolioItemRecord) throw 'Could not find portfolioItem for ObjectID: ' + topPortfolioItemOID;
-				}
-				else me.TopPortfolioItemRecord = me.TopPortfolioItemRecords[0];
-			});
-		},
-		
 		/**************************************** Get ObjectID of CommitMatrix *********************************/
 		_getCommitMatrixObjectID: function(){
 			var me = this;
@@ -110,17 +71,31 @@
 				me.CommitMatrixCustomAppObjectID = customAppObjectID;
 			});
 		},
+				
+		/**************************************** Scrum Group Loading *********************************/
+		_loadScrumGroupPortfolioProject: function(){
+			var me = this;
+			return me.loadProject(me.getContext().getProject().ObjectID).then(function(projectRecord){
+				return me.projectInWhichScrumGroup(projectRecord).then(function(scrumGroupRootRecord){
+					if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
+						me.ScrumGroupRootRecord = scrumGroupRootRecord;
+						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+							.then(function(scrumGroupPortfolioProject){
+								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+							});
+					} 
+					else throw "must scope to valid project";
+				});
+			});
+		},
 		
 		/**************************************** Release Loading *********************************/
-		/*
-		 *	Gets releases from twelve weeks ago onward
-		 */
 		_getReleaseRecords: function() {
 			var me = this,
 				twelveWeeks = 12*7*24*60*60*1000;
 				
 			// Load releases after twelve weeks ago
-			return me.loadReleasesAfterGivenDate(me.PortfolioProjectRecord, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
+			return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
 				me.ReleaseRecords = releaseRecords;
 				var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
 				// If a release parameter is supplied
@@ -134,59 +109,50 @@
 			});
 		},
 		
+		/**************************************** PortfolioItems Loading *********************************/
+		_loadPortfolioItems: function(){ 
+			var me = this,
+				highestPortfolioItemType = me.PortfolioItemTypes.slice(-1)[0].toLowerCase(),
+				portfolioItemParam = window.parent.location.href.match(new RegExp(highestPortfolioItemType + '=\\d+'));
+				
+			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
+				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
+						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, type)
+					);
+				}))
+				.then(function(portfolioItemStores){
+					me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
+					me.LowestPortfolioItemRecords = portfolioItemStores[0].getRange();
+					me.TopPortfolioItemRecords = portfolioItemStores.slice(-1)[0].getRange();
+					if(portfolioItemParam){
+						var topPortfolioItemOID = parseInt(portfolioItemParam[0].split('=')[1], 10);
+						me.TopPortfolioItemRecord = _.find(me.TopPortfolioItemRecords, function(topPortfolioItemRecord){
+							return topPortfolioItemRecord.data.ObjectID === topPortfolioItemOID;
+						});
+						if(!me.TopPortfolioItemRecord) throw 'Could not find portfolioItem for ObjectID: ' + topPortfolioItemOID;
+					}
+					else me.TopPortfolioItemRecord = me.TopPortfolioItemRecords[0];
+				});
+		},
+		
 		/**************************************** Reload *******************************************/
-		/*
-		 *	Reloads the data and UI
-		 */
 		_reload: function() {
 			var me = this;
-			return me._getLowestPortfolioItemRecords().then(me._getStorySnapshots.bind(me)).then(function() {
+			return me._setFilteredLowestPortfolioItemRecords().then(me._getStorySnapshots.bind(me)).then(function() {
 				return Q.all([
 					me._getStories(),
 					me._buildCharts()
 				]);
 			});
 		},
-		
-		/**************************************** lowestPortfolioItem Loading *********************************/
-		/*
-		 *	Creates a filter for lowestPortfolioItems in the current release
-		 */
-		_createLowestPortfolioItemFilter: function(releaseName) {
-			// Filter down to only lowestPortfolioItems in the scoped release
-			var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
-					property: 'Release.Name',
-					operator: '=',
-					value: releaseName
-				});
-			return releaseFilter;
-		},
-		
-		/*
-		 *	Loads all lowestPortfolioItems for the selected release under this project
-		 */
-		_getLowestPortfolioItemRecords: function() {
-			var me = this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				config = {
-					autoLoad: false,
-					model: me['PortfolioItem/' + lowestPortfolioItemType],
-					filters: [me._createLowestPortfolioItemFilter(me.ReleaseRecord.data.Name)],
-					fetch: [
-						'FormattedID', 'Name', 'ObjectID', 'UserStories', 'ActualEndDate', 
-						'PercentDoneByStoryPlanEstimate', 'PlannedEndDate', 'PlannedStartDate', 'ActualStartDate', 'Parent'
-					],
-					context: {
-						project: me.PortfolioProjectRecord.data._ref,
-						projectScopeUp: false,
-						projectScopeDown: false
-					}
-				},
-				store = Ext.create('Rally.data.wsapi.Store', config);
-			return me.reloadStore(store).then(function(lowestPortfolioItemStore) {
-				me.LowestPortfolioItemRecords = lowestPortfolioItemStore.getRange();
-				return me.LowestPortfolioItemRecords;
+
+		_setFilteredLowestPortfolioItemRecords: function(){
+			var me=this;
+			me.FilteredLowestPortfolioItemRecords = _.filter(me.LowestPortfolioItemRecords, function(lowestPortfolioItemRecord){
+				return me.PortfolioItemMap[lowestPortfolioItemRecord.data.ObjectID] === me.TopPortfolioItemRecord.data.Name;
 			});
+			return Q();
 		},
 		
 		/**************************************** Story Loading ***********************************/
@@ -228,7 +194,7 @@
 			var me = this;
 			me.StoriesByLowestPortfolioItem = {};
 			// Load stories under each lowestPortfolioItemRecord
-			return Q.all(_.map(me.LowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
+			return Q.all(_.map(me.FilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				var config = {
 					autoLoad: false,
 					model: me.UserStory,
@@ -256,7 +222,7 @@
 			me.AllSnapshots = [];
 			
 			// Load snapshots under each lowestPortfolioItemRecord
-			return Q.all(_.map(me.LowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
+			return Q.all(_.map(me.FilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				var config = {
 					context: {
 						workspace: me.getContext().getWorkspace()._ref,
@@ -308,9 +274,11 @@
 		 */
 		_buildControls: function() {
 			var me = this;
+			me.down('#nav').removeAll();
 			me._buildReleasePicker();
 			me._buildTopPortfolioItemPicker();
 		},
+		
 		/*
 		 *	Creates the release picker
 		 */
@@ -390,6 +358,7 @@
 				topPortfolioItemChartContainer = $('#top-pi-chart-innerCt').highcharts(
 					Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: {
+							style:{cursor:'pointer'},
 							height: 400,
 							events: {
 								click: me._topPortfolioItemChartClicked.bind(me)
@@ -425,13 +394,13 @@
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
 				releaseEnd = me.ReleaseRecord.data.ReleaseDate,
-				sortedLowestPortfolioItemRecords = _.sortBy(me.LowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
+				sortedFilteredLowestPortfolioItemRecords = _.sortBy(me.FilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 					return lowestPortfolioItemRecord.data.FormattedID;
 				}),
 				lowestPortfolioItemChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32),
 				lowestPortfolioItemCharts = $('#lowest-pi-charts-innerCt'),
 				options = {trendType: 'Last2Sprints'};
-			_.each(sortedLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
+			_.each(sortedFilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				if(me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID]) {
 					var snapshots = me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID],
 						lowestPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(snapshots), options),
@@ -440,6 +409,7 @@
 					var lowestPortfolioItemChartContainer = $('#' + lowestPortfolioItemChartID).highcharts(
 						Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 							chart: {
+								style:{cursor:'pointer'},
 								height: 350,
 								events: {
 									// Needs to be bound to me because this is, by default, referring to the chart
@@ -455,16 +425,16 @@
 							subtitle: {
 								useHTML: true,
 								text: [
-									'<a href="https://rally1.rallydev.com/#/' + me.PortfolioProjectRecord.data.ObjectID + 
+									'<a href="https://rally1.rallydev.com/#/' + me.ScrumGroupPortfolioProject.data.ObjectID + 
 									'd/detail/portfolioitem/' + lowestPortfolioItemType + '/' + lowestPortfolioItemRecord.data.ObjectID + '" target="_blank">',
 										lowestPortfolioItemRecord.data.FormattedID + ': ' + lowestPortfolioItemRecord.data.Name,
 									'</a>',
 									'<br>' + (lowestPortfolioItemRecord.data.PercentDoneByStoryPlanEstimate*100).toFixed(2) + '% Done' + 
 									'<br><span style="color:red;">',
-										'Planned End: ' + (lowestPortfolioItemRecord.data.PlannedEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A',
+										'Planned End: ' + ((lowestPortfolioItemRecord.data.PlannedEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
 									'</span>',
 									'<br><span style="color:blue;">',
-										'Actual End: ' + (lowestPortfolioItemRecord.data.ActualEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A',
+										'Actual End: ' + ((lowestPortfolioItemRecord.data.ActualEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
 									'</span>'
 								].join('\n')
 							},
@@ -476,12 +446,12 @@
 									color: '#FF0000',
 									width: 2,
 									dashStyle: 'ShortDash',
-									value: ((lowestPortfolioItemRecord.data.PlannedEndDate - releaseStart)/(24*60*60*1000)) >> 0
+									value: ((new Date(lowestPortfolioItemRecord.data.PlannedEndDate)*1 -new Date(releaseStart)*1)/(24*60*60*1000)) >> 0
 								},{
 									color: '#0000FF',
 									width: 2,
 									dashStyle: 'ShortDash',
-									value: ((lowestPortfolioItemRecord.data.ActualEndDate - releaseStart)/(24*60*60*1000)) >> 0
+									value: ((new Date(lowestPortfolioItemRecord.data.ActualEndDate)*1 - new Date(releaseStart)*1)/(24*60*60*1000)) >> 0
 								}]
 							},
 							series: lowestPortfolioItemChartData.series,
@@ -499,15 +469,18 @@
 		},
 		
 		/**************************************** Event Handling **********************************/
-		/*
-		 *	Fires when a release is selected from the release picker
-		 */
 		_releasePickerSelected: function(combo, records) {
 			var me = this;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(release) {return release.data.Name === records[0].data.Name;});
-			me._reload();
+			me.setLoading('loading');
+			me._loadPortfolioItems()
+				.then(me._buildControls.bind(me))
+				.then(me._reload.bind(me))
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
+				.done();
 		},
 		
 		/*
@@ -515,7 +488,7 @@
 		 */
 		_topPortfolioItemPickerSelected: function(combo, records) {
 			var me = this;
-			if (me.TopPortfolioItemRecord.data.ObjectID === records[0].data.ObjectID) return;
+			if(me.TopPortfolioItemRecord.data.ObjectID === records[0].data.ObjectID) return;
 			me.setLoading(true);
 			me.TopPortfolioItemRecord = _.find(me.TopPortfolioItemRecords, function(topPortfolioItemRecord) {
 				return topPortfolioItemRecord.data.ObjectID === records[0].data.ObjectID;
@@ -532,7 +505,7 @@
 				lowestPortfolioItemStore = Ext.create('Rally.data.custom.Store', {
 					autoLoad: false,
 					model: me['PortfolioItem/' + lowestPortfolioItemType],
-					data: me.LowestPortfolioItemRecords
+					data: me.FilteredLowestPortfolioItemRecords
 				});
 
 			function getProgressBarColor(percentDone) {
@@ -605,7 +578,7 @@
 					listeners: {
 						afterrender: function(ct){
 							if(me.CommitMatrixCustomAppObjectID){
-								var link = 'https://rally1.rallydev.com/#/' + me.PortfolioProjectOID + 'd/custom/' + 
+								var link = 'https://rally1.rallydev.com/#/' + me.ScrumGroupRootRecord.data.ObjectID + 'd/custom/' + 
 									me.CommitMatrixCustomAppObjectID + '?viewmode=percent_done';
 								ct.update('<h2><a href="' + link + '" target="_blank">View commit matrix</a></h2>');
 							}
@@ -685,7 +658,7 @@
 		 */
 		_lowestPortfolioItemChartClicked: function(e) {
 			var me = this,
-				lowestPortfolioItemRecord = _.find(me.LowestPortfolioItemRecords, function(lowestPortfolioItemRecord){
+				lowestPortfolioItemRecord = _.find(me.FilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord){
 					return lowestPortfolioItemRecord.data.ObjectID === e.currentTarget.options.lowestPortfolioItemOID;
 				}),
 				storyStore = Ext.create('Rally.data.custom.Store', {

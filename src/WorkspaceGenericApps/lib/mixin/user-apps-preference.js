@@ -19,9 +19,9 @@
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				filterByUser:true,
-				filterByName: me._userAppsPref,
+				filterByName: me.userAppsPref,
 				success: function(prefs) {
-					var appPrefs = prefs[me._userAppsPref];
+					var appPrefs = prefs[me.userAppsPref];
 					try{ appPrefs = JSON.parse(appPrefs); }
 					catch(e){ appPrefs = { projs:{}, refresh:0};}
 					deferred.resolve(appPrefs);
@@ -33,10 +33,10 @@
 		saveAppsPreference: function(prefs){
 			var me=this, s = {}, deferred = Q.defer();
 			prefs = {projs:prefs.projs, refresh:prefs.refresh};
-			s[me._userAppsPref] = JSON.stringify(prefs); 
+			s[me.userAppsPref] = JSON.stringify(prefs); 
 			Rally.data.PreferenceManager.update({
 				filterByUser: true,
-				filterByName: me._userAppsPref,
+				filterByName: me.userAppsPref,
 				settings: s,
 				success: deferred.resolve,
 				failure: deferred.reject

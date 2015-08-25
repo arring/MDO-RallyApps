@@ -26,7 +26,8 @@
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
-			'Intel.lib.mixin.HorizontalTeamTypes'
+			'Intel.lib.mixin.HorizontalTeamTypes',
+			'Intel.lib.mixin.CustomAppObjectIDRegister'
 		],
 		
 		layout: {
@@ -561,7 +562,8 @@
 						me.loadAllChildrenProjects()
 							.then(function(allProjects){ 
 								me.AllProjects = allProjects; 
-							})
+							}),
+						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 					]);
 				})
 				.then(function(){ 

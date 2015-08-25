@@ -42,7 +42,7 @@
 			width:'100%'
 		}],
 		
-		userAppsPref: 'intel-ART-CFD',	//dont share release scope settings with other apps	
+		userAppsPref: 'intel-ScrumGroup-CFD',
 		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
@@ -101,27 +101,11 @@
 				return me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type);			
 			}))
 			.then(function(portfolioItemStores){
-				var lowestPortfolioItemStore = portfolioItemStores[0];
-				_.each(lowestPortfolioItemStore.getRange(), function(lowPortfolioItem){ //create the portfolioItem mapping
-					var ordinal = 0, 
-						parentPortfolioItem = lowPortfolioItem,
-						getParentRecord = function(child, parentList){
-							return _.find(parentList, function(parent){ 
-								return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
-							});
-						};
-					while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItem){
-						parentPortfolioItem = getParentRecord(parentPortfolioItem, portfolioItemStores[ordinal+1].getRange());
-						++ordinal;
-					}
-					if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItem)
-						me.PortfolioItemMap[lowPortfolioItem.data.ObjectID] = parentPortfolioItem.data.Name;
-				});
-				
+				me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);		
 				me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
 					function(name){ return {Name: name}; }),
 					function(name){ return name.Name; });
-				me.LowestPortfolioItemsHash = _.reduce(lowestPortfolioItemStore.getRange(), function(hash, r){
+				me.LowestPortfolioItemsHash = _.reduce(portfolioItemStores[0].getRange(), function(hash, r){
 					hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
 					return hash;
 				}, {});
@@ -178,7 +162,7 @@
 		},
 		reloadEverything:function(){ 
 			var me=this;
-			me.setLoading('Loading Stores');	
+			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
 				.then(function(){ return me.loadSnapshotStores(); })
