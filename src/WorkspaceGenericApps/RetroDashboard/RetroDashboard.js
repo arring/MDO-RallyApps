@@ -74,7 +74,8 @@
 									var html = ['<ul class ="ulInformation"><li><b>Scope Delta</b> = (Final Workload - Original Commit) / Original Commit</li>',
 										'<li><b>A/C Original</b> = Final Accepted / Original Commit</li>',
 										'<li><b>A/C Final</b> = Final Accepted / Final Workload</li>',
-										'<li>Sample dates are taken on <b>7th day</b> of the Release Start Date and on the Release End Date for Scope Delta , and 10 days after Release Start Date for Feature Scope Change.</li>',
+										'<li>Sample dates are taken on <b>7th day</b> of the Release Start Date and on the Release End Date for Scope Delta , and 10 days after Release Start Date for' +
+										[lowestPortfolioItemType]  +'Scope Change.</li>',
 										'<li>If there are 0 points at Release End Date, then the ideal and projected data are taken for the sample.</li>',
 										'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
 										'<li>Once Release Start Date for a selected Release is changed, it will be saved and reloaded with the saved Release Start Date in future.</li>',
@@ -143,8 +144,8 @@
 				},
 				items:[{
 					xtype:'container',
-					title:"Feature Progress",
-					id: 'scopeGrid' 
+					title: "Progress",
+					id: 'scopeGrid'
 				},{
 					xtype:'container',
 					title:"Art Scrum Fitness",
@@ -348,7 +349,7 @@
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
 						projectId = snapshot.data.Project;
-						//console.log( projectId, snapshot.data.Feature, me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]], releaseName)
+						//console.log( projectId, snapshot.data[lowestPortfolioItemType], me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]], releaseName)
 						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
 								(!snapshot.data.Release  && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName)) &&
 							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
@@ -444,11 +445,11 @@
 			me.WsapiUserStoryMap = {};
 			var UserStoryStoreItems = !(me.UserStoryStore) ? {} : me.UserStoryStore.getRange();
 			me.WsapiUserStoryMap = _.reduce(UserStoryStoreItems, function(hash, r, key){
-				if(r.data.Feature !== null){
-					var featureID = r.data.Feature.ObjectID;
-					hash[r.data.Feature.ObjectID] = _.filter(me.UserStoryStore.getRange(),function(f){
-						if(f.data.Feature !== null) 
-							return f.data.Feature.ObjectID === featureID; 
+				if(r.data[lowestPortfolioItemType] !== null){
+					var featureID = r.data[lowestPortfolioItemType].ObjectID;
+					hash[r.data[lowestPortfolioItemType].ObjectID] = _.filter(me.UserStoryStore.getRange(),function(f){
+						if(f.data[lowestPortfolioItemType] !== null) 
+							return f.data[lowestPortfolioItemType].ObjectID === featureID; 
 					});
 				}
 				return hash;
@@ -577,11 +578,11 @@
 				if(userStories.data.Iteration!==null && userStories.data.Iteration.EndDate < today.toISOString() && userStories.data.ScheduleState!='Accepted')
 					return userStories;
 			}));
-			// stories scheduled after feature end date
+			// stories scheduled after lowestPortfolioItemType end date
 			storiesScheduleAfterFeatureEndDate =  _.size(_.filter(projectStoreMap, function(userStories){
-				if(userStories.data.Feature !==null && 
+				if(userStories.data[lowestPortfolioItemType] !==null && 
 					userStories.data.Iteration!==null &&
-					userStories.data.Feature.PlannedEndDate < userStories.data.Iteration.StartDate && 
+					userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate && 
 					userStories.data.ScheduleState !="Accepted")
 					return userStories;
 				}));
@@ -689,7 +690,7 @@
 				autoScroll: true,
 				height: 500,
 				showPagingToolbar: false,
-				title: 'Feature Progress in the Release ('+ me.InitialTargetDate + ' - ' + me.CompleteFinalTargetDate + ')',
+				title: [lowestPortfolioItemType] +' Progress in the Release ('+ me.InitialTargetDate + ' - ' + me.CompleteFinalTargetDate + ')',
 				store: me.gridstore,
 				columnCfgs: [{
 					header: lowestPortfolioItemType + 's',
@@ -1256,6 +1257,10 @@
 			Ext.getCmp('scopeGrid').removeAll(); 
 			Ext.getCmp('grdScrumHealthHeader').update(" ");
 			Ext.getCmp('grdScrumHealth').removeAll(); 
+			//hack to dynamically change the tab title
+			//TODO: find a better way
+			Ext.getCmp('scopeGridWrapper').tabBar.activeTab.update((me.PortfolioItemTypes[0] + " Progess").toUpperCase());
+			$('.x-tab-bar .x-tab-active').css({'font-size':'12px'});
 			//load all the child release to get the user story snap shots
 			//get the portfolioItems from wsapi
 			return Q.all([
