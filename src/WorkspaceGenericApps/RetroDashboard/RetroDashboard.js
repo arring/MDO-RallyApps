@@ -11,7 +11,8 @@
 			'Intel.lib.mixin.UserAppsPreference',
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
-			'Intel.lib.mixin.ParallelLoader'
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.CustomAppObjectIDRegister'
 		],
 		items:[{
 			xtype: 'container', 

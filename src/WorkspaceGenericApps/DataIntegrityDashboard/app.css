@@ -83,8 +83,7 @@
 	
 .heatmap-xlabel {
 	white-space:nowrap;
-	z-index:100;
-	cursor:pointer; }
+	z-index:100; }
 	.heatmap-xlabel:hover {
 		color:blue; }
 		
