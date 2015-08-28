@@ -75,8 +75,8 @@
 									var html = ['<ul class ="ulInformation"><li><b>Scope Delta</b> = (Final Workload - Original Commit) / Original Commit</li>',
 										'<li><b>A/C Original</b> = Final Accepted / Original Commit</li>',
 										'<li><b>A/C Final</b> = Final Accepted / Final Workload</li>',
-										'<li>Sample dates are taken on <b>7th day</b> of the Release Start Date and on the Release End Date for Scope Delta , and 10 days after Release Start Date for' +
-										[lowestPortfolioItemType]  +'Scope Change.</li>',
+										'<li>Sample dates are taken on <b>7th day</b> of the Release Start Date and on the Release End Date for Scope Delta , ',
+											'and 10 days after Release Start Date for ' + Rally.getApp().PortfolioItemTypes[0] + ' Scope Change.</li>',
 										'<li>If there are 0 points at Release End Date, then the ideal and projected data are taken for the sample.</li>',
 										'<li>You can change the Release Start Date for the selected Release. This will update the sample date for the Release Start Date.</li>',
 										'<li>Once Release Start Date for a selected Release is changed, it will be saved and reloaded with the saved Release Start Date in future.</li>',
@@ -447,10 +447,10 @@
 			var UserStoryStoreItems = !(me.UserStoryStore) ? {} : me.UserStoryStore.getRange();
 			me.WsapiUserStoryMap = _.reduce(UserStoryStoreItems, function(hash, r, key){
 				if(r.data[lowestPortfolioItemType] !== null){
-					var featureID = r.data[lowestPortfolioItemType].ObjectID;
+					var portfolioItemID = r.data[lowestPortfolioItemType].ObjectID;
 					hash[r.data[lowestPortfolioItemType].ObjectID] = _.filter(me.UserStoryStore.getRange(),function(f){
 						if(f.data[lowestPortfolioItemType] !== null) 
-							return f.data[lowestPortfolioItemType].ObjectID === featureID; 
+							return f.data[lowestPortfolioItemType].ObjectID === portfolioItemID; 
 					});
 				}
 				return hash;
@@ -543,7 +543,7 @@
 			var releaseName = me.ReleaseRecord.data.Name;
 			//blocked stories
 			var blockedStories = 0, unsizedStoires= 0,  improperlySizedStoires= 0,  storyWithoutIteration= 0, 
-				storyWithoutRelease= 0,  unacceptedStoriesinPastIteration= 0,  storiesScheduleAfterFeatureEndDate= 0;
+				storyWithoutRelease= 0,  unacceptedStoriesinPastIteration= 0,  storiesScheduleAftePortfolioItemEndDate= 0;
 				
 			blockedStories = _.size(_.filter(projectStoreMap, function(userStories){
 				return userStories.data.Blocked === true;
@@ -580,14 +580,14 @@
 					return userStories;
 			}));
 			// stories scheduled after lowestPortfolioItemType end date
-			storiesScheduleAfterFeatureEndDate =  _.size(_.filter(projectStoreMap, function(userStories){
+			storiesScheduleAftePortfolioItemEndDate =  _.size(_.filter(projectStoreMap, function(userStories){
 				if(userStories.data[lowestPortfolioItemType] !==null && 
 					userStories.data.Iteration!==null &&
 					userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate && 
 					userStories.data.ScheduleState !="Accepted")
 					return userStories;
 				}));
-				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyWithoutRelease + unacceptedStoriesinPastIteration + storiesScheduleAfterFeatureEndDate;
+				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyWithoutRelease + unacceptedStoriesinPastIteration + storiesScheduleAftePortfolioItemEndDate;
 		},
 		_buildFitnessGrid: function(){
 			var me = this;
@@ -663,15 +663,26 @@
 		_renderReleaseDetailHeader: function() {
 			var me = this,
 				workWeek = me.ReleaseRecord.data.ReleaseDate < new Date() ? me.getWorkweek(me.ReleaseRecord.data.ReleaseDate) :    me.getWorkweek(new Date()),
-				dataIntegrityDashboardLink = "<span class ='link-achor good-job'><a href='https://rally1.rallydev.com/#/" + me.ProjectRecord.data.ObjectID + "d/custom/22859089715' target='_blank'>Click here to view the  ART DATA INTEGRITY DASHBOARD</a></span>",
+				dataIntegrityDashboardLink = me.ARTDataIntegrityAppObjectID ? 
+					[
+						"<span class ='link-achor good-job'>",
+							"<a href='https://rally1.rallydev.com/#/" + me.ProjectRecord.data.ObjectID + "d/custom/" + 
+							me.ARTDataIntegrityAppObjectID + "' target='_blank'>",
+								"Click here to view the ART Data Integrity Dashboard",
+							"</a>",
+						"</span>"
+					].join('\n') :
+					"ART Data Integrity Dashboard cannot be located!",
 				dataAsOf = (me.ReleaseRecord.data.ReleaseDate < new Date() ? me.ReleaseRecord.data.ReleaseDate : new Date());
 
-				var releaseDetailHeaderHtml = ["Release: " + me.ReleaseRecord.data.Name ,  
-					"ReleaseStartDate: " + new Date(me.ReleaseRecord.data.ReleaseStartDate).toLocaleDateString() , 
-					"ReleaseEndDate: " + new Date(me.ReleaseRecord.data.ReleaseDate).toLocaleDateString() , 
+				var releaseDetailHeaderHtml = [
+					"Release: " + me.ReleaseRecord.data.Name,  
+					"ReleaseStartDate: " + new Date(me.ReleaseRecord.data.ReleaseStartDate).toLocaleDateString(), 
+					"ReleaseEndDate: " + new Date(me.ReleaseRecord.data.ReleaseDate).toLocaleDateString(), 
 					"Data as of: " + dataAsOf.toLocaleDateString(), 
 					"WorkWeek: ww" + workWeek,
-					"<br/>" + dataIntegrityDashboardLink].join(",");
+					"<br/>" + dataIntegrityDashboardLink
+				].join(",");
 
 				Ext.getCmp('grdScrumHealthHeader').update(releaseDetailHeaderHtml);
 
@@ -1334,7 +1345,10 @@
 									]);
 								} 
 								else me.CurrentScrum = me.ProjectRecord;
-							}),				
+							}),
+						me.getCustomAppObjectID('Intel.DataIntegrityDashboard.Vertical').then(function(customAppObjectID){
+							me.ARTDataIntegrityAppObjectID = customAppObjectID;
+						}),					
 						me.loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
