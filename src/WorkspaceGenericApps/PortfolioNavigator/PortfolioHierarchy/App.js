@@ -7,6 +7,7 @@
 
 	Ext.define('Intel.PortfolioNavigator.PortfolioHierarchy', {
 		extend: 'Intel.lib.IntelRallyApp',
+		cls: 'portfolio-hierarchy-app',
 		mixins: [
 			'Rally.Messageable',
 			'Intel.lib.mixin.PrettyAlert',
@@ -33,6 +34,7 @@
 			xtype:'container',
 			id:'bodyContainer'
 		}],
+		minWidth:1,
 		
 		userAppsPref: 'intel-portfolio-nav',
 

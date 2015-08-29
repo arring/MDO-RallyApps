@@ -76,7 +76,7 @@
 			if(grid){
 				return Q.all(_.map(grid.getSelectionModel().getSelection(), function(record){ //faster to make many requests insteadof using $in
 					var parallelLoaderConfig = {
-						scope: {
+						context: {
 							workspace: me.getContext().getWorkspace()._ref,
 							project:null
 						},
@@ -109,7 +109,7 @@
 				});
 			} else {
 				var parallelLoaderConfig = {
-					scope: {
+					context: {
 						workspace: me.getContext().getWorkspace()._ref,
 						project: null
 					},
