@@ -1,5 +1,5 @@
 this script just compiles a list of ObjectIDs of all the projects for a given workspace
-to run the script, create a config.json file with these contents:
+to run the script, create a config.json file in this directory with these contents:
 {
 	"apiKey": "",
 	"workspace": "",

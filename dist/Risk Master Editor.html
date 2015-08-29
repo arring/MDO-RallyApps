@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Portfolio Hierarchy</title>
+    <title>Risk Master Editor</title>
 
     <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function () {
@@ -923,6 +925,331 @@
 		}
 	});
 }());
+                /** 
+	SUMMARY: 
+		A project is used as a database. Each artifact in that project is a key-value pair. That means that all artifact of a certain type 
+		created in that project are created with 'key' and 'value' fields. Multiple artifacts can have the same 'key',
+		which will allow for easier filtering by other apps.
+		
+		Example: you want to make UserStories that represent the favorite color count for each person on each scrum. Every Story could
+		represent 1 person. So for project 'scrumA', and scrum member 'jim' who likes color 'blue' we would have:
+		
+			UserStory: {
+				c_usDbKey: 'favoriteColor-<scrumA ObjectID>-<userA ObjectID>',
+				c_usDbValue: 'blue'
+			}
+		
+		"key" field should be a unique 'string' field and "value field" should be a 'text' field.
+		
+		We have to keep track of which project this preference is stored in, so we create a custom field that keeps track of it.
+		
+		To Call the CRUD methods, you must first call initialize() method. You don't need to call initialize() before calling 
+		setDatabaseProjectOID or getDatabaseProjectOID. The CRUD methods for the key value pairs will return an object or list 
+		of objects of this form: 
+			
+			kvPair {
+				key: dbKey,
+				value: dbValue
+				ObjectID: artifactID
+			}
+	
+	DEPENDENCIES: 
+		- kriskowal/q
+		- jquery 2.X
+		- lodash
+		- the KEY_NAME and VALUE_NAME must be hidden custom fields on the <MODEL_NAME> artifact type you choose.
+			> so, if you use the defaults in this app, you have to create hidden c_usDbKey(string) and c_usDbValue(text) fields on 
+				HierarchicalRequirement in your workspace. Dont mess up the (string) and (text) part
+	
+	ISSUES: 
+		If someone has an app open that uses this, and another person changes the projectOID, the first person will continue to 
+		save key-value pairs to the old project. So make sure nobody is using apps that require this class when you are modifying the 
+		project serving as the database.
+		
+		Ext.Ajax keeps changing the apiKey in the url for POST, PUT and DELETE requests. Could not figure out why, so using jquery instead.
+		
+		Also, this uses ajax, not sure what that means with regards to CORS but I think you cannot use file:/// protocol when developing
+		locally.
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** 
+		The first 6 variables should probably just be left alone. But if you feel compelled to use Tasks or Defects as the KV storage
+		medium (MODEL_NAME) or change the KEY_NAME or VALUE_NAME or PREF_NAME, knock yourself out.
+		
+		The next 2 variables are the max length the key and value strings can be.
+		
+		The last 2 variables will be modified as apps use this database
+	*/
+	var PREF_NAME = 'intel-key-value-database-project',
+		MODEL_NAME = 'HierarchicalRequirement',
+		KEY_NAME = 'c_usDbKey',
+		VALUE_NAME = 'c_usDbValue',
+		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
+		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
+		
+		MAX_TEXT_LENGTH = 65536,
+		MAX_STRING_LENGTH = 256,
+		
+		INITIALIZED = false,
+		PROJECT_OID = 0;
+	
+	Ext.define('Intel.lib.resource.KeyValueDb', {
+		singleton: true,
+		
+		/**
+			private method for sending requests to the rally server. 
+		
+			method must be an HTTP method
+			params must be an object
+			data may be undefined or a non-null object
+			
+			returns Promise(httpResponseData)
+		*/
+		_sendRequest: function(method, params, urlExtension, data){
+			var deferred = Q.defer();
+			
+			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1)                     return Q.reject('invalid method');
+			if(!(params instanceof Object) || params === null)                              return Q.reject('invalid params');
+			if(typeof urlExtension !== 'string' || urlExtension[0] !== '/')                 return Q.reject('invalid urlExtension');
+			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null)) return Q.reject('invalid data');
+
+			data = (data === undefined ? data : JSON.stringify(data, null, '  '));
+			params = _.map(Ext.merge({
+				fetch: ['ObjectID', KEY_NAME, VALUE_NAME].join(','),
+				project: '/project/' + PROJECT_OID,
+				projectScopeUp: false,
+				projectScopeDown: false,
+				key: SECURITY_KEY
+			}, params), function(value, key){ return key + '=' + value; }).join('&');
+			
+			var request = $.ajax({
+				url: BASE_URL + urlExtension + '?' + params,
+				method: method,
+				data: data,
+				dataType: 'json',
+				headers: {
+					'Content-Type' : 'application/json'
+				},
+				xhrFields: {
+					withCredentials: true
+				}
+			});
+			request.done(function(json){
+				var results, errors;
+				json = json.OperationResult || json.QueryResult || json.CreateResult || json[MODEL_NAME];
+				errors = json.Errors;
+				results = json.Results || json.Object || json;
+				if(errors && errors.length) deferred.reject(errors);
+				else deferred.resolve(results);
+			});
+			request.fail(function(jqXHR, textStatus){
+				deferred.reject(textStatus);
+			});
+			
+			return deferred.promise;
+		},
+		
+		/** 
+			You must call this before you can use it. Not using constructor because we need a promise to be returned.
+			This fails if the preference does not exist or holds a bad value.
+			returns Promise()
+		*/
+		initialize: function(){
+			if(INITIALIZED) return Q();
+			return this.getDatabaseProjectOID()
+				.then(function(projectOID){
+					projectOID = parseInt(projectOID, 10);
+					if(isNaN(projectOID) || projectOID <= 0) return Q.reject('KeyValueDb not properly initialized');
+					else PROJECT_OID = projectOID;
+				})
+				.then(function(){ INITIALIZED = true; });
+		},
+		
+		/** 
+			Sets the ObjectID for the project that will serve as a database.
+			returns Promise(projectOID)
+		*/
+		setDatabaseProjectOID: function(projectOID){
+			var settings = {}, deferred = Q.defer();
+			
+			projectOID = parseInt(projectOID, 10);
+			if(isNaN(projectOID) || projectOID <= 0) return Q.reject('invalid projectOID');
+			
+			settings[PREF_NAME] = projectOID; 
+			Rally.data.PreferenceManager.update({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
+				filterByName: PREF_NAME,
+				settings: settings,
+				success: function(prefs){ 
+					PROJECT_OID = projectOID;
+					deferred.resolve(projectOID); 
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+	
+		/** 
+			Gets the projectOID that serves as a database.
+			returns Promise(projectOID)
+		*/
+		getDatabaseProjectOID: function(){
+			var deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
+				filterByName: PREF_NAME,
+				success: function(prefs){ 
+					var projectOID = parseInt(prefs[PREF_NAME], 10);
+					if(isNaN(projectOID) || projectOID <= 0) deferred.reject('invalid projectOID');
+					else deferred.resolve(projectOID); 
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		
+		/** returns Promise(kvPair || null) */
+		getKeyValuePair: function(dbKey){
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' = "' + dbKey + '")',
+					pagesize: 1
+				};
+			
+			return this._sendRequest('GET', params, urlExtension).then(function(items){ 
+				if(items.length){
+					return {
+						key: items[0][KEY_NAME],
+						value: items[0][VALUE_NAME],
+						ObjectID: items[0].ObjectID
+					};
+				}
+				else return null;
+			});
+		},
+		
+		/** returns Promise( [kvPair] ) */
+		queryKeyValuePairs: function(dbKeyContains){
+			var me=this, allItems = [];
+			
+			if(!INITIALIZED)                              return Q.reject('not initialized');
+			if(typeof dbKeyContains !== 'string')         return Q.reject('invalid key');
+			if(dbKeyContains.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' contains "' + dbKeyContains + '")',
+					pagesize: 200,
+					start: 1
+				};
+				
+			function nextPage(){
+				return me._sendRequest('GET', params, urlExtension).then(function(items){
+					if(items.length){
+						allItems = allItems.concat(items);
+						params.start += 200;
+						return nextPage();
+					}
+				});
+			}
+			return nextPage().then(function(){
+				return allItems.map(function(item){
+					return {
+						key: item[KEY_NAME],
+						value: item[VALUE_NAME],
+						ObjectID: item.ObjectID
+					};
+				});
+			});
+		},
+		
+		/** returns Promise(kvPair) */
+		createKeyValuePair: function(dbKey, dbValue){
+			var me = this, jsonData = {};
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
+			
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(kvPair) return Q.reject('key already exists');
+				else {					
+					var urlExtension = '/' + MODEL_NAME + '/create';
+					return me._sendRequest('PUT', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
+			});
+		},
+		
+		/** returns Promise(kvPair) */
+		updateKeyValuePair: function(dbKey, dbValue){
+			var me = this, jsonData = {};
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
+
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(!kvPair) return Q.reject('key does not exist');
+				else{					
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;
+					return me._sendRequest('POST', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
+			});
+		},
+		
+		/** returns Promise(void) */
+		deleteKeyValuePair: function(dbKey){
+			var me = this;
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(kvPair){
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;	
+					return me._sendRequest('DELETE', {}, urlExtension);
+				}
+			});
+		}
+	});
+}());
                 /**  
 	DESCRIPTION:
 		This mixin gives a window-centered alert or confirm dialog box that isn't ugly. 
@@ -992,727 +1319,373 @@
 		}
 	});
 }());
-                /** 
-	given named queues, only allows one function at a time in each queue to execute. 
+                /**
+	The Risk Model to be used as a base model for all SAFe Apps.
+	Validation should always be handled by this model as well.
 	
-	This is just a locking implementation. you call enqueue and then when its your function's turn
-	you do stuff and then you call the callback passed to you so the next function can execute.
-	
-	It will always perfom your queued function wrapped in a setTimeout. 
-	
-	Mix this in to your app: call me.enqueue(function(){...}, 'queue-name') 
+	This file is the source-of-truth for all things related to the schema and validation of Risks
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		QueueOfFuncs = {};
+		RISK_KEY_PREFIX = 'risk-',
+		STATUS_OPTIONS = ['Open', 'WIP', 'Materialized', 'Closed'],
+		RISK_LEVEL_OPTIONS = ['High', 'Medium', 'Low'],
+		INVALID_MESSAGE = 'is invalid';
 	
-	function dequeue(queueName){
-		queueName = queueName || 'undefined';
-		if(QueueOfFuncs[queueName]){
-			QueueOfFuncs[queueName].shift();
-			if(!QueueOfFuncs[queueName].length) return;
-			else {
-				setTimeout(function(){
-					QueueOfFuncs[queueName][0].call(null, dequeue.bind(null, queueName));
-				}, 0);
-			}
-		}
-	}
+	/*************************** Risk Custom Validators **********************************/
+	Ext.data.validations.RiskIDMessage =                    INVALID_MESSAGE;
+	Ext.data.validations.RiskReleaseNameMessage =           INVALID_MESSAGE;
+	Ext.data.validations.RiskPortfolioItemObjectIDMessage = INVALID_MESSAGE;
+	Ext.data.validations.RiskProjectObjectIDMessage =       INVALID_MESSAGE;
+	Ext.data.validations.RiskDescriptionMessage =           INVALID_MESSAGE;
+	Ext.data.validations.RiskImpactMessage =                INVALID_MESSAGE;
+	Ext.data.validations.RiskMitigationPlanMessage =        INVALID_MESSAGE;
+	Ext.data.validations.RiskStatusMessage =                INVALID_MESSAGE;
+	Ext.data.validations.RiskLevelMessage =                 INVALID_MESSAGE;
+	Ext.data.validations.RiskOwnerObjectIDMessage =         INVALID_MESSAGE;
+	Ext.data.validations.RiskSubmitterObjectIDMessage =     INVALID_MESSAGE;
+	Ext.data.validations.RiskCheckpointMessage =            INVALID_MESSAGE;
 	
-	Ext.define('Intel.lib.mixin.AsyncQueue', {
-		/**
-			input callback(done): make sure you call done when you are finished
-			input queueName: name of queue to use, if not specified uses default
-		*/
-		enqueue: function(callback, queueName){
-			queueName = queueName || 'undefined';
-			if(typeof callback !== 'function') throw new Error('Not a function');
-			if(!QueueOfFuncs[queueName] || !QueueOfFuncs[queueName].length){
-				QueueOfFuncs[queueName] = [callback];
-				setTimeout(function(){
-					callback.call(null, dequeue.bind(null, queueName));
-				}, 0);
+	Ext.data.validations.RiskID = function(config, value){
+		return typeof value === 'string' && new RegExp('^' + RISK_KEY_PREFIX).test(value);
+	};
+	Ext.data.validations.RiskReleaseName = function(config, value){
+		return typeof value === 'string' && value.length > 0;
+	};
+	Ext.data.validations.RiskPortfolioItemObjectID = function(config, value){
+		return typeof value === 'number' && value > 0;
+	};
+	Ext.data.validations.RiskProjectObjectID = function(config, value){
+		return value === undefined || (typeof value === 'number' && value > 0);
+	};
+	Ext.data.validations.RiskDescription = function(config, value){
+		return typeof value === 'string' && value.length > 0;
+	};
+	Ext.data.validations.RiskImpact = function(config, value){
+		return typeof value === 'string' && value.length > 0;
+	};
+	Ext.data.validations.RiskMitigationPlan = function(config, value){
+		return typeof value === 'string' && value.length > 0;
+	};
+	Ext.data.validations.RiskStatus = function(config, value){
+		return STATUS_OPTIONS.indexOf(value) > -1;
+	};
+	Ext.data.validations.RiskLevel = function(config, value){
+		return RISK_LEVEL_OPTIONS.indexOf(value) > -1;
+	};
+	Ext.data.validations.RiskOwnerObjectID = function(config, value){
+		return typeof value === 'number' && value > 0;
+	};
+	Ext.data.validations.RiskSubmitterObjectID = function(config, value){
+		return typeof value === 'number' && value > 0;
+	};
+	Ext.data.validations.RiskCheckpoint = function(config, value){
+		return typeof value === 'number' && value >= 0;
+	};
+	
+	/*************************** Risk Model Definition **********************************/
+	Ext.define('Intel.SAFe.lib.model.Risk', {
+		extend: 'Ext.data.Model',
+		idProperty: 'RiskID',
+		fields: [
+			{name: 'RiskID', type:'auto'},
+			{name: 'ReleaseName', type:'auto'},
+			{name: 'PortfolioItemObjectID', type: 'auto'},
+			{name: 'ProjectObjectID', type:'auto', defaultValue: undefined},
+			{name: 'Description', type: 'auto'},
+			{name: 'Impact', type: 'auto'},	
+			{name: 'MitigationPlan', type: 'auto'},
+			{name: 'RiskLevel', type: 'auto'},
+			{name: 'Status', type: 'auto'},
+			{name: 'OwnerObjectID', type: 'auto'},
+			{name: 'SubmitterObjectID', type: 'auto'},
+			{name: 'Checkpoint', type: 'auto'}
+		],
+		validations: [
+			{type: 'RiskID', field: 'RiskID'},
+			{type: 'RiskReleaseName', field: 'ReleaseName'},
+			{type: 'RiskPortfolioItemObjectID', field: 'PortfolioItemObjectID'},
+			{type: 'RiskProjectObjectID', field: 'ProjectObjectID'},
+			{type: 'RiskDescription', field: 'Description'},
+			{type: 'RiskImpact', field: 'Impact'},
+			{type: 'RiskMitigationPlan', field: 'MitigationPlan'},
+			{type: 'RiskStatus', field: 'Status'},
+			{type: 'RiskLevel', field: 'RiskLevel'},
+			{type: 'RiskOwnerObjectID', field: 'OwnerObjectID'},
+			{type: 'RiskSubmitterObjectID', field: 'SubmitterObjectID'},
+			{type: 'RiskCheckpoint', field: 'Checkpoint'}
+		],
+		statics:{
+			isValidRiskID: function(riskID){
+				return typeof riskID === 'string' && riskID.indexOf(RISK_KEY_PREFIX) === 0;
+			},
+			getStatusOptions: function(){
+				return STATUS_OPTIONS.slice();
+			},
+			getRiskLevelOptions: function(){
+				return RISK_LEVEL_OPTIONS.slice(); 
 			}
-			else QueueOfFuncs[queueName].push(callback);
 		}
 	});
 }());
                 /** 
 	SUMMARY: 
-		This mixin is used to save user preferences per project, that can follow the user from app to app. So 
-		when you call saveAppsPreference it saves it to a preference filtered by user and the value of me.userAppsPref.
+		CRUD API for Risks. Each Risk has a RiskID. Choose the ID carefully, as it will be very important for querying, and GET, PUT, POST, and DELETE
+		all use RiskIDs as the key in the key-value storage. Recommended usage is to name the keys something like: 'risk-<release name>-<unique character hash>'
 		
-		Different apps can share the me.userAppsPref which is useful if you have 5 apps that should all scope to the same
-		Release. So if the user scopes to Release R1 on one of the apps, when she goes to any of the other apps, it should
-		scope to Release R1 as well.
-**/
+		The risk 'value' is obfuscated because Rally strips html characters from the text, which then breaks JSON. it is obfuscated by using:
+		btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')))
+		
+		this file does not handle schema or validation things for risks -- it only handles the CRUD interface for them. It uses the RiskModel object 
+		to do validation
+	
+	DEPENDENCIES: 
+		- Intel.lib.resource.KeyValueDb
+		- Intel.SAFe.lib.model.Risk
+*/
 (function(){
-	var Ext = window.Ext4 || window.Ext;
+	var Ext = window.Ext4 || window.Ext,
+		KeyValueDb = Intel.lib.resource.KeyValueDb,
+		RiskModel = Intel.SAFe.lib.model.Risk;
 
-	Ext.define('Intel.lib.mixin.UserAppsPreference', {
+	Ext.define('Intel.SAFe.lib.resource.RiskDb', {
+		singleton: true,
 		
-		/** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
-		userAppsPref: 'intel-user-apps-preference',
-		
-		loadAppsPreference: function(){
-			var me=this, deferred = Q.defer();
-			Rally.data.PreferenceManager.load({
-				filterByUser:true,
-				filterByName: me.userAppsPref,
-				success: function(prefs) {
-					var appPrefs = prefs[me.userAppsPref];
-					try{ appPrefs = JSON.parse(appPrefs); }
-					catch(e){ appPrefs = { projs:{}, refresh:0};}
-					deferred.resolve(appPrefs);
-				},
-				failure: deferred.reject
-			});
-			return deferred.promise;
+		/** 
+			private function. returns error if missing or invalid fields, else returns pruned riskJSON
+			returns Promise(riskJSON)
+		*/
+		_validateRisk: function(riskJSON){
+			var model = new RiskModel(riskJSON),
+				errors = model.validate();
+			if(errors.length) return Q.reject(_.map(errors.getRange(), function(error){ return error.field + ' ' + error.message; }));
+			else return Q(model.data);
 		},
-		saveAppsPreference: function(prefs){
-			var me=this, s = {}, deferred = Q.defer();
-			prefs = {projs:prefs.projs, refresh:prefs.refresh};
-			s[me.userAppsPref] = JSON.stringify(prefs); 
-			Rally.data.PreferenceManager.update({
-				filterByUser: true,
-				filterByName: me.userAppsPref,
-				settings: s,
-				success: deferred.resolve,
-				failure: deferred.reject
+		
+		/** 
+			You must call this before you can use it. Not using constructor because we need a promise to be returned.
+			returns Promise()
+		*/
+		initialize: function(){
+			return KeyValueDb.initialize();
+		},
+		
+		/** returns Promise(riskJSON) */
+		get: function(riskID){
+			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
+			return KeyValueDb.getKeyValuePair(riskID).then(function(kvPair){
+				try { return kvPair ? _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}) : null; }
+				catch(e){ return Q.reject(e); }
 			});
-			return deferred.promise;
-		}
-	});
-}());
-                /** 
-	SUMMARY:
-		This combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
-		(although there is some arrow key scrolling bug) 
-	*/
-(function(){
-	var Ext = window.Ext4 || window.Ext;	
-	
-	Ext.define('Intel.lib.component.ComboBox', {
-		extend:'Ext.form.field.ComboBox',
-		alias: ['widget.intelcombo', 'widget.intelcombobox'],
+		},
 		
-		constructor: function(options) {
-			options = options || {};
-			options = Ext.merge({
-				enableKeyEvents:true,
-				queryMode:'local',
-				ignoreNoChange:true,
-				allowBlank:true,
-				listeners: {
-					change: function(a,b){
-						if(!b || (b.keyCode>=37 && b.keyCode <=40)) return; //arrow keys
-						var combo = this;
-						combo.store.clearFilter();
-						combo.store.filterBy(function(item){
-							var escapedValue = combo.getRawValue().replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
-							return item.data[combo.displayField].match(new RegExp(escapedValue, 'i')) !== null;
-						});
-					},
-					focus: function(combo) {
-						combo.store.clearFilter();
-						combo.setValue('');
-						combo.expand();
-					}
+		/** returns Promise( [riskJSON] ) */
+		query: function(riskIDContains){
+			if(!RiskModel.isValidRiskID(riskIDContains)) return Q.reject('invalid RiskID');
+			return KeyValueDb.queryKeyValuePairs(riskIDContains).then(function(kvPairs){
+				try { 
+					return _.map(kvPairs, function(kvPair){
+						return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key});
+					});
 				}
-			}, options);
-			this.callParent([options]);
-		}
-	});
-}());
-                /** 
-	SUMMARY:
-		This combo has some built in defaults for static-comboboxes (which means you dont type into it, you just select from it)
-	*/
-(function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	Ext.define('Intel.lib.component.FixedComboBox', {
-		extend:'Ext.form.field.ComboBox',
-		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
+				catch(e){ return Q.reject(e); }
+			});
+		},
 		
-		editable: false,	
-		allowBlank:true,
-		queryMode:'local',
-		matchFieldWidth: false,
-		listeners: {
-			change:function(combo, newval, oldval){ 
-				if(newval.length===0) combo.setValue(oldval || ''); 
-			},
-			focus: function(combo) {
-				if(combo.store.findExact(combo.valueField, combo.getValue()) === -1) combo.setValue('');
-				combo.expand();
-			}
+		/** 
+			validates the riskJSON and then creates risk if it is unique
+			returns Promise(riskJSON) 
+		*/
+		create: function(riskID, riskJSON){
+			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
+			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
+				var riskJSONString = btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')));		
+				return KeyValueDb.createKeyValuePair(riskID, riskJSONString).then(function(kvPair){
+					try { return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}); }
+					catch(e){ return Q.reject(e); }
+				});
+			});
+		},
+		
+		/** 
+			validates the riskJSON and then updates risk if it exists
+			returns Promise(riskJSON) 
+		*/
+		update: function(riskID, riskJSON){
+			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
+			return this._validateRisk(_.merge(riskJSON, {RiskID: riskID})).then(function(riskJSON){
+				var riskJSONString = btoa(encodeURIComponent(JSON.stringify(riskJSON, null, '\t')));	
+				return KeyValueDb.updateKeyValuePair(riskID, riskJSONString).then(function(kvPair){
+					try { return _.merge(JSON.parse(decodeURIComponent(atob(kvPair.value))), {RiskID: kvPair.key}); }
+					catch(e){ return Q.reject(e); }
+				});
+			});
+		},
+		
+		/** returns Promise(void) */
+		'delete': function(riskID){
+			if(!RiskModel.isValidRiskID(riskID)) return Q.reject('invalid RiskID');
+			return KeyValueDb.deleteKeyValuePair(riskID);
 		}
 	});
 }());
                 (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	Ext.define('Intel.PortfolioNavigator.PortfolioHierarchy.FittedUserStoryTreeItem', {
-		extend: 'Rally.ui.tree.UserStoryTreeItem',
-		alias: 'widget.fitteduserstorytreeitem',
+	var Ext = window.Ext4 || window.Ext,
+		RiskDb = Intel.SAFe.lib.resource.RiskDb;
 
-		config: {
-			displayedFields: ['Name', 'Project', 'ScheduleState']
-		},
-
-		getContentTpl: function(){
-			var me = this;
-			return Ext.create('Ext.XTemplate',
-				'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
-				'{[this.getActionsGear()]}',
-				'<div class="textContent ellipses" style="max-width:65%;">',
-					'{[this.getFormattedId()]} - ',
-					'<span title="{Name}\nProject: {[this.getProjectName()]}">{Name}</span>',
-				'</div>',
-				'<div class="rightSide">',
-					'{[this.getScheduleState()]}',
-				'</div>',
-			{
-				canDrag: function(){
-					return me.getCanDrag();
-				},
-				getProjectName: function() {
-					return me.getRecord().data.Project.Name;    
-				},
-				getActionsGear: function(){
-					return me._buildActionsGearHtml();
-				},
-				getScheduleState: function(){
-					return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'ScheduleState');
-				},
-				getFormattedId: function(){
-					return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'FormattedID');
-				}
-			});
-		}
-	});
-}());
-                (function(){
-	var Ext = window.Ext4 || window.Ext;
-	
-	Ext.define('Intel.PortfolioNavigator.PortfolioHierarchy.FittedPortfolioItemTreeItem', {
-		extend: 'Rally.ui.tree.PortfolioItemTreeItem',
-		alias: 'widget.fittedportfolioitemtreeitem',
-
-		config: {
-			displayedFields: ['Name', 'Plan']
-		},
-
-		getContentTpl: function(){
-			var me = this;
-
-			return Ext.create('Ext.XTemplate',
-				'<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
-				'{[this.getActionsGear()]}',
-				'<tpl if="this._renderPlanOnLowestLevelPortfolioItem()">',
-					'<div class="textContent ellipses" style="max-width: 65%;">',
-						'{[this.getFormattedId()]} - ',
-						'<span title="{Name}">{Name}</span>',
-						'<div class="textContent ellipses">{[this.getPlanData()]}</div>',
-					'</div>',
-				'<tpl else>',
-					'<div class="textContent ellipses" style="max-width: 65%;">',
-						'{[this.getFormattedId()]} - ',
-						'<span title="{Name}">{Name}</span>',
-					'</div>',
-				'</tpl>',
-				'<div class="rightSide">',
-					'{[this.getPercentDone()]}',
-				'</div>',
-				{
-					canDrag: function(){
-						return me.getCanDrag();
-					},
-					getActionsGear: function(){
-						return me._buildActionsGearHtml();
-					},
-					getPercentDone: function(){
-						return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'PercentDoneByStoryCount');
-					},
-					getFormattedId: function(){
-						return Rally.ui.renderer.RendererFactory.renderRecordField(me.getRecord(), 'FormattedID');
-					},
-					getPlanData: function() {
-						var plan = me.getRecord().data.Plan;
-						var planName = plan && plan.name ? plan.name : "";
-						return planName;
-					},
-					_renderPlanOnLowestLevelPortfolioItem: function() {
-						return me.getRecord().self.isLowestLevelPortfolioItem();
-					}
-				}
-			);
-		}
-	});
-}());
-                /** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
-(function(){
-	var Ext = window.Ext4 || window.Ext;
-
-	var context = Rally.environment.getContext(),
-		SETTINGS_TOKEN = context.getProject().ObjectID;
-
-	Ext.define('Intel.PortfolioNavigator.PortfolioHierarchy', {
+	Ext.define('Intel.SAFe.RiskMasterEditor', {
 		extend: 'Intel.lib.IntelRallyApp',
-		cls: 'portfolio-hierarchy-app',
 		mixins: [
-			'Rally.Messageable',
-			'Intel.lib.mixin.PrettyAlert',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.PrettyAlert'
 		],
-		layout: {
-			type:'vbox',
-			align:'stretch',
-			pack:'start'
-		},
-		items:[{
-			xtype:'container',
-			id:'headerRelease',
-			layout:'hbox'
-		},{
-			xtype:'container',
-			id:'headerProject',
-			layout:'hbox'
-		},{
-			xtype:'container',
-			id:'headerComplete',
-			layout:'hbox'
-		},{
-			xtype:'container',
-			id:'bodyContainer'
-		}],
-		minWidth:1,
-		
-		userAppsPref: 'intel-portfolio-nav',
+	
+		minWidth:910, /** thats when rally adds a horizontal scrollbar for a pagewide app */
 
-		config: {
-			defaultSettings: (function(){
-				var s = {};
-				s['Type' + SETTINGS_TOKEN] = ''; 
-				s['QueryFilter' + SETTINGS_TOKEN] = '';
-				s['InferPortfolioLocation' + SETTINGS_TOKEN] = true;
-				s['PortfolioLocation' + SETTINGS_TOKEN] = 0;
-				return s;
-			}())
-		},				
-		getSettingsFields: function() {
-			return [{
-				name: 'Type' + SETTINGS_TOKEN,
-				xtype:'rallycombobox',
-				editable:false,
-				queryFilter:true, //<--- this is a hack, but it works
-				displayField:'Name',
-				valueField:'Name',
-				storeConfig:{
-					xtype:'rallywsapidatastore',
-					model: 'TypeDefinition',
-					limit:Infinity,
-					fetch:['Ordinal', 'Name'],
-					filters: [{
-						property: 'Parent.Name',
-						value: 'Portfolio Item'
-					},{
-						property: 'Creatable',
-						value: true
-					}],
-					sorters: [{
-						property: 'Ordinal',
-						direction: 'DESC'
-					}],
-					context:{
-						workspace:Rally.environment.getContext().getWorkspace()._ref,
-						project:null
-					}
-				},
-				listeners:{
-					added: function(field, form){
-						if(form.down('rallycombobox').value) field.hide();
-						else field.show();
-					}
-				},
-				label: 'Type',
-				labelWidth: 120, width:'100%'
-			},{
-				name: 'QueryFilter' + SETTINGS_TOKEN,
-				xtype: 'textfield',
-				label: 'Query Filter',
-				labelWidth: 120, width:'100%'
-			},{
-				name: 'InferPortfolioLocation' + SETTINGS_TOKEN,
-				xtype:'rallycheckboxfield',
-				label: 'Infer Portfolio Location',
-				labelWidth: 120, width:'100%',
-				bubbleEvents: ['change'] 
-			},{
-				name: 'PortfolioLocation' + SETTINGS_TOKEN,
-				xtype:'rallycombobox',
-				editable:false,
-				queryFilter:true, //<--- this is a hack, but it works
-				displayField:'Name',
-				valueField:'ObjectID',
-				storeConfig: {
-					xtype:'rallywsapidatastore',
-					model: 'Project',
-					limit:Infinity,
-					fetch:['ObjectID', 'Name'],
-					sorters: [{
-						property: 'Name',
-						direction: 'ASC'
-					}],
-					context:{
-						workspace:Rally.environment.getContext().getWorkspace()._ref,
-						project:null
-					}
-				},
-				label: 'Portfolio Location',
-				labelWidth: 120, width:'100%',
-				listeners:{
-					added: function(field, form){
-						if(form.down('rallycheckboxfield').value) field.hide();
-						else{
-							field.show();
-							setTimeout(function(){
-								var fieldVal = Rally.getApp().getSetting(field.name);
-								if(fieldVal) field.setValue(fieldVal);
-							}, 50);
-						}
-					}
-				},
-				handlesEvents: {
-					change: function(checkbox, isChecked) {
-						var field=this;
-						if(isChecked) field.hide();
-						else{
-							field.show();
-							setTimeout(function(){
-								var fieldVal = Rally.getApp().getSetting(field.name);
-								if(fieldVal) field.setValue(fieldVal);
-							}, 50);
-						}
-					}
-				}
-			}];
+		/**___________________________________ DATA STORE METHODS ___________________________________*/		
+		loadRisks: function(){
+			var me=this;
+			return RiskDb.query('risk-').then(function(risks){
+				me.Risks = risks;
+			});
 		},
-		
-		/********************************************** Refreshing Data ***************************************************/
-		refreshTree: function() {
-			var me=this;
-			me.down('#bodyContainer').removeAll();
-			me.renderPortfolioTree();
-		},	
-		reloadEverything: function(){
-			var me=this;
-			me.setLoading(false);
-			me.renderFilterOnRelease();
-			me.renderReleasePicker();
-			me.renderFilterOnProject();
-			me.renderFilterOnComplete();
-			me.renderPortfolioTree();
-		},
-		
-		/************************************************** Launch ***************************************************/	
-		launch: function() {
-			var me=this;
+
+		/**___________________________________ LAUNCH ___________________________________*/
+		launch: function(){
+			var me = this;
 			me.setLoading('Loading Configuration');
-			me.configureIntelRallyApp()
-				.then(function(){
-					var scopeProject = me.getContext().getGlobalContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
-				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([
-						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-										.then(function(scrumGroupPortfolioProject){
-											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										});
-								} 
-							}),
-						me.loadAppsPreference() /********* 2 ************/
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
-								var twelveWeeks = 1000*60*60*24*7*12;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-							})
-							.then(function(releaseRecords){		
-								me.ReleaseRecords = releaseRecords;
-								me.ReleaseNames = [];
-								for(var i=0,len=releaseRecords.length; i<len; ++i){
-									me.ReleaseNames.push({ Name: releaseRecords[i].data.Name });
-								}
-							}),
-						me.loadAllProjects() /********* 3 ************/
-							.then(function(projects){
-								me.AllProjects = projects;
-							}),
-						me.loadRandomUserStory(me.ProjectRecord) /********* 4 ************/
-							.then(function(userStory){
-								me.HasUserStories = !!userStory;
-							})
-					]);
-				})
-				.then(function(){
-					var pid = me.ProjectRecord.data.ObjectID, 
-						prefs = me.AppsPref.projs[pid] || {};
-					me.PIType = me.getSetting('Type' + SETTINGS_TOKEN);
-					if(!me.PIType){
-						me.PIType = me.PortfolioItemTypes[0];
-						var newSettings = {};
-						newSettings['Type' + SETTINGS_TOKEN] = me.PIType;
-						me.updateSettingsValues({settings:newSettings});
-					}
-					me.QueryFilter = me.getSetting('QueryFilter' + SETTINGS_TOKEN);
-					me.InferPortfolioLocation = me.getSetting('InferPortfolioLocation' + SETTINGS_TOKEN);
-					me.PortfolioLocation = me.getSetting('PortfolioLocation' + SETTINGS_TOKEN);
-					me.FilterOnRelease = prefs.FilterOnRelease || false;
-					me.FilterReleaseName = prefs.FilterReleaseName || (me.ReleaseNames.length ? me.ReleaseNames[0].Name : null);
-					me.FilterOnProject = prefs.FilterOnProject || false;
-					me.FilterOnComplete = prefs.FilterOnComplete || false;
-					if(me.InferPortfolioLocation){
-						if(me.ScrumGroupPortfolioProject) me.PortfolioLocation = me.ScrumGroupPortfolioProject;
-						else me.PortfolioLocation = me.ProjectRecord;
-					}
-					else {
-						if(me.PortfolioLocation){ //if ObjectID is set manually
-							me.PortfolioLocation = _.find(me.AllProjects, function(p){ 
-								return p.data.ObjectID === me.PortfolioLocation; 
-							});
-						}
-						if(!me.PortfolioLocation){
-							return Q.reject('Error inferring Portfolio Location. You must set the project that the portfolio resides in!');
-						}
-					}
-					return me.reloadEverything();
-				})
+			RiskDb.initialize()
+				.then(function(){ return me.loadRisks(); })
+				.then(function(){ me.loadGrid(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
 		},
 
-		/*************************************************** HEADER ITEMS *********************************************/	
-		onPreferenceChanged: function(field, newValue){
-			var me=this,
-				pid = me.ProjectRecord.data.ObjectID;
-			if(me[field] === newValue) return Q();
-			else me[field] = newValue;
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid][field] = newValue;
-			return me.saveAppsPreference(me.AppsPref);
-		},
-		onReleaseSelected: function(combo, records){
-			var me=this;
-			me.onPreferenceChanged('FilterReleaseName', records[0].data.Name)
-				.then(function(){ if(me.FilterOnRelease) me.refreshTree(); })
-				.fail(function(reason){ me.alert('ERROR:', reason); })
-				.done();
-		},				
-		renderReleasePicker: function(){
-			var me=this;
-			Ext.getCmp('headerRelease').add({
-				xtype:'intelfixedcombo',
-				store: Ext.create('Ext.data.Store', {
-					fields: ['Name'],
-					sorters: [function(o1, o2){ return o1.data.Name > o2.data.Name ? -1 : 1; }],
-					data: me.ReleaseNames
-				}),
-				hidden: !me.FilterOnRelease,
-				displayField: 'Name',
-				value: me.FilterReleaseName,
-				listeners: { select: me.onReleaseSelected.bind(me) }
-			});
-		},		
-		onFilterOnReleaseChanged: function(checkBox){
-			var me=this,
-				value = checkBox.getValue(),
-				box = Ext.getCmp('headerRelease').down('intelfixedcombo');
-			if(value) box.show(); else box.hide();
-			me.onPreferenceChanged('FilterOnRelease', value)
-				.then(function(){ me.refreshTree(); })
-				.fail(function(reason){ me.alert('ERROR:', reason); })
-				.done();
-		},
-		renderFilterOnRelease: function(){
-			var me=this;
-			Ext.getCmp('headerRelease').add({
-				xtype: 'rallycheckboxfield',
-				boxLabel: 'Filter ' + me.PortfolioItemTypes[0] + 's in Release',
-				id: 'filterOnReleaseCheckbox',
-				value: me.FilterOnRelease,
-				listeners: { change: me.onFilterOnReleaseChanged.bind(me) }
-			});
-		},		
-		onFilterOnProjectChanged: function(checkBox){
-			var me=this;
-			me.onPreferenceChanged('FilterOnProject', checkBox.getValue())
-				.then(function(){ me.refreshTree(); })
-				.fail(function(reason){ me.alert('ERROR:', reason); })
-				.done();
-		},
-		renderFilterOnProject: function(){
-			var me=this;
-			Ext.getCmp('headerProject').add({
-				xtype: 'rallycheckboxfield',
-				boxLabel: 'Filter User Stories in Current Project',
-				id: 'filterOnProjectCheckbox',
-				hidden: !me.HasUserStories,
-				value: me.FilterOnProject,
-				listeners: { change: me.onFilterOnProjectChanged.bind(me) }
-			});
-		},			
-		onFilterOnCompleteChanged: function(checkBox){
-			var me=this;
-			me.onPreferenceChanged('FilterOnComplete', checkBox.getValue())
-				.then(function(){ me.refreshTree(); })
-				.fail(function(reason){ me.alert('ERROR:', reason); })
-				.done();
-		},
-		renderFilterOnComplete: function(){
-			var me=this;
-			Ext.getCmp('headerComplete').add({
-				xtype: 'rallycheckboxfield',
-				boxLabel: 'Hide Completed Items',
-				labelWidth: 170,
-				value: me.FilterOnComplete,
-				listeners: { change: me.onFilterOnCompleteChanged.bind(me) }
-			});
-		},
-
-		/******************************************************* GRID ITEMS *********************************************/
-		onTreeItemSelected: function(treeItem){
-			if(treeItem.xtype === 'fittedportfolioitemtreeitem'){
-				this.publish('portfoliotreeitemselected', treeItem);
-			}
-		},	
-		getDummyWsapiFilter: function(){
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property: 'ObjectID',
-				operator: '!=',
-				value: 0
-			});
-		},
-		getFilterOnCompleteFilter: function(ordinal){
-			//the best we can do is filter if state 'Done' or 'Complete(d)' exists
-			var me=this,
-				completeState = me.getPortfolioItemTypeStateByOrdinal(ordinal, 'Done') || 
-					me.getPortfolioItemTypeStateByOrdinal(ordinal, 'Complete') || 
-					me.getPortfolioItemTypeStateByOrdinal(ordinal, 'Completed');
-			if(completeState){
-				return Ext.create('Rally.data.wsapi.Filter', {
-					property:'State.OrderIndex',
-					operator:'<',
-					value: completeState.data.Ordinal
-				}).or(Ext.create('Rally.data.wsapi.Filter', {
-					property:'State',
-					value: null
-				}));
-			}
-			else return me.getDummyWsapiFilter();
-		},
-		getFilterOnReleaseFilter: function(){
-			var me=this;
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property: 'Release.Name',
-				value: me.FilterReleaseName 
-			});
-		},
-		getFilterOnQueryFilter: function(){
-			try { return Rally.data.QueryFilter.fromQueryString(this.QueryFilter); }
-			catch(e){ return this.getDummyWsapiFilter(); }
-		},	
-		getParentRecordFilter: function(parentRecord, ordinal){
-			return Ext.create('Rally.data.wsapi.Filter', {
-				property: (ordinal === 0 ? 'PortfolioItem' : 'Parent') + '.ObjectID', //only uses right under lowest PI have issue
-				value: parentRecord.data.ObjectID
-			});
-		},	
-		getTopLevelStoreConfig: function(ordinal){ //ordinal of this level
-			var me=this, 
-				filters = [];
-			if(me.FilterOnComplete) filters.push(me.getFilterOnCompleteFilter(ordinal));
-			if(me.FilterOnRelease && ordinal === 0) filters.push(me.getFilterOnReleaseFilter());
-			if(me.QueryFilter) filters.push(me.getFilterOnQueryFilter());
-			return {
-				limit:Infinity,
-				filters: filters,
-				context: {
-					project: me.PortfolioLocation.data._ref,
-					projectScopeDown: true,
-					projectScopeUp: false
-				}
-			};
-		},
-		getChildLevelStoreConfig: function(tree, parentRecord, isPI, ordinal){ //ordinal and isPI of PARENT item
-			var me=this,
-				context= {
-					project: me.PortfolioLocation.data._ref,
-					projectScopeDown: true,
-					projectScopeUp: false
+		/**___________________________________ RENDER GRID ___________________________________*/	
+		loadGrid: function(){
+			var me = this;
+			var columnCfgs = [{
+				dataIndex:'RiskID',
+				width:300,
+				text: 'RiskID',
+				editor:false,
+				draggable:false,
+				sortable:true,
+				resizable:false,
+				menuDisabled:true,
+				cls:'header-cls'
+			},{
+				dataIndex:'RiskJSON',
+				flex:1,
+				text: 'RiskJSON',
+				editor:{
+					xtype:'textarea',
+					grow:true,
+					growMin:20,
+					growMax:350
 				},
-				filters = [ me.getParentRecordFilter(parentRecord, ordinal)];
-			if(me.FilterOnComplete && isPI && ordinal > 0) filters.push(me.getFilterOnCompleteFilter(ordinal));
-			if(!isPI || ordinal === 0) {
-				if(me.FilterOnProject){ //we want only this project's stories
-					context.project = me.ProjectRecord.data._ref;
-					context.projectScopeDown = false;
+				draggable:false,
+				sortable:false,
+				resizable:false,
+				menuDisabled:true,
+				tdCls:'pre-wrap-cell intel-editor-cell',
+				cls:'header-cls'
+			},{
+				text:'',
+				width:24,
+				editor:false,
+				draggable:false,
+				sortable:false,
+				resizable:false,
+				menuDisabled:true,
+				cls:'header-cls',
+				renderer: function(value, meta, gridRecord, row, col){
+					var realRisk = _.find(me.Risks, function(r){ return r.RiskID === gridRecord.data.RiskID; }),
+						clickFnName = 'Click' + gridRecord.id.replace(/\-/g, 'z').replace('Ext.data.Store.ImplicitModel', '') + 'Fn' + col;
+					meta.tdAttr = 'title="Undo"';
+					window[clickFnName] = function(){
+						gridRecord.set('RiskJSON', JSON.stringify(realRisk, null, '  '));
+						gridRecord.commit();
+					};
+					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-undo"></i></div>';
 				}
-				else { //we want ALL user stories
-					context.project = null;
-					context.projectScopeDown = false;
+			},{
+				text:'',
+				width:24,
+				editor:false,
+				draggable:false,
+				sortable:false,
+				resizable:false,
+				menuDisabled:true,
+				cls:'header-cls',
+				renderer: function(value, meta, gridRecord, row, col){
+					var clickFnName = 'Click' + gridRecord.id.replace(/\-/g, 'z').replace('Ext.data.Store.ImplicitModel', '') + 'Fn' + col;
+					meta.tdAttr = 'title="Save Risk"';
+					window[clickFnName] = function(){
+						var newRiskJSON;
+						try { newRiskJSON = JSON.parse(gridRecord.data.RiskJSON); }
+						catch(e){ me.alert('ERROR', e); return; }
+						me.setLoading("Saving item");
+						RiskDb.update(gridRecord.data.RiskID, newRiskJSON)
+							.then(function(newRiskJSON){
+								_.each(me.Risks, function(e, i, a){
+									if(e.RiskID === newRiskJSON.RiskID) a[i] = newRiskJSON;
+								});
+							})
+							.fail(function(reason){ me.alert('ERROR', reason); })
+							.then(function(){ me.setLoading(false); })
+							.done();
+					};
+					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-floppy-o"></i></div>';
 				}
-			} 
-			if(me.FilterOnRelease && isPI && ordinal === 1) filters.push(me.getFilterOnReleaseFilter());
-			if(me.QueryFilter) filters.push(me.getFilterOnQueryFilter());
-			return {
-				limit:Infinity,
-				fetch: tree._getDefaultTopLevelFetchFields().concat(['Parent', 'Project', 'State']),
-				context: context,
-				filters:filters
-			};
-		},	
-		renderPortfolioTree: function(){
-			var me = this,
-				modelName ='PortfolioItem/' + me.PIType,
-				ordinal = me.portfolioItemTypeToOrdinal(me.PIType);
-
-			me.down('#bodyContainer').add({
-				xtype: 'rallyportfoliotree',
-				stateful: true,
-				stateId: me.getAppId() + 'rallyportfoliotree',
-				topLevelModel: modelName,
-				topLevelStoreConfig: me.getTopLevelStoreConfig(ordinal),
-				listeners: {
-					itemselected: me.onTreeItemSelected.bind(me)
-				},
-				childItemsStoreConfigForParentRecordFn: function(parentRecord) {
-					var tree = this,
-						isPI = tree._isPortfolioItem(parentRecord),
-						ordinal = parentRecord.self.ordinal;
-					return me.getChildLevelStoreConfig(tree, parentRecord, isPI, ordinal);
-				},
-				treeItemConfigForRecordFn: function(record){
-					var tree = this,
-						config = Rally.ui.tree.PortfolioTree.prototype.treeItemConfigForRecordFn.call(tree, record);
-					if(tree._isPortfolioItem(record)) config.xtype = 'fittedportfolioitemtreeitem'; 
-					else config.xtype = 'fitteduserstorytreeitem'; 
-					return config;
+			},{
+				text:'',
+				width:24,
+				editor:false,
+				draggable:false,
+				sortable:false,
+				resizable:false,
+				menuDisabled:true,
+				cls:'header-cls',
+				renderer: function(value, meta, gridRecord, row, col){
+					var clickFnName = 'Click' + gridRecord.id.replace(/\-/g, 'z').replace('Ext.data.Store.ImplicitModel', '') + 'Fn' + col;
+					meta.tdAttr = 'title="Delete Risk"';
+					window[clickFnName] = function(){
+						me.setLoading("Deleting item");
+						RiskDb['delete'](gridRecord.data.RiskID)
+							.then(function(){
+								me.Risks = _.filter(me.Risks, function(e){ return e.RiskID !== gridRecord.data.RiskID; });
+								gridRecord.destroy();
+							})
+							.fail(function(reason){ me.alert('ERROR', reason); })
+							.then(function(){ me.setLoading(false); })
+							.done();
+					};
+					return '<div class="intel-editor-cell" onclick="' + clickFnName + '()"><i class="fa fa-md fa-trash"></i></div>';
 				}
-			});
+			}];
+			
+			me.add({
+				xtype: 'grid',
+				title:'All Risks',
+				height:400,
+				cls: 'custom-field-grid',
+				scroll:'vertical',
+				columns: columnCfgs,
+				disableSelection: true,
+				enableEditing:true,
+				plugins: [Ext.create('Ext.grid.plugin.CellEditing', {clicksToEdit: 1})],
+				store: Ext.create('Rally.data.custom.Store', {
+					fields: ['RiskID', 'RiskJSON'],
+					data: me.Risks.map(function(risk){ return {RiskID: risk.RiskID, RiskJSON: JSON.stringify(risk, null, '  ')}; })
+				})
+			});	
 		}
 	});
 }());
 
-            Rally.launchApp('Intel.PortfolioNavigator.PortfolioHierarchy', {
-                name:"Portfolio Hierarchy",
+            Rally.launchApp('Intel.SAFe.RiskMasterEditor', {
+                name:"Risk Master Editor",
 	            parentRepos:""
             });
 
@@ -1720,39 +1693,48 @@
     </script>
 
 
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css"/>
 
     <style type="text/css">
-        .portfolio-hierarchy-app .rallytree {
-  padding-top: 5px;
-  padding-bottom: 20px;
+        .x-grid-cell.intel-editor-cell *,
+.x4-grid-cell.intel-editor-cell *,
+.intel-editor-cell {
+  cursor: pointer !important;
 }
-.portfolio-hierarchy-app .header {
-  border-bottom: 1px dotted #c6c6c6;
+.fa.fa-md {
+  font-size: 1.05rem;
+  line-height: .75em;
+  vertical-align: -15%;
 }
-.portfolio-hierarchy-app .filterInfo {
-  float: right;
-  padding-right: 1px;
-  border-right: 1px solid #CCC;
-  margin-right: 5px;
-  margin-top: 2px;
-  margin-bottom: 2px;
+/************************************************ RALLY BUTTON STYLE *****************************************/
+.intel-button {
+  border-radius: 2px;
+  background-color: #00a9e0;
+  border-color: #00a9e0;
 }
-.portfolio-hierarchy-app .rally-help-icon {
-  float: right;
+.intel-button:hover {
+  background-color: #29beff;
+  border-color: #29beff;
 }
-.portfolio-hierarchy-app .current-project-only-float {
-  float: left;
+.intel-button * {
+  font-size: 12px;
 }
-.portfolio-hierarchy-app .filter-on-release-float {
-  float: left;
-  margin-left: 10px;
-  margin-right: 8px;
+
+    </style>
+
+    <style type="text/css">
+        .custom-field-grid {
+  margin-bottom: 10px;
+  border: 2px solid black;
 }
-#filterOnReleaseCheckbox {
-  padding: 0 4px 0 0;
+.custom-field-grid .x-panel-header,
+.custom-field-grid .x4-panel-header {
+  font-weight: bold;
+  background-color: rgba(0, 255, 0, 0.4) !important;
 }
-#filterOnProjectCheckbox {
-  padding: 0 4px 0 0;
+.custom-field-grid .x-grid-cell-inner,
+.custom-field-grid .x4-grid-cell-inner {
+  white-space: pre !important;
 }
 
     </style>
