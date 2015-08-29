@@ -1271,7 +1271,7 @@
 			Ext.getCmp('grdScrumHealth').removeAll(); 
 			//hack to dynamically change the tab title
 			//TODO: find a better way
-			Ext.getCmp('scopeGridWrapper').tabBar.activeTab.update((me.PortfolioItemTypes[0] + " Progess").toUpperCase());
+			Ext.getCmp('scopeGridWrapper').tabBar.activeTab.update((me.PortfolioItemTypes[0] + " Progress").toUpperCase());
 			$('.x-tab-bar .x-tab-active').css({'font-size':'12px'});
 			//load all the child release to get the user story snap shots
 			//get the portfolioItems from wsapi
