@@ -1,6 +1,6 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
-	Ext.define('Intel.RetroDashboard', {
+	Ext.define('Intel.TrainPerformanceDashboard', {
 		extend: 'Intel.lib.IntelRallyApp',
 		componentCls: 'app',
 		requires: [

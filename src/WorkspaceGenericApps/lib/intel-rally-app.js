@@ -265,7 +265,7 @@
 		},	
 		loadUserStory: function(oid, projectRecord){
 			var me = this, deferred = Q.defer();
-			if(!oid) return Q.reject('Invalid arguments: LUS');
+			if(!oid) return Q.reject('Invalid arguments: loadUserStory');
 			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
 			else {
 				me.UserStory.load(oid, {
@@ -281,7 +281,7 @@
 		},	
 		loadPortfolioItemByType: function(oid, type){
 			var me = this, deferred = Q.defer();
-			if(!oid || !type) return Q.reject('Invalid arguments: LPIBT');
+			if(!oid || !type) return Q.reject('Invalid arguments: loadPortfolioItemByType');
 			else {
 				type = (type.indexOf('PortfolioItem/') === 0) ? type : ('PortfolioItem/' + type);	
 				me[type].load(oid, {
@@ -323,7 +323,7 @@
 			}
 		},
 		loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
-			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: _loadScrumGroupPortfolioProject');
+			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: loadScrumGroupPortfolioProject');
 			var me=this,
 				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
 					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
@@ -333,7 +333,7 @@
 			else return me.loadProject(foundScrumGroupConfig.PortfolioProjectOID);
 		},
 		getScrumGroupName: function(scrumGroupRootProjectRecord){
-			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: _getScrumGroupName';
+			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: getScrumGroupName';
 			var me=this,
 				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
 					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
@@ -411,7 +411,7 @@
 			);
 		},
 		loadRandomUserStory: function(projectRecord){
-			if(!projectRecord) return Q.reject('Invalid arguments: LRUS');
+			if(!projectRecord) return Q.reject('Invalid arguments: loadRandomUserStory');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -431,7 +431,7 @@
 			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
 		},
 		loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
-			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: LRUSFR');
+			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: loadRandomUserStoryFromReleaseTimeframe');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -459,7 +459,7 @@
 			});
 		},
 		loadUserStoryByFID: function(formattedID, projectRecord){
-			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: LUSBFID');
+			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: loadUserStoryByFID');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'HierarchicalRequirement',
@@ -486,7 +486,7 @@
 		
 		/**************************************** PortfolioItem Funcs ************************************************/
 		loadPortfolioItemsOfType: function(portfolioProject, type){
-			if(!portfolioProject || !type) return Q.reject('Invalid arguments: OPIOT');
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store',{
 					model: 'PortfolioItem/' + type,
@@ -521,7 +521,7 @@
 			return me.reloadStore(store);
 		},
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
-			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: LPIOO');
+			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: loadPortfolioItemsOfOrdinal');
 			var me=this, type = me.PortfolioItemTypes[ordinal];
 			if(type) return me.loadPortfolioItemsOfType(portfolioProject, type);
 			else return Q.reject('Invalid PortfolioItem ordinal');

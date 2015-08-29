@@ -367,8 +367,8 @@
 		*/
 		loadUserStories: function() {
 			var me=this,
-				lowestPortfolioItem = me.PortfolioItemTypes[0],
-				filter;
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
+				
 			me.UserStoryFetchFields = ['Name', 'ObjectID', 'Project', 'Owner', 'PlannedEndDate', 'ActualEndDate', 
 				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 
 				'Release', 'ReleaseStartDate', 'ReleaseDate', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
