@@ -3,12 +3,17 @@ MDO-RallyApps
 
 A sweet suite of apps.
 
-## For People who just want code
-All the files are in the dist folder. just copy and paste into a custom app
+## How to use these apps in your Workspace
+All the apps are in the `dist/` folder.
+
+__Before you install any app:__ You need to install the `dist/Workspace Configuration.html` custom app. This app configures the various things such as Trains, Horizontals, and locations of specific projects. 
+
+After you install the `dist/Workspace Configuration.html` app, you can install any of the other apps in the `dist/` folder by copying the code into a custom app page in Rally.
+
+__Many Apps have extra configuration__: Especially all the `SAFe` apps, like `dist/Team Report.html` and `dist/Risk Swimlanes.html`, etc... To look at these extra configuration options, look at the Wiki page for that app.
 
 ## For Developers
-
-All the apps are in the src/ folder, and all the output files are in the dist folder. you can go
+All the apps are in the `src/` folder, and all the generated output files are in the `dist/` folder. You can go
 edit and add apps to the src as long as they follow the conventions of the other apps.
 Do NOT `npm install` stuff for your apps, instead, if you need devDependencies for your app,
 install them in the root directory
@@ -26,8 +31,7 @@ install them in the root directory
 
 ### NOTES ABOUT DEVELOPING EXTERNALLY:
 
-There are a few reasons why you must develop some apps in rally using the copy/paste
-method. 
+There are a few reasons why it is easier to develop some apps in rally using the copy/paste method instead of developing locally:
 
 - Rally.environment is not set. You can't do Rally.env.Environment.getContext() or get the current user, project, workspace etc.
 - CORS, cookies, and iframes: we have no access to Rally's auth cookies when pointed
@@ -43,9 +47,11 @@ method.
 
 ### WSAPI NOTES
 
-- DO NOT USE PROJECTSCOPEDOWN FOR ANYTHING! It sometimes does not work correctly. Itsbetter to first get the Train -> then get the child projects from it (usually by getting all projects and then filtering by ones under the Train Project) -> then create a query with a bunch of (project.ObjectID = ...) OR'ed together. 
-	
+- __DO NOT USE PROJECTSCOPEDOWN FOR WORK ITEMS!__ It sometimes does not work correctly. Its better to first get the Parent Project -> then get the child projects from it (usually by getting all projects and then filtering by ones under the Train Project) -> then create a query with a bunch of (project.ObjectID = ...) OR'ed together. 
+
 - Sometimes we want to get the stories in a Release. The way I currently Do that is a query similar to this: ((Release.Name = X) OR (DirectChildrenCount = 0) AND ((Release.Name = null) AND (Feature.Release.Name = X))). We need the DirectChildrenCount = 0 or else we will double count parent UserStories's PlanEstimates.
+
+- you have to use `sdk 2.0rc3` instead of `sdk 2.0` because there is a weird issue in the sdk with fetch:[] fields and compress:true used together in queries. This bug makes some fetch:[] fields not return correctly
 	
 ### LOOKBACK NOTES
 

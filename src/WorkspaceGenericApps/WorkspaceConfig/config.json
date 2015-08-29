@@ -1,0 +1,22 @@
+{
+   "name": "Workspace Configuration",
+   "className": "Intel.WorkspaceConfiguration",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc3",
+   "javascript": [
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "../lib/intel-rally-app.js",
+      "../lib/resource/key-value-db.js",
+      "../lib/mixin/window-listener.js",
+      "../lib/mixin/iframe-resize.js",
+      "../lib/mixin/pretty-alert.js",
+      "../lib/vendor/component-column.js",
+      "../lib/component/intel-component-column.js",
+      "../lib/component/intel-combobox.js",
+      "App.js"
+   ],
+   "css": [
+      "../lib/css/base.css",
+      "app.css"
+   ]
+}

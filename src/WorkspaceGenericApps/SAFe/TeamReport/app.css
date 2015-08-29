@@ -1,0 +1,57 @@
+.team-report-grid-header-text { font-size: 13px !important; }
+
+.team-report-hidden-grid-row { display:none !important; }
+	
+/************************************************ NAVBAR/CONTAINERS *****************************************/
+#navbox { margin:0 10px 0 10px; }
+#releasePicker { margin: 4px 0 0 0; }
+#scrumGroupPicker { margin: 4px 0 0 5px; }
+#manualRefreshButton { margin: 5px 0 0 5px; }
+
+#tcVelBox { margin:0 10px 0 10px; }
+
+/************************************************ TEAM COMMITS GRID *****************************************/
+.team-commits-grid { padding:0 20px 0 0; }
+.team-commits-grey-row .x-grid-cell { background-color:rgba(224, 224, 224, 0.15) !important; } 
+.team-commits-grey-row.x-grid-row-selected .x-grid-cell { background-color:rgba(224, 224, 224, 0.25) !important; }
+.team-commits-red-row .x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; } 
+.team-commits-red-row.x-grid-row-selected .x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+.team-commits-green-row .x-grid-cell{ background-color:rgba(0, 255, 0, 0.15) !important; } 
+.team-commits-green-row.x-grid-row-selected .x-grid-cell { background-color:rgba(0, 255, 0, 0.25) !important; }
+
+/************************************************ VELOCITY GRID *****************************************/
+.velocity-grid {}
+.x-grid-row .velocity-grid-error-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; } /*red*/
+.x-grid-row-selected .velocity-grid-error-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.25) !important; }
+.x-grid-row .velocity-grid-warning-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.15) !important; } /*yellow*/
+.x-grid-row-selected .velocity-grid-warning-cell.x-grid-cell { background-color:rgba(230, 230, 0, 0.25) !important; }
+
+/************************************************ MINI DATA INTEGRITY GRID *****************************************/
+.mini-data-integrity-grid { margin:30px 0 0 0; }
+.mini-data-integrity-name-cell { 
+	border-left:1px solid black;
+	border-top:1px solid black;
+	border-bottom:1px solid black;
+	border-bottom-left-radius:5px;
+	border-top-left-radius:5px; }
+.green-bg-cell { background-color:#2ECC40 !important; }
+.aqua-bg-cell { background-color:#7FDBFF !important; }
+.silver-bg-cell { background-color:#DDDDDD !important; }
+.teal-bg-cell { background-color:#39CCCC !important; }
+.yellow-bg-cell { background-color:#FFDC00 !important; }
+.mini-data-integrity-num-cell { 
+	text-align:center;
+	border:1px solid black; }
+.mini-data-integrity-header { font-size:13px; }
+
+.x-grid-row .mini-data-integrity-red-cell.x-grid-cell { background-color:rgba(255, 0, 0, 0.15) !important; }
+.x-grid-row .mini-data-integrity-green-cell.x-grid-cell { background-color:rgba(0, 255, 0, 0.15) !important; }
+
+/************************************************ RISKS GRID *****************************************/
+#risk-grid { margin:40px 10px 0px 10px; }
+
+/************************************************ DEPENDENCIES GRIDS *****************************************/
+.predecessor-grid { margin:40px 10px 0px 10px; }
+.successor-grid { margin:40px 10px 40px 10px; }
+
+.predecessor-grid .add-new-button { margin: 0 10px 0 0; }

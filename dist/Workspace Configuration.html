@@ -1,0 +1,2582 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Workspace Configuration</title>
+
+    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                /** 
+	SUMMARY:
+		This extends Rally.app.app. All Intel Apps should extend from this if they want to use the functionality it provides,
+		as well as numerous other lib/* files that require you to extend from this.
+		
+		If you extend from Intel.lib.IntelRallyApp, you have to call me.configureIntelRallyApp() before anything else in your launch() 
+		function. After you call me.configureIntelRallyApp, you will be able to access a lot of things, such as:
+			- me.ScheduleStates: possible UserStory schedule States
+			- me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
+			- me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
+			- me.HorizontalGroupingConfig: the horizontal scrum groupings by keywords
+			- All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
+		
+	DEPENDENCIES:
+		Q promise library
+		
+	ISSUES:
+		sdk 2.0 does not work with the project function due to a bug in the sdk. use sdk 2.0rc3
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+	
+	//increase timeouts to 2 minutes since rally can be slow sometimes
+	var timeout = 120000;
+	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
+	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
+	
+	//rally's built-in jsonpproxy does not handle timeouts
+	Ext.override(Rally.sdk.data.lookback.JsonPProxy, {
+		setException: function(operation, response){
+			var error = operation.getError() || {};
+			operation.setException(Ext.apply(error, {
+				errors:(response || {}).Errors || []
+			}));
+		}
+	});
+				
+	Ext.define('Intel.lib.IntelRallyApp', {
+		extend: 'Rally.app.App',
+		minWidth:910, //when Rally adds its own scrollbar anyways
+		
+		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
+		portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal',
+			'PercentDoneByStoryPlanEstimate'],
+		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
+			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+		
+		/********************************************** APP CONFIGURATION **************************************/
+		_loadScheduleStates: function(){ 
+			var me=this, deferred = Q.defer();
+			Rally.data.ModelFactory.getModel({
+				type: 'UserStory',
+				success: function(model) {
+					model.getField('ScheduleState').getAllowedValueStore().load({
+						callback: function(records, operation, success) {
+							me.ScheduleStates = _.map(records, function(r){ return r.data.StringValue; });
+							deferred.resolve();
+						}
+					});
+				}
+			});
+			return deferred.promise;
+		},
+		_loadPortfolioItemStatesForEachType: function(){ 
+			var me=this;
+			me.PortfolioItemTypeStates = [];
+			return Q.all(_.map(me.PortfolioItemTypes, function(portfolioType, ordinal){
+				var store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'State',
+					autoLoad:false,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					fetch:['Name', 'Enabled', 'OrderIndex'],
+					filters: [{
+						property: 'TypeDef.Name',
+						value: portfolioType
+					},{
+						property: 'Enabled',
+						value: true
+					}]
+				});
+				return me.reloadStore(store).then(function(store){
+					me.PortfolioItemTypeStates[ordinal] = store.getRange();
+				});
+			}));
+		},
+		_loadPortfolioItemTypes: function(){ 
+			/** loads all the portfolioitem names into sorted array [smallest ordinal --> biggest ordinal] */
+			var me=this,
+				deferred = Q.defer(),
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'TypeDefinition',
+					autoLoad:true,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					fetch:['Ordinal', 'Name'],
+					filters: [{
+						property: 'Parent.Name',
+						value: 'Portfolio Item'
+					},{
+						property: 'Creatable',
+						value: true
+					}],
+					listeners:{
+						load:function(portfolioTypeStore){
+							me.PortfolioItemTypes = _.map(_.sortBy(_.map(portfolioTypeStore.getRange(), 
+								function(item){ return {Name: item.data.Name, Ordinal: item.data.Ordinal}; }),
+								function(item){ return item.Ordinal; }),
+								function(item){ return item.Name; });
+							deferred.resolve();
+						}
+					}
+				});
+			return deferred.promise;
+		},
+		_loadModels: function(){ 
+			/** loads models for project, userstories, and all the portfolio items */
+			var me=this, 
+				promises = [],
+				models = {
+					User: 'User',
+					Project: 'Project',
+					UserStory: 'HierarchicalRequirement',
+					PortfolioItem: 'PortfolioItem'
+				};
+			_.each(me.PortfolioItemTypes, function(name){ models['PortfolioItem/' + name] = 'PortfolioItem/' + name; });
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},
+		_loadScrumGroupConfig: function(){
+			/** scrum-groups are groups of scrums that share the same portfolio. The group of scrums may or may not be a train */
+			/** me.ScrumGroupConfig is an array of these objects: 
+				{
+					ScrumGroupRootProjectOID: configItem.ScrumGroupRootProjectOID || 0,
+					ScrumGroupName: configItem.ScrumGroupName || '',
+					ScrumGroupAndPortfolioLocationTheSame: configItem.ScrumGroupAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: configItem.PortfolioProjectOID || 0,
+					IsTrain: configItem.IsTrain ? true : false
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: ScrumGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
+					try{ scrumGroupConfig = JSON.parse(configString); }
+					catch(e){ scrumGroupConfig = []; }
+					me.ScrumGroupConfig = scrumGroupConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_loadHorizontalGroupingConfig: function(){
+			/** HorizontalGroupingConfig is this:
+			{
+				enabled: boolean,
+				groups: {
+					<horizontal1Name>: ['keyword1', 'keyword2'],
+					<horizontal2Name>: ['keyword1', 'keyword2'],
+					...
+				}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[HorizontalGroupingConfigPrefName], horizontalGroupingConfig;
+					try{ horizontalGroupingConfig = JSON.parse(configString); }
+					catch(e){ horizontalGroupingConfig = {enabled:false, groups:{}}; }
+					me.HorizontalGroupingConfig = horizontalGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveScrumGroupConfig: function(scrumGroupConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: ScrumGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		configureIntelRallyApp: function(){
+			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
+			return Q.all([
+				me._loadPortfolioItemTypes().then(function(){ 
+					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
+					return Q.all([
+						me._loadModels(),
+						me._loadPortfolioItemStatesForEachType()
+					]);
+				}),
+				me._loadScrumGroupConfig(),
+				me._loadHorizontalGroupingConfig(),
+				me._loadScheduleStates()
+			]);
+		},
+				
+		/**************************** Generic store loading with Q wrapper, returns promise *************************************/		
+		reloadStore: function(store){
+			var deferred = Q.defer();
+			store.load({
+				callback: function(records, operation, success){
+					if(!success) deferred.reject(operation.getError() || 'Could not load data');
+					else deferred.resolve(store);
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/********************************************** LOADING SINGLE MODELS **************************************/	
+		loadProject: function(oid){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.reject('Invalid arguments: loadProject');
+			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
+			else {
+				me.Project.load(oid, {
+					fetch: me.projectFields,
+					context: { 
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadUserStory: function(oid, projectRecord){
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.reject('Invalid arguments: loadUserStory');
+			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
+			else {
+				me.UserStory.load(oid, {
+					fetch: me.userStoryFields,
+					context: {
+						workspace: projectRecord ? null : me.getContext().getWorkspace()._ref,
+						project: projectRecord ? projectRecord.data._ref : null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadPortfolioItemByType: function(oid, type){
+			var me = this, deferred = Q.defer();
+			if(!oid || !type) return Q.reject('Invalid arguments: loadPortfolioItemByType');
+			else {
+				type = (type.indexOf('PortfolioItem/') === 0) ? type : ('PortfolioItem/' + type);	
+				me[type].load(oid, {
+					fetch: me.portfolioItemFields,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadPortfolioItemByOrdinal: function(oid, ordinal){
+			var me = this, deferred = Q.defer(),
+				type = me.PortfolioItemTypes[ordinal];
+			return me.loadPortfolioItemByType(oid, type);
+		},	
+		
+		/**************************************** ScrumGroup Funcs ***************************************************/
+		projectInWhichScrumGroup: function(projectRecord){ 
+			/** returns scrumgroup the projectRecord is in, otherwise null. */
+			if(!projectRecord) return Q();
+			else {
+				var me=this,
+					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
+					});
+				if(foundScrumGroupConfig) return Q(projectRecord);
+				else { 
+					var parent = projectRecord.data.Parent;
+					if(!parent) return Q();
+					else {
+						return me.loadProject(parent.ObjectID).then(function(parentRecord){
+							return me.projectInWhichScrumGroup(parentRecord);
+						});
+					}
+				}
+			}
+		},
+		loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: loadScrumGroupPortfolioProject');
+			var me=this,
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
+				});
+			if(!foundScrumGroupConfig) return Q.reject('Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum group!');
+			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
+			else return me.loadProject(foundScrumGroupConfig.PortfolioProjectOID);
+		},
+		getScrumGroupName: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: getScrumGroupName';
+			var me=this,
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
+				});
+			if(!foundScrumGroupConfig) throw 'Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum-group!';
+			if(foundScrumGroupConfig.ScrumGroupName) return foundScrumGroupConfig.ScrumGroupName;
+			else return scrumGroupRootProjectRecord.data.Name;
+		},
+		loadAllScrumGroups: function(){
+			var me=this,
+				filter = _.reduce(me.ScrumGroupConfig, function(filter, scrumGroupConfig){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: scrumGroupConfig.ScrumGroupRootProjectOID });
+					return filter ? filter.or(newFilter) : newFilter;
+				}, null);
+			if(!filter) return Q([]);
+			else {
+				var store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.projectFields,
+					filters:[filter],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+				return me.reloadStore(store).then(function(store){ return store.getRange(); });
+			}
+		},
+		getScrumGroupPortfolioObjectIDs: function(){
+			return _.map(me.ScrumGroupConfig, function(item){
+				return item.ScrumGroupAndPortfolioLocationTheSame ? item.ScrumGroupRootProjectOID : item.PortfolioProjectOID;
+			});
+		},
+		getPortfolioOIDForScrumGroupRootProjectRecord: function(scrumGroupRootProjectRecord){
+			var configItem = _.find(this.ScrumGroupConfig, function(item){ 
+				return item.ScrumGroupRootProjectOID === scrumGroupRootProjectRecord.data.ObjectID; 
+			});
+			return configItem.ScrumGroupAndPortfolioLocationTheSame ? configItem.ScrumGroupRootProjectOID : configItem.PortfolioProjectOID;
+		},
+		
+		/**************************************** UserStory Funcs ************************************************/
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
+			/** only pull look at PortfolioItem Release if US.Release == null */
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.ObjectID',
+					value: null
+				}).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property: lowestPortfolioItem + '.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property: lowestPortfolioItem + '.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				)
+			);
+		},
+		loadRandomUserStory: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: loadRandomUserStory');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					disableMetaChangeEvent: true,
+					fetch: false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{ 
+						property:'Project.ObjectID', 
+						value: projectRecord.data.ObjectID 
+					}]
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
+			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: loadRandomUserStoryFromReleaseTimeframe');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					disableMetaChangeEvent: true,
+					fetch: me.userStoryFields,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project.ObjectID', value: projectRecord.data.ObjectID }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+					]
+				});
+			return me.reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		loadUserStoryByFID: function(formattedID, projectRecord){
+			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: loadUserStoryByFID');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					disableMetaChangeEvent: true,
+					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					filters: [{
+						property:'FormattedID',
+						value:formattedID
+					},{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					}]
+				});
+			return me.reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},	
+		
+		/**************************************** PortfolioItem Funcs ************************************************/
+		loadPortfolioItemsOfType: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: me.portfolioItemFields,
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store);
+		},		
+		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
+			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: me.portfolioItemFields,
+					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store);
+		},
+		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
+			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: loadPortfolioItemsOfOrdinal');
+			var me=this, type = me.PortfolioItemTypes[ordinal];
+			if(type) return me.loadPortfolioItemsOfType(portfolioProject, type);
+			else return Q.reject('Invalid PortfolioItem ordinal');
+		},
+		portfolioItemTypeToOrdinal: function(type){
+			return this.PortfolioItemTypes.indexOf(type);
+		},
+		getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
+			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
+		},
+		getPortfolioItemTypeStateByName: function(portfolioType, stateName){
+			return this.getPortfolioItemTypeStateByOrdinal(this.portfolioItemTypeToOrdinal(portfolioType), stateName);
+		},
+		createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap: function(portfolioItemStores){
+			var portfolioItemMap = {};
+			_.each(portfolioItemStores[0].getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
+				var ordinal = 0, 
+					parentPortfolioItemRecord = lowPortfolioItemRecord,
+					getParentRecord = function(child, parentList){
+						return _.find(parentList, function(parent){ 
+							return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+						});
+					};
+				while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
+					parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
+					++ordinal;
+				}
+				if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+					portfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
+			});
+			return portfolioItemMap;
+		},
+			
+		/********************************************** Project Funcs ********************************************/
+		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
+		_storeItemsToProjTree: function(projects){
+			var me=this, projTree = {};
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			return projTree;
+		},
+		_addProjectsWithTeamMembersToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
+			}
+		},	
+		_allChildProjectToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_allLeafProjectsToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		loadAllProjects: function(){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				var map = _.reduce(store.getRange(), function(map, project){
+					map[project.data.ObjectID] = project;
+					return map;
+				}, {});
+				return map;
+			});	
+		},
+		loadProjectsWithTeamMembers: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				projectsWithTeamMembers = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
+					return projectsWithTeamMembers;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.TeamMembers.Count > 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},	
+		loadAllChildrenProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				childrenProjects = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+					return childrenProjects;
+				} else {
+					return _.reduce(store.getRange(), function(map, project){
+						map[project.data.ObjectID] = project;
+						return map;
+					}, {});
+				}
+			});
+		},	
+		loadAllLeafProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				leafProjects = {}, 
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+					return leafProjects;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.Children.Count === 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},
+		loadProjectByName: function(projectName){
+			if(!projectName) return Q.reject('Invalid arguments: LPBN');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'ObjectID'],
+					disableMetaChangeEvent: true,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [{
+						property:'Name',
+						value:projectName
+					}]
+				});
+			return me.reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},
+		
+		/********************************************** Release loading ********************************************/	
+		loadAllReleases: function(projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},	
+		loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					disableMetaChangeEvent: true,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>',
+						value: new Date(startDate).toISOString()
+					},{
+						property:'ReleaseStartDate',
+						operator:'<',
+						value: new Date(endDate).toISOString()
+					}]
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesInTheFuture: function(projectRecord){
+			return this.loadReleasesAfterGivenDate(projectRecord, new Date());
+		},
+		loadReleasesByNameUnderProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					}],
+					context:{
+						project:projectRecord.data._ref,
+						projectScopeDown:true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},	
+		loadReleaseByNameForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						operator:'contains',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
+			/** gets the most likely release to scope to base on the following order:
+				1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+								to use preferences for this one)
+				2) if we are currently in one of the releases
+				3) the closest release planning date to the current date
+			*/
+			var me=this,
+				d = new Date(),
+				rs = releaseRecords,
+				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+				_.find(rs, function(r){
+					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+				}) ||
+				_.reduce(rs, function(best, r){
+					if(best===null) return r;
+					else {
+						var d1 = new Date(best.data.ReleaseStartDate)*1, d2 = new Date(r.data.ReleaseStartDate)*1, now = new Date()*1;
+						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+					}
+				}, null);
+		}
+	});
+}());
+                /** 
+	SUMMARY: 
+		A project is used as a database. Each artifact in that project is a key-value pair. That means that all artifact of a certain type 
+		created in that project are created with 'key' and 'value' fields. Multiple artifacts can have the same 'key',
+		which will allow for easier filtering by other apps.
+		
+		Example: you want to make UserStories that represent the favorite color count for each person on each scrum. Every Story could
+		represent 1 person. So for project 'scrumA', and scrum member 'jim' who likes color 'blue' we would have:
+		
+			UserStory: {
+				c_usDbKey: 'favoriteColor-<scrumA ObjectID>-<userA ObjectID>',
+				c_usDbValue: 'blue'
+			}
+		
+		"key" field should be a unique 'string' field and "value field" should be a 'text' field.
+		
+		We have to keep track of which project this preference is stored in, so we create a custom field that keeps track of it.
+		
+		To Call the CRUD methods, you must first call initialize() method. You don't need to call initialize() before calling 
+		setDatabaseProjectOID or getDatabaseProjectOID. The CRUD methods for the key value pairs will return an object or list 
+		of objects of this form: 
+			
+			kvPair {
+				key: dbKey,
+				value: dbValue
+				ObjectID: artifactID
+			}
+	
+	DEPENDENCIES: 
+		- kriskowal/q
+		- jquery 2.X
+		- lodash
+		- the KEY_NAME and VALUE_NAME must be hidden custom fields on the <MODEL_NAME> artifact type you choose.
+			> so, if you use the defaults in this app, you have to create hidden c_usDbKey(string) and c_usDbValue(text) fields on 
+				HierarchicalRequirement in your workspace. Dont mess up the (string) and (text) part
+	
+	ISSUES: 
+		If someone has an app open that uses this, and another person changes the projectOID, the first person will continue to 
+		save key-value pairs to the old project. So make sure nobody is using apps that require this class when you are modifying the 
+		project serving as the database.
+		
+		Ext.Ajax keeps changing the apiKey in the url for POST, PUT and DELETE requests. Could not figure out why, so using jquery instead.
+		
+		Also, this uses ajax, not sure what that means with regards to CORS but I think you cannot use file:/// protocol when developing
+		locally.
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	/** 
+		The first 6 variables should probably just be left alone. But if you feel compelled to use Tasks or Defects as the KV storage
+		medium (MODEL_NAME) or change the KEY_NAME or VALUE_NAME or PREF_NAME, knock yourself out.
+		
+		The next 2 variables are the max length the key and value strings can be.
+		
+		The last 2 variables will be modified as apps use this database
+	*/
+	var PREF_NAME = 'intel-key-value-database-project',
+		MODEL_NAME = 'HierarchicalRequirement',
+		KEY_NAME = 'c_usDbKey',
+		VALUE_NAME = 'c_usDbValue',
+		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
+		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
+		
+		MAX_TEXT_LENGTH = 65536,
+		MAX_STRING_LENGTH = 256,
+		
+		INITIALIZED = false,
+		PROJECT_OID = 0;
+	
+	Ext.define('Intel.lib.resource.KeyValueDb', {
+		singleton: true,
+		
+		/**
+			private method for sending requests to the rally server. 
+		
+			method must be an HTTP method
+			params must be an object
+			data may be undefined or a non-null object
+			
+			returns Promise(httpResponseData)
+		*/
+		_sendRequest: function(method, params, urlExtension, data){
+			var deferred = Q.defer();
+			
+			if(['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1)                     return Q.reject('invalid method');
+			if(!(params instanceof Object) || params === null)                              return Q.reject('invalid params');
+			if(typeof urlExtension !== 'string' || urlExtension[0] !== '/')                 return Q.reject('invalid urlExtension');
+			if(typeof data !== 'undefined' && (!(data instanceof Object) || data === null)) return Q.reject('invalid data');
+
+			data = (data === undefined ? data : JSON.stringify(data, null, '  '));
+			params = _.map(Ext.merge({
+				fetch: ['ObjectID', KEY_NAME, VALUE_NAME].join(','),
+				project: '/project/' + PROJECT_OID,
+				projectScopeUp: false,
+				projectScopeDown: false,
+				key: SECURITY_KEY
+			}, params), function(value, key){ return key + '=' + value; }).join('&');
+			
+			var request = $.ajax({
+				url: BASE_URL + urlExtension + '?' + params,
+				method: method,
+				data: data,
+				dataType: 'json',
+				headers: {
+					'Content-Type' : 'application/json'
+				},
+				xhrFields: {
+					withCredentials: true
+				}
+			});
+			request.done(function(json){
+				var results, errors;
+				json = json.OperationResult || json.QueryResult || json.CreateResult || json[MODEL_NAME];
+				errors = json.Errors;
+				results = json.Results || json.Object || json;
+				if(errors && errors.length) deferred.reject(errors);
+				else deferred.resolve(results);
+			});
+			request.fail(function(jqXHR, textStatus){
+				deferred.reject(textStatus);
+			});
+			
+			return deferred.promise;
+		},
+		
+		/** 
+			You must call this before you can use it. Not using constructor because we need a promise to be returned.
+			This fails if the preference does not exist or holds a bad value.
+			returns Promise()
+		*/
+		initialize: function(){
+			if(INITIALIZED) return Q();
+			return this.getDatabaseProjectOID()
+				.then(function(projectOID){
+					projectOID = parseInt(projectOID, 10);
+					if(isNaN(projectOID) || projectOID <= 0) return Q.reject('KeyValueDb not properly initialized');
+					else PROJECT_OID = projectOID;
+				})
+				.then(function(){ INITIALIZED = true; });
+		},
+		
+		/** 
+			Sets the ObjectID for the project that will serve as a database.
+			returns Promise(projectOID)
+		*/
+		setDatabaseProjectOID: function(projectOID){
+			var settings = {}, deferred = Q.defer();
+			
+			projectOID = parseInt(projectOID, 10);
+			if(isNaN(projectOID) || projectOID <= 0) return Q.reject('invalid projectOID');
+			
+			settings[PREF_NAME] = projectOID; 
+			Rally.data.PreferenceManager.update({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
+				filterByName: PREF_NAME,
+				settings: settings,
+				success: function(prefs){ 
+					PROJECT_OID = projectOID;
+					deferred.resolve(projectOID); 
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+	
+		/** 
+			Gets the projectOID that serves as a database.
+			returns Promise(projectOID)
+		*/
+		getDatabaseProjectOID: function(){
+			var deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: Rally.environment.getContext().getWorkspace()._ref,
+				filterByName: PREF_NAME,
+				success: function(prefs){ 
+					var projectOID = parseInt(prefs[PREF_NAME], 10);
+					if(isNaN(projectOID) || projectOID <= 0) deferred.reject('invalid projectOID');
+					else deferred.resolve(projectOID); 
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		
+		/** returns Promise(kvPair || null) */
+		getKeyValuePair: function(dbKey){
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' = "' + dbKey + '")',
+					pagesize: 1
+				};
+			
+			return this._sendRequest('GET', params, urlExtension).then(function(items){ 
+				if(items.length){
+					return {
+						key: items[0][KEY_NAME],
+						value: items[0][VALUE_NAME],
+						ObjectID: items[0].ObjectID
+					};
+				}
+				else return null;
+			});
+		},
+		
+		/** returns Promise( [kvPair] ) */
+		queryKeyValuePairs: function(dbKeyContains){
+			var me=this, allItems = [];
+			
+			if(!INITIALIZED)                              return Q.reject('not initialized');
+			if(typeof dbKeyContains !== 'string')         return Q.reject('invalid key');
+			if(dbKeyContains.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			
+			var urlExtension = '/' + MODEL_NAME,
+				params = {
+					query: '(' + KEY_NAME + ' contains "' + dbKeyContains + '")',
+					pagesize: 200,
+					start: 1
+				};
+				
+			function nextPage(){
+				return me._sendRequest('GET', params, urlExtension).then(function(items){
+					if(items.length){
+						allItems = allItems.concat(items);
+						params.start += 200;
+						return nextPage();
+					}
+				});
+			}
+			return nextPage().then(function(){
+				return allItems.map(function(item){
+					return {
+						key: item[KEY_NAME],
+						value: item[VALUE_NAME],
+						ObjectID: item.ObjectID
+					};
+				});
+			});
+		},
+		
+		/** returns Promise(kvPair) */
+		createKeyValuePair: function(dbKey, dbValue){
+			var me = this, jsonData = {};
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
+			
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(kvPair) return Q.reject('key already exists');
+				else {					
+					var urlExtension = '/' + MODEL_NAME + '/create';
+					return me._sendRequest('PUT', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
+			});
+		},
+		
+		/** returns Promise(kvPair) */
+		updateKeyValuePair: function(dbKey, dbValue){
+			var me = this, jsonData = {};
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(typeof dbValue !== 'string')       return Q.reject('invalid value');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+			if(dbValue.length > MAX_TEXT_LENGTH)  return Q.reject('value too long');
+			
+			jsonData[MODEL_NAME] = {};
+			jsonData[MODEL_NAME][KEY_NAME] = dbKey;
+			jsonData[MODEL_NAME][VALUE_NAME] = dbValue;
+			jsonData[MODEL_NAME].Name = dbKey;
+
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(!kvPair) return Q.reject('key does not exist');
+				else{					
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;
+					return me._sendRequest('POST', {}, urlExtension, jsonData);
+				}
+			}).then(function(item){
+				return {
+					key: item[KEY_NAME],
+					value: item[VALUE_NAME],
+					ObjectID: item.ObjectID
+				};
+			});
+		},
+		
+		/** returns Promise(void) */
+		deleteKeyValuePair: function(dbKey){
+			var me = this;
+			
+			if(!INITIALIZED)                      return Q.reject('not initialized');
+			if(typeof dbKey !== 'string')         return Q.reject('invalid key');
+			if(dbKey.length === 0)                return Q.reject('key too short');
+			if(dbKey.length > MAX_STRING_LENGTH)  return Q.reject('key too long');
+
+			return me.getKeyValuePair(dbKey).then(function(kvPair){
+				if(kvPair){
+					var urlExtension = '/' + MODEL_NAME + '/' + kvPair.ObjectID;	
+					return me._sendRequest('DELETE', {}, urlExtension);
+				}
+			});
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		This mixin is used if you want to listen to events in the parent window (e.g. useful for rally apps that 
+		resize with browser screen vertically or things that need to know browser scroll position) 
+		You also can artificially fire the events and have the listeners run using fireParentWindowEvent
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		windowListeners = {};
+
+	Ext.define('Intel.lib.mixin.WindowListener', {
+
+		_initWindowEventListener: function(eventName){
+			if(!windowListeners) windowListeners = {};
+			windowListeners[eventName] = [];
+			
+			window.parent['on' + eventName] = function(event){ 
+				var listeners = windowListeners[eventName];
+				for(var i=0, len=listeners.length; i<len; ++i)
+					listeners[i](event);
+			};
+		},
+		
+		/** eventName is something like: resize, scroll, etc... */
+		addWindowEventListener: function(eventName, fn){
+			if(!windowListeners || !windowListeners[eventName]) 
+				this._initWindowEventListener(eventName);
+			windowListeners[eventName].push(fn);
+		},
+		
+		/** eventName is something like: resize, scroll, etc... */
+		fireParentWindowEvent: function(eventName){
+			var me=this;
+			if(!windowListeners || !windowListeners[eventName]) return;
+			var listeners = windowListeners[eventName];
+			for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		this mixin is used to mess with the environment outside of the iframe that the rally app is put in. 
+		
+	DEPENDENCIES:
+		'Intel.lib.mixin.WindowListener' mixed in to app so listen for window events
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	var TOP_BAR_HEIGHT = 40,
+		BOTTOM_BAR_HEIGHT = 24,
+		BOTTOM_IFRAME_PADDING = 20,
+		TITLE_BAR_HEIGHT = 33,
+		IFRAME_HEADER_HEIGHT = 28;
+		
+	Ext.define('Intel.lib.mixin.IframeResize', {
+		requires: ['Intel.lib.mixin.WindowListener'],
+		
+		/**
+			makes app as large as screen, without the padding/margin. 
+			Makes it look more like a built-in rally app instead of a custom app.
+			NOTE: as rally changes their interface overtime, this mixin will have to change as well to compensate for it.
+		*/
+		_fixRallyDashboard: function(){ 
+			if(window && window.frameElement){
+				var me=this,
+					bottomEl = Ext.get(window.frameElement),
+					portlet = bottomEl.up('.x-portlet'), 
+					dashboard = portlet.up('#mydash_portlet'), //has huge padding values
+					titleBar = dashboard.down('.titlebar'), //redundant with app header bar
+					domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
+					innerHeight = window.parent.innerHeight,
+					innerWidth = window.parent.innerWidth;
+				
+				//adjust widths
+				while(true){
+					domNodeW.style.width = (innerWidth - 4) + 'px';
+					domNodeW.style.padding = '0';
+					domNodeW.style.margin = '0';
+					if(domNodeW.id === 'mydash_portlet') break;
+					domNodeW = domNodeW.parentNode;
+				}
+				
+				//adjust heights
+				while(true){
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING)) + 'px';
+					if(domNodeH.classList.contains('x-portlet')) break;
+					domNodeH = domNodeH.parentNode;
+				}
+				while(true){
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT)) + 'px';
+					if(domNodeH.id == 'mydash_portlet') break;
+					domNodeH = domNodeH.parentNode;
+				}
+				dashboard.dom.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT)) + 'px';
+				
+				//final touches LOL
+				dashboard.dom.style.padding = "0 2px 0 2px";
+				titleBar.dom.style.padding = "2px";
+				titleBar.dom.style.margin = "0";
+			}
+		},		
+		initFixRallyDashboard: function(){ 
+			var me=this;
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
+			}
+			me._fixRallyDashboard();
+		},
+
+		/** 
+			hides the draggable resize handle from under the app 
+		*/
+		_disableResizeHandle: function(){ 
+			var me=this, handle;
+			if(window && window.frameElement){
+				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
+				if(handle) {
+					handle.hide();
+					handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				}
+			}
+		},	
+		initDisableResizeHandle: function(){
+			var me=this;
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
+			}
+			me._disableResizeHandle();
+		}
+	});
+}());
+                /**  
+	DESCRIPTION:
+		This mixin gives a window-centered alert or confirm dialog box that isn't ugly. 
+		
+	ISSUES:
+		Sometimes alert.setY() fails so we have to fallback to the ugly built-in alert
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('Intel.lib.mixin.PrettyAlert', {	
+		_getMessageBoxY: function(){ 
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
+				ps = window.frameElement ? window.parent.getScrollY() : window.scrollY,
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			return iyOffset<0 ? 0 : iyOffset;
+		},
+		
+		_formatString: function(message){
+			message = message || '';
+			return (typeof message === 'string') ? 
+				message : (message.message ? 
+				message.message : JSON.stringify(message, null, '\t'));
+		},
+
+		/** non-ugly alert dialog */
+		alert: function(title, message){
+			if(arguments.length<1) return;
+			if(arguments.length===1){
+				message = title;
+				title = '';
+			}
+			
+			try {
+				Ext.MessageBox.alert(this._formatString(title), this._formatString(message)).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			}
+			catch(e){ alert(this._formatString(message)); }
+		},
+		
+		/** non-ugly confirm dialog */
+		confirm: function(title, message, fn){
+			if(arguments.length<2) return;
+			if(arguments.length===2){
+				fn = message;
+				message = title;
+				title = '';
+			}
+			if(typeof fn !== 'function') fn = function(){};
+			
+			try {
+				Ext.MessageBox.confirm(this._formatString(title), this._formatString(message), fn).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			}
+			catch(e){ if(confirm(this._formatString(message))) fn('yes'); else fn('no'); }
+		}
+	});
+}());
+                //TODO: find this on a CDN and remove it from here
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	var POLL_INTERVAL_MS = 10;
+	
+	/*!
+	 * CTemplate
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/ctemplate
+	 
+		MY NOTE: how this works. XTemplates use apply() to convert the template to the actual HTML. CTemplate converts XTemplate into a bunch
+		of <p> tags and stores the ids of them and then immediately starts polling for them in doPolling. do POlling calls injectComponents
+		after the poll interval and if injectComponents does not render all the components, it calls doPolling again.
+		injectComponents calls renderComponent for each component.
+		overwrite and doInsert call the XTemplate parent functions, which call CTemplate's apply, and then they call injectComponents.
+		
+		NOTE: everytime apply() is called, the me.ids[] is generated, and when injectComponents is finished, me.ids[] is empty!
+	 */
+	Ext.define('Skirtle.CTemplate',{
+		extend: 'Ext.XTemplate',
+		statics: { AUTO_ID: 0 },
+		
+		copyDepth: 10,		
+		cTpl: '<p id="ctemplate-{0}-{1}"></p>',
+		isCTemplate: true,
+
+		constructor: function(){
+			var me = this;
+			me.callParent(arguments);
+			me.id = ++me.statics().AUTO_ID;
+			me.reset();
+		},
+
+		copyValues: function(values, depth){
+			/* Takes a recursive copy of the values provided, switching out components for placeholder values. The component ids
+			 * are recorded and injectComponents() uses the ids to find the placeholder elements in the DOM and switch in the
+			 * components.
+			 */
+			var me = this,
+				id,
+				copy = {},
+				copyDepth = depth || me.copyDepth;
+
+			if(copyDepth === 1) return values;
+
+			if(Ext.isArray(values)){
+				return Ext.Array.map(values, function(value) {
+					return me.copyValues(value, copyDepth - 1);
+				});
+			}
+
+			if(!Ext.isObject(values)) return values;
+
+			// This is the key sleight-of-hand that makes the whole thing work
+			if(values.isComponent){
+				id = values.getId();
+				me.ids.push(id);
+				return Ext.String.format(me.cTpl, id, me.id);
+			}
+
+			Ext.Object.each(values, function(key, value) {
+				// $comp is a special value for a renderTpl that references the current component
+				copy[key] = key === '$comp' ? value : me.copyValues(value, copyDepth - 1);
+			});
+
+			return copy;
+		},
+		doInsert: function() { // Override
+			//(calls this.apply() to convert ids to templates for XTemplate to put in the DOM
+			var ret = this.callParent(arguments);	
+			this.injectComponents();// There's no guarantee this will succeed so we still need polling as well
+			return ret;
+		},
+		doPolling: function(interval) {
+			var me = this;
+			me.pollInterval = interval;
+			if(me.pollId) clearTimeout(me.pollId);
+			me.pollId = Ext.defer(me.injectComponents, interval, me);
+		},
+		getPlaceholderEl: function(id) {
+			return Ext.get('ctemplate-' + id + '-' + this.id);
+		},	
+		injectComponents: function() {
+			/* Attempts to substitute all placeholder elements with the real components. If a component is successfully injected
+			 * or it has been destroyed then it won't be attempted again. This method is repeatedly invoked by a polling
+			 * mechanism until no components remain, however relying on the polling is not advised. Instead it is preferable to
+			 * call this method directly as soon as the generated HTML is inserted into the DOM.
+			 */
+			var me = this,
+				ids = me.ids,
+				index = ids.length - 1,
+				id,
+				cmp,
+				placeholderEl;
+
+			// Iterate backwards because we remove some elements in the loop
+			for( ; index >= 0 ; --index){
+				id = ids[index];
+				cmp = Ext.getCmp(id);
+				placeholderEl = me.getPlaceholderEl(id);
+				if(me.renderComponent(cmp, placeholderEl) || !cmp){
+					// Either we've successfully done the switch or the component has been destroyed
+					Ext.Array.splice(ids, index, 1);
+					if(placeholderEl) placeholderEl.remove();
+				}
+			}
+			// Some components have not been injected. Polling acts both to do deferred injection and as a form of GC
+			if(ids.length) me.doPolling(me.pollInterval); //originally was me.pollInterval * 1.5
+		},
+		overwrite: function(el){ // Override 
+			//(calls this.apply() to convert ids to templates for XTemplate to put in the DOM
+			var dom,
+				firstChild,
+				ret;
+
+			/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+			 * will fail as their DOM nodes will have been torn apart. We can't defend against external updates to the DOM
+			 * but we can guard against the case where all updates come through this template.
+			 */
+			if(Ext.isIE){
+				dom = Ext.getDom(el);
+				while(dom.firstChild){
+					dom.removeChild(dom.firstChild);
+				}
+			}
+			ret = this.callParent(arguments);		
+			this.injectComponents(); // There's no guarantee this will succeed so we still need polling as well
+			return ret;
+		},
+		renderComponent: function(cmp, placeholderEl){
+			if(cmp && placeholderEl){
+				var parent = placeholderEl.parent();
+				
+				// Move a component that has been rendered previously
+				if(cmp.rendered) cmp.getEl().replace(placeholderEl);
+				else cmp.render(parent, placeholderEl);
+
+				// Some components (mostly form fields) reserve space but fail to show up without a repaint in IE6
+				if(Ext.isIE6)	parent.repaint();
+				return true;
+			}
+			else return false;
+		},
+		reset: function() {
+			var me = this;	
+			me.ids = [];// The ids of injected components that haven't yet been rendered
+			if(me.pollId){
+				clearTimeout(me.pollId);
+				me.pollId = null;
+			}
+		}
+	}, function(ctemplate) {
+		var apply = function(){
+			var me = this,
+				args = Ext.Array.slice(arguments);
+			args[0] = me.copyValues(args[0]);
+			me.doPolling(POLL_INTERVAL_MS); // As we're returning an HTML string/array we can't actually complete the injection here
+			return me.callParent(args);
+		};
+		// The main override is different depending on whether we're using ExtJS 4.0 or 4.1+
+		if(ctemplate.prototype.applyOut) ctemplate.override({ applyOut: apply });// 4.1+
+		else {	
+			ctemplate.override({ applyTemplate: apply }); // 4.0
+			ctemplate.createAlias('apply', 'applyTemplate');
+		}
+	});
+
+	/*!
+	 * Component Column
+	 * Version 1.1
+	 * Copyright(c) 2011-2013 Skirtle's Den
+	 * License: http://skirtlesden.com/ux/component-column
+	 */
+	Ext.define('Skirtle.grid.column.Component', {
+		alias: 'widget.componentcolumn',
+		extend: 'Ext.grid.column.Column',
+		requires: ['Skirtle.CTemplate'],
+
+		autoWidthComponents: true, // Whether or not to automatically resize the components when the column resizes		
+		componentGC: true, // Whether or not to destroy components when they are removed from the DOM
+		hasCustomRenderer: true, // Override the superclass - this must always be true or odd things happen, especially in IE
+		lastFrameWidth: 12, // The estimated size of the cell frame. This is updated once there is a cell where it can be measured
+
+		/* Defer durations for updating the component width when a column resizes. Required when a component has an animated
+		 * resize that causes the scrollbar to appear/disappear. Otherwise the animated component can end up the wrong size.
+		 *
+		 * For ExtJS 4.0 both delays are required. For 4.1 just having the 10ms delay seems to be sufficient.
+		 */
+		widthUpdateDelay: [10, 400],
+
+		constructor: function(cfg) {
+			var me = this;
+
+			me.callParent(arguments);
+
+			// Array of component ids for both component queries and GC
+			me.compIds = [];
+
+			// We need a dataIndex, even if it doesn't correspond to a real field
+			me.dataIndex = me.dataIndex || Ext.id(null, 'cc-dataIndex-');
+			me.tpl = me.createTemplate(me.tpl);
+			me.renderer = me.createRenderer(me.renderer);
+			me.registerColumnListeners();
+		},
+		addRefOwner: function(child) {
+			var me = this,
+				fn = me.refOwnerFn || (me.refOwnerFn = function() { return me; });
+			if(me.extVersion < 40200) child.getBubbleTarget = fn; // Component queries for ancestors use getBubbleTarget in 4.1 ...
+			else child.getRefOwner = fn; // ... and getRefOwner in 4.2+
+		},
+		applyTemplate: function(data, value) {
+			if(Ext.isDefined(value)) data[this.dataIndex] = value;
+			return this.tpl.apply(data);
+		},
+		beforeViewRefresh: function() {
+			/* In IE setting the innerHTML will destroy the nodes for the previous content. If we try to reuse components it
+			 * will fail as their DOM nodes will have been torn apart. To defend against this we must remove the components
+			 * from the DOM just before the grid view is refreshed.
+			 */
+			if (Ext.isIE) {
+				var ids = this.compIds,
+					index = 0,
+					len = ids.length,
+					item,
+					el,
+					parentEl;
+
+				for ( ; index < len ; index++) {
+					if ((item = Ext.getCmp(ids[index])) && (el = item.getEl()) && (el = el.dom) && (parentEl = el.parentNode)) {
+						parentEl.removeChild(el);
+					}
+				}
+			}
+		},
+		calculateFrameWidth: function(component) {
+			var el = component.getEl(),
+				parentDiv = el && el.parent(),
+				// By default the TD has no padding but it is quite common to add some via a tdCls
+				parentTd = parentDiv && parentDiv.parent();
+
+			if(parentTd){
+				// Cache the frame width so that it can be used as a 'best guess' in cases where we don't have the elements
+				this.lastFrameWidth = parentDiv.getFrameWidth('lr') + parentTd.getFrameWidth('lr');
+				return this.lastFrameWidth;
+			}
+		},
+		createRenderer: function(renderer) {
+			var me = this;
+			return function(value, p, record) {
+				var data = Ext.apply({}, record.data, record.getAssociatedData());
+				if(renderer) value = renderer.apply(this, arguments); // Scope must be this, not me
+				// Process the value even with no renderer defined as the record may contain a component config
+				value = me.processValue(value);
+				return me.applyTemplate(data, value);
+			};
+		},
+		createTemplate: function(tpl) {
+			return tpl && tpl.isTemplate ? tpl : Ext.create('Skirtle.CTemplate', tpl || ['{', this.dataIndex ,'}']);
+		},
+		destroyChild: function(child) { child.destroy(); },
+		getRefItems: function(deep) {
+			var items = this.callParent([deep]),
+					ids = this.compIds,
+					index = 0,
+					len = ids.length,
+					item;
+
+			for( ; index < len ; index++){
+				item = Ext.getCmp(ids[index]);
+				if(item){
+					items.push(item);
+					if(deep && item.getRefItems) items.push.apply(items, item.getRefItems(true));
+				}
+			}
+			return items;
+		},
+		onChildAfterRender: function(child){ this.resizeChild(child); },
+		onChildBoxReady: function(child){
+			// Pass false to avoid triggering deferred resize, the afterrender listener will already cover those cases
+			this.resizeChild(child, false);
+		},
+		onChildDestroy: function(child){ Ext.Array.remove(this.compIds, child.getId()); },
+		onChildResize: function(){ this.redoScrollbars(); },
+		onColumnResize: function(column){ column.resizeAll(); },
+		onColumnShow: function(column){ column.resizeAll(); },
+		onColumnVisibilityChange: function(column) {
+			// This is called in IE 6/7 as the components can still be seen even when a column is hidden
+			var items = column.getRefItems(),
+				index = 0,
+				length = items.length,
+				visible = !column.isHidden();
+
+			// In practice this probably won't help but it shouldn't hurt either
+			if(Ext.suspendLayouts) Ext.suspendLayouts();
+
+			for( ; index < length ; ++index){
+				items[index].setVisible(visible);
+			}
+			if(Ext.resumeLayouts) Ext.resumeLayouts(true);
+		},
+		onDestroy: function() {
+				Ext.destroy(this.getRefItems());
+
+				this.callParent();
+		},
+		onRender: function(){ // Override
+			this.registerViewListeners();
+			this.callParent(arguments);
+		},
+		onViewChange: function() {
+			// View has changed, may be a full refresh or just a single row
+			var me = this,
+				tpl = me.tpl;
+
+			// Batch the resizing of child components until after they've all been injected
+			me.suspendResizing();
+
+			if (tpl.isCTemplate) {
+				// No need to wait for the polling, the sooner we inject the less painful it is
+				tpl.injectComponents();
+				// If the template picked up other components in the data we can just ignore them, they're not for us
+				tpl.reset();
+			}
+			// A view change could mean scrollbar problems. Note this won't actually do anything till we call resumeResizing
+			me.redoScrollbars();
+			me.resumeResizing();			
+			me.performGC();
+		},
+		performGC: function() {
+			// Component GC, try to stop components leaking
+			var compIds = this.compIds,
+				index = compIds.length - 1,
+				comp,
+				el;
+
+			for( ; index >= 0 ; --index){
+				// Could just assume that the component id is the el id but that seems risky
+				comp = Ext.getCmp(compIds[index]);
+				el = comp && comp.getEl();
+
+				if (!el || (this.componentGC && (!el.dom || Ext.getDom(Ext.id(el)) !== el.dom))) {
+					// The component is no longer in the DOM
+					if(comp && !comp.isDestroyed) comp.destroy();
+				}
+			}
+		},
+		processValue: function(value) {
+			var me = this,
+				compIds = me.compIds,
+				id, initialWidth, dom, parent;
+
+			if(Ext.isObject(value) && !value.isComponent && value.xtype) {
+				// Do not default to a panel, not only would it be an odd default but it makes future enhancements trickier
+				value = Ext.widget(value.xtype, value);
+			}
+
+			if(value && value.isComponent){
+				id = value.getId();
+				// When the view is refreshed the renderer could return a component that's already in the list
+				if(!Ext.Array.contains(compIds, id)) compIds.push(id);
+				me.addRefOwner(value);
+				me.registerListeners(value);
+				if(value.rendered){
+					/* This is only necessary in IE because it is just another manifestation of the innerHTML problems.
+					 * The problem occurs when a record value is changed and the components in that same row are being
+					 * reused. The view doesn't go through a full refresh, instead it performs a quick update on just the
+					 * one row. Unfortunately this nukes the existing components so we need to remove them first.
+					 */
+					if(Ext.isIE){
+						// TODO: Should this be promoted to CTemplate?
+						dom = value.el.dom;
+						parent = dom.parentNode;
+
+						if(parent){
+							if(me.extVersion === 40101){
+								// Workaround for the bugs in Element.syncContent - p tag matches CTemplate.cTpl
+								Ext.core.DomHelper.insertBefore(dom, {tag: 'p'});
+							}
+							// TODO: Removing the element like this could fall foul of Element GC
+							parent.removeChild(dom);
+						}
+					}
+				}
+				else if (me.autoWidthComponents) {
+					/* Set the width to a 'best guess' before the component is rendered to ensure that the component's
+					 * layout is using a configured width and not natural width. This avoids problems with 4.1.1 where
+					 * subsequent calls to setWidth are ignored because it believes the width is already correct but only
+					 * the outermost element is actually sized correctly. We could use an arbitrary width but instead we
+					 * make a reasonable guess at what the actual width will be to try to avoid extra resizing.
+					 */
+					initialWidth = me.getWidth() - me.lastFrameWidth;
+
+					// Impose a minimum width of 4, we really don't want negatives values or NaN slipping through
+					initialWidth = initialWidth > 4 ? initialWidth : 4;
+
+					value.setWidth(initialWidth);
+				}
+				// Part of the same IE 6/7 hack as onColumnVisibilityChange
+				if((Ext.isIE6 || Ext.isIE7) && me.isHidden()) value.hide();
+			}
+
+			return value;
+		},
+		redoScrollbars: function() {
+			var me = this,
+				grid = me.up('tablepanel');
+
+			if(grid){
+				// The presence of a resizeQueue signifies that we are currently suspended
+				if(me.resizeQueue){
+					me.redoScrollbarsRequired = true;
+					return;
+				}
+
+				// After components are injected the need for a grid scrollbar may need redetermining
+				if(me.extVersion < 40100){ // 4.0	
+					grid.invalidateScroller();
+					grid.determineScrollbars();
+				}
+				else grid.doLayout(); // 4.1+
+			}
+		},
+		registerColumnListeners: function() {
+			var me = this;
+
+			if(me.autoWidthComponents){
+				// Need to resize children when the column resizes
+				me.on('resize', me.onColumnResize);
+				// Need to resize children when the column is shown as they can't be resized correctly while it is hidden
+				me.on('show', me.onColumnShow);
+			}
+			if(Ext.isIE6 || Ext.isIE7){
+				me.on({
+					hide: me.onColumnVisibilityChange,
+					show: me.onColumnVisibilityChange
+				});
+			}
+		},
+		registerListeners: function(component) {
+			var me = this;
+
+			// Remove the component from the child list when it is destroyed
+			component.on('destroy', me.onChildDestroy, me);
+			if(me.autoWidthComponents){
+				// Need to resize children after render as some components (e.g. comboboxes) get it wrong otherwise
+				component.on('afterrender', me.onChildAfterRender, me, {single: true});
+
+				// With 4.1 boxready gives more reliable results than afterrender as it occurs after the initial sizing
+				if(me.extVersion >= 40100) component.on('boxready', me.onChildBoxReady, me, {single: true});
+			}
+
+			// Need to redo scrollbars when a child resizes
+			component.on('resize', me.onChildResize, me);
+		},
+		registerViewListeners: function() {
+				var me = this,
+					view = me.up('tablepanel').getView();
+				me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+				me.mon(view, 'refresh', me.onViewChange, me);
+				me.mon(view, 'itemupdate', me.onViewChange, me);
+				me.mon(view, 'itemadd', me.onViewChange, me);
+				me.mon(view, 'itemremove', me.onViewChange, me);
+		},
+		resizeAll: function() {
+				var me = this;
+				me.suspendResizing();
+				me.resizeQueue = me.getRefItems();
+				me.resumeResizing();
+		},
+		resizeChild: function(component, defer) {
+			var me = this,
+				frameWidth,
+				newWidth,
+				oldWidth,
+				resizeQueue;
+
+			if(me.resizingSuspended){
+				resizeQueue = me.resizeQueue;
+				if(!Ext.Array.contains(resizeQueue, component)) resizeQueue.push(component);
+				return;
+			}
+			frameWidth = me.calculateFrameWidth(component);
+
+			// TODO: Should we destroy the component here if it doesn't have a parent element? Already picked up anyway?
+			if(Ext.isNumber(frameWidth)){
+				newWidth = me.getWidth() - frameWidth;
+				oldWidth = component.getWidth();
+
+				// Returns true if a resize actually happened
+				if(me.setChildWidth(component, newWidth, oldWidth)){
+					// Avoid an infinite resizing loop, deferring will only happen once
+					if(defer !== false){
+						// Do the sizing again after a delay. This is because child panel collapse animations undo our sizing
+						Ext.each(me.widthUpdateDelay, function(delay){
+							Ext.defer(me.resizeChild, delay, me, [component, false]);
+						});
+					}
+				}
+			}
+		},
+		resumeResizing: function() {
+			var me = this,
+				index = 0,
+				resizeQueue = me.resizeQueue,
+				len = resizeQueue.length;
+
+			if(!--me.resizingSuspended) {
+				for ( ; index < len ; ++index){
+					me.resizeChild(resizeQueue[index]);
+				}
+				me.resizeQueue = null;
+				if (me.redoScrollbarsRequired) me.redoScrollbars();
+			}
+		},
+		setChildWidth: function(component, newWidth, oldWidth) {
+			if(oldWidth === newWidth) return false;
+			component.setWidth(newWidth);
+			return true;
+		},
+		suspendResizing: function() {
+			var me = this;
+			me.resizingSuspended = (me.resizingSuspended || 0) + 1;
+			if(!me.resizeQueue) me.resizeQueue = [];
+		}
+	}, 
+	function(cls){
+		var proto = cls.prototype,
+			version = Ext.getVersion();
+		proto.extVersion = (version.getMajor() * 100 + version.getMinor()) * 100 + version.getPatch(); // ExtJS version detection
+		// 4.1.1 initially reported its version as 4.1.0
+		if(Ext.Element.prototype.syncContent && version.toString() === '4.1.0') proto.extVersion = 40101;
+	});
+}());
+
+                /**
+	SUMMARY:
+		This override makes the ComponentColumn component much more performant. Edits found using Chrome profiling
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+		
+	Ext.define('Intel.lib.component.ComponentColumn', {
+		extend: 'Skirtle.grid.column.Component',
+		alias: 'widget.intelcomponentcolumn',
+
+		autoWidthComponents: false,
+		componentGC: true,
+		hasCustomRenderer: true,
+		lastFrameWidth: 12,		
+		constructor: function(cfg) {
+			var me = this;
+			me.callParent(arguments);
+		},
+		registerViewListeners: function() {
+			var me = this,
+				view = me.up('tablepanel').getView();
+
+			me.mon(view, 'beforerefresh', me.beforeViewRefresh, me);
+			me.mon(view, 'refresh', me.onViewChange, me);
+			//me.mon(view, 'itemupdate', me.onViewChange, me); //why are these necessary...
+			//me.mon(view, 'itemadd', me.onViewChange, me);
+			//me.mon(view, 'itemremove', me.onViewChange, me);
+		},
+		onViewChange: function() {
+			var me = this, tpl = me.tpl;
+			me.suspendResizing();
+			if (tpl.isCTemplate) {
+					tpl.injectComponents();
+					tpl.reset();
+			}
+			//me.redoScrollbars();
+			me.resumeResizing();
+			me.performGC();
+		},		
+		resumeResizing: function(){
+			var me = this,
+				index = 0,
+				resizeQueue = me.resizeQueue,
+				len = resizeQueue.length;
+			if (!--me.resizingSuspended) {
+				for ( ; index < len ; ++index) me.resizeChild(resizeQueue[index]);
+				me.resizeQueue = null;
+				/* if (me.redoScrollbarsRequired) {
+						me.redoScrollbars();
+				} */
+			}
+		},
+		onChildResize: function() {
+			//this.redoScrollbars();
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		This combo has filter-as-you-type and drops down on click. it also lets you navigate with arrow keys
+		(although there is some arrow key scrolling bug) 
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;	
+	
+	Ext.define('Intel.lib.component.ComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelcombo', 'widget.intelcombobox'],
+		
+		constructor: function(options) {
+			options = options || {};
+			options = Ext.merge({
+				enableKeyEvents:true,
+				queryMode:'local',
+				ignoreNoChange:true,
+				allowBlank:true,
+				listeners: {
+					change: function(a,b){
+						if(!b || (b.keyCode>=37 && b.keyCode <=40)) return; //arrow keys
+						var combo = this;
+						combo.store.clearFilter();
+						combo.store.filterBy(function(item){
+							var escapedValue = combo.getRawValue().replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+							return item.data[combo.displayField].match(new RegExp(escapedValue, 'i')) !== null;
+						});
+					},
+					focus: function(combo) {
+						combo.store.clearFilter();
+						combo.setValue('');
+						combo.expand();
+					}
+				}
+			}, options);
+			this.callParent([options]);
+		}
+	});
+}());
+                /** this app is used to configure the scrum-groups and portfolio locations in the workspace **/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		KeyValueDb = Intel.lib.resource.KeyValueDb,
+		VALID_HORIZONTAL_GROUPING_SYNTAX = /^(?:[\-\w\s\&]+\:[\-\w\s\&]+(?:,[\-\w\s\&]+)*;)*$/;
+		
+	Ext.define('Intel.WorkspaceConfiguration', {
+		extend: 'Intel.lib.IntelRallyApp',
+		mixins:[
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize'
+		],
+
+		/************************************************** UTIL FUNCS **********************************************/
+		getScrumGroupPortfolioStoreData: function(){
+			var me=this;
+			return _.map(me.ScrumGroupConfig, function(scrumGroupConfig){
+				return {
+					ScrumGroupRootProjectOID: scrumGroupConfig.ScrumGroupRootProjectOID || 0,
+					ScrumGroupName: scrumGroupConfig.ScrumGroupName || '',
+					ScrumGroupAndPortfolioLocationTheSame: scrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: scrumGroupConfig.PortfolioProjectOID || 0,
+					IsTrain: scrumGroupConfig.IsTrain ? true : false
+				};
+			});
+		},
+		horizontalGroupingObjToString: function(obj){
+			return _.reduce(obj, function(str, keywords, horizontal){
+				var newStr = horizontal + ':' + keywords.join(',') + ';';
+				return str.length ? str + '\n' + newStr : newStr;
+			}, '');
+		},
+		horizontalGroupingStringToObj: function(str){
+			return _.reduce(str.split('\n'), function(obj, str){
+				if(!str.length) return obj;
+				var split = str.split(':');
+				obj[split[0]] = split[1].replace(';','').split(',');
+				return obj;
+			}, {});
+		},
+		
+		/******************************************************* LAUNCH ********************************************************/	
+		launch: function(){
+			var me = this;
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.setLoading('Loading Configuration');
+			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
+				me.setLoading(false);
+				me.alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
+				return;
+			} 
+			me.configureIntelRallyApp()
+				.then(function(){ return me.loadAllProjects(); })
+				.then(function(allProjects){
+					me.AllProjects = allProjects;
+					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
+						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
+						function(item){ return item.Name; });
+				})
+				.then(function(){
+					return KeyValueDb.getDatabaseProjectOID()
+						.then(function(projectOID){ me.DatabaseProjectObjectID = projectOID; })
+						.fail(function(){ me.DatabaseProjectObjectID = undefined; });
+				})
+				.then(function(){
+					me.setLoading(false);
+					me.renderChooseDatabaseProject();
+					me.renderScrumGroupPortfolioGrid();
+					me.renderScrumHorizontalGroupingKeywords();
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me.alert('ERROR', reason);
+				})
+				.done();
+		},
+
+		/************************************************************* RENDER *******************************************/
+		renderChooseDatabaseProject: function(){
+			var me = this;
+			me.add({
+				xtype:'container',
+				cls: 'section-header-text',
+				html:'Key-Value Database Project Config'
+			});
+			me.add({
+				xtype: 'intelcombobox',
+				width: 400,
+				fieldLabel: 'Key-Value Database Project',
+				labelWidth: 200,
+				margin:'5px 0 20px 0',
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name', 'ObjectID'],
+					data: me.ProjectDataForStore
+				}),
+				value: me.DatabaseProjectObjectID,
+				displayField: 'Name',
+				valueField: 'ObjectID',
+				listeners: {
+					select: function(combo, records){
+						var newProjectOID = records[0].data.ObjectID;
+						if(me.DatabaseProjectObjectID === newProjectOID) return;
+						me.setLoading('Saving');
+						KeyValueDb.setDatabaseProjectOID(newProjectOID)
+							.then(function(){ me.DatabaseProjectObjectID = newProjectOID; })
+							.fail(function(reason){ me.alert(reason); })
+							.then(function(){ me.setLoading(false); })
+							.done();
+					}
+				}
+			});
+		},
+		renderScrumGroupPortfolioGrid: function(){
+			var me = this;
+			
+			me.ScrumGroupPortfolioConfigStore = Ext.create('Ext.data.Store', { 
+				fields: [
+					{name:'ScrumGroupRootProjectOID', type:'number'}, 
+					{name:'ScrumGroupName', type:'string'}, 
+					{name:'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'}, 
+					{name:'PortfolioProjectOID', type:'number'}, 
+					{name:'IsTrain', type:'boolean'}
+				],
+				data: me.getScrumGroupPortfolioStoreData()
+			});
+
+			var columns = [{
+				text:'Scrum Group Root Project',
+				dataIndex:'ScrumGroupRootProjectOID',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					width:'100%',
+					allowBlank:true,
+					store: Ext.create('Ext.data.Store', {
+						fields: ['Name', 'ObjectID'],
+						data: me.ProjectDataForStore
+					}),
+					displayField: 'Name',
+					valueField: 'ObjectID'
+					
+				},			
+				resizable:false,
+				draggable:false,
+				sortable:true,
+				renderer:function(pid){ 
+					if(!pid) return '-';
+					else return me.AllProjects[pid].data.Name;
+				}
+			},{
+				text:'Scrum Group Name', 
+				dataIndex:'ScrumGroupName',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'textfield',
+				resizable:false,
+				draggable:false,
+				sortable:true
+			},{
+				text:'Scrum Group And Portfolio Location The Same?', 
+				xtype:'checkcolumn',
+				dataIndex:'ScrumGroupAndPortfolioLocationTheSame',
+				flex:1,
+				resizable:false,
+				draggable:false,
+				sortable:true
+			},{
+				text:'Portfolio Project',
+				dataIndex:'PortfolioProjectOID',
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					width:'100%',
+					allowBlank:true,
+					store: Ext.create('Ext.data.Store', {
+						fields: ['Name', 'ObjectID'],
+						data: me.ProjectDataForStore
+					}),
+					displayField: 'Name',
+					valueField: 'ObjectID'
+				},			
+				resizable:false,
+				draggable:false,
+				sortable:true,
+				renderer:function(pid, meta, record){
+					if(!record.data.ScrumGroupAndPortfolioLocationTheSame) meta.tdCls += ' intel-editor-cell';
+					if(record.data.ScrumGroupAndPortfolioLocationTheSame || !pid) return '-';
+					else return me.AllProjects[pid].data.Name;
+				}
+			},{
+				text:'Is Train?', 
+				xtype:'checkcolumn',
+				dataIndex:'IsTrain',
+				width: 100,
+				resizable:false,
+				draggable:false,
+				sortable:true
+			},{
+				text:'',
+				width:160,
+				xtype:'intelcomponentcolumn',
+				tdCls: 'iconCell',
+				resizable:false,
+				draggable:false,
+				renderer: function(value, meta, record){
+					return {
+						xtype:'button',
+						text:'Remove Scrum Group',
+						width:'100%',
+						handler: function(){ me.ScrumGroupPortfolioConfigStore.remove(record); }
+					};
+				}
+			}];
+
+			me.ScrumGroupPortfolioConfigGrid = me.add({
+				xtype: 'grid',
+				emptyText: ' ',
+				header: {
+					layout: 'hbox',
+					items: [{
+						xtype:'text',
+						cls:'section-header-text',
+						width:500,
+						text:"Scrum Group Portfolio Config"
+					},{
+						xtype:'container',
+						flex:1000,
+						layout:{
+							type:'hbox',
+							pack:'end'
+						},
+						items:[{
+							xtype:'button',
+							text:'+ Add Scrum Group',
+							width:150,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									var model = Ext.create(me.ScrumGroupPortfolioConfigStore.getProxy().getModel(), {
+										ScrumGroupRootProjectOID: 0,
+										ScrumGroupName: '',
+										ScrumGroupAndPortfolioLocationTheSame: true,
+										PortfolioProjectOID: 0,
+										IsTrain: true
+									});
+									me.ScrumGroupPortfolioConfigStore.insert(0, [model]);
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Undo changes',
+							width:110,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									me.ScrumGroupPortfolioConfigStore.removeAll();
+									me.ScrumGroupPortfolioConfigStore.add(me.getScrumGroupPortfolioStoreData());
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Save Config',
+							width:100,
+							listeners:{ 
+								click: function(){
+									var scrumGroupRecords = me.ScrumGroupPortfolioConfigStore.getRange(),
+										scrumGroupData = _.map(scrumGroupRecords, function(scrumGroupRecord){
+											return {
+												ScrumGroupRootProjectOID: scrumGroupRecord.data.ScrumGroupRootProjectOID,
+												ScrumGroupName: scrumGroupRecord.data.ScrumGroupName,
+												ScrumGroupAndPortfolioLocationTheSame: scrumGroupRecord.data.ScrumGroupAndPortfolioLocationTheSame,
+												PortfolioProjectOID: scrumGroupRecord.data.PortfolioProjectOID,
+												IsTrain: scrumGroupRecord.data.IsTrain
+											};
+										}),
+										badScrumGroupRootOID = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupRootProjectOID) return true;
+										}),
+										badPortfolioOID = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame && !scrumGroupConfig.PortfolioProjectOID) return true;
+										}),
+										badScrumGroupName = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupName) return true;
+										}),
+										conflictingScrumGroupProject = _.find(scrumGroupData, function(scrumGroup1, idx1){
+											return _.some(scrumGroupData, function(scrumGroup2, idx2){
+												return idx1 !== idx2 && scrumGroup1.ScrumGroupRootProjectOID && 
+													(scrumGroup1.ScrumGroupRootProjectOID == scrumGroup2.ScrumGroupRootProjectOID);
+											});
+										}),
+										conflictingScrumGroupName = _.find(scrumGroupData, function(scrumGroup1, idx1){
+											return _.some(scrumGroupData, function(scrumGroup2, idx2){
+												return idx1 !== idx2 && scrumGroup1.ScrumGroupName === scrumGroup2.ScrumGroupName;
+											});
+										});
+										
+									/***************** run data integrity checks before saving *************************/
+									if(badScrumGroupRootOID) 
+										me.alert('ERROR', 'You must select a valid Scrum Group Root Project!');
+									else if(badPortfolioOID) 
+										me.alert('ERROR', 'You must select a valid Portfolio Project!');
+									else if(badScrumGroupName) 
+										me.alert('ERROR', 'Found an invalid Scrum Group Name!');
+									else if(conflictingScrumGroupProject) 
+										me.alert('ERROR', 'A project is used for more than 1 Scrum Group!');
+									else if(conflictingScrumGroupName) 
+										me.alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
+									else {
+										me.ScrumGroupPortfolioConfigGrid.setLoading('Saving Config');
+										me.saveScrumGroupConfig(scrumGroupData)
+											.fail(function(reason){ me.alert(reason); })
+											.then(function(){ me.ScrumGroupPortfolioConfigGrid.setLoading(false); })
+											.done();
+									}
+								}
+							}
+						}]
+					}]
+				},
+				margin:'0 0 20px 0',
+				width:'95%',
+				height:400,
+				scroll:'vertical',
+				columns: columns,
+				disableSelection: true,
+				plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 1 })],
+				viewConfig:{
+					stripeRows:true,
+					preserveScrollOnRefresh:true
+				},
+				listeners: {
+					beforeedit: function(editor, e){
+						var record = e.record,
+							field = e.field;
+						return (field != 'PortfolioProjectOID') || !record.data.ScrumGroupAndPortfolioLocationTheSame;
+					},
+					edit: function(editor, e){
+						var field = e.field,
+							value = e.value,
+							originalValue = e.originalValue,
+							record = e.record;
+						if(field == 'ScrumGroupName' && value != originalValue) record.set('ScrumGroupName', value.trim());
+					}
+				},
+				showRowActionsColumn:false,
+				showPagingToolbar:false,
+				enableEditing:false,
+				store: me.ScrumGroupPortfolioConfigStore
+			});	
+		},
+		renderScrumHorizontalGroupingKeywords: function(){
+			var me=this,
+				goodHTMLIndicator = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+				badHTMLIndicator = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
+				
+			function setIndicatorHTML(){
+				var indicatorEl = Ext.get('horizontalGroupingSyntaxNotifier'),
+					textareaParentEl = Ext.get('horizontalGroupingTextarea');
+				if(textareaParentEl && indicatorEl){
+					if(textareaParentEl.down('textarea').getValue().match(VALID_HORIZONTAL_GROUPING_SYNTAX)) 
+						indicatorEl.setHTML(goodHTMLIndicator);
+					else indicatorEl.setHTML(badHTMLIndicator);
+				}
+			}
+			
+			me.add({
+				xtype:'container',
+				id:'horizontalGroupingContainer',
+				margin:'0 0 50px 0',
+				items:[{
+					xtype:'text',
+					cls:'section-header-text',
+					text:"Horizontal Scrum Grouping Config"
+				},{
+					xtype:'checkbox',
+					id: 'enableHorizontalGroupingCheckbox',
+					fieldLabel: 'Enable Horizontal Scrum Groupings',
+					labelWidth: 200,
+					value: me.HorizontalGroupingConfig.enabled,
+					listeners: {
+						change: function(combo, newValue){
+							me.HorizontalGroupingConfig.enabled = newValue;
+							me.setLoading('Saving Preference');
+							me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.then(function(){ Ext.get('toggledHorizontalGroupingItems')[newValue ? 'show' : 'hide'](); })
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
+						}
+					}
+				},{
+					xtype:'container',
+					id: 'toggledHorizontalGroupingItems',
+					hidden: !me.HorizontalGroupingConfig.enabled,
+					border:false,
+					items: [{
+						xtype:'container',
+						id: 'horizontalGroupingInstructions',
+						border:false,
+						html:[
+							'<hr/>',
+							'<div>',
+								'<b>Set The Horizontal Groupings</b>',
+								'<p>Group Scrums into Horizontals By keywords. Syntax is:</p>',
+								'<div style="padding-left:5px;">',
+									'<p>HorizontalName1:keyword1,keyword2,keyword3;</p>',
+									'<p>HorizontalName2:keyword1,keyword2;</p>',
+									'<p>...</p>',
+								'</div>',
+							'</div>'
+						].join('\n')
+					},{
+						xtype:'textarea',
+						id: 'horizontalGroupingTextarea',
+						width:800, 
+						height:250,
+						value: me.horizontalGroupingObjToString(me.HorizontalGroupingConfig.groups),
+						listeners: { change: setIndicatorHTML }
+					},{
+						xtype:'container',
+						id: 'horizontalGroupingSyntaxNotifier',
+						listeners:{ added: function(){ setTimeout(setIndicatorHTML, 100); } }
+					},{
+						xtype:'button',
+						text:'Save Horizontal Grouping Config',
+						listeners:{ 
+							click: function(){
+								var textareaEl = Ext.get('horizontalGroupingTextarea').down('textarea');
+								if(!textareaEl.getValue().match(VALID_HORIZONTAL_GROUPING_SYNTAX)){
+									me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
+									return;
+								}
+								me.HorizontalGroupingConfig.groups = me.horizontalGroupingStringToObj(textareaEl.getValue());
+								me.setLoading('Saving Preference');
+								me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ me.setLoading(false); })
+								.done();
+							}
+						}
+					}]
+				}]
+			});
+		}
+	});
+}());
+
+            Rally.launchApp('Intel.WorkspaceConfiguration', {
+                name:"Workspace Configuration",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+
+    <style type="text/css">
+        .x-grid-cell.intel-editor-cell *,
+.x4-grid-cell.intel-editor-cell *,
+.intel-editor-cell {
+  cursor: pointer !important;
+}
+.fa.fa-md {
+  font-size: 1.05rem;
+  line-height: .75em;
+  vertical-align: -15%;
+}
+/************************************************ RALLY BUTTON STYLE *****************************************/
+.intel-button {
+  border-radius: 2px;
+  background-color: #00a9e0;
+  border-color: #00a9e0;
+}
+.intel-button:hover {
+  background-color: #29beff;
+  border-color: #29beff;
+}
+.intel-button * {
+  font-size: 12px;
+}
+
+    </style>
+
+    <style type="text/css">
+        .section-header-text {
+  font-size: 1.3rem;
+}
+
+    </style>
+</head>
+<body>
+</body>
+</html>

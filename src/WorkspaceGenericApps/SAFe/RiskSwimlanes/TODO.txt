@@ -1,0 +1,46 @@
+Allen's Decision: 
+	- should Blocked/BlockedReason fields be added
+	- should Archived field be added
+	- should KanbanLastMovedDate field be added (this would affect Archived boolean field after certain date)
+		> we would have to set a constant in RiskModel for 'DaysClosedUntilArchived' and look to archive risks when someone loads the page
+	
+TODO LATER: 
+	- add cool field picker for the cards
+	- add cool filter picker for the cards
+	DONE - test user combobox 
+	DONE - test key value db thoroughly
+	DONE - test risk db thoroughly
+	
+TODO:
+	DONE - add colors to cards 
+	DONE - add 'copy' card option
+	DONE - create look and feel of cards in regular app
+	DONE - create a universal modal for creating/editing/viewing risks
+	DONE - implement drag and drop
+	DONE - clean up the editor popup
+	DONE - add train filter for cards 
+	DONE - add product filter for cards 
+	DONE - add horizontal filter for cards 
+	DONE - stop it from jumping to the top when you make an edit on a card
+		> stopped having problems for no reason...keep an eye out
+
+TODO:
+	DONE 1) fix the promise stuff so that when we render swimlanes that everything gets halted until the _loadSwimlaneAgreements finishes. otherwise there will be a 
+		race condition
+	DONE 2) find out how to get the container's html to render? what am i doing wrong?
+	DONE 3) key does not exist error
+	DONE 4) add another release and make sure the release switching stuff works (delete card too if you switch!)
+	
+	
+URGENT TODO: 
+	DONE - when you switch the release in the editor, you have to delete the old risk and then create a new risk!
+	DONE - move swimlanes and card into their own ux component
+
+	DONE - fix the filter by owner box
+	DONE - when we delete a card, update the store in the filter by owner box
+	DONE - when we add a card, update the store in the filter by owner box
+	DONE - when we switch release, update combo
+ 
+	
+
+

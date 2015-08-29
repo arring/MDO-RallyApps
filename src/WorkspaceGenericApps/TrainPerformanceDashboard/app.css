@@ -1,0 +1,182 @@
+.app {
+     /* Add app styles here */
+	 
+}
+.ulInformation{
+	margin-top:-3px;
+}
+.clickForDateChange{
+	text-decoration:underline;
+	font-style:italic;
+	cursor: pointer;
+	padding-top: 5px;
+	padding-left: 5px;
+	margin-left:5px;
+}
+#cntDatePickerWrapper{
+	margin-left:5px;
+
+}
+#datePickerWrapper{
+	border-top: solid #BFBFBF 1px;
+	border-left: solid #BFBFBF 1px;
+	border-right: solid #BFBFBF 1px;
+	padding-top:5px;
+	padding-left:10px;
+	background-color: #cbdbef;
+}
+/* .appInfo{
+	float:right;
+	text-align:right;
+	font:bold;
+	font-weight: bold;
+	color: green;
+} */
+.rui-triggerfield .icon-calendar {
+  background-image: none;
+  color: #888;
+  font-size: 12px;
+  padding: 3px 3px 5px 4px;
+} 
+.chart-wrapper{
+	width:100%;
+}
+.retrochart-wrapper{
+	clear:both;
+	float:right;
+/* 	border: solid green 1px; */
+	/*change the width percentage to change the size of the donut-wrapper*/
+}
+.barchart-wrapper{
+	border-bottom: solid #BFBFBF 1px;  
+	border-left: solid #BFBFBF 1px;  
+	border-right: solid #BFBFBF 1px;  
+	width: 100%;/*change the width percentage to change the size of the donut-wrapper*/
+/* 	background-color:red; */
+}
+#cntInformation{
+	clear:both;
+	float:right;
+	text-decoration:underline;
+	font-style:italic;
+	font-weight:bold;
+	color:green;
+	text-align:right;
+	border-top: solid #BFBFBF 1px; 
+	border-left: solid #BFBFBF 1px;  
+	border-right: solid #BFBFBF 1px;
+	width:100%;
+}
+.help{
+	cursor: pointer;
+}
+.legendwrapper{
+	margin-top: -35px;
+/* 	border:red solid 1px; */
+	float: right;
+	width: 40%;
+	text-align: center;
+}
+.mtargetwrapper{
+	float:left;
+	color: #333333;
+	font-size: 12px;
+	font-weight: bold;
+}
+.mtarget {
+	float:left;
+	background-color:#92D050;
+	height:12px;
+	width:16px;
+	margin-left: 50px;
+	margin-right:3px;
+	margin-top: 3px;
+}
+.atarget {
+	float:left;
+	height:12px;
+	width:16px;
+	margin-left: 50px;
+	margin-right:3px;
+	margin-top: 3px;
+}
+.dtargetwrapper{
+	float: left;
+	color: #333333;
+	font-size: 12px;
+	font-weight: bold;
+	cursor: pointer;
+}
+.dtarget{
+	float:left;
+	background-color:#d05052;
+	height:12px;
+	width:16px;
+	margin-left: 10px;
+	margin-right: 3px;
+	margin-top: 3px;
+}
+#grid_header_hd{
+	color: #396295;
+	font-size: 14px;
+	font-weight: bold;
+}
+
+/* simple, float it right instead of left */
+.progress-right .progress-bar-r {
+  float: left;
+	border:solid red 1px;
+	height: 20px;
+	text-align: left;
+	background-color:#fc8585;
+	text-shadow: 0 1px 0 #D05052;
+	color:black;
+}
+div.sr-only {
+  border: solid #D05052 1px;
+  float: left;
+  background-color:#D05052;
+  color:white;
+  height:19px;
+  overflow:visible;
+/*   direction: rtl; */
+  
+}
+.require-attention {
+	color:red;
+}
+.good-job {
+  color: #1ab058;
+  font-weight: bold;
+}
+.grd-ScrumHealth .x-panel-header {
+  background-color: whitesmoke;
+}
+.grd-ScrumHealth .x-panel-header-text {
+  color: #40d0ed;
+	font-weight:bold;
+}
+
+#grdScrumHealthHeader {
+	margin-top: 5px;
+	font-size: 12px;
+	text-align: center;
+}
+#grdScrumHealthHeader a{
+	color:black;
+	text-decoration:underline;
+}
+
+.x-tab-default-override {
+		border-bottom: 1px solid #deecfd;
+		background-color: #cbdbef;
+		border-color: #8db3e3;
+}
+.x-tab-default-override a{
+		border-color: #8db3e3;
+		background-color: #cbdbef;
+    cursor: pointer;
+}
+.x-tab-default-top{
+	background-color:white !important;
+	}

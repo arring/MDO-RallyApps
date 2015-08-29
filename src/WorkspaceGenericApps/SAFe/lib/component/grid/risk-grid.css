@@ -1,0 +1,22 @@
+.risk-grid .risk-grid-header-text {
+	font-size: 13px; }
+	
+.risk-grid .add-new-button,
+.risk-grid .clear-filters-button {
+	border-radius: 2px;
+	margin-left: 10px;
+	background-color: #00a9e0;
+	border-color: #00a9e0; }
+	
+	.risk-grid .add-new-button:hover,
+	.risk-grid .clear-filters-button:hover {
+		background-color: #29beff;
+		border-color: #29beff; }
+	
+	.risk-grid .add-new-button *,
+	.risk-grid .clear-filters-button * {
+		font-size: 12px; }
+
+.risk-grid .x-grid-row .x-grid-cell,
+.risk-grid .x-grid-row.x-grid-row-alt.x-grid-row-over .x-grid-cell {
+	background-color: transparent !important; }

@@ -1,0 +1,22 @@
+/************************************************ NAVBAR/TOOLSBAR *****************************************/
+#navbar { padding:0 10px 10px 10px; }
+	#releasePicker { margin: 4px 0 0 0; }
+	#scrumGroupPicker { margin: 4px 0 0 15px; }
+
+#toolsbar { margin-top:10px; }
+	#addNewButton {
+		padding: 3px; 
+		background-color: #00a9e0;
+		border-color: #00a9e0; }
+		
+	#filterByOwnerDropdown,
+	#filterByTopPortfolioItemDropdown,
+	#filterByHorizontalDropdown {
+		margin-left:20px; }
+		
+	#showCheckpointsCheckbox {
+		margin-right:20px; }
+
+
+				
+	

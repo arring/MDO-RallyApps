@@ -1,7 +1,18 @@
+/**
+	This is the build script that runs the app builder on all projects in the src/ 
+	folder and places the App-uncompressed files in the dist/ folder.
+	
+	This script should really only be run 1 time right before a new release (tag) 
+	is made in the git repository.
+	
+	If sm-rab is installed, it will generate the sm-app files in dist/sm-dist
+	(all sm-rab does is make it so the custom-app gets rendered outside of the 
+	iframe in rally, which allows you to drag-and-drop with other native rally
+	apps, or custom apps built with sm-rab)
+*/
 require('shelljs/global');
 
-var fs = require('fs'),
-	util = require('util'),
+var util = require('util'),
 	path = require('path'),
 	
 	hasSmRab = which('sm-rab'),

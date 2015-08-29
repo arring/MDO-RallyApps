@@ -1,6 +1,6 @@
 {
   "name": "MDO-RallyApps",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Suite of Custom Rally Apps",
   "repository": {
     "type": "git",
@@ -13,6 +13,10 @@
     },
     {
       "name": "Sarita Regmi"
+    },
+    {
+      "name": "Matthew Stevens",
+			"email": "smatth25@vt.edu"
     },
     {
       "name": "Allen Ringel"
@@ -29,11 +33,11 @@
     "url": "https://github.com/arring/MDO-RallyApps/issues"
   },
   "homepage": "https://github.com/arring/MDO-RallyApps",
-	"scripts": {
-		"build": "node scripts/build.js",
-		"lint": "echo linting is currently a no-op",
-		"test": "testing is currently a no-op"
-	},
+  "scripts": {
+    "build": "node scripts/build.js",
+    "lint": "echo linting is currently a no-op",
+    "test": "testing is currently a no-op"
+  },
   "dependencies": {
     "lodash": "^3.6.0",
     "q": "^1.2.0",
