@@ -1,16 +1,9 @@
 MDO-RallyApps
 =============
-
-A sweet suite of apps.
+_A suite of Rally Apps built for MDO group within Intel_
 
 ## How to use these apps in your Workspace
-All the apps are in the `dist/` folder.
-
-__Before you install any app:__ You need to install the `dist/Workspace Configuration.html` custom app. This app configures the various things such as Trains, Horizontals, and locations of specific projects. 
-
-After you install the `dist/Workspace Configuration.html` app, you can install any of the other apps in the `dist/` folder by copying the code into a custom app page in Rally.
-
-__Many Apps have extra configuration__: Especially all the `SAFe` apps, like `dist/Team Report.html` and `dist/Risk Swimlanes.html`, etc... To look at these extra configuration options, __look at the Wiki__ page for that app.
+It is highly recommended you first quick read through the [Wiki Pages](https://github.com/arring/MDO-RallyApps/wiki) for the apps. Otherwise, the apps to paste into the custom app are in the [dist folder](https://github.com/arring/MDO-RallyApps/tree/master/dist). _(NOTE: your going to want to click on `Raw` so you can `Ctrl+A, Ctrl+C` some of the apps, since they are 8000+ lines long)_
 
 ## For Developers
-Read the `Developer Notes` page in the wiki
+Read the [Developer Notes](https://github.com/arring/MDO-RallyApps/wiki/Developer-Notes) page in the wiki
