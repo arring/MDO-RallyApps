@@ -709,8 +709,9 @@
 					dataIndex: "Name",
 					flex:4,
 					renderer: function(v, m, r) {
+						//TODO: find why r.data.ProjectObjectID is empty , temp: replacing with me.ProjectRecord.data.ObjectID
 						return Ext.String.format('<a href="{0}/#/{1}d/detail/portfolioitem/{2}/{3}" target="_blank">{4}: </a>{5}', 
-							me.BaseUrl, r.data.ProjectObjectID, lowestPortfolioItemType, r.data.ObjectID, r.data.FormattedID, v );
+							me.BaseUrl, me.ProjectRecord.data.ObjectID, lowestPortfolioItemType, r.data.ObjectID, r.data.FormattedID, v );
 					}
 				},{
 					header: "% Complete<br/> @ Release Start " + me.InitialTargetDate,
