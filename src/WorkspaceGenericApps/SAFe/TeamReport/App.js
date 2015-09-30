@@ -1480,19 +1480,23 @@
 				});
 			delete iterationGroups.__DELETE__; //ignore those not in an iteration
 			
-			var iterationGroupTotals = _.sortBy(_.map(me.IterationStore.getRecords(), function(iteration) {
-				var iName = iteration.data.Name;
-				return {    
-					Name: iName, 
-					PlannedVelocity: iteration.data.PlannedVelocity || 0,
-					RealVelocity: _.reduce((iterationGroups[iName] || []), function(sum, us) { 
-						return sum + 
-							(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
-								us.data.PlanEstimate : 
-								0);
-					}, 0)
-				};
-			}), 'Name');
+			var iterationGroupTotals = _.map(_.sortBy(me.IterationStore.getRecords(), 
+				function(iteration){
+					return new Date(iteration.data.StartDate);
+				}),
+				function(iteration) {
+					var iName = iteration.data.Name;
+					return {    
+						Name: iName, 
+						PlannedVelocity: iteration.data.PlannedVelocity || 0,
+						RealVelocity: _.reduce((iterationGroups[iName] || []), function(sum, us) { 
+							return sum + 
+								(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
+									us.data.PlanEstimate : 
+									0);
+						}, 0)
+					};
+				});
 			
 			var velocityStore = Ext.create('Intel.lib.component.Store', {
 				data: iterationGroupTotals,
