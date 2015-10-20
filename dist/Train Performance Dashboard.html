@@ -2687,8 +2687,8 @@
 				}]
 			}]
 		}],
-		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'Project'], //override intel-rally-app		
-		portfolioItemFields: ['Name','ObjectID','FormattedID','Release','PlannedEndDate'], //override intel-rally-app
+		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name'], //override intel-rally-app		
+		portfolioItemFields: ['Name','ObjectID','FormattedID','Release','PlannedEndDate','Project'], //override intel-rally-app
 		releaseFields:  ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'], //override intel-rally-app
 		userAppsPref: 'intel-retro-dashboard',	//dont share release scope settings with other apps	
 		
@@ -3065,54 +3065,53 @@
 		},
 		_calculateDataIntegrity: function(projectStoreMap){
 			var me = this;
-			var releaseName = me.ReleaseRecord.data.Name;
+			var releaseName = me.ReleaseRecord.data.Name,
+				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
+				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
+				now = new Date(),
+				lowestPortfolioItemType = me.PortfolioItemTypes[0];
 			//blocked stories
 			var blockedStories = 0, unsizedStoires= 0,  improperlySizedStoires= 0,  storyWithoutIteration= 0, 
-				storyWithoutRelease= 0,  unacceptedStoriesinPastIteration= 0,  storiesScheduleAftePortfolioItemEndDate= 0;
-				
-			blockedStories = _.size(_.filter(projectStoreMap, function(userStories){
-				return userStories.data.Blocked === true;
-				}));
-			// unsized stories
+				storyinIterationNotAttachedToRelease= 0,  unacceptedStoriesinPastIteration= 0,  storiesScheduleAfterPortfolioItemEndDate= 0;
+
 			unsizedStoires = _.size(_.filter(projectStoreMap, function(userStories){
-				return userStories.data.PlanEstimate === null;
-				}));
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				return userStories.data.PlanEstimate === null; 
+			}));
 			//improperly sized stories
 			improperlySizedStoires = _.size(_.filter(projectStoreMap, function(userStories){
-				if (userStories.data.PlanEstimate !== null && 
-					userStories.data.PlanEstimate !== 0 &&	
-					userStories.data.PlanEstimate !== 1 &&	
-					userStories.data.PlanEstimate !== 2 && 
-					userStories.data.PlanEstimate !== 4 &&	
-					userStories.data.PlanEstimate !== 8 && 
-					userStories.data.PlanEstimate !== 16 )
-          return userStories;
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				if(userStories.data.Children.Count === 0) return false;
+				var pe = userStories.data.PlanEstimate;
+				return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 				}));
 			//stories in release without iteration 
 			storyWithoutIteration = _.size(_.filter(projectStoreMap, function(userStories){
-				return userStories.data.Iteration === null;
-				}));
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				return !userStories.data.Iteration; 
+			}));
 			//stories in iteration not attached to release
 			storyinIterationNotAttachedToRelease = _.size(_.filter(projectStoreMap, function(userStories){
-				if(!userStories.data.Iteration)	return false;
-				return (userStories.data.Iteration.Name.indexOf(releaseName) > -1) &&(!userStories.data.Release || userStories.data.Release.Name.indexOf(releaseName) < 0);
+				if (!userStories.data.Iteration) return false;
+				return (new Date(userStories.data.Iteration.StartDate) < releaseDate && new Date(userStories.data.Iteration.EndDate) > releaseStartDate) &&
+				(!userStories.data.Release || userStories.data.Release.Name.indexOf(releaseName) < 0);
 			}));
 			//unaccepted stories in past iteration
-			var today = new Date(),
-				lowestPortfolioItemType = me.PortfolioItemTypes[0];
 			unacceptedStoriesinPastIteration = _.size(_.filter(projectStoreMap, function(userStories){
-				if(userStories.data.Iteration!==null && userStories.data.Iteration.EndDate < today.toISOString() && userStories.data.ScheduleState!='Accepted')
-					return userStories;
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				if(!userStories.data.Iteration) return false;
+				return new Date(userStories.data.Iteration.EndDate) < now && userStories.data.ScheduleState != 'Accepted';
+			
 			}));
 			// stories scheduled after lowestPortfolioItemType end date
-			storiesScheduleAftePortfolioItemEndDate =  _.size(_.filter(projectStoreMap, function(userStories){
-				if(userStories.data[lowestPortfolioItemType] !==null && 
-					userStories.data.Iteration!==null &&
-					userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate && 
-					userStories.data.ScheduleState !="Accepted")
-					return userStories;
+			storiesScheduleAfterPortfolioItemEndDate = _.size(_.filter(projectStoreMap, function(userStories){
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				if(!userStories.data.Iteration || !userStories.data[lowestPortfolioItemType] || 
+					!userStories.data[lowestPortfolioItemType].PlannedEndDate || !userStories.data.Iteration.StartDate) return false;
+				if(userStories.data.ScheduleState == 'Accepted') return false;
+				return userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate;
 				}));
-				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyWithoutRelease + unacceptedStoriesinPastIteration + storiesScheduleAftePortfolioItemEndDate;
+				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyinIterationNotAttachedToRelease + unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
 		},
 		_buildFitnessGrid: function(){
 			var me = this;
