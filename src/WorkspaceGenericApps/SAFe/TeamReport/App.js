@@ -182,6 +182,8 @@
 				inIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.Name', operator: 'contains', value: releaseName})).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null })),
 				userStoryProjectFilter = Ext.create('Rally.data.wsapi.Filter', { 
 					property: 'Project.ObjectID', 
@@ -273,8 +275,8 @@
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				releaseName = me.ReleaseRecord.data.Name,
-				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
-				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
+				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
+				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
 			return [{
 				title: 'Unsized Stories',
@@ -299,9 +301,12 @@
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
-					if(!item.data.Iteration || item.data.Release) return false;
-					return new Date(item.data.Iteration.StartDate) < new Date(releaseDate) && 
-						new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
+					// if(!item.data.Iteration || item.data.Release) return false;
+					// return new Date(item.data.Iteration.StartDate) < new Date(releaseDate) && 
+						// new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
+					if (!item.data.Iteration) return false;
+					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
+						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 				})
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
