@@ -1,5 +1,6 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext;
+	
 	Ext.define('Intel.TrainPerformanceDashboard', {
 		extend: 'Intel.lib.IntelRallyApp',
 		componentCls: 'app',
@@ -392,7 +393,7 @@
 				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
 			]);
 		},				
-		_getStories: function(){
+		_loadStories: function(){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				config = {
@@ -1232,35 +1233,25 @@
 				me.initialAddedDaysCount = Math.floor(( Date.parse(date2) - Date.parse(date1) ) / _1day );				
 			}
 		},
-		_loadScopeToReleaseTab: function(){
+		_renderScopeToReleaseTab: function(){
 			var me = this;
 			if(me.AllSnapshots.length === 0 ){
-					me.alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
-					return;     
-				}else{
-					me._buildScopeToReleaseStore();
-					me._buildPortfolioProgressGrid();
-				}
+					me.alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name); 
+			} else {
+				me._buildScopeToReleaseStore();
+				me._buildPortfolioProgressGrid();
+			}
 		},
-		_loadARTScrumFitnessTab: function(){
+		_renderARTScrumFitnessTab: function(){
 			var me = this;
-			return Q.all([
-				me._getStories()
-			])
-			.then(function(){
-				me._buildArtScrumFitnessGridStore();
-				me._buildFitnessGrid();
-				Ext.getCmp('scopeGridWrapper').setLoading(false);
-				Ext.getCmp('datePickerWrapper').setLoading(false);
-				me._renderReleaseDetailHeader(); 
-			})
-			.fail(function(reason){
-				Ext.getCmp('scopeGridWrapper').setLoading(false);
-				Ext.getCmp('datePickerWrapper').setLoading(false);
-				me.alert('ERROR', reason); 
-			})
-			.done();
+			me._buildArtScrumFitnessGridStore();
+			me._buildFitnessGrid();
+			Ext.getCmp('scopeGridWrapper').setLoading(false);
+			Ext.getCmp('datePickerWrapper').setLoading(false);
+			me._renderReleaseDetailHeader(); 
 
+			Ext.getCmp('scopeGridWrapper').setLoading(false);
+			Ext.getCmp('datePickerWrapper').setLoading(false);
 		},
 		_reloadEverything: function(){
 			var me = this;
@@ -1275,7 +1266,7 @@
 			//load all the child release to get the user story snap shots
 			//get the portfolioItems from wsapi
 			return Q.all([
-				me._loadAllChildReleases() ,
+				me._loadAllChildReleases(),
 				me._getPortfolioItems()
 			])
 			.then(function(){
@@ -1288,7 +1279,11 @@
 				});
 			})
 			.then(function(){ 
-				return me._loadSnapshotStores(); 
+				//load data
+				return Q.all([
+					me._loadStories(),
+					me._loadSnapshotStores()
+				]);
 			})
 			.then(function(){  
 				//load all the user story snap shot for release
@@ -1297,16 +1292,13 @@
 				me._buildRetroChart();
 				me._hideHighchartsLinks();
 
-			})
-			.then(function(){ 
 				if(me.AllSnapshots.length === 0 ){
-					me.alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name);
-					return;     
-				}else{
+					me.alert('ERROR', me.ScrumGroupRootRecord.data.Name + ' has no data for release: ' + me.ReleaseRecord.data.Name); 
+				} else {
 					Ext.getCmp('scopeGridWrapper').setLoading("Loading Scrum Fitness Grid");
 					Ext.getCmp('datePickerWrapper').setLoading("Loading Scrum Fitness Grid");
-					me._loadScopeToReleaseTab();
-					me._loadARTScrumFitnessTab();
+					me._renderScopeToReleaseTab();
+					me._renderARTScrumFitnessTab();
 				}
 			});
 		},   
@@ -1320,7 +1312,7 @@
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //two streams
+					return Q.all([
 						me.projectInWhichScrumGroup(me.ProjectRecord) /********* 1 ************/
 							.then(function(scrumGroupRootRecord){
 								if(scrumGroupRootRecord){
