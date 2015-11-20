@@ -68,6 +68,11 @@
 	border-left: 1px solid black; 
 }
 
+.grid-container > span > div {
+	display:flex !important;
+	justify-content:center; 
+}
+
 /* 
 .stdci-cell-container  .x-box-inner {
 	height: 100% !important;

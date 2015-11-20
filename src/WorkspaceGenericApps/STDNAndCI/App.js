@@ -50,15 +50,11 @@
 					itemId:'navboxLeftVert',
 					layout: 'vbox'
 				}]
-			},{
-				xtype:'container',
-				flex:2,
-				itemId:'navboxRight',
-				layout: {
-					type:'hbox',
-					pack:'end'
-				}
 			}]
+		},{
+			xtype:'container',
+			itemId:'gridContainer',
+			cls: 'grid-container'
 		}],
 		minWidth:910,
 		
@@ -485,7 +481,11 @@
 				horizontalData: {HorizontalName:'', Total:0, STDCI:0},
 				horizontalTeamTypes: ['-'],
 			}, _.reduce(trainTotals, function(map, trainTotal, trainName){
-				map[trainName] = [{stdciPoints: trainTotal.STDCI, totalPoints:trainTotal.Total}];
+				map[trainName] = [{
+					stdciPoints: trainTotal.STDCI, 
+					totalPoints:trainTotal.Total,
+					scrumName: trainName
+				}];
 				return map;
 			}, {})));
 			
@@ -525,10 +525,10 @@
 							width: '100%',
 							items: _.map(horizontalTeamTypes, function(teamType){
 								return {
-									xtype: 'text',
+									xtype: 'container',
 									flex:1,
 									cls: 'team-type-cell',
-									text: teamType
+									html: teamType
 								};
 							})
 						});
@@ -553,10 +553,11 @@
 								items: _.map(scrumDataList, function(scrumData){
 									var exists = (scrumData !== null);
 									var percent = exists ? (scrumData.stdciPoints/scrumData.totalPoints*100)>>0 : 0;
+									var tooltip = exists ? (scrumData.scrumName + ': ' + scrumData.stdciPoints + '/' + scrumData.totalPoints + ' points') : '';
 									return {
-										xtype: 'text',
+										xtype: 'container',
 										cls: exists ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell',
-										text: exists ? (percent + '%') : '-'
+										html: exists ? '<span title="' + tooltip + '">' + percent + '%</span>' : '-'
 									};
 								})
 							});
@@ -572,14 +573,15 @@
 					renderer:function(horizontalData, meta){
 						var hasData = horizontalData.Total > 0;
 						var percent =  hasData ? (horizontalData.STDCI/horizontalData.Total*100)>>0 : 0;
+						var tooltip = hasData ? (horizontalData.HorizontalName + ': ' + horizontalData.STDCI + '/' + horizontalData.Total + ' points') : '';
 						meta.tdCls += hasData ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell';
-						return hasData ? percent + '%' : '-';
+						return hasData ? '<span title="' + tooltip + '">' + percent + '%</span>' : '-';
 					}
 				}]
 			);
 		
 			//finally build the grid
-			me.add({
+			me.down('#gridContainer').add({
 				xtype: 'grid',
 				header: {
 					items: [{
@@ -591,6 +593,7 @@
 					stripeRows: false,
 					preserveScrollOnRefresh:true
 				},
+				width: _.reduce(columns, function(sum, column){ return sum + column.width; }, 2),
 				columns: {
 					defaults: {
 						text:'',
