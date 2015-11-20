@@ -14,12 +14,14 @@
       "../lib/mixin/parallel-loader.js",
       "../lib/mixin/user-apps-preference.js",
       "../lib/mixin/horizontal-team-types.js",
+      "../lib/vendor/component-column.js",
       "../lib/component/intel-combobox.js",
       "../lib/component/intel-fixed-combobox.js",
       "../lib/component/intel-release-picker.js",
       "../lib/component/intel-session-storage.js",
       "../lib/component/intel-store.js",
       "../lib/component/intel-table-view.js",
+      "../lib/component/intel-component-column.js",
       "App.js"
    ],
    "css": [

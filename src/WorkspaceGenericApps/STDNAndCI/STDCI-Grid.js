@@ -273,7 +273,7 @@
 							scrumObjectID: 10,
 							totalPoints: 101,
 							stdciPoints: 56
-						}
+						},
 					}
 				},
 				Train3: {
@@ -300,7 +300,7 @@
 							scrumObjectID: 10,
 							totalPoints: 101,
 							stdciPoints: 5
-						}
+						},
 					}
 				},
 				Train4: {
@@ -330,72 +330,71 @@
 			
 			//debugging the grid only
 			me.GridData = me.getTestData();
-			me.renderGrid();
 			return;
 			
-			// me.setLoading('Loading configuration');
-			// me.ClickMode = 'Details';
-			// me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
-			// me.initDisableResizeHandle();
-			// me.initFixRallyDashboard();
-			// me.initGridResize();
-			// if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
-				// me.setLoading(false);
-				// me.alert('ERROR', 'You do not have permissions to edit this project');
-				// return;
-			// }	
-			// me.configureIntelRallyApp()
-				// .then(function(){
-					// var scopeProject = me.getContext().getProject();
-					// return me.loadProject(scopeProject.ObjectID);
-				// })
-				// .then(function(scopeProjectRecord){
-					// me.ProjectRecord = scopeProjectRecord;
-					// return Q.all([
-						// me.projectInWhichScrumGroup(me.ProjectRecord)
-							// .then(function(scrumGroupRootRecord){
-								// if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-									// me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									// return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-										// .then(function(scrumGroupPortfolioProject){
-											// if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
-											// me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										// });
-								// } 
-								// else return Q.reject('You are not scoped to a valid project');
-							// }),
-						// me.loadAppsPreference()
-							// .then(function(appsPref){
-								// me.AppsPref = appsPref;
-								// var twelveWeeks = 1000*60*60*24*7*12;
-								// return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-							// })
-							// .then(function(releaseRecords){
-								// me.ReleaseRecords = releaseRecords;
-								// var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								// if(currentRelease) me.ReleaseRecord = currentRelease;
-								// else return Q.reject('This project has no releases.');
-							// }),
-						// me.loadProjectsWithTeamMembers(me.ProjectRecord)
-							// .then(function(projectsWithTeamMembers){ 
-								// me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
-							// }),
-						// me.loadAllChildrenProjects()
-							// .then(function(allProjects){ 
-								// me.AllProjects = allProjects; 
-							// }),
-						// me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
-					// ]);
-				// })
-				// .then(function(){ 
-					// me.setRefreshInterval(); 
-					// return me.reloadEverything(); 
-				// })
-				// .fail(function(reason){
-					// me.setLoading(false);
-					// me.alert('ERROR', reason);
-				// })
-				// .done();
+			me.setLoading('Loading configuration');
+			me.ClickMode = 'Details';
+			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.initGridResize();
+			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
+				me.setLoading(false);
+				me.alert('ERROR', 'You do not have permissions to edit this project');
+				return;
+			}	
+			me.configureIntelRallyApp()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me.loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					return Q.all([
+						me.projectInWhichScrumGroup(me.ProjectRecord)
+							.then(function(scrumGroupRootRecord){
+								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+									me.ScrumGroupRootRecord = scrumGroupRootRecord;
+									return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+										.then(function(scrumGroupPortfolioProject){
+											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+										});
+								} 
+								else return Q.reject('You are not scoped to a valid project');
+							}),
+						me.loadAppsPreference()
+							.then(function(appsPref){
+								me.AppsPref = appsPref;
+								var twelveWeeks = 1000*60*60*24*7*12;
+								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+							})
+							.then(function(releaseRecords){
+								me.ReleaseRecords = releaseRecords;
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								if(currentRelease) me.ReleaseRecord = currentRelease;
+								else return Q.reject('This project has no releases.');
+							}),
+						me.loadProjectsWithTeamMembers(me.ProjectRecord)
+							.then(function(projectsWithTeamMembers){ 
+								me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+							}),
+						me.loadAllChildrenProjects()
+							.then(function(allProjects){ 
+								me.AllProjects = allProjects; 
+							}),
+						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
+					]);
+				})
+				.then(function(){ 
+					me.setRefreshInterval(); 
+					return me.reloadEverything(); 
+				})
+				.fail(function(reason){
+					me.setLoading(false);
+					me.alert('ERROR', reason);
+				})
+				.done();
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
@@ -451,49 +450,39 @@
 			_.each(me.GridData, function(trainData, trainName){
 				trainTotals[trainName] = {TrainName:trainName, Total:0, STDCI:0};
 				_.each(trainData, function(horizontalData, horizontalName){
-					horizontalTotals[horizontalName] = horizontalTotals[horizontalName] || {HorizontalName:horizontalName, Total:0, STDCI:0};
+					horizontalTotals[horizontalName] = horizontalTotals[horizontalName] || {HorizontalName:horizontalName, Total:0, SDTCI:0};
 					horizontalTeamTypes[horizontalName] = horizontalTeamTypes[horizontalName] || [];
 					_.each(horizontalData, function(scrumData, scrumTeamType){
-						horizontalTotals[horizontalName].STDCI += scrumData.stdciPoints;
+						horizontalTotals[horizontalName].SDTCI += scrumData.stdciPoints;
 						horizontalTotals[horizontalName].Total += scrumData.totalPoints;
-						trainTotals[trainName].STDCI += scrumData.stdciPoints;
+						trainTotals[trainName].SDTCI += scrumData.stdciPoints;
 						trainTotals[trainName].Total += scrumData.totalPoints;
-						horizontalTeamTypes[horizontalName].push(scrumTeamType);
+						horizontalTeamTypes.push(scrumTeamType);
 					});
-				});
+				}):
 			}, []);
 			
 			//build the rows for the table
 			var data = _.map(_.keys(horizontalTotals), function(horizontalTotalName){
-				return {
-					horizontalData: horizontalTotals[horizontalTotalName],
-					horizontalTeamTypes: _.uniq(horizontalTeamTypes[horizontalTotalName]).sort()
-				};
+				horizontalData: horizontalTotals[horizontalTotalName],
+				horizontalTeamTypes: _.uniq(horizontalTeamTypes[horizontalTotalName]).sort()
 			});
 			_.each(trainTotals, function(trainTotal, trainName){
 				_.each(data, function(row){
-					row[trainName] = _.map(row.horizontalTeamTypes, function(teamType){
+					row.push(_.map(row.horizontalTeamTypes, function(teamType){
 						if((me.GridData[trainName][row.horizontalData.HorizontalName] || {})[teamType])
 							return me.GridData[trainName][row.horizontalData.HorizontalName][teamType];
 						else 
 							return null;
-					});
+					}));
 				});
 			});
-			//build the last row, with the train data 
-			data.push(_.merge({
-				horizontalData: {HorizontalName:'', Total:0, STDCI:0},
-				horizontalTeamTypes: ['-'],
-			}, _.reduce(trainTotals, function(map, trainTotal, trainName){
-				map[trainName] = [{stdciPoints: trainTotal.STDCI, totalPoints:trainTotal.Total}];
-				return map;
-			}, {})));
 			
 			//create the store that will hold the rows in the table
 			var gridStore = Ext.create('Ext.data.Store', {
 				fields:[
 					{name: 'horizontalData', type: 'auto'},
-					{name: 'horizontalTeamTypes', type: 'auto'}
+					{name: 'horizontalTeamTypes', type: 'auto'},
 				]
 				.concat(_.map(trainTotals, function(trainTotal){
 					return {name:trainTotal.TrainName, type:'auto'};
@@ -506,7 +495,7 @@
 				[{
 					text:' ', //Horizontal Name Column
 					dataIndex:'horizontalData',
-					tdCls: 'horizontal-name-cell',
+					tdCls: '',
 					width:100,
 					sortable:false,
 					renderer:function(horizontalData, meta){
@@ -517,51 +506,40 @@
 					xtype:'intelcomponentcolumn',
 					dataIndex:'horizontalTeamTypes',
 					width:100,
-					tdCls: 'stdci-cell-container',
 					sortable:false,
 					renderer:function(horizontalTeamTypes){
 						return Ext.create('Ext.container.Container', {
 							layout: { type: 'vbox' },
-							width: '100%',
+							width: 100,
 							items: _.map(horizontalTeamTypes, function(teamType){
 								return {
 									xtype: 'text',
-									flex:1,
-									cls: 'team-type-cell',
-									text: teamType
+									text: teamType,
 								};
 							})
 						});
 					}
 				}],
 				_.map(trainTotals, function(trainTotal){
-					return {
-						text: trainTotal.TrainName, //Train Column
-						xtype:'intelcomponentcolumn',
-						dataIndex: trainTotal.TrainName,
-						width:100,
-						cls: 'train-header-cls',
-						tdCls: 'stdci-cell-container',
-						sortable:false,
-						renderer:function(scrumDataList){
-							return Ext.create('Ext.container.Container', {
-								layout: { type: 'vbox' },
-								width: '100%',
-								padding:0,
-								margin:0,
-								flex:1,
-								items: _.map(scrumDataList, function(scrumData){
-									var exists = (scrumData !== null);
-									var percent = exists ? (scrumData.stdciPoints/scrumData.totalPoints*100)>>0 : 0;
-									return {
-										xtype: 'text',
-										cls: exists ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell',
-										text: exists ? (percent + '%') : '-'
-									};
-								})
-							});
-						}
-					};
+					text:' ', //Horizontal Team Types Column
+					xtype:'intelcomponentcolumn',
+					dataIndex: trainTotal.TrainName,
+					width:100,
+					sortable:false,
+					renderer:function(scrumDataList){
+						return Ext.create('Ext.container.Container', {
+							layout: { type: 'vbox' },
+							width: 100,
+							items: _.map(scrumDataList, function(scrumData){
+								var percent = (scrumData.stdciPoints/scrumData.totalPoints*100)>>0;
+								return {
+									xtype: 'text',
+									cls: (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell'),
+									text: percent + '%'
+								};
+							})
+						});
+					}
 				}), 
 				[{
 					text:' ', //Horizontal % column
@@ -570,16 +548,15 @@
 					width:100,
 					sortable:false,
 					renderer:function(horizontalData, meta){
-						var hasData = horizontalData.Total > 0;
-						var percent =  hasData ? (horizontalData.STDCI/horizontalData.Total*100)>>0 : 0;
-						meta.tdCls += hasData ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell';
-						return hasData ? percent + '%' : '-';
+						var percent = (horizontalData.STDCI/horizontalData.Total*100)>>0;
+						meta.tdCls += (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell');
+						return percent + '%';
 					}
 				}]
 			);
 		
 			//finally build the grid
-			me.add({
+			me.down('#grid-container').add({
 				xtype: 'grid',
 				header: {
 					items: [{
@@ -607,9 +584,6 @@
 				enableEditing:false,
 				disableSelection: true
 			});
-			setTimeout(function(){
-				me.doLayout();
-			}, 500);
 		}
 	});
 }());

@@ -1,55 +1,81 @@
-/************************************************ NAVBAR/CONTAINERS *****************************************/
+/*********	*************************************** NAVBAR/CONTAINERS *****************************************/
 #navbar { padding:0 10px 0 10px; }
 #releasePicker { margin: 4px 0 0 0; }
-#modePicker { margin:0; }
-#viewPicker { margin:0; }
-#manualRefreshButton { margin: 5px 0 5px 0; }
 
-.intel-legend-dot {
-	width:12px;
-	height:12px;
-	border-radius:6px;
-	border:1px solid black;
-	display:inline-block;
-	vertical-align:middle; }
-	
-.intel-legend-item {
-	font-size:1em;
-	text-align:right; }
+/************************************************ GRID STUFF *****************************************/
+.x-grid-cell-inner {
+	padding: 0 !important;
+}
+.x-grid-cell .x-box-inner,
+.x-grid-cell .x-box-inner .x-box-target,
+.team-type-cell,
+.stdci-cell, 
+.bad-stdci-cell, 
+.good-stdci-cell {
+	width:100% !important;
+}
 
-/************************************************ TEAM COMMITS MATRIX STUFF *****************************************/
-.x-grid-header-ct .matrix-subheader-cell {
+.team-type-cell,
+.stdci-cell, 
+.bad-stdci-cell, 
+.good-stdci-cell,
+.stdci-cell *, 
+.bad-stdci-cell *, 
+.good-stdci-cell * {
+	text-align: center !important;
+}
+
+.x-grid-cell.bad-stdci-cell, 
+.bad-stdci-cell { 
+	flex: 1;
+	background-color:rgba(255, 0, 0, 0.50) !important; 
+}
+
+.x-grid-cell.good-stdci-cell,
+.good-stdci-cell { 
+	flex: 1;
+	background-color:rgba(0, 255, 0, 0.50) !important; 
+}
+
+.stdci-cell-container,
+.horizontal-name-cell {
+	border-right: 1px solid lightgrey;
+	width:100%;
+	height:100%; }
+
+.stdci-cell-container  .x-container,
+.horizontal-name-cell > .x-grid-cell-inner {
 	display:flex;
-	flex-direction:column; }
-	.x-grid-header-ct .matrix-subheader-cell .x-column-header-inner {
-		flex:1; }
-	.x-grid-header-ct .matrix-subheader-cell > .project-percentage-complete {
-		display:block !important;
-		font-size:0.7rem;
-		border-bottom:1px solid black;
-		line-height:20px !important;
-		height:20px !important; }
-		
-.x-grid-header-ct .not-dispositioned-project .x-column-header-inner,
-.x-grid-body .x-grid-row .not-committed-portfolio-item.x-grid-cell { background-color:rgba(255, 0, 0, 0.50) !important; }
+	text-align:center;
+	justify-content:center;
+	align-items:stretch; }
+	
+.train-header-cls {
+	text-align:center;
+}
 
-.x-grid-header-ct .not-dispositioned-project .x-column-header-inner.x-column-header-over,
-.x-grid-body .x-grid-row-selected .not-committed-portfolio-item.x-grid-cell,
-.x-grid-body .x-grid-row-over .not-committed-portfolio-item.x-grid-cell { 
-	background-image:none !important;
-	background-color:rgba(255, 0, 0, 0.70) !important; }
+.team-type-cell {
+	border-right: 1px solid black; 
+}
+	
+.x-grid-table tbody > tr:last-child > td {
+	border-top: 1px solid black; 
+}
+.x-grid-table tbody > tr:not(:last-child):not(:first-child) > td {
+	border-top: 1px solid gray; 
+}
+.x-grid-table tbody > tr > td:last-child  {
+	border-left: 1px solid black; 
+}
 
-.x-grid-header-ct .dispositioned-project .x-column-header-inner { background-color:rgba(0, 255, 0, 0.50) !important; }
-.x-grid-header-ct .dispositioned-project .x-column-header-inner.x-column-header-over { 
-	background-image:none !important;
-	background-color:rgba(0, 255, 0, 0.70) !important; }
+/* 
+.stdci-cell-container  .x-box-inner {
+	height: 100% !important;
+}
 
-.matrix-hidden-grid-row { display:none !important; }
-
-.x-column-header-inner .x-column-header-text {
-	white-space: normal !important;
-	line-height: 15px; }
-
-.x-column-header-inner {
-	text-align: center;
-	height:100 !important; }
+.stdci-cell-container .x-box-target {
+	display: flex;
+	justify-content: center;
+	align-items: stretch;
+	height: 100% !important;
+} */
