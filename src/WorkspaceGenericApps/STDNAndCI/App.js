@@ -4,6 +4,7 @@
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext,
+		STDN_CI_TOKEN = 'STDNCI',
 		COLUMN_DEFAULTS = {
 			text:'',
 			resizable: false,
@@ -21,13 +22,10 @@
 			'Intel.lib.mixin.WindowListener',
 			'Intel.lib.mixin.PrettyAlert',
 			'Intel.lib.mixin.IframeResize',
-			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-			'Intel.lib.mixin.RallyReleaseColor',
-			'Intel.lib.mixin.HorizontalTeamTypes',
-			'Intel.lib.mixin.CustomAppObjectIDRegister',
+			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		
 		layout: {
@@ -69,102 +67,143 @@
 		userAppsPref: 'intel-SAFe-apps-preference',
 
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		loadPortfolioItems: function(){ 
-			var me=this, deferred = Q.defer();
-			me.enqueue(function(done){
-				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
-					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-							me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
-							me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, type)
-						);
-					}))
-					.then(function(portfolioItemStores){
-						if(me.PortfolioItemStore) me.PortfolioItemStore.destroyStore(); //destroy old store, so it gets GCed
-						me.PortfolioItemStore = portfolioItemStores[0];
-						me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
-						
-						//destroy the stores, so they get GCed
-						portfolioItemStores.shift();
-						while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
-					})
-					.then(function(){ done(); deferred.resolve(); })
-					.fail(function(reason){ done(); deferred.reject(reason); })
-					.done();
-				}, 'PortfolioItemQueue');
-			return deferred.promise;
-		},		
-		getUserStoryQuery: function(portfolioItemRecords){
+
+		getUserStoryQuery: function(train){
 			var me=this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
 				releaseFilter = 
 					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }).and(
-						Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType+'.Release.Name', value: me.ReleaseRecord.data.Name }))
-					),
-				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
-					var newFilter = Ext.create('Rally.data.wsapi.Filter', {
-						property: lowestPortfolioItemType + '.ObjectID',
-						value: portfolioItemRecord.data.ObjectID
-					});
-					return filter ? filter.or(newFilter) : newFilter;
-				}, null);
-			return portfolioItemFilter ? releaseFilter.and(leafFilter).and(portfolioItemFilter) : null;
+					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null })) ,
+				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children', value: 'null' })
+			return releaseFilter.and(leafFilter);
 		},
-		loadUserStories: function(){
-			/** note: lets say the lowest portfolioItemType is 'Feature'. If we want to get child user stories under a particular Feature,
-					we must query and fetch using the Feature field on the UserStories, NOT PortfolioItem. PortfolioItem field only applies to the 
-					user Stories directly under the feature
-				*/
-			var me = this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				newMatrixUserStoryBreakdown = {},
-				newMatrixProjectMap = {},
-				newProjectOIDNameMap = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group
-				
-			return Q.all(_.map(_.chunk(me.PortfolioItemStore.getRange(), 20), function(portfolioItemRecords){
-				var filter = me.getUserStoryQuery(portfolioItemRecords),
+		getStdCIUserStoryQuery: function(train){
+			var me=this,
+				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
+				releaseFilter = 
+					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
+						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }) .and(
+						Ext.create('Rally.data.wsapi.Filter', {property: 'Feature' + '.Parent.Parent.Name', operator:'Contains', value: 'STDNCI' }))
+					) ,
+				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children', value: 'null' })
+				//TODO Project.Childre didnt work, find out why
+			return releaseFilter.and(leafFilter)/* .and(projectFilter) */; 
+		},		
+		_loadStdnCIStories: function(){
+			var me = this;
+			newMatrixStdnCIUserStoryPlanEsitmate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
+				var filter = me.getStdCIUserStoryQuery(train),
+					trainName= train.data.Name,
 					config = {
 						model: 'HierarchicalRequirement',
-						filters: filter ? [filter] : [],
-						fetch:['Name', 'ObjectID', 'Project', 'Release', 'PlanEstimate', 'FormattedID', 'ScheduleState', lowestPortfolioItemType],
+						filters: filter ,
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Release','DirectChildrenCount','Project','Children','Feature'],
 						context: {
 							workspace:me.getContext().getWorkspace()._ref,
-							project: null
+							project: '/project/' + train.data.ObjectID ,
+							projectScopeDown: true,
+							projectScopeUp: false
 						}
 					};
 				return me.parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
-						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
-							projectName = storyRecord.data.Project.Name,
+						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
-						if(!newMatrixUserStoryBreakdown[projectName]) 
-							newMatrixUserStoryBreakdown[projectName] = {};
-						if(!newMatrixUserStoryBreakdown[projectName][portfolioItemName]) 
-							newMatrixUserStoryBreakdown[projectName][portfolioItemName] = [];
-						newMatrixUserStoryBreakdown[projectName][portfolioItemName].push(storyRecord.data);						
-						newMatrixProjectMap[projectName] = storyRecord.data.Project.ObjectID; //this gets called redundantly each loop
-						newProjectOIDNameMap[projectOID] = projectName;
+						//userstories for standarization
+						if(!newMatrixStdnCIUserStoryPlanEsitmate[trainName]){
+							newMatrixStdnCIUserStoryPlanEsitmate[trainName] = {};
+						}
+						if(!newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName]){
+							newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = {};
+							newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = 0 ;								
+						}
+						newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] + storyRecord.data.PlanEstimate;						
 					});
 					store.destroyStore();
 				});
 			}))
 			.then(function(){
-				me.MatrixUserStoryBreakdown = newMatrixUserStoryBreakdown;
-				me.MatrixProjectMap = newMatrixProjectMap;
-				me.ProjectOIDNameMap = newProjectOIDNameMap;
-						
-					//always show the teams under the scrum-group that have teamMembers > 0, even if they are not contributing this release
-				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
-					var projectName = projectRecord.data.Name,
-						projectOID = projectRecord.data.ObjectID;
-					if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
-					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
-					me.ProjectOIDNameMap[projectOID] = projectName;
+				me.StdnCIUserStoryPlanEsitmateMap = newMatrixStdnCIUserStoryPlanEsitmate;
+			});				
+		},
+		_loadUserStrories: function(){
+			var me = this,
+				newMatrixProjectUserStoryPlanEsitmate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
+				var filter = me.getUserStoryQuery(train),
+					trainName= train.data.Name,
+					config = {
+						model: 'HierarchicalRequirement',
+						filters: filter ,
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Release','DirectChildrenCount','Project','Children'],
+						context: {
+							workspace:me.getContext().getWorkspace()._ref,
+							project: '/project/' + train.data.ObjectID ,
+							projectScopeDown: true,
+							projectScopeUp: false
+						}
+					};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					_.each(store.getRange(), function(storyRecord){
+						var projectName = storyRecord.data.Project.Name,
+							projectOID = storyRecord.data.Project.ObjectID;		
+						//userstories for standarization
+						if(!newMatrixProjectUserStoryPlanEsitmate[trainName]){
+							newMatrixProjectUserStoryPlanEsitmate[trainName] = {};
+						}
+						if(!newMatrixProjectUserStoryPlanEsitmate[trainName][projectName]){
+							newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = {};
+							newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = 0 ;								
+						}
+						newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] + storyRecord.data.PlanEstimate;						
+					});
+					store.destroyStore();
 				});
+			}))
+			.then(function(){
+				me.ProjectUserStoryPlanEsitmateMap = newMatrixProjectUserStoryPlanEsitmate;
+			});		
+		},
+		_loadAllLeafProjectsMap:function(){
+			var me = this,
+			newTrainProjectMap ={};
+			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
+				return me.loadAllLeafProjects(train)
+					.then(function(allProjects){
+					if(newTrainProjectMap[train.data.Name])
+						newTrainProjectMap[train.data.Name] = {};
+						newTrainProjectMap[train.data.Name] = allProjects; 
+					})
+			}))
+			.then(function(){
+				me.TrainProjectMap = newTrainProjectMap;
 			});
-		},		
-			
+		},
+		_createGridDataHash: function(){
+			var me = this;
+			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
+				hash[train.data.Name] = _.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,item,key){
+					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
+					var project = item.projectRecord.data.Name;
+					var item2 = item;
+					hash[horizontal] =_.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,r,key){
+						if (item.projectRecord.data.ObjectID === r.projectRecord.data.ObjectID){;
+							var scrumTeamType = r.teamType +" " + r.number;
+							var project = r.projectRecord.data.Name;
+							hash[scrumTeamType] ={ scrumTeamType: r.teamType +" " + r.number,
+								scrumName: r.projectRecord.data.Name,
+								scrumObjectID: r.projectRecord.data.ObjectID,
+								totalPoints:me.ProjectUserStoryPlanEsitmateMap[train.data.Name][project],
+							stdciPoints:me.StdnCIUserStoryPlanEsitmateMap[train.data.Name][project]}
+						};
+						return hash;
+						}, {});	 
+					return hash;
+			}, {});			
+			return hash;
+			}, {});			
+		},
 		/**___________________________________ LOADING AND RELOADING ___________________________________*/
 		showGrids: function(){
 			var me=this;
@@ -178,16 +217,21 @@
 		},
 		clearEverything: function(){
 			var me=this;
-			
-			me.clearToolTip();
-			if(me.MatrixGrid) {
+/* 			
+			me.clearToolTip(); */
+			/* if(me.MatrixGrid) {
 				me.MatrixGrid.up().remove(me.MatrixGrid);
 				me.MatrixGrid = undefined;
-			}
+			} */
 		},
 		reloadStores: function(){
 			var me = this;
-			return me.loadPortfolioItems().then(function(){ return me.loadUserStories(); });
+			/* return me.loadPortfolioItems().then(function(){  return me._loadStdnCIStories();  }); */
+			return Q.all([
+				me._loadAllLeafProjectsMap(),
+				me._loadStdnCIStories(),
+				me._loadUserStrories()
+			])
 		},
 		
 		reloadEverything: function(){
@@ -195,19 +239,20 @@
 
 			me.setLoading('Loading Data');
 			me.enqueue(function(done){
-				me.reloadStores()
+				 return me.reloadStores()
 					.then(function(){
+							me._createGridDataHash();
 						me.clearEverything();
 						if(!me.ReleasePicker){
-							me.renderReleasePicker();
-							me.renderClickModePicker();
+							//me.renderReleasePicker();
+					/* 	 	me.renderClickModePicker();
 							me.renderViewModePicker();
 							me.renderClearFiltersButton();
-							me.renderMatrixLegend();
+							me.renderMatrixLegend();  */
 						}				
 					})
-					.then(function(){ me.updateGrids(); })
-					.then(function(){ me.showGrids(); })
+		/* 			.then(function(){ me.updateGrids(); })
+					.then(function(){ me.showGrids(); }) */
 					.fail(function(reason){ me.alert('ERROR', reason); })
 					.then(function(){ me.setLoading(false); done(); })
 					.done();
@@ -222,7 +267,7 @@
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
-			me.initGridResize();
+	/* 		me.initGridResize(); */
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
@@ -230,24 +275,14 @@
 			}	
 			me.configureIntelRallyApp()
 				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
+					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain});
+					return me.loadAllScrumGroups()
+				}).then(function(scrumGroupRootRecords){
+					me.AllScrumGroupRootRecords = scrumGroupRootRecords;
 				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
+ 				.then(function(){
+					me.ProjectRecord = me.AllScrumGroupRootRecords[0];
 					return Q.all([
-						me.projectInWhichScrumGroup(me.ProjectRecord)
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-										.then(function(scrumGroupPortfolioProject){
-											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
-											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										});
-								} 
-								else return Q.reject('You are not scoped to a valid project');
-							}),
 						me.loadAppsPreference()
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
@@ -259,20 +294,11 @@
 								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
-							}),
-						me.loadProjectsWithTeamMembers(me.ProjectRecord)
-							.then(function(projectsWithTeamMembers){ 
-								me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
-							}),
-						me.loadAllChildrenProjects()
-							.then(function(allProjects){ 
-								me.AllProjects = allProjects; 
-							}),
-						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
-					]);
-				})
+							})
+					]); 
+				}) 
 				.then(function(){ 
-					me.setRefreshInterval(); 
+					//me.setRefreshInterval(); 
 					return me.reloadEverything(); 
 				})
 				.fail(function(reason){
@@ -310,11 +336,11 @@
 		/************************************************************* RENDER ********************************************************************/
 		renderGrid: function(){
 			var me = this;
-			me.GridData = {
+/* 			me.GridData = {
 				<TrainName>: {
-					<HorizontalName>: {
-						<ScrumTeamType>: {
-							scrumTeamType:<ScrumTeamType>,
+					<HorizontalName: ACD>: {
+						<ScrumTeamType:MIO CLK 1>: {
+							scrumTeamType:<ScrumTeamType: MIO CLK 1>,
 							scrumName:<projectName>
 							scrumObjectID:<projectObjectID>,
 							totalPoints: <number>,
@@ -322,7 +348,7 @@
 						}
 					}
 				}
-			}
+			} */
 			
 		}
 	});
