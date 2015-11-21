@@ -182,13 +182,27 @@
 		},
 		_createGridDataHash: function(){
 			var me = this;
+/* 			me.GridData = {
+				<TrainName>: {
+					<HorizontalName: ACD>: {
+						<ScrumTeamType:MIO CLK 1>: {
+							scrumTeamType:<ScrumTeamType: MIO CLK 1>,
+							scrumName:<projectName>
+							scrumObjectID:<projectObjectID>,
+							totalPoints: <number>,
+							stdciPoints: <number>
+						}
+					}
+				}
+			} */			
 			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
 				hash[train.data.Name] = _.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,item,key){
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
 					var project = item.projectRecord.data.Name;
 					var item2 = item;
 					hash[horizontal] =_.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,r,key){
-						if (item.projectRecord.data.ObjectID === r.projectRecord.data.ObjectID){;
+						var horizontal2 = (item.horizontal === null) ? "Other" : item.horizontal;
+						if (horizontal === horizontal2){;
 							var scrumTeamType = r.teamType +" " + r.number;
 							var project = r.projectRecord.data.Name;
 							hash[scrumTeamType] ={ scrumTeamType: r.teamType +" " + r.number,
