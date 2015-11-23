@@ -197,19 +197,18 @@
 			} */			
 			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
 				hash[train.data.Name] = _.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,item,key){
+					debugger;
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
-					var project = item.projectRecord.data.Name;
-					var item2 = item;
 					hash[horizontal] =_.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,r,key){
-						var horizontal2 = (item.horizontal === null) ? "Other" : item.horizontal;
-						if (horizontal === horizontal2){;
-							var scrumTeamType = r.teamType +" " + r.number;
-							var project = r.projectRecord.data.Name;
+						var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
+						if (horizontal === horizontal2 ){;
+							var scrumTeamType = r.teamType + " " + r.number;
+							var project2 = r.projectRecord.data.Name;
 							hash[scrumTeamType] ={ scrumTeamType: r.teamType +" " + r.number,
 								scrumName: r.projectRecord.data.Name,
 								scrumObjectID: r.projectRecord.data.ObjectID,
-								totalPoints:me.ProjectUserStoryPlanEsitmateMap[train.data.Name][project],
-							stdciPoints:me.StdnCIUserStoryPlanEsitmateMap[train.data.Name][project]}
+								totalPoints:me.ProjectUserStoryPlanEsitmateMap[train.data.Name][project2],
+							stdciPoints:me.StdnCIUserStoryPlanEsitmateMap[train.data.Name][project2]}
 						};
 						return hash;
 						}, {});	 
