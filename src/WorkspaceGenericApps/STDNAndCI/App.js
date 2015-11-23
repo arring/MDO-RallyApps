@@ -98,7 +98,7 @@
 					config = {
 						model: 'HierarchicalRequirement',
 						filters: filter ,
-						fetch:['ObjectID', 'Name', 'PlanEstimate','Release','DirectChildrenCount','Project','Children','Feature'],
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'/* ,'Release','DirectChildrenCount','Project','Children','Feature' */],
 						context: {
 							workspace:me.getContext().getWorkspace()._ref,
 							project: '/project/' + train.data.ObjectID ,
@@ -136,7 +136,7 @@
 					config = {
 						model: 'HierarchicalRequirement',
 						filters: filter ,
-						fetch:['ObjectID', 'Name', 'PlanEstimate','Release','DirectChildrenCount','Project','Children'],
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'/* ,'Release','DirectChildrenCount','Project','Children' */],
 						context: {
 							workspace:me.getContext().getWorkspace()._ref,
 							project: '/project/' + train.data.ObjectID ,
@@ -167,7 +167,8 @@
 		},
 		_loadAllLeafProjectsMap:function(){
 			var me = this,
-			newTrainProjectMap ={};
+				newTrainProjectMap ={};
+			me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"]; 
 			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
 				return me.loadAllLeafProjects(train)
 					.then(function(allProjects){
@@ -197,7 +198,6 @@
 			} */			
 			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
 				hash[train.data.Name] = _.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,item,key){
-					debugger;
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
 					hash[horizontal] =_.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,r,key){
 						var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
