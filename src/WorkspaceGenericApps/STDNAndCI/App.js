@@ -257,11 +257,11 @@
 							me._createGridDataHash();
 						me.clearEverything();
 						if(!me.ReleasePicker){
-							//me.renderReleasePicker();
-					/* 	 	me.renderClickModePicker();
+							me.renderReleasePicker();
+					 	 	/* me.renderClickModePicker();
 							me.renderViewModePicker();
 							me.renderClearFiltersButton();
-							me.renderMatrixLegend();  */
+							me.renderMatrixLegend();  */ 
 						}				
 					})
 		/* 			.then(function(){ me.updateGrids(); })
@@ -345,7 +345,68 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},	
-		
+		clickModePickerSelected: function(combo, records){
+			var me=this, value = records[0].data.ClickMode;
+			if(value === me.ClickMode) return;
+			else me.ClickMode = value;
+			me.clearToolTip();
+		},		
+		renderClickModePicker: function(){
+			var me=this;
+			me.ClickModePicker = me.down('#navboxLeftVert').add({
+				xtype:'intelfixedcombo',
+				fieldLabel:'Click Mode',
+				id:'modePicker',
+				labelWidth: 70,
+				width: 250,
+				store: Ext.create('Ext.data.Store', {
+					fields:['ClickMode'],
+					data: [
+						{ClickMode:'Flag'},
+						{ClickMode:'Comment'},
+						{ClickMode:'Details'}
+					]
+				}),
+				displayField: 'ClickMode',
+				value:me.ClickMode,
+				listeners: { select: me.clickModePickerSelected.bind(me) }
+			});
+		},	
+		viewModePickerSelected: function(combo, records){
+			var me=this, value = records[0].data.ViewMode;
+			if(value === me.ViewMode) return;
+			else me.ViewMode = value;
+			me.clearToolTip();
+			me.setLoading('Please Wait');
+			setTimeout(function(){
+				if(me.MatrixGrid){
+					if(me.ViewMode == '% Done') me.MatrixGrid.columns[5].show();
+					else me.MatrixGrid.columns[5].hide();
+					if(me.MatrixGrid.store) me.MatrixGrid.store.intelUpdate();
+				}
+				me.setLoading(false);
+			}, 0);
+		},				
+		renderViewModePicker: function(){
+			var me=this;
+			me.ViewModePicker = me.down('#navboxLeftVert').add({
+				xtype:'intelfixedcombo',
+				fieldLabel:'View Mode',
+				id:'viewPicker',
+				labelWidth: 70,
+				width: 250,
+				store: Ext.create('Ext.data.Store', {
+					fields:['ViewMode'],
+					data: [
+						{ViewMode:'Normal'},
+						{ViewMode:'% Done'}
+					]
+				}),
+				displayField: 'ViewMode',
+				value: me.ViewMode,
+				listeners: { select: me.viewModePickerSelected.bind(me) }
+			});
+		},		
 		/************************************************************* RENDER ********************************************************************/
 		renderGrid: function(){
 			var me = this;
