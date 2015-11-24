@@ -90,15 +90,16 @@
 		_loadStdnCIStories: function(){
 			var me = this;
 			newMatrixStdnCIUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
-			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				var trainName= train.data.Name,
+			return Q.all(_.map(me.ScrumGroupConfig, function(train){
+				var trainName = train.ScrumGroupName,
+					trainObjectID = train.ScrumGroupRootProjectOID,
 					config = {
 						model: 'HierarchicalRequirement',
 						filters: me.getStdCIUserStoryQuery(),
 						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
 						context: {
 							workspace: null,
-							project: '/project/' + train.data.ObjectID,
+							project: '/project/' + trainObjectID,
 							projectScopeDown: true,
 							projectScopeUp: false
 						}
@@ -126,15 +127,16 @@
 		_loadUserStories: function(){
 			var me = this,
 				newMatrixProjectUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
-			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				var trainName = train.data.Name,
+			return Q.all(_.map(me.ScrumGroupConfig, function(train){
+				var trainName = train.ScrumGroupName,
+					trainObjectID = train.ScrumGroupRootProjectOID,
 					config = {
 						model: 'HierarchicalRequirement',
 						filters: me.getUserStoryQuery() ,
 						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
 						context: {
 							workspace:null,
-							project: '/project/' + train.data.ObjectID ,
+							project: '/project/' + trainObjectID ,
 							projectScopeDown: true,
 							projectScopeUp: false
 						}
@@ -162,7 +164,6 @@
 		_loadAllLeafProjectsMap:function(){ //TODO: change horizontal-team-types mixin to NOT need projects, but takes arrays of projects names!
 			var me = this,
 				newTrainProjectMap ={};
-			me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
 			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
 				return me.loadAllLeafProjects(train).then(function(allProjects){
 					if(!newTrainProjectMap[train.data.Name]) 
@@ -176,21 +177,25 @@
 		},
 		_createGridDataHash: function(){ //TODO: clean this up, seems redundant loops
 			var me = this;	
-			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
-				var d = me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]);
-				hash[me.getScrumGroupName(train)] = _.reduce(d, function(hash,item,key){
+			me.GridData = _.reduce(me.ScrumGroupConfig, function(hash,train,key){
+				var projectArrary = [];
+				_.each(me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName], function(item, key){
+					projectArrary.push(key);
+				});
+				var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectArray(projectArrary);
+				hash[train.ScrumGroupName] = _.reduce(horizontalMap, function(hash,item,key){
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
-					hash[horizontal] = _.reduce(d, function(hash,r,key){
+					hash[horizontal] = _.reduce(horizontalMap, function(hash,r,key){
 						var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
 						if (horizontal === horizontal2 ){
 							var scrumTeamType = r.teamType + " " + r.number;
-							var projectName = r.projectRecord.data.Name;
+							var projectName = r.projectRecord/* .data.Name */;
 							hash[scrumTeamType] = { 
 								scrumTeamType: r.teamType + " " + r.number,
-								scrumName: r.projectRecord.data.Name,
-								scrumObjectID: r.projectRecord.data.ObjectID,
-								totalPoints: me.ProjectUserStoryPlanEstimateMap[train.data.Name][projectName] || 0,
-								stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.data.Name][projectName] || 0
+								scrumName: r.projectRecord/* .data.Name */,
+								scrumObjectID: r.projectRecord/* .data.ObjectID */,
+								totalPoints: me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0,
+								stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0
 							};
 						}
 						return hash;
@@ -205,7 +210,7 @@
 		reloadStores: function(){
 			var me = this;
 			return Q.all([
-				me._loadAllLeafProjectsMap(),
+				/* me._loadAllLeafProjectsMap(), */
 				me._loadStdnCIStories(),
 				me._loadUserStories()
 			]);
@@ -345,10 +350,6 @@
 		
 		launch: function(){
 			var me = this;
-			//debugging the grid only
-			// me.GridData = me.getTestData();
-			// me.renderGrid();
-	
 			me.setLoading('Loading configuration');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
@@ -359,23 +360,22 @@
 			}	
 			me.configureIntelRallyApp()
 				.then(function(){
-					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); //TODO: don'tload all scrumGroups to improve performance
-					return me.loadAllScrumGroups();
-				}).then(function(scrumGroupRootRecords){
-					me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+					me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
+					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); 
 				})
 				.then(function(){
-					me.ProjectRecord = me.AllScrumGroupRootRecords[0];
+					//picking random Release as all the ScrumGroup share the same Release Name
+					me.ProjectRecord = me.ScrumGroupConfig[0];
 					return Q.all([
 						me.loadAppsPreference()
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+								return me.loadReleasesAfterGivenDateByProjectObjID(me.ProjectRecord.ScrumGroupRootProjectOID, (new Date()*1 - twelveWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.ScrumGroupRootProjectOID, me.AppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
@@ -394,7 +394,7 @@
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
 		releasePickerSelected: function(combo, records){
-			var me=this, pid = me.ProjectRecord.data.ObjectID;
+			var me=this, pid = me.ProjectRecord.ScrumGroupRootProjectOID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Saving Preference");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
