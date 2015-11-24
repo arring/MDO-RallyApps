@@ -503,7 +503,6 @@
 			return me.reloadStore(store);
 		},		
 		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
-			debugger;
 			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
 			var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {

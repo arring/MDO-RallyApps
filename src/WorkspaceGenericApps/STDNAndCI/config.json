@@ -10,7 +10,6 @@
       "../lib/mixin/window-listener.js",
       "../lib/mixin/iframe-resize.js",
       "../lib/mixin/pretty-alert.js",
-      "../lib/mixin/async-queue.js",
       "../lib/mixin/parallel-loader.js",
       "../lib/mixin/user-apps-preference.js",
       "../lib/mixin/horizontal-team-types.js",

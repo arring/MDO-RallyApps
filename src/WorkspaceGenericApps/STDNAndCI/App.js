@@ -1,6 +1,17 @@
 /** 
-	this app will probably get buggy if you have multiple projects with the same name or portfolioItems with the same name
-	Because i never tested for that.
+	me.GridData = {
+		<TrainName>: {
+			<HorizontalName: ACD>: {
+				<ScrumTeamType:MIO CLK 1>: {
+					scrumTeamType:<ScrumTeamType: MIO CLK 1>,
+					scrumName:<projectName>
+					scrumObjectID:<projectObjectID>,
+					totalPoints: <number>,
+					stdciPoints: <number>
+				}
+			}
+		}
+	}
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext,
@@ -34,24 +45,7 @@
 		},
 		items:[{
 			xtype:'container',
-			itemId:'navbox',
-			layout: {
-				type:'hbox',
-				align:'stretch',
-				pack:'start'
-			},
-			items:[{
-				xtype:'container',
-				flex:3,
-				itemId:'navboxLeft',
-				layout: 'hbox',
-				items:[{
-					xtype:'container',
-					flex:1,
-					itemId:'navboxLeftVert',
-					layout: 'vbox'
-				}]
-			}]
+			itemId:'navbox'
 		},{
 			xtype:'container',
 			itemId:'gridContainer',
@@ -63,40 +57,48 @@
 
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 
-		getUserStoryQuery: function(train){
+		/**
+			get all leaf stories in this release for the leaf projects under the train
+			*/
+		getUserStoryQuery: function(){
 			var me=this,
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null })) ,
-				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children', value: 'null' })
-			return releaseFilter.and(leafFilter);
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
+				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
+				
+			return releaseFilter.and(leafFilter).and(projectFilter);
 		},
-		getStdCIUserStoryQuery: function(train){
+	
+		/**
+			get all STDNCI leaf stories in this release for the leaf projects under the train
+			
+			Super hardcoded. This assumes there are 3 levels of portfolio items and the top level has STDN_CI_TOKEN in the name. we will only
+			query user stories under this 3rd level portfolioItem
+			*/
+		getStdCIUserStoryQuery: function(){
 			var me=this,
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
 				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }) .and(
-						Ext.create('Rally.data.wsapi.Filter', {property: 'Feature' + '.Parent.Parent.Name', operator:'Contains', value: 'STDNCI' }))
-					) ,
-				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children', value: 'null' })
-				//TODO Project.Childre didnt work, find out why
-			return releaseFilter.and(leafFilter)/* .and(projectFilter) */; 
+					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
+					Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType + '.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
+				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
+				
+			return releaseFilter.and(leafFilter).and(projectFilter);
 		},		
+		
 		_loadStdnCIStories: function(){
 			var me = this;
-			newMatrixStdnCIUserStoryPlanEsitmate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+			newMatrixStdnCIUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
 			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				var filter = me.getStdCIUserStoryQuery(train),
-					trainName= train.data.Name,
+				var trainName= train.data.Name,
 					config = {
 						model: 'HierarchicalRequirement',
-						filters: filter ,
-						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'/* ,'Release','DirectChildrenCount','Project','Children','Feature' */],
+						filters: me.getStdCIUserStoryQuery(),
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
 						context: {
-							workspace:me.getContext().getWorkspace()._ref,
-							project: '/project/' + train.data.ObjectID ,
+							workspace: null,
+							project: '/project/' + train.data.ObjectID,
 							projectScopeDown: true,
 							projectScopeUp: false
 						}
@@ -106,34 +108,32 @@
 						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
 						//userstories for standarization
-						if(!newMatrixStdnCIUserStoryPlanEsitmate[trainName]){
-							newMatrixStdnCIUserStoryPlanEsitmate[trainName] = {};
+						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName]){
+							newMatrixStdnCIUserStoryPlanEstimate[trainName] = {};
 						}
-						if(!newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName]){
-							newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = {};
-							newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = 0 ;								
+						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName]){
+							newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] = 0 ;								
 						}
-						newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] = newMatrixStdnCIUserStoryPlanEsitmate[trainName][projectName] + storyRecord.data.PlanEstimate;						
+						newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;						
 					});
 					store.destroyStore();
 				});
 			}))
 			.then(function(){
-				me.StdnCIUserStoryPlanEsitmateMap = newMatrixStdnCIUserStoryPlanEsitmate;
+				me.StdnCIUserStoryPlanEstimateMap = newMatrixStdnCIUserStoryPlanEstimate;
 			});				
 		},
-		_loadUserStrories: function(){
+		_loadUserStories: function(){
 			var me = this,
-				newMatrixProjectUserStoryPlanEsitmate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+				newMatrixProjectUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
 			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				var filter = me.getUserStoryQuery(train),
-					trainName= train.data.Name,
+				var trainName = train.data.Name,
 					config = {
 						model: 'HierarchicalRequirement',
-						filters: filter ,
-						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'/* ,'Release','DirectChildrenCount','Project','Children' */],
+						filters: me.getUserStoryQuery() ,
+						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
 						context: {
-							workspace:me.getContext().getWorkspace()._ref,
+							workspace:null,
 							project: '/project/' + train.data.ObjectID ,
 							projectScopeDown: true,
 							projectScopeUp: false
@@ -144,130 +144,89 @@
 						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
 						//userstories for standarization
-						if(!newMatrixProjectUserStoryPlanEsitmate[trainName]){
-							newMatrixProjectUserStoryPlanEsitmate[trainName] = {};
+						if(!newMatrixProjectUserStoryPlanEstimate[trainName]){
+							newMatrixProjectUserStoryPlanEstimate[trainName] = {};
 						}
-						if(!newMatrixProjectUserStoryPlanEsitmate[trainName][projectName]){
-							newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = {};
-							newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = 0 ;								
+						if(!newMatrixProjectUserStoryPlanEstimate[trainName][projectName]){
+							newMatrixProjectUserStoryPlanEstimate[trainName][projectName] = 0 ;								
 						}
-						newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] = newMatrixProjectUserStoryPlanEsitmate[trainName][projectName] + storyRecord.data.PlanEstimate;						
+						newMatrixProjectUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;						
 					});
 					store.destroyStore();
 				});
 			}))
 			.then(function(){
-				me.ProjectUserStoryPlanEsitmateMap = newMatrixProjectUserStoryPlanEsitmate;
+				me.ProjectUserStoryPlanEstimateMap = newMatrixProjectUserStoryPlanEstimate;
 			});		
 		},
-		_loadAllLeafProjectsMap:function(){
+		_loadAllLeafProjectsMap:function(){ //TODO: change horizontal-team-types mixin to NOT need projects, but takes arrays of projects names!
 			var me = this,
 				newTrainProjectMap ={};
-			me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"]; 
+			me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
 			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				return me.loadAllLeafProjects(train)
-					.then(function(allProjects){
-					if(newTrainProjectMap[train.data.Name])
+				return me.loadAllLeafProjects(train).then(function(allProjects){
+					if(!newTrainProjectMap[train.data.Name]) 
 						newTrainProjectMap[train.data.Name] = {};
 						newTrainProjectMap[train.data.Name] = allProjects; 
-					})
+				});
 			}))
 			.then(function(){
 				me.TrainProjectMap = newTrainProjectMap;
 			});
 		},
-		_createGridDataHash: function(){
-			var me = this;
-/* 			me.GridData = {
-				<TrainName>: {
-					<HorizontalName: ACD>: {
-						<ScrumTeamType:MIO CLK 1>: {
-							scrumTeamType:<ScrumTeamType: MIO CLK 1>,
-							scrumName:<projectName>
-							scrumObjectID:<projectObjectID>,
-							totalPoints: <number>,
-							stdciPoints: <number>
-						}
-					}
-				}
-			} */			
+		_createGridDataHash: function(){ //TODO: clean this up, seems redundant loops
+			var me = this;	
 			me.GridData = _.reduce(me.AllScrumGroupRootRecords, function(hash,train,key){
-				hash[train.data.Name] = _.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,item,key){
+				var d = me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]);
+				hash[me.getScrumGroupName(train)] = _.reduce(d, function(hash,item,key){
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
-					hash[horizontal] =_.reduce(me.getAllHorizontalTeamTypeInfos(me.TrainProjectMap[train.data.Name]), function(hash,r,key){
+					hash[horizontal] = _.reduce(d, function(hash,r,key){
 						var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
-						if (horizontal === horizontal2 ){;
+						if (horizontal === horizontal2 ){
 							var scrumTeamType = r.teamType + " " + r.number;
-							var project2 = r.projectRecord.data.Name;
-							hash[scrumTeamType] ={ scrumTeamType: r.teamType +" " + r.number,
+							var projectName = r.projectRecord.data.Name;
+							hash[scrumTeamType] = { 
+								scrumTeamType: r.teamType + " " + r.number,
 								scrumName: r.projectRecord.data.Name,
 								scrumObjectID: r.projectRecord.data.ObjectID,
-								totalPoints:me.ProjectUserStoryPlanEsitmateMap[train.data.Name][project2],
-							stdciPoints:me.StdnCIUserStoryPlanEsitmateMap[train.data.Name][project2]}
-						};
+								totalPoints: me.ProjectUserStoryPlanEstimateMap[train.data.Name][projectName] || 0,
+								stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.data.Name][projectName] || 0
+							};
+						}
 						return hash;
-						}, {});	 
+					}, {});	 
 					return hash;
-			}, {});			
-			return hash;
+				}, {});			
+				return hash;
 			}, {});			
 		},
+		
 		/**___________________________________ LOADING AND RELOADING ___________________________________*/
-		showGrids: function(){
-			var me=this;
-			if(!me.MatrixGrid) me.renderMatrixGrid();
-		},	
-		updateGrids: function(){
-			var me=this;
-			if(me.PortfolioItemStore){
-				if(me.MatrixGrid && me.MatrixGrid.store) me.MatrixGrid.store.intelUpdate();
-			}
-		},
-		clearEverything: function(){
-			var me=this;
-/* 			
-			me.clearToolTip(); */
-			/* if(me.MatrixGrid) {
-				me.MatrixGrid.up().remove(me.MatrixGrid);
-				me.MatrixGrid = undefined;
-			} */
-		},
 		reloadStores: function(){
 			var me = this;
-			/* return me.loadPortfolioItems().then(function(){  return me._loadStdnCIStories();  }); */
 			return Q.all([
 				me._loadAllLeafProjectsMap(),
 				me._loadStdnCIStories(),
-				me._loadUserStrories()
-			])
+				me._loadUserStories()
+			]);
 		},
-		
 		reloadEverything: function(){
 			var me=this;
 
 			me.setLoading('Loading Data');
-			me.enqueue(function(done){
-				 return me.reloadStores()
-					.then(function(){
-							me._createGridDataHash();
-						me.clearEverything();
-						if(!me.ReleasePicker){
-							me.renderReleasePicker();
-					 	 	/* me.renderClickModePicker();
-							me.renderViewModePicker();
-							me.renderClearFiltersButton();
-							me.renderMatrixLegend();  */ 
-						}				
-					})
-		/* 			.then(function(){ me.updateGrids(); })
-					.then(function(){ me.showGrids(); }) */
-					.fail(function(reason){ me.alert('ERROR', reason); })
-					.then(function(){ me.setLoading(false); done(); })
-					.done();
-			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
+			return me.reloadStores().then(function(){
+				me._createGridDataHash();
+				if(!me.ReleasePicker){ //only draw the first time
+					me.renderReleasePicker();
+				}				
+				me.down('#gridContainer').removeAll();
+				me.renderGrid();
+			})
+			.then(function(){ me.setLoading(false); });
 		},
 		
 		/**___________________________________ LAUNCH ___________________________________*/	
+		/*only used for testing the UI!!!!
 		getTestData: function(){
 			return {
 				Train1: {
@@ -382,12 +341,13 @@
 				}
 			};
 		},
+		*/
+		
 		launch: function(){
 			var me = this;
 			//debugging the grid only
 			// me.GridData = me.getTestData();
 			// me.renderGrid();
-			// return;
 	
 			me.setLoading('Loading configuration');
 			me.initDisableResizeHandle();
@@ -399,12 +359,12 @@
 			}	
 			me.configureIntelRallyApp()
 				.then(function(){
-					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain});
-					return me.loadAllScrumGroups()
+					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); //TODO: don'tload all scrumGroups to improve performance
+					return me.loadAllScrumGroups();
 				}).then(function(scrumGroupRootRecords){
 					me.AllScrumGroupRootRecords = scrumGroupRootRecords;
 				})
- 				.then(function(){
+				.then(function(){
 					me.ProjectRecord = me.AllScrumGroupRootRecords[0];
 					return Q.all([
 						me.loadAppsPreference()
@@ -422,13 +382,13 @@
 					]); 
 				}) 
 				.then(function(){ 
-					//me.setRefreshInterval(); 
 					return me.reloadEverything(); 
 				})
 				.fail(function(reason){
 					me.setLoading(false);
 					me.alert('ERROR', reason);
 				})
+				.then(function(){ me.setLoading(false); })
 				.done();
 		},
 		
@@ -441,12 +401,17 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
-				.then(function(){ me.reloadEverything(); })
+				.then(function(){ return me.reloadEverything(); })
+				.fail(function(reason){
+					me.setLoading(false);
+					me.alert('ERROR', reason);
+				})
+				.then(function(){ me.setLoading(false); })
 				.done();
 		},				
 		renderReleasePicker: function(){
 			var me=this;
-			me.ReleasePicker = me.down('#navboxLeftVert').add({
+			me.ReleasePicker = me.down('#navbox').add({
 				xtype:'intelreleasepicker',
 				id: 'releasePicker',
 				labelWidth: 70,
@@ -458,23 +423,6 @@
 		},	
 		
 		/************************************************************* RENDER ********************************************************************/
-		/**
-			renderGrid expects this to exist:
-				
-				me.GridData = {
-					<TrainName>: {
-						<HorizontalName>: {
-							<ScrumTeamType>: {
-								scrumTeamType:<ScrumTeamType>,
-								scrumName:<projectName>
-								scrumObjectID:<projectObjectID>,
-								totalPoints: <number>,
-								stdciPoints: <number>
-							}
-						}
-					}
-				}	
-			*/
 		renderGrid: function(){
 			var me = this,
 				trainTotals = {}, 
@@ -517,7 +465,7 @@
 			//build the last row, with the train data 
 			data.push(_.merge({
 				horizontalData: {HorizontalName:'', Total:0, STDCI:0},
-				horizontalTeamTypes: ['-'],
+				horizontalTeamTypes: ['-']
 			}, _.reduce(trainTotals, function(map, trainTotal, trainName){
 				map[trainName] = [{
 					stdciPoints: trainTotal.STDCI, 
