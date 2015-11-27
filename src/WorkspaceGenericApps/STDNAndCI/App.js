@@ -5,7 +5,6 @@
 				<ScrumTeamType:MIO CLK 1>: {
 					scrumTeamType:<ScrumTeamType: MIO CLK 1>,
 					scrumName:<projectName>
-					scrumObjectID:<projectObjectID>,
 					totalPoints: <number>,
 					stdciPoints: <number>
 				}
@@ -107,7 +106,7 @@
 				return me.parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
 						var projectName = storyRecord.data.Project.Name,
-							projectOID = storyRecord.data.Project.ObjectID;		
+							projectOID = storyRecord.data.Project.ObjectID;
 						//userstories for standarization
 						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName]){
 							newMatrixStdnCIUserStoryPlanEstimate[trainName] = {};
@@ -161,39 +160,24 @@
 				me.ProjectUserStoryPlanEstimateMap = newMatrixProjectUserStoryPlanEstimate;
 			});		
 		},
-		_loadAllLeafProjectsMap:function(){ //TODO: change horizontal-team-types mixin to NOT need projects, but takes arrays of projects names!
-			var me = this,
-				newTrainProjectMap ={};
-			return Q.all(_.map(me.AllScrumGroupRootRecords, function(train){
-				return me.loadAllLeafProjects(train).then(function(allProjects){
-					if(!newTrainProjectMap[train.data.Name]) 
-						newTrainProjectMap[train.data.Name] = {};
-						newTrainProjectMap[train.data.Name] = allProjects; 
-				});
-			}))
-			.then(function(){
-				me.TrainProjectMap = newTrainProjectMap;
-			});
-		},
-		_createGridDataHash: function(){ //TODO: clean this up, seems redundant loops
+		_createGridDataHash: function(){
 			var me = this;	
 			me.GridData = _.reduce(me.ScrumGroupConfig, function(hash,train,key){
-				var projectArrary = [];
-				_.each(me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName], function(item, key){
-					projectArrary.push(key);
+				var projectNames = [];
+				_.each(me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName], function(userStories, projectName){
+					projectNames.push(projectName);
 				});
-				var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectArray(projectArrary);
+				var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
 				hash[train.ScrumGroupName] = _.reduce(horizontalMap, function(hash,item,key){
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
 					hash[horizontal] = _.reduce(horizontalMap, function(hash,r,key){
 						var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
 						if (horizontal === horizontal2 ){
 							var scrumTeamType = r.teamType + " " + r.number;
-							var projectName = r.projectRecord/* .data.Name */;
+							var projectName = r.projectName;
 							hash[scrumTeamType] = { 
-								scrumTeamType: r.teamType + " " + r.number,
-								scrumName: r.projectRecord/* .data.Name */,
-								scrumObjectID: r.projectRecord/* .data.ObjectID */,
+								scrumTeamType: scrumTeamType,
+								scrumName: projectName ,
 								totalPoints: me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0,
 								stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0
 							};
@@ -210,7 +194,6 @@
 		reloadStores: function(){
 			var me = this;
 			return Q.all([
-				/* me._loadAllLeafProjectsMap(), */
 				me._loadStdnCIStories(),
 				me._loadUserStories()
 			]);
@@ -446,12 +429,17 @@
 			}, []);
 			
 			//build the rows for the table
-			var data = _.map(_.keys(horizontalTotals), function(horizontalTotalName){
+			var data = _.map(_.keys(horizontalTotals).sort(), function(horizontalTotalName){
 				return {
 					horizontalData: horizontalTotals[horizontalTotalName],
 					horizontalTeamTypes: _.uniq(horizontalTeamTypes[horizontalTotalName]).sort()
 				};
 			});
+			//put 'Other' Row last
+			var otherRow = _.find(data, function(row){ return row.horizontalData.HorizontalName == 'Other'; });
+			if(otherRow !== null){
+				data = _.filter(data,function(row){ return row.horizontalData.HorizontalName !== 'Other'; }).concat(otherRow);
+			}
 			_.each(trainTotals, function(trainTotal, trainName){
 				_.each(data, function(row){
 					row[trainName] = _.map(row.horizontalTeamTypes, function(teamType){
@@ -520,11 +508,11 @@
 						});
 					}
 				}],
-				_.map(trainTotals, function(trainTotal){
+				_.map(_.keys(trainTotals).sort(), function(trainName){
 					return {
-						text: trainTotal.TrainName, //Train Column
+						text: trainName, //Train Column
 						xtype:'intelcomponentcolumn',
-						dataIndex: trainTotal.TrainName,
+						dataIndex: trainName,
 						width:100,
 						cls: 'train-header-cls',
 						tdCls: 'stdci-cell-container',

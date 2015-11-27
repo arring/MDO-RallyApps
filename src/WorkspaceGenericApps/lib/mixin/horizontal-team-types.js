@@ -77,7 +77,6 @@
 				function(teamTypeInfo){ return teamTypeInfo.projectRecord.data.Name; }),
 				function(teamTypeInfo, index){ teamTypeInfo.number = index + startIndex; return teamTypeInfo; });
 		},
-		
 		getAllHorizontalTeamTypeInfos: function(projectRecords){
 			var me = this;
 			return [].concat.apply([], _.map(_.groupBy(_.map(projectRecords, 
@@ -99,13 +98,20 @@
 				})
 			);
 		},
-		_getHorizontalTeamTypeInfoFromProjectArray: function(projectRecord){
+		getHorizontalTeamTypeInfo: function(projectRecord){
+			return this._getHorizontalTeamTypeInfo(projectRecord);
+		},
+		isProjectInHorizontal: function(projectRecord, horizontal){
+			return this._getHorizontalTeamTypeInfo(projectRecord).horizontal === horizontal;
+		},
+		
+		_getHorizontalTeamTypeInfoFromProjectName: function(projectName){
 			var me=this,
-				scrumName = projectRecord.split('-')[0].trim(),
+				scrumName = projectName.split('-')[0].trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
-					projectRecord: projectRecord,
+					projectName: projectName,
 					horizontal:null, 
 					teamType:scrumTeamType,
 					teamTypeComponents: [],
@@ -137,7 +143,7 @@
 							return teamTypeMatches;
 						}, []);
 						return teamTypeMatches.length ? {
-								projectRecord: projectRecord,
+								projectName: projectName,
 								horizontal:horizontal, 
 								teamType: teamTypeMatches.sort().join(' '), 
 								teamTypeComponents: teamTypeMatches.sort(),
@@ -148,10 +154,16 @@
 				}, null);
 			return teamTypeObject || notInHorizontalObject;
 		},
-		getAllHorizontalTeamTypeInfosFromProjectArray: function(projectArray){
+		_resolveTeamTypeInfoConflictsFromProjectNames: function(teamTypeInfos, startIndex){
+			startIndex = startIndex || 1;
+			_.each(_.sortBy(teamTypeInfos, 
+				function(teamTypeInfo){ return teamTypeInfo.projectName; }),
+				function(teamTypeInfo, index){ teamTypeInfo.number = index + startIndex; return teamTypeInfo; });
+		},	
+		getAllHorizontalTeamTypeInfosFromProjectNames: function(projectNames){
 			var me = this;
-			return [].concat.apply([], _.map(_.groupBy(_.map(projectArray, 
-				function(projectRecord){ return me._getHorizontalTeamTypeInfoFromProjectArray(projectRecord); }),
+			return [].concat.apply([], _.map(_.groupBy(_.map(projectNames, 
+				function(projectName){ return me._getHorizontalTeamTypeInfoFromProjectName(projectName); }),
 				function(teamTypeInfo){ return teamTypeInfo.teamType; }),
 				function(teamTypeInfos){
 					if(teamTypeInfos.length === 1) return teamTypeInfos; 
@@ -159,22 +171,23 @@
 						var teamTypeInfosWithNumber1 = _.filter(teamTypeInfos, function(teamTypeInfo){ return teamTypeInfo.number === 1; });
 						if(teamTypeInfosWithNumber1.length > 1){
 							var projectsWithoutExplicit1 = _.filter(teamTypeInfosWithNumber1, function(teamTypeInfo){ 
-									return teamTypeInfo.projectRecord.data.Name.indexOf('1') === -1; 
+									return teamTypeInfo.projectName.data.Name.indexOf('1') === -1; 
 								}),
 								startIndex = Math.max.apply(Math, _.pluck(teamTypeInfos, 'number')) + 1;
-							me._resolveTeamTypeInfoConflicts(projectsWithoutExplicit1, startIndex);
+							me._resolveTeamTypeInfoConflictsFromProjectNames(projectsWithoutExplicit1, startIndex);
 						}
 						return teamTypeInfos;
 					}
 				})
 			);
 		},		
-		getHorizontalTeamTypeInfo: function(projectRecord){
-			return this._getHorizontalTeamTypeInfo(projectRecord);
+		getHorizontalTeamTypeInfoFromProjectName: function(projectName){
+			return this._getHorizontalTeamTypeInfoFromProjectName(projectName);
 		},
-		isProjectInHorizontal: function(projectRecord, horizontal){
-			return this._getHorizontalTeamTypeInfo(projectRecord).horizontal === horizontal;
+		isProjectNameInHorizontal: function(projectName, horizontal){
+			return this._getHorizontalTeamTypeInfoFromProjectName(projectName).horizontal === horizontal;
 		},
+		
 		getAllHorizontalTeamTypeComponents: function(){
 			return [].concat.apply([], _.values(this.HorizontalGroupingConfig.groups));
 		},
