@@ -96,6 +96,7 @@
 						model: 'HierarchicalRequirement',
 						filters: me.getStdCIUserStoryQuery(),
 						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
+						compact:false,
 						context: {
 							workspace: null,
 							project: '/project/' + trainObjectID,
@@ -131,6 +132,7 @@
 					trainObjectID = train.ScrumGroupRootProjectOID,
 					config = {
 						model: 'HierarchicalRequirement',
+						compact:false,
 						filters: me.getUserStoryQuery() ,
 						fetch:['ObjectID', 'Name', 'PlanEstimate','Project'],
 						context: {
