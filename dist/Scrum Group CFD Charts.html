@@ -1000,9 +1000,12 @@
 					innerHeight = window.parent.innerHeight,
 					innerWidth = window.parent.innerWidth;
 				
+				//remove vertical/horizontal scrolls from top window
+				window.parent.document.body.insertAdjacentHTML('afterend', '<style>html, body {overflow: hidden !important; }</style>');
+				
 				//adjust widths
 				while(true){
-					domNodeW.style.width = (innerWidth - 4) + 'px';
+					domNodeW.style.width = (innerWidth - 10) + 'px';
 					domNodeW.style.padding = '0';
 					domNodeW.style.margin = '0';
 					if(domNodeW.id === 'mydash_portlet') break;
@@ -1011,7 +1014,7 @@
 				
 				//adjust heights
 				while(true){
-					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING)) + 'px';
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING) - 10) + 'px';
 					if(domNodeH.classList.contains('x-portlet')) break;
 					domNodeH = domNodeH.parentNode;
 				}
