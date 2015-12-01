@@ -2020,6 +2020,11 @@
 					me.FilteredAllSnapshots = me.FilteredAllSnapshots.concat(filteredRecords);
 				});
 			}
+			//add all scrums in scrum group if they dont exist yet
+			_.each(me.LeafProjects, function(projectRecord){
+				me.FilteredTeamStores[projectRecord.data.Name] = me.FilteredTeamStores[projectRecord.data.Name] || {};
+			});
+			
 			return Q();
 		},
 		redrawEverything: function(){
