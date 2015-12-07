@@ -15,6 +15,7 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext,
 		STDN_CI_TOKEN = 'STDNCI',
+		SCHEDULED_USERSTORY_FILTER = '/userstories?tpsSI=0&tpsV=qv%3A5', 
 		COLUMN_DEFAULTS = {
 			text:'',
 			resizable: false,
@@ -88,7 +89,7 @@
 		
 		_loadStdnCIStories: function(){
 			var me = this;
-			newMatrixStdnCIUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+			newMatrixStdnCIUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group	
 			return Q.all(_.map(me.ScrumGroupConfig, function(train){
 				var trainName = train.ScrumGroupName,
 					trainObjectID = train.ScrumGroupRootProjectOID,
@@ -113,9 +114,9 @@
 							newMatrixStdnCIUserStoryPlanEstimate[trainName] = {};
 						}
 						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName]){
-							newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] = 0 ;								
+							newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] = 0 ;	
 						}
-						newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;						
+						newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;
 					});
 					store.destroyStore();
 				});
@@ -127,6 +128,7 @@
 		_loadUserStories: function(){
 			var me = this,
 				newMatrixProjectUserStoryPlanEstimate = {}; //filter out teams that entered a team commit but have no user stories AND are not a scrum under the scrum-group			
+				newProjectObjectIDMap = {};				
 			return Q.all(_.map(me.ScrumGroupConfig, function(train){
 				var trainName = train.ScrumGroupName,
 					trainObjectID = train.ScrumGroupRootProjectOID,
@@ -147,19 +149,30 @@
 						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
 						//userstories for standarization
+						if(!newProjectObjectIDMap[projectName]){
+							newProjectObjectIDMap[projectName] = {};
+							newProjectObjectIDMap[projectName] = projectOID;
+						}							
 						if(!newMatrixProjectUserStoryPlanEstimate[trainName]){
 							newMatrixProjectUserStoryPlanEstimate[trainName] = {};
 						}
 						if(!newMatrixProjectUserStoryPlanEstimate[trainName][projectName]){
 							newMatrixProjectUserStoryPlanEstimate[trainName][projectName] = 0 ;								
 						}
-						newMatrixProjectUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;						
+						newMatrixProjectUserStoryPlanEstimate[trainName][projectName] += storyRecord.data.PlanEstimate;
 					});
 					store.destroyStore();
 				});
 			}))
 			.then(function(){
 				me.ProjectUserStoryPlanEstimateMap = newMatrixProjectUserStoryPlanEstimate;
+				_.each(me.ScrumGroupConfig, function(train){
+					if(!newProjectObjectIDMap[train.ScrumGroupName]){
+						newProjectObjectIDMap[train.ScrumGroupName] = {};
+					}	
+					newProjectObjectIDMap[train.ScrumGroupName] = train.ScrumGroupRootProjectOID;
+				});	
+				me.ProjectObjectIDMap = newProjectObjectIDMap ;					
 			});		
 		},
 		_createGridDataHash: function(){
@@ -216,123 +229,6 @@
 		},
 		
 		/**___________________________________ LAUNCH ___________________________________*/	
-		/*only used for testing the UI!!!!
-		getTestData: function(){
-			return {
-				Train1: {
-					Hrz1: {
-						TypeA: {
-							scrumTeamType: 'TypeA',
-							scrumName: 'TypeA - T1',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 5
-						},
-						TypeB: {
-							scrumTeamType: 'TypeB',
-							scrumName: 'TypeB - T1',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 4
-						},
-						TypeC: {
-							scrumTeamType: 'TypeC',
-							scrumName: 'TypeC - T1',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 11
-						}
-					},
-					Hrz2: {
-						TypeD: {
-							scrumTeamType: 'TypeD',
-							scrumName: 'TypeD - T2',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 56
-						}
-					},
-					Hrz3: {
-						TypeE: {
-							scrumTeamType: 'TypeE',
-							scrumName: 'TypeE - T1',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 56
-						}
-					}
-				},
-				Train2: {
-					Hrz2: {
-						TypeD: {
-							scrumTeamType: 'TypeD',
-							scrumName: 'TypeD - T2',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 56
-						}
-					},
-					Hrz3: {
-						TypeE: {
-							scrumTeamType: 'TypeE',
-							scrumName: 'TypeE - T2',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 56
-						}
-					}
-				},
-				Train3: {
-					Hrz1: {
-						TypeA: {
-							scrumTeamType: 'TypeA',
-							scrumName: 'TypeA - T3',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 9
-						},
-						TypeC: {
-							scrumTeamType: 'TypeC',
-							scrumName: 'TypeC - T3',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 10
-						}
-					},
-					Hrz3: {
-						TypeE: {
-							scrumTeamType: 'TypeE',
-							scrumName: 'TypeE - T3',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 5
-						}
-					}
-				},
-				Train4: {
-					Hrz1: {
-						TypeB: {
-							scrumTeamType: 'TypeB',
-							scrumName: 'TypeB - T4',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 12
-						}
-					},
-					Hrz2: {
-						TypeD: {
-							scrumTeamType: 'TypeD',
-							scrumName: 'TypeD - T4',
-							scrumObjectID: 10,
-							totalPoints: 101,
-							stdciPoints: 56
-						}
-					}
-				}
-			};
-		},
-		*/
-		
 		launch: function(){
 			var me = this;
 			me.setLoading('Loading configuration');
@@ -533,7 +429,7 @@
 									return {
 										xtype: 'container',
 										cls: exists ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell',
-										html: exists ? '<span title="' + tooltip + '">' + percent + '%</span>' : '-'
+										html: exists ? '<span title="' + tooltip + '">' + '<a href="https://rally1.rallydev.com/#/'+ me.ProjectObjectIDMap[scrumData.scrumName] + 'ud' + SCHEDULED_USERSTORY_FILTER + '"  target = "_blank">' + percent +'%</a></span>' : '-'
 									};
 								})
 							});
@@ -551,7 +447,7 @@
 						var percent =  hasData ? (horizontalData.STDCI/horizontalData.Total*100)>>0 : 0;
 						var tooltip = hasData ? (horizontalData.HorizontalName + ': ' + horizontalData.STDCI + '/' + horizontalData.Total + ' points') : '';
 						meta.tdCls += hasData ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell';
-						return hasData ? '<span title="' + tooltip + '">' + percent + '%</span>' : '-';
+						return hasData ? '<span id="" title="' + tooltip + '">' + percent + '%</span>' : '-';
 					}
 				}]
 			);
