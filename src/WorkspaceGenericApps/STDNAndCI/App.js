@@ -77,11 +77,11 @@
 			*/
 		getStdCIUserStoryQuery: function(){
 			var me=this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
+				lowestPortfolioItemType = me.PortfolioItemTypes[1],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
 				releaseFilter = 
 					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType + '.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
+					Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);
@@ -243,6 +243,7 @@
 				.then(function(){
 					me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
 					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); 
+					/* _.remove(me.ScrumGroupConfig, function(d){return d.ScrumGroupName != "Julio"}); */
 				})
 				.then(function(){
 					//picking random Release as all the ScrumGroup share the same Release Name
@@ -304,6 +305,7 @@
 		},	
 		
 		/************************************************************* RENDER ********************************************************************/
+	
 		renderGrid: function(){
 			var me = this,
 				trainTotals = {}, 
@@ -429,7 +431,38 @@
 									return {
 										xtype: 'container',
 										cls: exists ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell',
-										html: exists ? '<span title="' + tooltip + '">' + '<a href="https://rally1.rallydev.com/#/'+ me.ProjectObjectIDMap[scrumData.scrumName] + 'ud' + SCHEDULED_USERSTORY_FILTER + '"  target = "_blank">' + percent +'%</a></span>' : '-'
+										items:{
+											xtype:'component',
+											autoEl: {
+												tag: 'a',
+												html: exists ? '<span title="' + tooltip + '">' +  percent +'%</span>' : '-'
+											} ,
+											listeners   : {
+												el : {
+													click: {
+														element: 'el', //bind to the underlying el property on the panel
+														fn: function(data){ 
+/* 															var newContext = Ext.create(Rally.app.Context, {
+																initialValues: {
+																		project: '/project/' + me.ProjectObjectIDMap[scrumData.scrumName] ,
+																		projectScopeDown: true,
+																		projectScopeUp: false
+																}
+														});
+														me.setContext(newContext); */
+														var link = 'https://rally1.rallydev.com/#/'+ me.ProjectObjectIDMap[scrumData.scrumName] + 'ud' + SCHEDULED_USERSTORY_FILTER;
+														var evt = link.ownerDocument.createEvent('MouseEvents');
+														var RIGHT_CLICK_BUTTON_CODE = 2; // the same for FF and IE
+														evt.initMouseEvent('contextmenu', true, true,
+																 link.ownerDocument.defaultView, 1, 0, 0, 0, 0, false,
+																 false, false, false, RIGHT_CLICK_BUTTON_CODE, null);
+				 
+														window.parent.open("https://rally1.rallydev.com/#/17058640701ud/userstories?tpsSI=0&tpsV=qv%3A0");
+														}
+													}
+												}
+											} 
+										}
 									};
 								})
 							});
