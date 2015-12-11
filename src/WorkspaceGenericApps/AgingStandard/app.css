@@ -2,12 +2,16 @@
    margin-top: 5px;
    margin-left: 5px;
 }
-.grid-container{
+/* .grid-container{
  margin:20px;
-}
+} */
 .red{
 color:red;
 }
-#gridToExport-container{
-height:10px;
+div#gridToExport {
+    display: none;
+}
+.button-export{
+	float:right;
+
 }

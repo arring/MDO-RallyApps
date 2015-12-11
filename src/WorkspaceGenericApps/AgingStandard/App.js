@@ -21,35 +21,6 @@ The “age” of a standard has to do with the time it has been in the current c
 			'Intel.lib.mixin.UserAppsPreference'
 		],
 		userAppsPref: 'intel-SAFe-apps-preference',
-		getSettingsFields: function() {
-				return [
-						{
-							name: 'IE0',
-							xtype: 'rallytextfield'
-						},{
-							name: 'IE1',
-							xtype: 'rallytextfield'
-						},{
-							name: 'IE2',
-							xtype: 'rallytextfield'						
-						},{
-							name: 'IE3',
-							xtype: 'rallytextfield'								
-						},{
-							name: 'IE4',
-							xtype: 'rallytextfield'								
-						}
-				];
-		},
-    config: {
-        defaultSettings: {
-            IE0: '',
-            IE1: '28',
-            IE2: '28',
-						IE3: '84',
-            IE4: '84'
-        }
-    },
 		items:[{
 			xtype: 'container',
       id: 'exportBtn'
@@ -64,10 +35,119 @@ The “age” of a standard has to do with the time it has been in the current c
 			id:'gridToExport-container'
 		}],
 		minWidth:910,	
-    _addExportButton: function () {
+		/**___________________________________ APP SETTINGS ___________________________________*/	
+		getSettingsFields: function() {
+			return [
+					{
+						name: 'IE0',
+						xtype: 'rallytextfield'
+					},{
+						name: 'IE1',
+						xtype: 'rallytextfield'
+					},{
+						name: 'IE2',
+						xtype: 'rallytextfield'						
+					},{
+						name: 'IE3',
+						xtype: 'rallytextfield'								
+					},{
+						name: 'IE4',
+						xtype: 'rallytextfield'								
+					}
+			];
+		},
+    config: {
+			defaultSettings: {
+					IE0: '',
+					IE1: '28',
+					IE2: '28',
+					IE3: '84',
+					IE4: '84'
+			}
+    },		
+		/**___________________________________ DATA STORE METHODS ___________________________________*/	
+		/**
+			get all the standardization K-briefs
+			*/
+		getStandardizationKBriefQuery: function(){
+			var me=this;
+			return Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!=' , value: null });
+		},		
+		_loadStandardizationKBrief: function(){
+			var me = this,
+				config = {
+					model: 'HierarchicalRequirement',
+					compact:false,
+					filters: me.getStandardizationKBriefQuery() ,
+					fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg'],
+					context: {
+						workspace:null,
+						project: '/project/' + me.ProjectRecord.data.ObjectID ,
+						projectScopeDown: true,
+						projectScopeUp: false
+					}
+				};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					me.griStoreItems = store.getRange();
+					store.destroyStore();
+				});
+		},
+		_loadStandardizationKBriefSnapshot: function(){
+			var me = this,
+			deferred = Q.defer();
+			Ext.create("Rally.data.lookback.SnapshotStore",
+			{
+				fetch   : [ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_StdsKanban", "c_KanbanStatus", "ScheduleState" ],
+				hydrate : [ "c_KanbanStatus", "ScheduleState","c_StdsKanban" ],
+				filters :
+				[
+					{
+						property : "_ProjectHierarchy",
+						value    : me.ProjectRecord.data.ObjectID
+					},
+					{
+						property: "_TypeHierarchy",
+						value: { $nin: [ -51009, -51012, -51031, -51078 ] }
+					},
+					{
+						property: "_ValidFrom",
+						value: { $gt: me.twoYearsBackDate }
+					}
+				],
+				sorters :
+				[
+					{
+						property  : "_ValidTo",
+						direction : "ASC"
+					}
+				]
+			}).load(
+			{
+				params:
+				{
+					compress: false,
+					removeUnauthorizedSnapshots: true
+				},
+				callback : function(records, operation, success)
+				{
+					if(!success) deferred.reject('could not load data from server');
+					else {
+						me.UserStoryKbriefSnapShot = _.groupBy(records, function(d){return d.data.ObjectID});
+						deferred.resolve(records);
+					}
+				}
+			});	
+		return deferred.promise;					
+		},			
+		/**___________________________________ EXPORTING GRID ___________________________________*/	
+		/**
+			creating a new grid of ignore all the filters or formats
+		*/    
+		_addExportButton: function () {
 			var me = this;
 			Ext.getCmp('exportBtn').add({
 					xtype: 'rallybutton',
+					cls: 'button-export',
 					text: 'Export to Excel',
 					handler: me._onClickExport,
 					visible: true,
@@ -76,7 +156,7 @@ The “age” of a standard has to do with the time it has been in the current c
 		 },	
 		_createGridToExport: function(){
        var me = this;
-        var totalDelta = 0;        
+       Ext.getCmp('gridToExport-container').removeAll();       
 			//create the store that will hold the rows in the table
 			var gridStore = Ext.create('Rally.data.custom.Store', {
 					pageSize: 10000, 
@@ -122,17 +202,17 @@ The “age” of a standard has to do with the time it has been in the current c
 					store: gridStore,
 					columnCfgs:gridColumns 
 			});
-		 	Ext.getCmp('gridToExport-container').removeAll();
 			Ext.getCmp('gridToExport-container').add(g);	 	
 		},
    _onClickExport: function (gridId) {
 			var me = this;
 			me._createGridToExport();
+			var gridIdToExport = 'gridToExport'
 			if (/*@cc_on!@*/0) { //Exporting to Excel not supported in IE
 					Ext.Msg.alert('Error', 'Exporting to CSV is not supported in Internet Explorer. Please switch to a different browser and try again.');
-			} else if (document.getElementById('gridToExport')) {
+			} else if (document.getElementById(gridIdToExport)) {
 
-					Ext.getBody().mask('Exporting ...');
+					me.setLoading('Exporting ...');
 
 					setTimeout(function () {
 							var template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-' +
@@ -150,165 +230,27 @@ The “age” of a standard has to do with the time it has been in the current c
 											return c[p];
 									})
 							};
-							var table = document.getElementById('gridToExport');
-						//	Ext.getCmp('gridToExport-container').removeAll();
+							var table = document.getElementById(gridIdToExport);
 							var excel_data = '<tr>';
-							Ext.Array.each(table.innerHTML.match(/<span .*?x-column-header-text.*?>.*?<\/span>/gm), function (column_header_span) {
+							_.each(table.innerHTML.match(/<span .*?x-column-header-text.*?>.*?<\/span>/gm), function (column_header_span) {
 									excel_data += (column_header_span.replace(/span/g, 'td'));
 							});
 							excel_data += '</tr>';
-							Ext.Array.each(table.innerHTML.match(/<tr id="rallygridview.*?<\/tr>/gm), function (line) {
+							_.each(table.innerHTML.match(/<tr id="rallygridview.*?<\/tr>/gm), function (line) {/*The RegExp differs according to the way way the grid is created*/
 									excel_data += line.replace(/[^\011\012\015\040-\177]/g, '>>');
 							});							
 							var ctx = {worksheet: name || 'Worksheet', table: excel_data};
 							window.location.href = 'data:application/vnd.ms-excel;base64,' + base64(format(template, ctx));
-							Ext.getBody().unmask();
+							me.setLoading(false);
 					}, 500);
 			}
     },	 /**___________________________________ DATA STORE METHODS ___________________________________*/	
-		getStandardizationKBriefQuery: function(){
-			var me=this,
-
-				filter1 = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'TypeDefOid', value:'13907894958'}).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban ', value:'IE0 <br />(Proposal)'}).or(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban ', value:'IE1 Pending<br />(Decision)'})).or(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban ', value:'IE2 Pending<br />(Plan)'})).or(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban ', value:'IE4 Pending<br />(Deploy All)'}))).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'DirectChildrenCount  ', value:0})),
-				filter2 = 	Ext.create('Rally.data.wsapi.Filter', {property: 'TypeDefOid', value:'13907895013'}).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban ', value:'IE0 <br />(Proposal)'}));
-				
-				filter3 = Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!=' , value: null });
-				
-			return filter3;/* filter1.or(filter2) */;
-		},		
-		
-		/**
-			get all the standardization K-briefs
-			*/
-		_loadStandardizationKBrief: function(){
-			var me = this;
- 			var me = this,
-				config = {
-						model: 'HierarchicalRequirement',
-						compact:false,
-						filters: me.getStandardizationKBriefQuery() ,
-/* 						 fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','Feature','c_StdsKanbanOrg','InProgressDate','c_NextIEWW','LastUpdateDate','LatestDiscussionAgeInMinutes','RevisionHistory','Revision','Description','CreationDate'],  */
-						fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg'],
-						context: {
-							workspace:null,
-							project: '/project/' + me.ProjectRecord.data.ObjectID ,
-							projectScopeDown: true,
-							projectScopeUp: false
-						}
-					};
-				return me.parallelLoadWsapiStore(config).then(function(store){
-					me._createGridStore(store);
-					/* me._createGrid(store); */
-					/* me._loadStandardizationKBriefSnapshot(); */
-					/* store.destroyStore(); */
-				})
-			.then(function(){
-				//me._createGrid(me._customRecords);
-				me._addExportButton();
-			});					
-		},
-		_loadStandardizationKBriefSnapshot: function(){
-		     /*    var artifacts = Ext.create('Rally.data.wsapi.artifact.Store', {
-            models: ['UserStory','Defect'],
-            fetch: ['c_StdsKanban','ObjectID','Workspace','VersionId','RevisionHistory','Revisions','CreationDate','Description','Owner','FormattedID','Blocked','BlockedReason','Ready','Name','Tags','DisplayColor','Project','Discussion:summary','LatestDiscussionAgeInMinutes','Tasks:summary[State;ToDo;Owner;Blocked]','TaskStatus','Defects:summary[State;Owner]','DefectStatus','C_StdsKanbanOrg','DragAndDropRank'],
-            autoLoad: true,
-           	filters: me.getStandardizationKBriefQuery(),
-					context: {
-						workspace: null,
-						project: '/project/24042562075',
-						projectScopeDown: true,
-						projectScopeUp: false
-					},						
-          listeners: {
-						load: this._onDataLoaded,
-						scope: this
-          }
-        });		 */	
-
-/* 		var me = this;
- 				var parallelLoaderConfig = {
- 					context:{ 
-						workspace: me.getContext().getGlobalContext().getWorkspace()._ref,
-						project: me.ProjectRecord.data._ref,
-					}, 
-					compress:true,
-					findConfig: { 
-						_TypeHierarchy: 'HierarchicalRequirement',
-						Project: me.ProjectRecord.data.ObjectID,
-						_ValidFrom: { $lte: new Date("2013-09-13") }/* ,
-						_ValidTo: { $gt: releaseStart }/  ,
-						Children: null */
-					/* },
-					fetch   :[ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_KanbanStatus", "ScheduleState" ],
-          hydrate :[ "c_KanbanStatus", "ScheduleState" ],
-				};   
-				return me.parallelLoadLookbackStore(parallelLoaderConfig).then(function(snapshotStore){ 
-				debugger;
-					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
-					var records = _.filter(snapshotStore.getRange(), function(snapshot){
-
-					});
-				});	 */	 	
-					//me._loadStandardizationKBrief();
-					var me = this,
-					deferred = Q.defer();
-					Ext.create("Rally.data.lookback.SnapshotStore",
-					{
-							fetch   : [ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_StdsKanban", "c_KanbanStatus", "ScheduleState" ],
-							hydrate : [ "c_KanbanStatus", "ScheduleState","c_StdsKanban" ],
-							filters :
-							[
-									{
-											property : "_ProjectHierarchy",
-											value    : me.ProjectRecord.data.ObjectID
-									},
-									{
-											property: "_TypeHierarchy",
-											value: { $nin: [ -51009, -51012, -51031, -51078 ] }
-									},
-									{
-											property: "_ValidFrom",
-											value: { $gt: "2013-09-13" }
-									}
-							],
-							sorters :
-							[
-									{
-											property  : "_ValidTo",
-											direction : "ASC"
-									}
-							]
-					}).load(
-					{
-							params:
-							{
-									compress: false,
-									removeUnauthorizedSnapshots: true
-							},
-							callback : function(records, operation, success)
-							{
-								if(!success) deferred.reject('could not load data from server');
-								else {
-									me.UserStoryKbriefSnapShot = _.groupBy(records, function(d){return d.data.ObjectID});
-								deferred.resolve(records);
-								}
-								
-							}
-					});	
-		return deferred.promise;					
-		},		
-    _createGridStore: function(store) {
+/**___________________________________ CREATING AND RENDERING GRID ___________________________________*/	
+    _createGridStore: function() {
 			var me = this;
         me._customRecords = [];
-				data = store.getRange();
-        _.each(data, function(item, index) {
+				/* data = store.getRange(); */
+        _.each(me.griStoreItems, function(item, index) {
 					var kbriefDescription =  item.get('c_StdsKanban').replace("<br />"," ");
 					var ageDays = me._getStageAgeDays(item.get('c_StdsKanban'),item.get('ObjectID'));
 					var defaultAgeDays = me._getAppSetting(item.get('c_StdsKanban'));
@@ -347,7 +289,6 @@ The “age” of a standard has to do with the time it has been in the current c
 								Age: age								
             });
         }, me);
-      // me._createGrid(store,data);
     },
 		_getAppSetting: function(c_StdsKanban){
 			var me = this;
@@ -373,36 +314,8 @@ The “age” of a standard has to do with the time it has been in the current c
 			}else{
 				return "<span class ='normal'>" + dt + "</span>";
 			}
-			
-/*
-			2015-01-14T00:40:31.613Z
-
-			2015-11-16T03:13:34.233Z			
-         var daysOld = 0;
-        function getLastStateChange() {
-            var revisions = item.RevisionHistory.Revisions;
-            var lastStateChangeDate = "";
-
-            rally.forEach(revisions, function(revision) {
-                if (lastStateChangeDate.length === 0) {
-                    var attr = options.attribute.toUpperCase();
-
-                    if (revision.Description.indexOf(attr + " changed from") !== -1) {
-                        lastStateChangeDate = revision.CreationDate;
-                    }
-                    if (revision.Description.indexOf(attr + " added") !== -1) {
-                        lastStateChangeDate = revision.CreationDate;
-                    }
-                }
-            });
-            return lastStateChangeDate || item.CreationDate;
-        }
-        var lastStateDate = getLastStateChange();
-
-        var lastUpdateDate = rally.sdk.util.DateTime.fromIsoString(lastStateDate);
-        return rally.sdk.util.DateTime.getDifference(new Date(), lastUpdateDate, "day"); */
     },		
-    _createGrid: function(store){
+    _createGrid: function(){
        var me = this;
 			//create the store that will hold the rows in the table
 			var gridStore = Ext.create('Rally.data.custom.Store', {
@@ -412,11 +325,7 @@ The “age” of a standard has to do with the time it has been in the current c
 						{
 							text: 'Name of Kbrief',
 							dataIndex: 'c_KBrief',
-							flex: 1/* ,
-							renderer: function(value){
-								if(_.isEmpty(value)){ return "KBrief Not linked";}
-								else{ return value.DisplayString = value.DisplayString ==="" || value.DisplayString === null  ? value.LinkID + ": KBrief Not linked" : value.DisplayString} ;
-							} */
+							flex: 1
 						},
 						{
 							text: 'Description', 
@@ -470,6 +379,25 @@ The “age” of a standard has to do with the time it has been in the current c
 			Ext.getCmp('gridKbriefs').add(g);
 			/* this.add(g); */ 
    },		
+		_loadEverything: function(){
+			var me = this;
+			return Q.all([
+				me._loadStandardizationKBriefSnapshot(),
+				me._loadStandardizationKBrief()
+			])
+			.then(function(){
+				me._createGridStore();
+				me._addExportButton();
+			})
+			.then(function(){
+				me._createGrid();
+			})
+			.fail(function(reason){
+				me.setLoading(false);
+				me.alert('ERROR', reason);
+			})
+			.then(function(){ me.setLoading(false); });
+		},
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
@@ -488,13 +416,13 @@ The “age” of a standard has to do with the time it has been in the current c
 				})
 				.then(function(scopeProjectRecord){
 					me.ProjectRecord = scopeProjectRecord;
+					var _twoYears = 1000 * 60 *60 *24* 365 * 2;
+					var twoYearsBack = new Date(new Date()*1  - _twoYears);
+					me.twoYearsBackDate = twoYearsBack.getFullYear() + "-" + (twoYearsBack.getMonth() + 1) + "-" + twoYearsBack.getDay();
 				})					
 				.then(function(){
-					return me._loadStandardizationKBriefSnapshot();
+					me._loadEverything();
 				}) 
-				.then(function(value){ 
-					me._loadStandardizationKBrief();
-				})
 				.fail(function(reason){
 					me.setLoading(false);
 					me.alert('ERROR', reason);
