@@ -23,46 +23,53 @@ The “age” of a standard has to do with the time it has been in the current c
 		userAppsPref: 'intel-SAFe-apps-preference',
 		items:[{
 			xtype: 'container',
-      id: 'exportBtn'
-		},{
-			xtype:'container',
-			id:'gridKbriefs',
-			itemId:'gridContainer',
-			cls: 'grid-container'
-		}
-		,{
-			xtype:'container',
-			id:'gridToExport-container'
+			cls: 'navbar-header',
+			items:[{
+				xtype: 'container',
+				id: 'information',
+				cls:'app-wrapper'
+			},{
+				xtype: 'container',
+				id: 'exportBtn'
+			},{
+				xtype:'container',
+				id:'gridKbriefs',
+				itemId:'gridContainer',
+				cls: 'grid-container'
+			},{
+				xtype:'container',
+				id:'gridToExport-container'
+			}]			
 		}],
-		minWidth:910,	
+		minWidth:910,	 
 		/**___________________________________ APP SETTINGS ___________________________________*/	
 		getSettingsFields: function() {
 			return [
-					{
-						name: 'IE0',
-						xtype: 'rallytextfield'
-					},{
-						name: 'IE1',
-						xtype: 'rallytextfield'
-					},{
-						name: 'IE2',
-						xtype: 'rallytextfield'						
-					},{
-						name: 'IE3',
-						xtype: 'rallytextfield'								
-					},{
-						name: 'IE4',
-						xtype: 'rallytextfield'								
-					}
+				{
+					name: 'IE0',
+					xtype: 'rallytextfield'
+				},{
+					name: 'IE1',
+					xtype: 'rallytextfield'
+				},{
+					name: 'IE2',
+					xtype: 'rallytextfield'						
+				},{
+					name: 'IE3',
+					xtype: 'rallytextfield'								
+				},{
+					name: 'IE4',
+					xtype: 'rallytextfield'								
+				}
 			];
 		},
     config: {
 			defaultSettings: {
-					IE0: '',
-					IE1: '28',
-					IE2: '28',
-					IE3: '84',
-					IE4: '84'
+				IE0: '',
+				IE1: '28',
+				IE2: '28',
+				IE3: '84',
+				IE4: '84'
 			}
     },		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
@@ -79,7 +86,7 @@ The “age” of a standard has to do with the time it has been in the current c
 					model: 'HierarchicalRequirement',
 					compact:false,
 					filters: me.getStandardizationKBriefQuery() ,
-					fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg'],
+					fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg','Iteration','Owner','c_NextIEWW'],
 					context: {
 						workspace:null,
 						project: '/project/' + me.ProjectRecord.data.ObjectID ,
@@ -97,8 +104,8 @@ The “age” of a standard has to do with the time it has been in the current c
 			deferred = Q.defer();
 			Ext.create("Rally.data.lookback.SnapshotStore",
 			{
-				fetch   : [ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_StdsKanban", "c_KanbanStatus", "ScheduleState" ],
-				hydrate : [ "c_KanbanStatus", "ScheduleState","c_StdsKanban" ],
+				fetch   : [ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_StdsKanban", "c_KanbanStatus", "ScheduleState",'c_StdsKanbanOrg' ],
+				compact:false,
 				filters :
 				[
 					{
@@ -132,7 +139,7 @@ The “age” of a standard has to do with the time it has been in the current c
 				{
 					if(!success) deferred.reject('could not load data from server');
 					else {
-						me.UserStoryKbriefSnapShot = _.groupBy(records, function(d){return d.data.ObjectID});
+						me.UserStoryKbriefSnapShot = _.groupBy(records, function(d){return d.data.ObjectID ;});
 						deferred.resolve(records);
 					}
 				}
@@ -148,146 +155,97 @@ The “age” of a standard has to do with the time it has been in the current c
 			Ext.getCmp('exportBtn').add({
 					xtype: 'rallybutton',
 					cls: 'button-export',
-					text: 'Export to Excel',
+					text: '<i class="fa fa-file-excel-o fa-6"></i>  Export to Excel',
 					handler: me._onClickExport,
 					visible: true,
 					scope:me
 			});
-		 },	
-		_createGridToExport: function(){
-       var me = this;
-       Ext.getCmp('gridToExport-container').removeAll();       
-			//create the store that will hold the rows in the table
-			var gridStore = Ext.create('Rally.data.custom.Store', {
-					pageSize: 10000, 
-					data: me._customRecords
-				});
-			var gridColumns = [
-						{
-							text: 'Name of Kbrief',
-							dataIndex: 'c_KBrief'
-						},
-						{
-							text: 'Description', 
-							dataIndex: 'Description',
-							flex:2,		
-							sortable:true,
-						},
-						{
-							text: 'IE Stage', 
-							dataIndex: 'c_StdsKanban',
-							flex:1									
-						},
-						{
-							text: 'No of days in IE Stage', 
-							dataIndex:'Age',
-							flex: 1 
-						},
-						{
-							text: 'Exceeded Time Limit', 
-							dataIndex: 'TimeLimitFlag',
-							flex:1
-						},						
-						{
-							text: 'Org', 
-							dataIndex: 'c_StdsKanbanOrg',
-							flex:1
-						}
-					]
-			var g = Ext.create('Rally.ui.grid.Grid', {
-					itemId: 'mygrid',
-					height:1,
-					id: 'gridToExport',
-					showPagingToolbar:false,
-					store: gridStore,
-					columnCfgs:gridColumns 
-			});
-			Ext.getCmp('gridToExport-container').add(g);	 	
-		},
-   _onClickExport: function (gridId) {
-			var me = this;
-			me._createGridToExport();
-			var gridIdToExport = 'gridToExport'
+		},	
+		_onClickExport: function (gridId) {
+			var me = this,
+				gridIdToExport = 'mygrid';			
 			if (/*@cc_on!@*/0) { //Exporting to Excel not supported in IE
 					Ext.Msg.alert('Error', 'Exporting to CSV is not supported in Internet Explorer. Please switch to a different browser and try again.');
-			} else if (document.getElementById(gridIdToExport)) {
-
-					me.setLoading('Exporting ...');
-
-					setTimeout(function () {
-							var template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-' +
-									'microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head>' +
-									'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>' +
-									'{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>' +
-									'</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table>{table}' +
-									'</table></body></html>';
-
-							var base64 = function (s) {
-									return window.btoa(unescape(encodeURIComponent(s)));
-							};
-							var format = function (s, c) {
-									return s.replace(/{(\w+)}/g, function (m, p) {
-											return c[p];
-									})
-							};
-							var table = document.getElementById(gridIdToExport);
-							var excel_data = '<tr>';
-							_.each(table.innerHTML.match(/<span .*?x-column-header-text.*?>.*?<\/span>/gm), function (column_header_span) {
-									excel_data += (column_header_span.replace(/span/g, 'td'));
-							});
-							excel_data += '</tr>';
-							_.each(table.innerHTML.match(/<tr id="rallygridview.*?<\/tr>/gm), function (line) {/*The RegExp differs according to the way way the grid is created*/
-									excel_data += line.replace(/[^\011\012\015\040-\177]/g, '>>');
-							});							
-							var ctx = {worksheet: name || 'Worksheet', table: excel_data};
-							window.location.href = 'data:application/vnd.ms-excel;base64,' + base64(format(template, ctx));
-							me.setLoading(false);
-					}, 500);
+			} 
+			else if (document.getElementById(gridIdToExport) !== null) {
+				me.setLoading('Exporting ...');
+				setTimeout(function () {
+					var template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-' +
+							'microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head>' +
+							'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>' +
+							'{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>' +
+							'</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table>{table}' +
+							'</table></body></html>';
+					var base64 = function (s) {
+							return window.btoa(unescape(encodeURIComponent(s)));
+					};
+					var format = function (s, c) {
+						return s.replace(/{(\w+)}/g, function (m, p) {
+							return c[p];
+						});
+					};
+					var table = document.getElementById(gridIdToExport);
+					var excel_data = '<tr>';
+					_.each(table.innerHTML.match(/<span .*?x-column-header-text.*?>.*?<\/span>/gm), function (column_header_span) {
+						//hack to remove the renderer html
+						column_header_span = column_header_span.replace(/<span .*?x-column-header-inner.*?>/g,'');
+						excel_data += (column_header_span.replace(/span/g, 'td'));
+					}); 
+					excel_data += '</tr>';
+					_.each(table.innerHTML.match(/<tr id="rallygridview.*?<\/tr>/gm), function (line) {/*The RegExp differs according to the way way the grid is created*/
+					//hack for filtered data
+						if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null)
+							excel_data += line.replace(/[^\011\012\015\040-\177]/g, '>>');
+					});							
+					var ctx = {worksheet: name || 'Worksheet', table: excel_data};
+					window.location.href = 'data:application/vnd.ms-excel;base64,' + base64(format(template, ctx));
+					me.setLoading(false);
+				}, 500);
 			}
-    },	 /**___________________________________ DATA STORE METHODS ___________________________________*/	
+		},
 /**___________________________________ CREATING AND RENDERING GRID ___________________________________*/	
     _createGridStore: function() {
 			var me = this;
         me._customRecords = [];
-				/* data = store.getRange(); */
+
         _.each(me.griStoreItems, function(item, index) {
+					//if(item.get('c_StdsKanban').replace("<br />"," ") === "IE4 Pending (Deploy All)" /* && item.get('c_StdsKanbanOrg') === "DCD" */){
 					var kbriefDescription =  item.get('c_StdsKanban').replace("<br />"," ");
-					var ageDays = me._getStageAgeDays(item.get('c_StdsKanban'),item.get('ObjectID'));
+					var ageDays = me._getStageAgeDays(item.get('c_StdsKanban'),item.get('c_StdsKanbanOrg'),item.get('ObjectID'));
 					var defaultAgeDays = me._getAppSetting(item.get('c_StdsKanban'));
+					var owner = item.get('Owner')._refObjectName;
+					var owningGroup = item.get('Iteration')? item.get('Iteration')._refObjectName : "-";
+					var nextReview = item.get('c_NextIEWW');
 					var age = "";
-					var timeLimitFlag = "No";
+					var timeLimitFlag = "N/A";
 					if(ageDays > defaultAgeDays){
-					/* 	age =  "<span class ='red'>" + ageDays + "</span>";
-						timeLimitFlag = "<span class ='red'> Yes </span>"; */
 						age = ageDays;
-						timeLimitFlag = "Yes";
+						timeLimitFlag = defaultAgeDays;
 					}else{
-						/* age =  "<span class ='normal'>" + ageDays + "</span>";
-						timeLimitFlag = "<span class ='red'> No </span>"; */
 						age = ageDays;
-						timeLimitFlag = "No";
+						timeLimitFlag = defaultAgeDays;
 					}	
 					//some of the stages are not defined
 					if (typeof defaultAgeDays === "undefined" || defaultAgeDays === "" )
-						timeLimitFlag = "Not defined";
+						timeLimitFlag = "N/A";
 						
 					var name = item.get('c_KBrief');
-					if(_.isEmpty(name)){ 
-						kbriefName =  "KBrief Not linked";
-					}
-					else{ 
-						kbriefName = name.DisplayString ==="" || name.DisplayString === null  ? name.LinkID + ": KBrief Not linked" : name.DisplayString
-					} ;					
+					var regex = _.isEmpty(name) ? null : name.LinkID.match(/K{1}B{1}.{1}\d{6}/);
+					var kbriefName = regex === null ? "KBrief Not linked" : regex[0].replace(regex[0].slice(2,3),"-") + ".docx";
           me._customRecords.push({
                 _ref: item.get('_ref'),
                 c_KBrief: kbriefName,
-                Description: item.get('Name').replace(","," "),
+                Description: item.get('Name'),
                 c_StdsKanban: kbriefDescription,
 								ObjectID: item.get('ObjectID'),
 								TimeLimitFlag: timeLimitFlag ,
 								c_StdsKanbanOrg: item.get('c_StdsKanbanOrg'),
-								Age: age								
-            });
+								Age: age,
+								Owner: owner,
+								OwningGroup:owningGroup,
+								nextReview:nextReview
+
+				});//}
         }, me);
     },
 		_getAppSetting: function(c_StdsKanban){
@@ -295,92 +253,156 @@ The “age” of a standard has to do with the time it has been in the current c
 			/* console.log(c_StdsKanban,c_StdsKanban.substr(0,3),me.getSetting(c_StdsKanban.substr(0,3))); */
 			return me.getSetting(c_StdsKanban.substr(0,3));
 		},
-		_getStageAgeDays : function(c_StdsKanban,ObjectID) {
+		_getStageAgeDays : function(c_StdsKanban,c_StdsKanbanOrg,ObjectID) {
 			var me = this;
-			var filtered = _.filter(me.UserStoryKbriefSnapShot[ObjectID],function(d){ return d.data.c_StdsKanban === c_StdsKanban});
-			var validTo = new Date(filtered[filtered.length-1].data._ValidTo) > new Date() ? new Date() : new Date(filtered[filtered.length-1].data._ValidTo)
-			//var test = _.groupBy(records, function(d){console.log(d.data.ObjectID);return d.data.ObjectID});
-			return  Rally.util.DateTime.getDifference(validTo, new Date(filtered[0].data._ValidFrom), 'day');
-		},			
-		_getColumnAgeDays : function(c_StdsKanban,ObjectID) {
-			var me = this;
-			var filtered = _.filter(me.UserStoryKbriefSnapShot[ObjectID],function(d){ return d.data.c_StdsKanban === c_StdsKanban});
-			var validTo = new Date(filtered[filtered.length-1].data._ValidTo) > new Date() ? new Date() : new Date(filtered[filtered.length-1].data._ValidTo)
-			//var test = _.groupBy(records, function(d){console.log(d.data.ObjectID);return d.data.ObjectID});
-			var dt = Rally.util.DateTime.getDifference(validTo, new Date(filtered[0].data._ValidFrom), 'day');
-			var settingday = me._getAppSetting(c_StdsKanban);
-			if(dt > settingday){
-				return "<span class ='red'>" + dt + "</span>"
-			}else{
-				return "<span class ='normal'>" + dt + "</span>";
+			var filtered = _.filter(me.UserStoryKbriefSnapShot[ObjectID],function(d){ return d.data.c_StdsKanban === c_StdsKanban; });
+			var userStorySnapShotSortDesc = _.sortBy(me.UserStoryKbriefSnapShot[ObjectID], '_ValidFrom').reverse();
+			
+			var validFrom = "";
+			var snapShotnotFound = true; 
+			//Stage changed considering with in same organization or organization changed but stage remained the same
+			for(i = 0 ; i< userStorySnapShotSortDesc.length ; i ++){
+				if(i < userStorySnapShotSortDesc.length - 1){
+					if((userStorySnapShotSortDesc[i].data.c_StdsKanban !== userStorySnapShotSortDesc[i + 1].data.c_StdsKanban && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg === c_StdsKanbanOrg && 
+						snapShotnotFound && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanban === c_StdsKanban ) ||
+						(userStorySnapShotSortDesc[i].data.c_StdsKanban === userStorySnapShotSortDesc[i + 1].data.c_StdsKanban && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg !== userStorySnapShotSortDesc[i+1].data.c_StdsKanbanOrg && 
+						snapShotnotFound && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg === c_StdsKanbanOrg ))						
+						{
+								validFrom = userStorySnapShotSortDesc[i].data._ValidFrom;
+								snapShotnotFound = false;
+						}
+				}
 			}
-    },		
+		//had the status when it was created
+			if(validFrom === "" ){
+				validFrom = userStorySnapShotSortDesc[userStorySnapShotSortDesc.length - 1].data._ValidFrom;
+			}
+			return  Rally.util.DateTime.getDifference(new Date(), new Date(validFrom), 'day');
+		},
     _createGrid: function(){
        var me = this;
 			//create the store that will hold the rows in the table
 			var gridStore = Ext.create('Rally.data.custom.Store', {
 					data: me._customRecords
 				});
-			var gridColumns = [
-						{
-							text: 'Name of Kbrief',
-							dataIndex: 'c_KBrief',
-							flex: 1
-						},
-						{
-							text: 'Description', 
-							dataIndex: 'Description',
-							flex:2,		
-							sortable:true,
-						},
-						{
-							text: 'IE Stage', 
-							dataIndex: 'c_StdsKanban',
-							flex:1,
-							items:[
-									{ 
-										xtype:'intelgridcolumnfilter'
-									}
-							]										
-						},
-						{
-							text: 'No of days in IE Stage', 
-							dataIndex:'Age',
-							flex: 1 
-						},
-						{
-							text: 'Exceeded Time Limit', 
-							dataIndex: 'TimeLimitFlag',
-							flex:1,
-							items:[
-								{ 
-									xtype:'intelgridcolumnfilter'
-								}
-							]
-						},						
-						{
-							text: 'Org', 
-							dataIndex: 'c_StdsKanbanOrg',
-							flex:1,
-							items:[
-								{ 
-									xtype:'intelgridcolumnfilter'
-								}
-							],
+			me.gridColumns = [
+				{
+					text: 'Name of Kbrief',
+					dataIndex: 'c_KBrief',
+					flex: 1,
+					renderer: function(value){
+						if(value.indexOf('Not linked') > -1 ){
+							return value;
+						}else{
+							return "<a href='https://palantir.intel.com/sites/PalantirHome/Knowledge%20Briefs/" + value + "' target = '_blank'>" + value +"</a>";
+						}
+					}
+				},{
+					text: 'Description', 
+					dataIndex: 'Description',
+					flex:2,		
+					sortable:true
+				},{
+					text: 'Standard Owner ', 
+					dataIndex: 'Owner',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]										
+				},{
+					text: 'IE Stage', 
+					dataIndex: 'c_StdsKanban',
+					cls:"helllllo",
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]										
+				},{
+					text: 'Age (Days)', 
+					dataIndex:'Age',
+					renderer: function(value,r){
+						if(r.record.data.Age > r.record.data.TimeLimitFlag){
+							return  "<div class ='red'>" + value + "</div>" ; 
+						}else if( r.record.data.Age <= r.record.data.TimeLimitFlag){
+							return  "<div class ='green'>" + value + "</div>" ; 
+						}else{
+							return value;
+						}						
+					}
+				},{
+					text: 'Checkpoint (Days)', 
+					dataIndex: 'TimeLimitFlag',
+					renderer: function(value,r){
+						var stagingName = r.record.data.c_StdsKanban;
+						if(r.record.data.Age > r.record.data.TimeLimitFlag){
+							return  "<div class ='red'>" + value + "</div> " ;//+ stagingName  ; 
+						}else if( r.record.data.Age <= r.record.data.TimeLimitFlag){
+							return  "<div class ='green'>" + value + "</div>";//+ stagingName ; 
+						}else{
+							return value;
+						}													
+					},
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
 						}
 					]
+				},{//nextReview
+					text: 'nextReview', 
+					dataIndex: 'nextReview',
+					flex:1
+				},{//nextReview
+					text: 'Owning Division', 
+					dataIndex: 'OwningGroup',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+				},{
+					text: 'Global/Local Standards', 
+					dataIndex: 'c_StdsKanbanOrg',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+				}
+			];
 			var g = Ext.create('Rally.ui.grid.Grid', {
-					itemId: 'mygrid',
-					enableEditing:false,
-					disableSelection: true,
-					store: gridStore,
-					columnCfgs:gridColumns 
+				/* itemId:'mygrid123', */
+				id: 'mygrid',
+				enableEditing:false,
+				disableSelection: true,
+				store: gridStore,
+				columnCfgs:me.gridColumns 
 			});
 			Ext.getCmp('gridKbriefs').add(g);
-			/* this.add(g); */ 
-   },		
+		},		
+		_renderInformationHeader: function(){
+				var me = this;
+				var fields = me.getSettingsFields();
+				var notes = "<div><table><tr><span class='stage-configuration-title'>Time limits for each IE stages  </span></tr>";
+				_.each(fields, function(appSetting){
+					appSettingDays = me.getSetting(appSetting.name) !=="" ? me.getSetting(appSetting.name): "N/A";
+					notes += "<td class='stage-configuration'>" + appSetting.name + " : " + appSettingDays + " days </td>";
+				});
+				notes += "</table></div>";
+				Ext.getCmp('information').update(notes);
+		},
 		_loadEverything: function(){
 			var me = this;
+			me._renderInformationHeader();
 			return Q.all([
 				me._loadStandardizationKBriefSnapshot(),
 				me._loadStandardizationKBrief()
@@ -402,8 +424,8 @@ The “age” of a standard has to do with the time it has been in the current c
 		launch: function(){
 			var me = this;
 			me.setLoading('Loading configuration');
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			/* me.initDisableResizeHandle();
+			me.initFixRallyDashboard(); */
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
@@ -418,7 +440,7 @@ The “age” of a standard has to do with the time it has been in the current c
 					me.ProjectRecord = scopeProjectRecord;
 					var _twoYears = 1000 * 60 *60 *24* 365 * 2;
 					var twoYearsBack = new Date(new Date()*1  - _twoYears);
-					me.twoYearsBackDate = twoYearsBack.getFullYear() + "-" + (twoYearsBack.getMonth() + 1) + "-" + twoYearsBack.getDay();
+					me.twoYearsBackDate = twoYearsBack.getFullYear() + "-" + (twoYearsBack.getMonth() + 1) + "-" + twoYearsBack.getDate();
 				})					
 				.then(function(){
 					me._loadEverything();
