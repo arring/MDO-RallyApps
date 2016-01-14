@@ -681,6 +681,7 @@
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
 					fetch: me.projectFields,
+					compact:false,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context:{

@@ -321,6 +321,41 @@
 					}, {});
 				});
 		},
+		_loadIterations: function(){
+			var me=this,
+				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.AllIterations =[];
+			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
+				iterationStore = Ext.create("Rally.data.wsapi.Store", {
+					model: "Iteration",
+					remoteSort: false,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project", "ObjectID"],
+					context:{
+						project: project.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:false
+					},
+					filters: [{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}]
+				});
+			return me.reloadStore(iterationStore)
+				.then(function(iterationStore){ 
+					me.AllIterations[project.data.ObjectID] = iterationStore.getRecords(); 
+					debugger;
+				});
+			}));			
+
+		},		
 		_loadSnapshotStores: function(){
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -1281,6 +1316,7 @@
 			.then(function(){ 
 				//load data
 				return Q.all([
+					me._loadIterations(),
 					me._loadStories(),
 					me._loadSnapshotStores()
 				]);
