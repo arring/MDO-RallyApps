@@ -171,7 +171,7 @@
 						var teamTypeInfosWithNumber1 = _.filter(teamTypeInfos, function(teamTypeInfo){ return teamTypeInfo.number === 1; });
 						if(teamTypeInfosWithNumber1.length > 1){
 							var projectsWithoutExplicit1 = _.filter(teamTypeInfosWithNumber1, function(teamTypeInfo){ 
-									return teamTypeInfo.projectName.data.Name.indexOf('1') === -1; 
+									return teamTypeInfo.projectName.indexOf('1') === -1; 
 								}),
 								startIndex = Math.max.apply(Math, _.pluck(teamTypeInfos, 'number')) + 1;
 							me._resolveTeamTypeInfoConflictsFromProjectNames(projectsWithoutExplicit1, startIndex);

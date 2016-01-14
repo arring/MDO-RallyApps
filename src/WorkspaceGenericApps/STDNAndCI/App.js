@@ -103,14 +103,12 @@
 							projectScopeUp: false
 						}
 					};
+				newMatrixStdnCIUserStoryPlanEstimate[trainName] = {};
 				return me.parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
 						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;
 						//userstories for standarization
-						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName]){
-							newMatrixStdnCIUserStoryPlanEstimate[trainName] = {};
-						}
 						if(!newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName]){
 							newMatrixStdnCIUserStoryPlanEstimate[trainName][projectName] = 0 ;								
 						}
@@ -140,14 +138,12 @@
 							projectScopeUp: false
 						}
 					};
+				newMatrixProjectUserStoryPlanEstimate[trainName] = {};
 				return me.parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
 						var projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
 						//userstories for standarization
-						if(!newMatrixProjectUserStoryPlanEstimate[trainName]){
-							newMatrixProjectUserStoryPlanEstimate[trainName] = {};
-						}
 						if(!newMatrixProjectUserStoryPlanEstimate[trainName][projectName]){
 							newMatrixProjectUserStoryPlanEstimate[trainName][projectName] = 0 ;								
 						}
@@ -163,10 +159,7 @@
 		_createGridDataHash: function(){
 			var me = this;	
 			me.GridData = _.reduce(me.ScrumGroupConfig, function(hash,train,key){
-				var projectNames = [];
-				_.each(me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName], function(userStories, projectName){
-					projectNames.push(projectName);
-				});
+				var projectNames = _.map(train.Scrums, function(scrum){ return scrum.data.Name; });
 				var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
 				hash[train.ScrumGroupName] = _.reduce(horizontalMap, function(hash,item,key){
 					var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
@@ -177,7 +170,7 @@
 							var projectName = r.projectName;
 							hash[scrumTeamType] = { 
 								scrumTeamType: scrumTeamType,
-								scrumName: projectName ,
+								scrumName: projectName,
 								totalPoints: me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0,
 								stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0
 							};
@@ -345,6 +338,11 @@
 				.then(function(){
 					me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
 					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); 
+					return Q.all(_.map(me.ScrumGroupConfig, function(cfg){
+						return me.loadAllLeafProjects({data: { ObjectID: cfg.ScrumGroupRootProjectOID}}).then(function(leafProjects){
+							cfg.Scrums = leafProjects;
+						});
+					}));
 				})
 				.then(function(){
 					//picking random Release as all the ScrumGroup share the same Release Name
