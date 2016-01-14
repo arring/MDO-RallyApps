@@ -1,0 +1,86 @@
+/*********	*************************************** NAVBAR/CONTAINERS *****************************************/
+#navbar { padding:0 10px 0 10px; }
+#releasePicker { margin: 4px 0 0 0; }
+
+/************************************************ GRID STUFF *****************************************/
+.x-grid-cell-inner {
+	padding: 0 !important;
+}
+.x-grid-cell .x-box-inner,
+.x-grid-cell .x-box-inner .x-box-target,
+.team-type-cell,
+.stdci-cell, 
+.bad-stdci-cell, 
+.good-stdci-cell {
+	width:100% !important;
+}
+
+.team-type-cell,
+.stdci-cell, 
+.bad-stdci-cell, 
+.good-stdci-cell,
+.stdci-cell *, 
+.bad-stdci-cell *, 
+.good-stdci-cell * {
+	text-align: center !important;
+}
+
+.x-grid-cell.bad-stdci-cell, 
+.bad-stdci-cell { 
+	flex: 1;
+	background-color:rgba(255, 0, 0, 0.50) !important; 
+}
+
+.x-grid-cell.good-stdci-cell,
+.good-stdci-cell { 
+	flex: 1;
+	background-color:rgba(0, 255, 0, 0.50) !important; 
+}
+
+.stdci-cell-container,
+.horizontal-name-cell {
+	border-right: 1px solid lightgrey;
+	width:100%;
+	height:100%; }
+
+.stdci-cell-container  .x-container,
+.horizontal-name-cell > .x-grid-cell-inner {
+	display:flex;
+	text-align:center;
+	justify-content:center;
+	align-items:stretch; }
+	
+.train-header-cls {
+	text-align:center;
+}
+
+.team-type-cell {
+	border-right: 1px solid black; 
+}
+	
+.x-grid-table tbody > tr:last-child > td {
+	border-top: 1px solid black; 
+}
+.x-grid-table tbody > tr:not(:last-child):not(:first-child) > td {
+	border-top: 1px solid gray; 
+}
+.x-grid-table tbody > tr > td:last-child  {
+	border-left: 1px solid black; 
+}
+
+.grid-container > span > div {
+	display:flex !important;
+	justify-content:center; 
+}
+
+/* 
+.stdci-cell-container  .x-box-inner {
+	height: 100% !important;
+}
+
+.stdci-cell-container .x-box-target {
+	display: flex;
+	justify-content: center;
+	align-items: stretch;
+	height: 100% !important;
+} */

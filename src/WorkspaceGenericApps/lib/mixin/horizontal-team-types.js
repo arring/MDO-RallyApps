@@ -77,7 +77,6 @@
 				function(teamTypeInfo){ return teamTypeInfo.projectRecord.data.Name; }),
 				function(teamTypeInfo, index){ teamTypeInfo.number = index + startIndex; return teamTypeInfo; });
 		},
-		
 		getAllHorizontalTeamTypeInfos: function(projectRecords){
 			var me = this;
 			return [].concat.apply([], _.map(_.groupBy(_.map(projectRecords, 
@@ -105,6 +104,90 @@
 		isProjectInHorizontal: function(projectRecord, horizontal){
 			return this._getHorizontalTeamTypeInfo(projectRecord).horizontal === horizontal;
 		},
+		
+		_getHorizontalTeamTypeInfoFromProjectName: function(projectName){
+			var me=this,
+				scrumName = projectName.split('-')[0].trim(),
+				scrumTeamType = scrumName.split(/\d/)[0].trim(),
+				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
+				notInHorizontalObject = {
+					projectName: projectName,
+					horizontal:null, 
+					teamType:scrumTeamType,
+					teamTypeComponents: [],
+					number:number
+				},
+				teamTypeObject = _.reduce(this.HorizontalGroupingConfig.groups, function(result, teamTypes, horizontal){
+					if(result) return result; 
+					else {
+						var teamTypeMatches = _.reduce(teamTypes, function(teamTypeMatches, teamType){
+							/**
+								If the teamType is in the name of the scrum, add it to teamTypeMatches.
+								If there is another teamType already added that is a substring of this teamType,
+								remove it from the teamType matches. If the current teamType is a substring of another
+								teamType already matches, DO NOT add this teamType to the matched teamTypes
+								
+								Example:	
+									scrum name="ABC - Train"
+									teamType options:["AB" "ABC" "ABCD"]
+											
+									the above scrum name will match "AB" and "ABC", but will only return ["ABC"]
+							*/
+							if(scrumName.indexOf(teamType) > -1){
+								for(var i=teamTypeMatches.length-1;i>=0;--i){
+									if(teamTypeMatches[i].indexOf(teamType) > -1) return teamTypeMatches;
+									if(teamType.indexOf(teamTypeMatches[i]) > -1) teamTypeMatches.splice(i, 1);
+								}
+								teamTypeMatches.push(teamType);
+							}
+							return teamTypeMatches;
+						}, []);
+						return teamTypeMatches.length ? {
+								projectName: projectName,
+								horizontal:horizontal, 
+								teamType: teamTypeMatches.sort().join(' '), 
+								teamTypeComponents: teamTypeMatches.sort(),
+								number:number
+							} : 
+							null;
+					}
+				}, null);
+			return teamTypeObject || notInHorizontalObject;
+		},
+		_resolveTeamTypeInfoConflictsFromProjectNames: function(teamTypeInfos, startIndex){
+			startIndex = startIndex || 1;
+			_.each(_.sortBy(teamTypeInfos, 
+				function(teamTypeInfo){ return teamTypeInfo.projectName; }),
+				function(teamTypeInfo, index){ teamTypeInfo.number = index + startIndex; return teamTypeInfo; });
+		},	
+		getAllHorizontalTeamTypeInfosFromProjectNames: function(projectNames){
+			var me = this;
+			return [].concat.apply([], _.map(_.groupBy(_.map(projectNames, 
+				function(projectName){ return me._getHorizontalTeamTypeInfoFromProjectName(projectName); }),
+				function(teamTypeInfo){ return teamTypeInfo.teamType; }),
+				function(teamTypeInfos){
+					if(teamTypeInfos.length === 1) return teamTypeInfos; 
+					else {
+						var teamTypeInfosWithNumber1 = _.filter(teamTypeInfos, function(teamTypeInfo){ return teamTypeInfo.number === 1; });
+						if(teamTypeInfosWithNumber1.length > 1){
+							var projectsWithoutExplicit1 = _.filter(teamTypeInfosWithNumber1, function(teamTypeInfo){ 
+									return teamTypeInfo.projectName.indexOf('1') === -1; 
+								}),
+								startIndex = Math.max.apply(Math, _.pluck(teamTypeInfos, 'number')) + 1;
+							me._resolveTeamTypeInfoConflictsFromProjectNames(projectsWithoutExplicit1, startIndex);
+						}
+						return teamTypeInfos;
+					}
+				})
+			);
+		},		
+		getHorizontalTeamTypeInfoFromProjectName: function(projectName){
+			return this._getHorizontalTeamTypeInfoFromProjectName(projectName);
+		},
+		isProjectNameInHorizontal: function(projectName, horizontal){
+			return this._getHorizontalTeamTypeInfoFromProjectName(projectName).horizontal === horizontal;
+		},
+		
 		getAllHorizontalTeamTypeComponents: function(){
 			return [].concat.apply([], _.values(this.HorizontalGroupingConfig.groups));
 		},

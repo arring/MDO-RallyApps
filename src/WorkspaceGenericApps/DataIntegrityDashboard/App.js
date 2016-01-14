@@ -741,8 +741,9 @@
 			if (!me.isScopedToScrum) {
 				if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
 					if(me.isHorizontalView){
-						var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], 
-							function(m, p){ m[p.data.ObjectID] = true; return m; 
+						var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], function(m, p){ 
+							m[p.data.ObjectID] = true; 
+							return m; 
 						}, {});
 						return _.filter(me.UserStoryStore.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
 					}
