@@ -325,9 +325,34 @@
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
-				me.AllIterations =[];
+				me.AllIterations = 0;
 			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
-				iterationStore = Ext.create("Rally.data.wsapi.Store", {
+				config = {
+					model: 'Iteration',
+					filters: [{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}],
+					fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project", "ObjectID"],
+					context:{
+						project: project.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:false
+					},
+				};
+			return me.parallelLoadWsapiStore(config).then(function(store){
+				me.AllIterations +=_.reduce(store.getRange(), function(sum, s) {
+					var n = s.data.PlannedVelocity;
+					return sum + n;
+				},0);
+				//delete store;
+			});				
+/* 				iterationStore = Ext.create("Rally.data.wsapi.Store", {
 					model: "Iteration",
 					remoteSort: false,
 					limit:Infinity,
@@ -347,12 +372,12 @@
 						operator: "<=",
 						value: endDate  
 					}]
-				});
-			return me.reloadStore(iterationStore)
+				}); */
+/* 			return me.reloadStore(iterationStore)
 				.then(function(iterationStore){ 
 					me.AllIterations[project.data.ObjectID] = iterationStore.getRecords(); 
 					debugger;
-				});
+				}); */
 			}));			
 
 		},		
@@ -978,11 +1003,13 @@
 			me.dataScope = scopechange[me.TeamType];
 
 			//cumulative flow chart 
-			var commitDataPlus =[];
+			var commitDataPlus =[],
+					targetVelocity =[];
 			// commitDataMinus = [];
 			//adding a line for the initial Commitment projection
 			_.each(me.aggregateChartData[me.TeamType].categories,function(f,key){
 				commitDataPlus.push(me.total.initialCommit);//commitDataMinus.push(total.initialCommit - 10);
+				targetVelocity.push(me.AllIterations);
 			});
 			//console.log(commitDataPlus,commitDataMinus);
 			me.aggregateChartData[me.TeamType].series.push({
@@ -991,9 +1018,18 @@
 				dashStyle: "shortdash",
 				color: "red",
 				data:commitDataPlus,
-				name: "Commitment",
+				name: "Current Commit LCL",
+				type: "spline"
+			},{
+				colorIndex: 1,
+				symbolIndex: 1,
+				dashStyle: "shortdash",
+				color: "red",
+				data:targetVelocity,
+				name: "Available Velocity UCL",
 				type: "spline"
 			});
+			
 			$("#retroChart").highcharts(Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 				chart: {
 					height: 400,
