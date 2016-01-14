@@ -236,7 +236,11 @@
 				.then(function(){
 					me.projectFields = ["ObjectID", "Releases", "Children", "Parent", "Name"];
 					me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function(item){ return item.IsTrain; }); 
-					/* _.remove(me.ScrumGroupConfig, function(d){return d.ScrumGroupName != "Julio"}); */
+					return Q.all(_.map(me.ScrumGroupConfig, function(cfg){
+						return me.loadAllLeafProjects({data: { ObjectID: cfg.ScrumGroupRootProjectOID}}).then(function(leafProjects){
+							cfg.Scrums = leafProjects;
+						});
+					}));
 				})
 				.then(function(){
 					//picking random Release as all the ScrumGroup share the same Release Name
@@ -435,20 +439,20 @@
 													click: {
 														element: 'el', //bind to the underlying el property on the panel
 														fn: function(data){ 
-															var newContext = Ext.create(Rally.app.Context, {
+															/*var newContext = Ext.create(Rally.app.Context, {
 																initialValues: {
 																		project: '/project/' + me.ProjectObjectIDMap[scrumData.scrumName] ,
 																		projectScopeDown: true,
 																		projectScopeUp: false
 																}
 														});
-														me.setContext(newContext);
+														me.setContext(newContext); */
 														var link = 'https://rally1.rallydev.com/#/'+ me.ProjectObjectIDMap[scrumData.scrumName] + 'ud' + SCHEDULED_USERSTORY_FILTER;
 														var evt = link.ownerDocument.createEvent('MouseEvents');
 														var RIGHT_CLICK_BUTTON_CODE = 2; // the same for FF and IE
 														evt.initMouseEvent('contextmenu', true, true,
-															link.ownerDocument.defaultView, 1, 0, 0, 0, 0, false,
-															false, false, false, RIGHT_CLICK_BUTTON_CODE, null);
+																link.ownerDocument.defaultView, 1, 0, 0, 0, 0, false,
+																false, false, false, RIGHT_CLICK_BUTTON_CODE, null);
 				 
 														window.parent.open("https://rally1.rallydev.com/#/17058640701ud/userstories?tpsSI=0&tpsV=qv%3A0");
 														}
