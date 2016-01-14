@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy562771";
+	var smAppID = "Portfolio_Hierarchy721402";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy562771";	
+					var smAppID = "Portfolio_Hierarchy721402";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2098,7 +2098,7 @@
 					}, {});
 				}
 			});
-		},	
+		},
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me=this,
@@ -2106,6 +2106,7 @@
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
 					fetch: me.projectFields,
+					compact: false,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context:{
@@ -2195,6 +2196,30 @@
 				});
 			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		loadReleasesAfterGivenDateByProjectObjID: function(projectObjectID, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},		
 		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
@@ -2345,7 +2370,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/**  
 	DESCRIPTION:
@@ -2423,7 +2448,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	given named queues, only allows one function at a time in each queue to execute. 
@@ -2477,7 +2502,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY: 
@@ -2533,7 +2558,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2582,7 +2607,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2617,7 +2642,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2669,7 +2694,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2736,7 +2761,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy562771";			
+						var smAppID = "Portfolio_Hierarchy721402";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
@@ -2865,7 +2890,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy562771").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy721402").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -3204,11 +3229,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy562771";			
+				var smAppID = "Portfolio_Hierarchy721402";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("Intel.PortfolioNavigator.IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy562771"
+						smAppID: "Portfolio_Hierarchy721402"
 					});
 				}
 			}());

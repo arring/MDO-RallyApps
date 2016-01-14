@@ -686,7 +686,7 @@
 					}, {});
 				}
 			});
-		},	
+		},
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me=this,
@@ -694,6 +694,7 @@
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: "Project",
 					fetch: me.projectFields,
+					compact: false,
 					limit:Infinity,
 					disableMetaChangeEvent: true,
 					context:{
@@ -783,6 +784,30 @@
 				});
 			return me.reloadStore(store).then(function(store){ return store.getRange(); });
 		},
+		loadReleasesAfterGivenDateByProjectObjID: function(projectObjectID, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},		
 		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
 			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
 			var me=this,
