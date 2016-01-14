@@ -325,7 +325,7 @@
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
-				me.AllIterations = 0;
+				me.AllScrumTargetVelocitySum = 0;
 			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
 				config = {
 					model: 'Iteration',
@@ -338,48 +338,20 @@
 						operator: "<=",
 						value: endDate  
 					}],
-					fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project", "ObjectID"],
+					fetch: ["PlannedVelocity"],
 					context:{
 						project: project.data._ref,
 						projectScopeUp:false,
 						projectScopeDown:false
-					},
+					}
 				};
-			return me.parallelLoadWsapiStore(config).then(function(store){
-				me.AllIterations +=_.reduce(store.getRange(), function(sum, s) {
-					var n = s.data.PlannedVelocity;
-					return sum + n;
-				},0);
-				//delete store;
-			});				
-/* 				iterationStore = Ext.create("Rally.data.wsapi.Store", {
-					model: "Iteration",
-					remoteSort: false,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					fetch: ["Name", "EndDate", "StartDate", "PlannedVelocity", "Project", "ObjectID"],
-					context:{
-						project: project.data._ref,
-						projectScopeUp:false,
-						projectScopeDown:false
-					},
-					filters: [{
-						property: "EndDate",
-						operator: ">=",
-						value: startDate
-					},{
-						property: "StartDate",
-						operator: "<=",
-						value: endDate  
-					}]
-				}); */
-/* 			return me.reloadStore(iterationStore)
-				.then(function(iterationStore){ 
-					me.AllIterations[project.data.ObjectID] = iterationStore.getRecords(); 
-					debugger;
-				}); */
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					me.AllScrumTargetVelocitySum +=_.reduce(store.getRange(), function(sum, iteration) {
+						var targetVelocity = iteration.data.PlannedVelocity;
+						return sum + targetVelocity;
+					},0);
+				});				
 			}));			
-
 		},		
 		_loadSnapshotStores: function(){
 			var me = this, 
@@ -1009,7 +981,7 @@
 			//adding a line for the initial Commitment projection
 			_.each(me.aggregateChartData[me.TeamType].categories,function(f,key){
 				commitDataPlus.push(me.total.initialCommit);//commitDataMinus.push(total.initialCommit - 10);
-				targetVelocity.push(me.AllIterations);
+				targetVelocity.push(me.AllScrumTargetVelocitySum);
 			});
 			//console.log(commitDataPlus,commitDataMinus);
 			me.aggregateChartData[me.TeamType].series.push({
@@ -1027,7 +999,7 @@
 				color: "red",
 				data:targetVelocity,
 				name: "Available Velocity UCL",
-				type: "spline"
+				type: "line"
 			});
 			
 			$("#retroChart").highcharts(Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
