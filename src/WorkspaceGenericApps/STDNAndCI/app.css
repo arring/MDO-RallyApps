@@ -28,7 +28,8 @@
 .x-grid-cell.bad-stdci-cell, 
 .bad-stdci-cell { 
 	flex: 1;
-	background-color:rgba(255, 0, 0, 0.50) !important; 
+	/* background-color:rgba(255, 0, 0, 0.50) !important;  */
+	background-color: pink !important;
 }
 
 .x-grid-cell.good-stdci-cell,
@@ -72,7 +73,12 @@
 	display:flex !important;
 	justify-content:center; 
 }
-
+a:visited {
+    color: #337ec6;
+}
+a:link {
+    color: #000000;
+}
 /* 
 .stdci-cell-container  .x-box-inner {
 	height: 100% !important;
