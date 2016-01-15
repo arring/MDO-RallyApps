@@ -270,6 +270,33 @@
 			return me.teamCommitsEstimateHash[portfolioItemObjectID];
 		},
 
+		/**___________________________________ STDNCI STUFF ___________________________________**/
+		/**
+			get all leaf stories in this release for the leaf projects under the train
+			*/
+		loadSTDNCIData: function(){
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
+				
+			var totalPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
+				var isLeaf = us.data.DirectChildrenCount === 0;
+				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				return (isLeaf && inRelease) ? sum + (us.data.PlanEstimate || 0) : sum;
+			}, 0);
+			var stdnciPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
+				var isLeaf = us.data.DirectChildrenCount === 0;
+				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				var isStdci = (me.PortfolioItemMap[(us.data[lowestPortfolioItem] || {}).ObjectID] || '').indexOf('STDNCI') >= 0;
+				return (isLeaf && inRelease && isStdci) ? sum + (us.data.PlanEstimate || 0) : sum;
+			}, 0);
+			
+			me.STDNCIData = {
+				percent: (stdnciPointsInRelease/totalPointsInRelease)*100>>0,
+				stdnciPoints: stdnciPointsInRelease,
+				totalPoints: totalPointsInRelease
+			};
+		},
+		
 		/** __________________________________ Data Integrity STUFF ___________________________________**/
 		getMiniDataIntegrityStoreData: function(){ 
 			var me=this,
@@ -487,6 +514,7 @@
 			if(!me.TeamCommitsGrid){
 				me.renderTeamCommitsGrid();
 				me.renderVelocityGrid();
+				me.renderSTDNCIGrid();
 				me.renderMiniDataIntegrityGrid();
 				me.renderRisksGrid();
 				me.renderDependenciesGrids();
@@ -553,7 +581,9 @@
 			if(!me.isEditingVelocity)  promises.push(me.loadIterations());
 			if(!me.isEditingTeamCommits) promises.push(me.loadPortfolioItems());
 			if(!me.isEditingVelocity && !me.isEditingTeamCommits && !isEditingDeps) promises.push(me.loadUserStories());
-			return Q.all(promises);
+			return Q.all(promises).then(function(){
+				return me.loadSTDNCIData(); //after portfolio items AND user stories are loaded
+			});
 		},
 		clearEverything: function(){
 			var me=this;
@@ -1669,6 +1699,47 @@
 				store: Ext.create('Ext.data.Store', {
 					model:'IntelVelocity',
 					data: [{Name:'', PlannedVelocity:0, RealVelocity:0}]
+				})
+			});
+		},
+		renderSTDNCIGrid: function() {
+			var me = this;
+			
+			var stdnciColumns = [{	
+				flex: 1,
+				renderer:function(name, meta, velocityRecord){ return 'STDN/CI'; }
+			},{
+				width:80,
+				renderer:function(val, meta){
+					var percent = me.STDNCIData.percent;
+					var stdnci = me.STDNCIData.stdnciPoints;
+					var total = me.STDNCIData.totalPoints;
+					if(percent < 5){ meta.tdCls += ' stdnci-grid-error-cell'; }
+					else if(percent < 10){ meta.tdCls += ' stdnci-grid-warning-cell'; }
+					else { meta.tdCls += ' stdnci-grid-success-cell'; }
+					return '<span title="' + stdnci + '/' + total + ' points">' + percent + '%</span>';
+				}
+			}];
+			
+			me.STDNCIGrid = me.down('#tcVelBoxRight').add({
+				xtype: 'grid',
+				cls: 'team-report-grid stdnci-grid rally-grid',
+				showPagingToolbar: false,
+				showRowActionsColumn:false,
+				hideHeaders:true,
+				disableSelection: true,
+				viewConfig: {
+					stripeRows: false,
+					preserveScrollOnRefresh:true
+				},
+				enableEditing:false,
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items: stdnciColumns
+				},
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Name'],
+					data: [{Name:''}]
 				})
 			});
 		},
