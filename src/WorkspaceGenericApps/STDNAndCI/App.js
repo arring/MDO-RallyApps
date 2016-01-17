@@ -64,6 +64,10 @@
 			var me=this,
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
 				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
+													Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null }).and(
+													Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItem + '.Release.Name', value: me.ReleaseRecord.data.Name }))
+												),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);
@@ -79,9 +83,11 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[1],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
+													Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null }).and(
+													Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItem + '.Release.Name', value: me.ReleaseRecord.data.Name }))
+												)
+												.and(Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);

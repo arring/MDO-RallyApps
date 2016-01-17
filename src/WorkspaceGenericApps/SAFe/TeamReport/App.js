@@ -308,37 +308,38 @@
 			return [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				})
 			},{
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-					if(item.data.Children.Count === 0) return false;
+					if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
 			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return !item.data.Iteration; 
 				})
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
-					// if(!item.data.Iteration || item.data.Release) return false;
-					// return new Date(item.data.Iteration.StartDate) < new Date(releaseDate) && 
-						// new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
-					if (!item.data.Iteration) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+					if(!item.data.Iteration) return false;
 					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 				})
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					if(!item.data.Iteration || !item.data[lowestPortfolioItem] || 
 						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 					if(item.data.ScheduleState == 'Accepted') return false;
