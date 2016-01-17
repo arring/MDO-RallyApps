@@ -2490,7 +2490,11 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext,
 		STDN_CI_TOKEN = 'STDNCI',
+<<<<<<< HEAD
 		SCHEDULED_USERSTORY_FILTER = '/userstories?tpsSI=0&tpsV=qv%3A5', 
+=======
+		SCHEDULED_USERSTORY_FILTER = '/releasestatus', 
+>>>>>>> 4292b714cb86972127d09fc7150af442bdf5ac3c
 		COLUMN_DEFAULTS = {
 			text:'',
 			resizable: false,
@@ -2903,6 +2907,7 @@
 									return {
 										xtype: 'container',
 										cls: exists ? (percent < 10 ? ' bad-stdci-cell' : ' good-stdci-cell') : ' stdci-cell',
+<<<<<<< HEAD
 										items:{
 											xtype:'component',
 											autoEl: {
@@ -2935,6 +2940,9 @@
 												}
 											} 
 										}
+=======
+										html: exists ? '<span title="' + tooltip + '">' + '<a href="https://rally1.rallydev.com/#/'+ me.ProjectObjectIDMap[scrumData.scrumName] + 'ud' + SCHEDULED_USERSTORY_FILTER + '"  target="_blank">' + percent +'%</a></span>' : '-'
+>>>>>>> 4292b714cb86972127d09fc7150af442bdf5ac3c
 									};
 								})
 							});
@@ -3063,7 +3071,12 @@
 .x-grid-cell.bad-stdci-cell,
 .bad-stdci-cell {
   flex: 1;
+<<<<<<< HEAD
   background-color: rgba(255, 0, 0, 0.5) !important;
+=======
+  /* background-color:rgba(255, 0, 0, 0.50) !important;  */
+  background-color: pink !important;
+>>>>>>> 4292b714cb86972127d09fc7150af442bdf5ac3c
 }
 .x-grid-cell.good-stdci-cell,
 .good-stdci-cell {
@@ -3102,6 +3115,15 @@
   display: flex !important;
   justify-content: center;
 }
+<<<<<<< HEAD
+=======
+a:visited {
+  color: #337ec6;
+}
+a:link {
+  color: #000000;
+}
+>>>>>>> 4292b714cb86972127d09fc7150af442bdf5ac3c
 /* 
 .stdci-cell-container  .x-box-inner {
 	height: 100% !important;
