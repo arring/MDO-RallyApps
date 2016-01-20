@@ -2538,7 +2538,7 @@
 		getUserStoryQuery: function(){
 			var me=this,
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);
@@ -2552,11 +2552,10 @@
 			*/
 		getStdCIUserStoryQuery: function(){
 			var me=this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[1],
+				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
+												Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType + '.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);
@@ -3063,7 +3062,8 @@
 .x-grid-cell.bad-stdci-cell,
 .bad-stdci-cell {
   flex: 1;
-  background-color: rgba(255, 0, 0, 0.5) !important;
+  /* background-color:rgba(255, 0, 0, 0.50) !important;  */
+  background-color: pink !important;
 }
 .x-grid-cell.good-stdci-cell,
 .good-stdci-cell {
@@ -3101,6 +3101,12 @@
 .grid-container > span > div {
   display: flex !important;
   justify-content: center;
+}
+a:visited {
+  color: #337ec6;
+}
+a:link {
+  color: #000000;
 }
 /* 
 .stdci-cell-container  .x-box-inner {

@@ -339,16 +339,12 @@
 					AND
 				Are in an during the release but not the release OR in the release
 		*/
-		createStoryFilter: function(leafProjects){			//NOTE: we are not filtering for leaf stories here, so we have to do that in the buildGrids() function
+		createStoryFilter: function(leafProjects){			//NOTE: we are filtering for leaf stories here
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = me.ReleaseRecord.data.ReleaseDate.toISOString(),
 				releaseStartDate = me.ReleaseRecord.data.ReleaseStartDate.toISOString(),
-				lowestPortfolioItem = me.PortfolioItemTypes[0],
-				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }).or(
-															Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null }).and(
-															Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItem + '.Release.Name', value: releaseName }))
-														),
+				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				leafStoriesInIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
@@ -1114,8 +1110,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.Blocked; 
 					}
 				},{
@@ -1131,8 +1126,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
 				},{
@@ -1148,8 +1142,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						var pe = item.data.PlanEstimate;
 						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
@@ -1166,8 +1159,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return !item.data.Iteration; 
 					}
 				},{
@@ -1187,7 +1179,6 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 						if (!item.data.Iteration) return false;
 						return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 							(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
@@ -1209,8 +1200,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration) return false;
 						return new Date(item.data.Iteration.EndDate) < now && item.data.ScheduleState != 'Accepted';
 					}
@@ -1231,8 +1221,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!me.isUserStoryInRelease(item, me.ReleaseRecord)) return false;
-						if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
 							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 						if(item.data.ScheduleState == 'Accepted') return false;
