@@ -270,6 +270,7 @@
 		/*Start: CFD Release Start Date Selection Option Component*/
 		_renderOptiontoSelectReleaseDate:function(){
 			var me = this;
+			if(typeof me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] = {};
 			me.releaseStartDateChanged = (!!(me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID]))? true : false;
 			if(me.releaseStartDateChanged){
 				me.changedReleaseStartDate = me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID].ReleaseStartDate;

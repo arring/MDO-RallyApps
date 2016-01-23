@@ -18,13 +18,16 @@
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
-			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.CfdAppsPreference',
 			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		minWidth:910,
 		items:[{
 			xtype:'container',
-			id:'navBar'
+			id:'navBar',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -101,14 +104,23 @@
 				.then(function(){ return me.loadSnapshotStores(); })
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
-					me.setLoading('Loading Charts');	
-					if(!me.ReleasePicker) me.renderReleasePicker();
+					me.setLoading('Loading Charts');
+					if(!me.ReleasePicker) me.renderReleasePicker();					
+					if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
+					if(!me.optionSelectReleaseDate) me._renderOptiontoSelectReleaseDate();
 					me.renderCharts();
 					me.hideHighchartsLinks();
 					me.setLoading(false);
 				});
 		},
-
+		redrawChartAfterReleaseDateChanged: function(){
+			var me=this;
+			me.setLoading('Loading Charts');	
+			$('#scrumCharts-innerCt').empty();
+			me.renderCharts();
+			me.hideHighchartsLinks(); 
+			me.setLoading(false);
+		},
 		/******************************************************* LAUNCH ********************************************************/		
 		launch: function(){
 			var me = this;
@@ -133,15 +145,15 @@
 									return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
 								});
 							}),
-						me.loadAppsPreference()	/******** load stream 2 *****/
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
+						me.loadCfdAppsPreference() 	/******** load stream 2 *****/
+							.then(function(cfdappsPref){
+								me.CfdAppsPref = cfdappsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
 								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.CfdAppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
@@ -160,9 +172,9 @@
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me.saveAppsPreference(me.AppsPref)
+			if(typeof me.CfdAppsPref.projs[pid] !== 'object') me.CfdAppsPref.projs[pid] = {};
+			me.CfdAppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			me.saveCfdAppsPreference(me.CfdAppsPref)
 				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
@@ -179,7 +191,38 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},
-		
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_renderOptiontoSelectReleaseDate:function(){
+			var me = this;
+			if(typeof me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] = {};
+			me.releaseStartDateChanged = (!!(me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID]))? true : false;
+			if(me.releaseStartDateChanged){
+				me.changedReleaseStartDate = me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
+			}			
+			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
+				xtype:'intelreleasedatachangepicker',
+				labelWidth: 80,
+				width: 240,
+				ProjectRecord: me.ProjectRecord,
+				currentRelease: me.ReleaseRecord,
+				CfdAppsPref : me.CfdAppsPref,
+				initialLoad: true,
+				listeners: { releaseDateChanged: me._releaseDateChangePickerSelected.bind(me)}
+			});				
+		},		
+		_releaseDateChangePickerSelected: function(date,cfdappPref){
+			var me = this;
+			me.setLoading(true);
+			me.saveCfdAppsPreference(cfdappPref)
+				.then(function(){ 
+					me.changedReleaseStartDate = date;
+					me.redrawChartAfterReleaseDateChanged(); 
+				})
+				.fail(function(reason){ me.alert('ERROR', reason); me.setLoading(false); })
+				.then(function(){ me.setLoading(false); })
+				.done();
+			
+		},/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************************** RENDERING CHARTS ******************************************/
 		renderCharts: function(){
 			var me = this, 
@@ -197,7 +240,10 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var updateOptions = {trendType:'Last2Sprints'},
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+			
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
 				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
@@ -219,7 +265,7 @@
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
 			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
 			
@@ -229,7 +275,7 @@
 				}),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'Last2Sprints'},
+				var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
@@ -246,7 +292,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});
