@@ -17,12 +17,21 @@
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.CfdAppsPreference'
 		],
 		minWidth:910,
 		items:[{
 			xtype:'container',
-			id:'navBar'
+			id:'navBar',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
+		},{
+			xtype:'container',
+			id:'navBarProductFilter',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -41,9 +50,6 @@
 			layout:'column',
 			width:'100%'
 		}],
-		
-		userAppsPref: 'intel-ScrumGroup-CFD',
-		
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
 			/** NOTE: _ValiTo is non-inclusive, _ValidFrom is inclusive **/
@@ -158,19 +164,29 @@
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
 					if(!me.ReleasePicker) me.renderReleasePicker();
+					if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
+					if(!me.optionSelectReleaseDate) me._renderOptiontoSelectReleaseDate();
 					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
 					me.renderTopPortfolioItemPicker();
 					me.renderCharts();
-					me.hideHighchartsLinks();
+					me.hideHighchartsLinks(); 
 					me.setLoading(false);
 				});
+		},
+		redrawChartAfterReleaseDateChanged: function(){
+			var me=this;
+			me.setLoading('Loading Charts');	
+			$('#scrumCharts-innerCt').empty();
+			me.renderCharts();
+			me.hideHighchartsLinks(); 
+			me.setLoading(false);
 		},
 		reloadEverything:function(){ 
 			var me=this;
 			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
-				.then(function(){ return me.loadSnapshotStores(); })
+				.then(function(){ return me.loadSnapshotStores(); }) 
 				.then(function(){ return me.redrawEverything(); });
 		},
 
@@ -203,15 +219,15 @@
 							.then(function(scrums){
 								me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
 							}),
-						me.loadAppsPreference() /******** load stream 2 *****/
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
+						me.loadCfdAppsPreference() /******** load stream 2 *****/
+							.then(function(cfdappsPref){
+								me.CfdAppsPref = cfdappsPref;
 								var fourteenWeeks = 1000*60*60*24*7*14;
 								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
 							})
 							.then(function(releaseRecords){
 								me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.CfdAppsPref);
 								if(currentRelease) me.ReleaseRecord = currentRelease;
 								else return Q.reject('This project has no releases.');
 							})
@@ -232,9 +248,9 @@
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me.saveAppsPreference(me.AppsPref)
+			if(typeof me.CfdAppsPref.projs[pid] !== 'object') me.CfdAppsPref.projs[pid] = {};
+			me.CfdAppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			me.saveCfdAppsPreference(me.CfdAppsPref)
 				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
@@ -251,6 +267,37 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_renderOptiontoSelectReleaseDate:function(){
+			var me = this;
+			me.releaseStartDateChanged = (!!(me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID]))? true : false;
+			if(me.releaseStartDateChanged){
+				me.changedReleaseStartDate = me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
+			}			
+			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
+				xtype:'intelreleasedatachangepicker',
+				labelWidth: 80,
+				width: 240,
+				ProjectRecord: me.ProjectRecord,
+				currentRelease: me.ReleaseRecord,
+				CfdAppsPref : me.CfdAppsPref,
+				initialLoad: true,
+				listeners: { releaseDateChanged: me._releaseDateChangePickerSelected.bind(me)}
+			});				
+		},		
+		_releaseDateChangePickerSelected: function(date,cfdappPref){
+			var me = this;
+			me.setLoading(true);
+			me.saveCfdAppsPreference(cfdappPref)
+				.then(function(){ 
+					me.changedReleaseStartDate = date;
+					me.redrawChartAfterReleaseDateChanged(); 
+				})
+				.fail(function(reason){ me.alert('ERROR', reason); me.setLoading(false); })
+				.then(function(){ me.setLoading(false); })
+				.done();
+			
+		},/*End: CFD Release Start Date Selection Option Component*/
 		topPortfolioItemPickerSelected: function(combo, records){
 			var me=this, 
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
@@ -263,7 +310,7 @@
 		renderTopPortfolioItemPicker: function(){
 			var me=this,
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
-			me.TopPortfolioItemPicker = Ext.getCmp('navBar').add({
+			me.TopPortfolioItemPicker = Ext.getCmp('navBarProductFilter').add({
 				xtype:'intelfixedcombo',
 				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
 				labelWidth: 80,
@@ -288,11 +335,13 @@
 					endDate: releaseEnd,
 					scheduleStates: me.ScheduleStates
 				});
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
 
 			/************************************** Scrum Group CHART STUFF *********************************************/
-			var updateOptions = {trendType:'Last2Sprints'},
-				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
-				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions);
+			var	aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:400 },
 						legend:{
@@ -313,7 +362,7 @@
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
 			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
 
@@ -321,7 +370,7 @@
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'Last2Sprints'},
+				var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
@@ -338,7 +387,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					})
+					} ,me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});

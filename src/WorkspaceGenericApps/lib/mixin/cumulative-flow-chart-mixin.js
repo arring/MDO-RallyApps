@@ -286,12 +286,80 @@
 			}
 			return projectedTrend;
 		},
+				/** binsearches for the closest date to 'date' */
+		_getIndexHelper:function(date, dateArray){ 
+			var curVal = (dateArray.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
+			while(curInt !== lastInt){
+				if(dateArray[curInt]===date) return curInt;
+				else if(dateArray[curInt]>date) curVal-=div;
+				else curVal+=div;
+				div/=2;
+				lastInt = curInt;
+				curInt = curVal>>0;
+			}
+			return curInt;
+		},
+		/** returns index in dateArra of date after or on the input date */
+		_getIndexOnOrAfter: function(date, dateArray){ 
+			if(dateArray.length===0) return -1;
+			var pos = this._getIndexHelper(date, dateArray);
+			if(pos===dateArray.length-1) { if(dateArray[pos] >= date) return pos; else return -1; } //either start of list or everything is after 'date'
+			else if(dateArray[pos] >= date) return pos;
+			else return pos+1;
+		},
+		_getIndexOn: function(date, dateArray){
+			var indexOn = dateArray.indexOf(date);
+			return indexOn >= 0 ? indexOn : 0;
+		},
+		_dateToStringDisplay: function (date) {
+			var date_regex = /^(0[1-9]|1[0-2])\/(0[1-9]|1\d|2\d|3[01])\/(19|20)\d{2}$/ ;
+			return (!(date_regex.test(date))) ? Ext.Date.format(new Date(date), 'm/d/Y'): date;
+		},		
+		getInitialAndfinalCommitPlotLines: function(aggregateChartData,changedReleaseStartDate){
+			var me = this,
+				selectedDayIndex = me._getIndexOn(me._dateToStringDisplay(changedReleaseStartDate),aggregateChartData.datemap);
+			xAxisPlotLines = {
+					plotLines: [{
+						color: '#58FAF4', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: selectedDayIndex, // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Original Commit ',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white',
+								background:'#40d0ed'
+							}
+						}						
+					},{
+						color: '#58FAF4', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: [aggregateChartData.categories.length - 1], // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Final Workload & Accepted',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white'
+							}
+						}						
+						
+					}]
+				};
+			return {xAxis:xAxisPlotLines};
+		},
 		updateCumulativeFlowChartData: function(data, options){
 			_.merge({}, options);
 			var me = this, 
 				now = new Date(),
 				trendType = options.trendType,
 				hideTrends = options.hideTrends,
+				selectedDate = me._dateToStringDisplay(options.date);
 				todayIndex = -1,
 				datemap = [],
 				rSquaredMap = [];
@@ -340,7 +408,26 @@
 			}		
 			data.datemap = datemap;
 			data.rSquaredMap = rSquaredMap;
-			
+			/*Adding initial Commit line*/
+			var selectedDayIndex = me._getIndexOn(selectedDate,data.datemap);
+			var commitDataPlus = [];
+			var totalinitial = 0;
+			_.each(data.series,function(f){
+				if(me.ScheduleStates.indexOf(f.name) >= 0)
+				totalinitial = totalinitial + f.data[selectedDayIndex];
+			});
+			_.each(data.categories,function(f,key){
+				commitDataPlus.push(totalinitial);//commitDataMinus.push(total.initialCommit - 10);
+			});	
+				data.series.push({
+				colorIndex: 1,
+				symbolIndex: 1,
+				dashStyle: "shortdash",
+				color: "red",
+				data:commitDataPlus,
+				name: "Commitment",
+				type: "spline"
+			});	
 			return data;
 		},
 		getCumulativeFlowChartTicks: function(startDate, endDate, width){
