@@ -251,7 +251,10 @@
 			if(typeof me.CfdAppsPref.projs[pid] !== 'object') me.CfdAppsPref.projs[pid] = {};
 			me.CfdAppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveCfdAppsPreference(me.CfdAppsPref)
-				.then(function(){ return me.reloadEverything(); })
+				.then(function(){ 
+					me._resetVariableAfterReleasePickerSelected();
+					return me.reloadEverything(); 
+				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
@@ -268,6 +271,11 @@
 			});
 		},
 		/*Start: CFD Release Start Date Selection Option Component*/
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+				me.optionSelectReleaseDate = undefined;
+		},		
 		_renderOptiontoSelectReleaseDate:function(){
 			var me = this;
 			if(typeof me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] = {};

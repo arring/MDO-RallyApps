@@ -105,9 +105,9 @@
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
 					me.setLoading('Loading Charts');
-					if(!me.ReleasePicker) me.renderReleasePicker();					
+					if(!me.ReleasePicker) me.renderReleasePicker();	
 					if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
-					if(!me.optionSelectReleaseDate) me._renderOptiontoSelectReleaseDate();
+					if(!me.optionSelectReleaseDate) me._renderOptiontoSelectReleaseDate();				
 					me.renderCharts();
 					me.hideHighchartsLinks();
 					me.setLoading(false);
@@ -145,7 +145,7 @@
 									return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
 								});
 							}),
-						me.loadCfdAppsPreference() 	/******** load stream 2 *****/
+						me.loadCfdAppsPreference()/******** load stream 2 *****/
 							.then(function(cfdappsPref){
 								me.CfdAppsPref = cfdappsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
@@ -175,7 +175,10 @@
 			if(typeof me.CfdAppsPref.projs[pid] !== 'object') me.CfdAppsPref.projs[pid] = {};
 			me.CfdAppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveCfdAppsPreference(me.CfdAppsPref)
-				.then(function(){ return me.reloadEverything(); })
+				.then(function(){ 
+				me._resetVariableAfterReleasePickerSelected();
+				return me.reloadEverything(); 
+				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
@@ -192,6 +195,11 @@
 			});
 		},
 		/*Start: CFD Release Start Date Selection Option Component*/
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+				me.optionSelectReleaseDate = undefined;
+		},
 		_renderOptiontoSelectReleaseDate:function(){
 			var me = this;
 			if(typeof me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] = {};
