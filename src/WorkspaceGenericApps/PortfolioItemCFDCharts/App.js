@@ -380,8 +380,6 @@
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
 			var updateOptions = {trendType:'Last2Sprints',date: me.changedReleaseStartDate},
 				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),				
-/* 				options = {trendType: 'Last2Sprints'},
-				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), options), */
 				topPortfolioItemChartContainer = $('#top-pi-chart-innerCt').highcharts(
 					Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: {
