@@ -308,7 +308,7 @@
 			else return pos+1;
 		},
 		_getIndexOn: function(date, dateArray){
-			var indexOn = dateArray.indexOf(date);
+			var indexOn = !!dateArray ? dateArray.indexOf(date) : 0;
 			return indexOn >= 0 ? indexOn : 0;
 		},
 		_dateToStringDisplay: function (date) {
@@ -406,10 +406,11 @@
 				rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		
+			me.setLoading(false);
 			data.datemap = datemap;
 			data.rSquaredMap = rSquaredMap;
 			/*Adding initial Commit line*/
-			var selectedDayIndex = me._getIndexOn(selectedDate,data.datemap);
+			var selectedDayIndex = me._getIndexOn(selectedDate,datemap);
 			var commitDataPlus = [];
 			var totalinitial = 0;
 			_.each(data.series,function(f){
