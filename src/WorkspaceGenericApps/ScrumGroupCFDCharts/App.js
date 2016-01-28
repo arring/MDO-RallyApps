@@ -219,7 +219,7 @@
 							.then(function(scrums){
 								me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
 							}),
-						me.loadCfdAppsPreference() /******** load stream 2 *****/
+						me.loadCfdAppsPreference(me.ProjectRecord) /******** load stream 2 *****/
 							.then(function(cfdappsPref){
 								me.CfdAppsPref = cfdappsPref;
 								var fourteenWeeks = 1000*60*60*24*7*14;
@@ -278,10 +278,10 @@
 		},		
 		_renderOptiontoSelectReleaseDate:function(){
 			var me = this;
-			if(typeof me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID] = {};
-			me.releaseStartDateChanged = (!!(me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID]))? true : false;
+			if(typeof me.CfdAppsPref.releases[me.ReleaseRecord.data.ObjectID] !== 'object') me.CfdAppsPref.releases[me.ReleaseRecord.data.ObjectID] = {};
+			me.releaseStartDateChanged = (!!(me.CfdAppsPref.releases[me.ReleaseRecord.data.ObjectID]))? true : false;
 			if(me.releaseStartDateChanged){
-				me.changedReleaseStartDate = me.CfdAppsPref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
+				me.changedReleaseStartDate = me.CfdAppsPref.releases[me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
 			}			
 			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
 				xtype:'intelreleasedatachangepicker',

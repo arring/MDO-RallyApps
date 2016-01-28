@@ -80,9 +80,9 @@
 			var pid = me.ProjectRecord.data.ObjectID;			
 			me.fieldLabel = 'Select Release Start Date';
 			me.labelWidth = 140;
-			if(typeof me.CfdAppsPref.projs[pid] !== 'object') me.CfdAppsPref.projs[pid] = {};
+			if(typeof me.CfdAppsPref.releases[rid] !== 'object') me.CfdAppsPref.releases[rid] = {};
 			me.minValue= new Date(new Date(me.currentRelease.data.ReleaseStartDate)*1 /* + _6days */);
-			me.value = !!(me.CfdAppsPref.projs[pid][rid]) ? new Date(me.CfdAppsPref.projs[pid][rid].ReleaseStartDate):me.minValue ;
+			me.value = _.isEmpty(me.CfdAppsPref.releases[rid]) ? me.minValue: new Date(me.CfdAppsPref.releases[rid].ReleaseStartDate) ;
 			me.maxValue = me.currentRelease.data.ReleaseDate > new Date() ? new Date() : me.currentRelease.data.ReleaseDate;
 			me.showToday = false;
 			Ext.getCmp('releasedatepicker-wrapper').removeAll();
@@ -104,9 +104,9 @@
 					//when the button is click
 					//save the date in the app preference
 					var dateSelected = Ext.getCmp('ReleaseDatePicker').value;
-						me.CfdAppsPref.projs[pid] = me.CfdAppsPref.projs[pid] || {};
-						me.CfdAppsPref.projs[pid][rid] =  me.CfdAppsPref.projs[pid][rid] || {};
-						me.CfdAppsPref.projs[pid][rid].ReleaseStartDate = dateSelected;
+ 						me.CfdAppsPref.releases[rid] = me.CfdAppsPref.releases[rid] || {};
+						//me.CfdAppsPref.projs[pid][rid] =  me.CfdAppsPref.projs[pid][rid] || {};
+						me.CfdAppsPref.releases[rid].ReleaseStartDate = dateSelected; 
 						me.fireEvent('releaseDateChanged',dateSelected,me.CfdAppsPref);	
 				}	
 			});			

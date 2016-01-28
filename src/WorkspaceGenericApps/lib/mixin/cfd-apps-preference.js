@@ -13,9 +13,9 @@
 	Ext.define('Intel.lib.mixin.CfdAppsPreference', {
 		
 		/** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
-		cfdAppsPref : 'intel-cfd-releaseDateChange',
+		cfdAppsPref : 'intel-workspace-admin-cfd-releasedatechange',
 
-		loadCfdAppsPreference: function(){
+/* 		loadCfdAppsPreference: function(){
 			var me=this, deferred = Q.defer();
 			Rally.data.PreferenceManager.load({
 				filterByUser:true,
@@ -42,6 +42,35 @@
 				failure: deferred.reject
 			});
 			return deferred.promise;
-		}
+		} */
+		
+		loadCfdAppsPreference: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				project: me.getContext().getProject()._ref,
+				filterByName: me.cfdAppsPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me.cfdAppsPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { releases:{}, refresh:0};}
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveCfdAppsPreference: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {releases:prefs.releases, refresh:prefs.refresh};
+			s[me.cfdAppsPref] = JSON.stringify(prefs); 
+			Rally.data.PreferenceManager.update({
+				project:me.getContext().getProject()._ref,
+				filterByName: me.cfdAppsPref,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		}		
 	});
 }());
