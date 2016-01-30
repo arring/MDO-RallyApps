@@ -7,7 +7,7 @@
 				width: 240,
 				ProjectRecord: me.ProjectRecord,
 				currentRelease: me.ReleaseRecord,
-				CfdAppsPref : me.CfdAppsPref,
+				me.cfdProjReleasePref : me.cfdProjReleasePref,
 				initialLoad: true,
 				listeners: { ReleaseDateChangeOptionSelected: me._renderReleaseDateChangePicker.bind(me) }
 			}		
@@ -28,7 +28,7 @@
 		/**________________________________________ YOU MUST SUPPLY THESE ________________________________________*/
 		ProjectRecord: null,
 		currentRelease: null,
-		CfdAppsPref: null, 
+		cfdProjReleasePref: null, 
 		initialLoad: null,
 		items:[],
 		/**________________________________________ INITIALIZE/PRIVATE METHODS ________________________________________*/
@@ -80,9 +80,9 @@
 			var pid = me.ProjectRecord.data.ObjectID;			
 			me.fieldLabel = 'Select Release Start Date';
 			me.labelWidth = 140;
-			if(typeof me.CfdAppsPref.releases[rid] !== 'object') me.CfdAppsPref.releases[rid] = {};
+			if(typeof me.cfdProjReleasePref.releases[rid] !== 'object') me.cfdProjReleasePref.releases[rid] = {};
 			me.minValue= new Date(new Date(me.currentRelease.data.ReleaseStartDate)*1 /* + _6days */);
-			me.value = _.isEmpty(me.CfdAppsPref.releases[rid]) ? me.minValue: new Date(me.CfdAppsPref.releases[rid].ReleaseStartDate) ;
+			me.value = _.isEmpty(me.cfdProjReleasePref.releases[rid]) ? me.minValue: new Date(me.cfdProjReleasePref.releases[rid].ReleaseStartDate) ;
 			me.maxValue = me.currentRelease.data.ReleaseDate > new Date() ? new Date() : me.currentRelease.data.ReleaseDate;
 			me.showToday = false;
 			Ext.getCmp('releasedatepicker-wrapper').removeAll();
@@ -104,10 +104,9 @@
 					//when the button is click
 					//save the date in the app preference
 					var dateSelected = Ext.getCmp('ReleaseDatePicker').value;
- 						me.CfdAppsPref.releases[rid] = me.CfdAppsPref.releases[rid] || {};
-						//me.CfdAppsPref.projs[pid][rid] =  me.CfdAppsPref.projs[pid][rid] || {};
-						me.CfdAppsPref.releases[rid].ReleaseStartDate = dateSelected; 
-						me.fireEvent('releaseDateChanged',dateSelected,me.CfdAppsPref);	
+					me.cfdProjReleasePref.releases[rid] = me.cfdProjReleasePref.releases[rid] || {};
+					me.cfdProjReleasePref.releases[rid].ReleaseStartDate = dateSelected; 
+					me.fireEvent('releaseDateChanged',dateSelected,me.cfdProjReleasePref);	
 				}	
 			});			
 		}
