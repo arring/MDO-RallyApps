@@ -49,6 +49,7 @@
 		}],
 
 		userAppsPref: 'intel-Func-CFD',
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
