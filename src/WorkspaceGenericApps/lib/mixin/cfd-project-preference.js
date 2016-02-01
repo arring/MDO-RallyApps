@@ -30,6 +30,35 @@
 			});
 			return deferred.promise;
 		},
+		loadCfdProjPreferenceForTrain: function(pref){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				project: pref,
+				filterByName: me.cfdProjPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me.cfdProjPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { releases:{}, refresh:0};}
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
+		loadCfdAllTrainPreference: function(){
+			var me=this, deferred = Q.defer(), AllTrain = [];
+				me.trainPref = {};
+			return Q.all(_.map(me.ScrumGroupConfig, function(item){
+					if (item.IsTrain){ 
+						var projectRef = "https://rally1.rallydev.com/slm/webservice/v2.0/project/" + item.ScrumGroupRootProjectOID
+						return me.loadCfdProjPreferenceForTrain(projectRef)
+						 .then(function(tPref){
+							 me.trainPref[item.ScrumGroupName] = tPref;
+						 });
+					}
+				})
+			)			
+		},
 		saveCfdProjPreference: function(prefs){
 			var me=this, s = {}, deferred = Q.defer();
 			prefs = {releases:prefs.releases, refresh:prefs.refresh};

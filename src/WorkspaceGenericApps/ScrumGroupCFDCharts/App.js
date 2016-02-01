@@ -285,10 +285,10 @@
 		/*Start: CFD Release Start Date Selection Option Component*/
 		_setchangedReleaseStartDate: function(){
 			var me = this;
-			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.ObjectID] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.ObjectID] = {};
-			me.releaseStartDateChanged = (!!(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.ObjectID]))? true : false;
+			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] = {};
+			me.releaseStartDateChanged = (!!(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]))? true : false;
 			if(me.releaseStartDateChanged){
-				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
+				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
 			}					
 		},		
 		_checkToRenderCFDCalendar: function(){

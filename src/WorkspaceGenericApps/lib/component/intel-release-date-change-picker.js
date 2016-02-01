@@ -76,7 +76,7 @@
 		_renderCalendarAndButton: function(){
 			var me = this;
 			var datePickerDefaultDate;
-			var rid = me.currentRelease.data.ObjectID;
+			var rid = me.currentRelease.data.Name;
 			var pid = me.ProjectRecord.data.ObjectID;			
 			me.fieldLabel = 'Select Release Start Date';
 			me.labelWidth = 140;
