@@ -107,8 +107,6 @@
 					$('#scrumCharts-innerCt').empty();
 					me.setLoading('Loading Charts');
 					if(!me.ReleasePicker) me.renderReleasePicker();	
-/* 					if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
-					if(!me.optionSelectReleaseDate) me._renderOptiontoSelectReleaseDate();	 */			
 					me.renderCharts();
 					me.hideHighchartsLinks();
 					me.setLoading(false);
@@ -147,10 +145,6 @@
 								});
 							}),
 							me.loadCfdAllTrainPreference(),
-							/* me.loadCfdProjPreference()
-							.then(function(cfdprojPref){
-								me.cfdProjReleasePref = cfdprojPref;
-							}), */
 							me.loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
@@ -188,21 +182,6 @@
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();			
-/*  			var me=this;
-			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-			me.setLoading(true);
-			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
- 			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.cfdProjReleasePref.projs[pid] !== 'object') me.cfdProjReleasePref.projs[pid] = {};
-			me.cfdProjReleasePref.projs[pid].Release = me.ReleaseRecord.data.ObjectID; 
-			me.saveCfdAppsPreference(me.cfdProjReleasePref)
-				.then(function(){ 
-				//me._resetVariableAfterReleasePickerSelected();
-				return me.reloadEverything(); 
-				})
-				.fail(function(reason){ me.alert('ERROR', reason); })
-				.then(function(){ me.setLoading(false); })
-				.done(); */
 		},		
 		renderReleasePicker: function(){
 			var me=this;
@@ -216,42 +195,11 @@
 			});
 		},
 		/*Start: CFD Release Start Date Selection Option Component*/
- 		_resetVariableAfterReleasePickerSelected: function(){
+		_resetVariableAfterReleasePickerSelected: function(){
 				var me = this;
 				me.changedReleaseStartDate = undefined;
-			//	me.optionSelectReleaseDate = undefined;
 		},
-/*		_renderOptiontoSelectReleaseDate:function(){
-			var me = this;
-			if(typeof me.cfdProjReleasePref.projs[me.ProjectRecord.data.ObjectID] !== 'object') me.cfdProjReleasePref.projs[me.ProjectRecord.data.ObjectID] = {};
-			me.releaseStartDateChanged = (!!(me.cfdProjReleasePref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID]))? true : false;
-			if(me.releaseStartDateChanged){
-				me.changedReleaseStartDate = me.cfdProjReleasePref.projs[me.ProjectRecord.data.ObjectID][me.ReleaseRecord.data.ObjectID].ReleaseStartDate;
-			}			
-			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
-				xtype:'intelreleasedatachangepicker',
-				labelWidth: 80,
-				width: 240,
-				ProjectRecord: me.ProjectRecord,
-				currentRelease: me.ReleaseRecord,
-				cfdProjReleasePref : me.cfdProjReleasePref,
-				initialLoad: true,
-				listeners: { releaseDateChanged: me._releaseDateChangePickerSelected.bind(me)}
-			});				
-		},		
-		_releaseDateChangePickerSelected: function(date,cfdappPref){
-			var me = this;
-			me.setLoading(true);
-			me.saveCfdAppsPreference(cfdappPref)
-				.then(function(){ 
-					me.changedReleaseStartDate = date;
-					me.redrawChartAfterReleaseDateChanged(); 
-				})
-				.fail(function(reason){ me.alert('ERROR', reason); me.setLoading(false); })
-				.then(function(){ me.setLoading(false); })
-				.done();
-			
-		}, *//*End: CFD Release Start Date Selection Option Component*/		
+		/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************************** RENDERING CHARTS ******************************************/
 		renderCharts: function(){
 			var me = this, 
@@ -306,9 +254,8 @@
 			_.each(sortedProjectNames, function(projectName){
 				//Find project Preference for each Train
 				var trainName = projectName.split(" ")[projectName.split(" ").length-1];
-				trainChangedReleaseStartDate = !(me.trainPref[trainName]) || _.isEmpty(me.trainPref[trainName].releases) || !(me.trainPref[trainName].releases[me.ReleaseRecord.data.Name])  
-					? me.changedReleaseStartDate : me.trainPref[trainName].releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
-				console.log(trainName,"   ", trainChangedReleaseStartDate)
+				trainChangedReleaseStartDate = !(me.trainPref[trainName]) || _.isEmpty(me.trainPref[trainName].releases) || !(me.trainPref[trainName].releases[me.ReleaseRecord.data.Name])	? me.changedReleaseStartDate : me.trainPref[trainName].releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
+
 				var updateOptions = {trendType:'Last2Sprints',date:trainChangedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),

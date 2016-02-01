@@ -50,14 +50,14 @@
 				me.trainPref = {};
 			return Q.all(_.map(me.ScrumGroupConfig, function(item){
 					if (item.IsTrain){ 
-						var projectRef = "https://rally1.rallydev.com/slm/webservice/v2.0/project/" + item.ScrumGroupRootProjectOID
+						var projectRef = "https://rally1.rallydev.com/slm/webservice/v2.0/project/" + item.ScrumGroupRootProjectOID;
 						return me.loadCfdProjPreferenceForTrain(projectRef)
-						 .then(function(tPref){
-							 me.trainPref[item.ScrumGroupName] = tPref;
-						 });
+							.then(function(tPref){
+								me.trainPref[item.ScrumGroupName] = tPref;
+						});
 					}
 				})
-			)			
+			);			
 		},
 		saveCfdProjPreference: function(prefs){
 			var me=this, s = {}, deferred = Q.defer();
