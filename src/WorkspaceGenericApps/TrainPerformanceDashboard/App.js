@@ -321,6 +321,38 @@
 					}, {});
 				});
 		},
+		_loadIterations: function(){
+			var me=this,
+				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.AllScrumTargetVelocitySum = 0;
+			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
+				config = {
+					model: 'Iteration',
+					filters: [{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}],
+					fetch: ["PlannedVelocity"],
+					context:{
+						project: project.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:false
+					}
+				};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					me.AllScrumTargetVelocitySum +=_.reduce(store.getRange(), function(sum, iteration) {
+						var targetVelocity = iteration.data.PlannedVelocity;
+						return sum + targetVelocity;
+					},0);
+				});				
+			}));			
+		},		
 		_loadSnapshotStores: function(){
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -943,11 +975,13 @@
 			me.dataScope = scopechange[me.TeamType];
 
 			//cumulative flow chart 
-			var commitDataPlus =[];
+			var commitDataPlus =[],
+					targetVelocity =[];
 			// commitDataMinus = [];
 			//adding a line for the initial Commitment projection
 			_.each(me.aggregateChartData[me.TeamType].categories,function(f,key){
 				commitDataPlus.push(me.total.initialCommit);//commitDataMinus.push(total.initialCommit - 10);
+				targetVelocity.push(me.AllScrumTargetVelocitySum);
 			});
 			//console.log(commitDataPlus,commitDataMinus);
 			me.aggregateChartData[me.TeamType].series.push({
@@ -956,9 +990,18 @@
 				dashStyle: "shortdash",
 				color: "red",
 				data:commitDataPlus,
-				name: "Commitment",
+				name: "Current Commit LCL",
 				type: "spline"
+			},{
+				colorIndex: 1,
+				symbolIndex: 1,
+				dashStyle: "shortdash",
+				color: "red",
+				data:targetVelocity,
+				name: "Available Velocity UCL",
+				type: "line"
 			});
+			
 			$("#retroChart").highcharts(Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 				chart: {
 					height: 400,
@@ -1281,6 +1324,7 @@
 			.then(function(){ 
 				//load data
 				return Q.all([
+					me._loadIterations(),
 					me._loadStories(),
 					me._loadSnapshotStores()
 				]);
