@@ -286,7 +286,7 @@
 		_setchangedReleaseStartDate: function(){
 			var me = this;
 			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] = {};
-			me.releaseStartDateChanged = (!!(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]))? true : false;
+			me.releaseStartDateChanged = _.isEmpty(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]) ? false : true;
 			if(me.releaseStartDateChanged){
 				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
 			}					

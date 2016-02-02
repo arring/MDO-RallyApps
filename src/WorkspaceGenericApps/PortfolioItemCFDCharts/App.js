@@ -107,30 +107,10 @@
 		
 		/**************************************** Release Loading *********************************/
 		_getReleaseRecords: function() {
-			var me = this;/* ,
-				twelveWeeks = 12*7*24*60*60*1000; */
-			me.loadAppsPreference() /******** load stream 2 *****/
-				.then(function(appsPref){
-					me.AppsPref = appsPref;
-					var twelveWeeks = 12*7*24*60*60*1000;
-					return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, (new Date()*1 - twelveWeeks));
-				})							
-				.then(function(releaseRecords){
-					me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-					var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
-					// If a release parameter is supplied
-					if(releaseParam){
-						var releaseName = decodeURIComponent(releaseParam[0].split('=')[1]);
-						me.ReleaseRecord = _.find(me.ReleaseRecords, function(release){return release.data.Name === releaseName;});
-						if(!me.ReleaseRecord) throw 'No release record found for: ' + releaseName;
-					}
-					else me.ReleaseRecord = me.getScopedRelease(me.ReleaseRecords);
-					
-					var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-					if(currentRelease) me.ReleaseRecord = currentRelease;
-				})
-					return me.ReleaseRecord;
-/* 			// Load releases after twelve weeks ago
+			var me = this,
+				twelveWeeks = 12*7*24*60*60*1000;
+				
+			// Load releases after twelve weeks ago
 			return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
 				me.ReleaseRecords = releaseRecords;
 				var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
@@ -142,7 +122,7 @@
 				}
 				else me.ReleaseRecord = me.getScopedRelease(me.ReleaseRecords);
 				return me.ReleaseRecord;
-			}); */
+			});
 		},
 		
 		/**************************************** PortfolioItems Loading *********************************/
@@ -175,6 +155,7 @@
 		/**************************************** Reload *******************************************/
 		_reload: function() {
 			var me = this;
+			me._setchangedReleaseStartDate();
 			return me._setFilteredLowestPortfolioItemRecords().then(me._getStorySnapshots.bind(me)).then(function() {
 				return Q.all([
 					me._getStories(),
@@ -314,7 +295,6 @@
 			me.down('#navBarProductFilter').removeAll();
 			
 			me._buildReleasePicker();
-			me._checkToRenderCFDCalendar();
 			me._buildTopPortfolioItemPicker();
 		},
 		
@@ -335,12 +315,6 @@
 				}
 			});
 		},
-/* 		__redrawChartAfterReleaseDateChanged: function(){
-			var me=this;
-			me.setLoading('Loading Charts');	
-			me._buildCharts();
-			me.setLoading(false);
-		}, */
 		/*
 		 *	Creates the topPortfolioItem picker
 		 */
@@ -448,6 +422,7 @@
 				
 			var	_6days = 1000 * 60 *60 *24*6;	
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
+			
 			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate};			
 
 			_.each(sortedFilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
@@ -521,50 +496,16 @@
 		_setchangedReleaseStartDate: function(){
 			var me = this;
 			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] = {};
-			me.releaseStartDateChanged = (!!(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]))? true : false;
+			me.releaseStartDateChanged = _.isEmpty(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]) ? false : true;
 			if(me.releaseStartDateChanged){
 				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
 			}					
 		},		
-		_checkToRenderCFDCalendar: function(){
-			var me = this;
-			me._setchangedReleaseStartDate();
-			if(!me.optionSelectReleaseDate && me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())){
-				if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
-				me._renderOptiontoSelectReleaseDate();
-			}
-		},
 		_resetVariableAfterReleasePickerSelected: function(){
 				var me = this;
 				me.changedReleaseStartDate = undefined;
-				me.optionSelectReleaseDate = undefined;
 		},	
-		_renderOptiontoSelectReleaseDate:function(){
-			var me = this;
-			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
-				xtype:'intelreleasedatachangepicker',
-				labelWidth: 80,
-				width: 240,
-				ProjectRecord: me.ProjectRecord,
-				currentRelease: me.ReleaseRecord,
-				cfdProjReleasePref : me.cfdProjReleasePref,
-				initialLoad: true,
-				listeners: { releaseDateChanged: me._releaseDateChangePickerSelected.bind(me)}
-			});	
-		},		
-		_releaseDateChangePickerSelected: function(date,cfdappPref){
-			var me = this;
-			me.setLoading(true);
-			me.saveCfdProjPreference(cfdappPref)
-				.then(function(){ 
-					me.changedReleaseStartDate = date;
-					me.redrawChartAfterReleaseDateChanged(); 
-				})
-				.fail(function(reason){ me.alert('ERROR', reason); me.setLoading(false); })
-				.then(function(){ me.setLoading(false); })
-				.done();
-			
-		},/*End: CFD Release Start Date Selection Option Component*/		
+		/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************** Event Handling **********************************/
 		_releasePickerSelected: function(combo, records) {
 			var me = this;
@@ -572,13 +513,10 @@
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(release) {return release.data.Name === records[0].data.Name;});
 			me.setLoading('loading');
-			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.cfdProjReleasePref.projs[pid] !== 'object') me.cfdProjReleasePref.projs[pid] = {};
-			me.cfdProjReleasePref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me._loadPortfolioItems()
 				.then(me._buildControls.bind(me))
 				.then(me._reload.bind(me))
-				.then(me.saveCfdAppsPreference(me.cfdProjReleasePref))
+				/* .then(me.saveCfdAppsPreference(me.cfdProjReleasePref)) */
 				.then(me._resetVariableAfterReleasePickerSelected())
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
