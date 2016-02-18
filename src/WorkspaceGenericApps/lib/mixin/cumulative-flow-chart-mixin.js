@@ -140,8 +140,7 @@
 			//initialize projected trendline
 			var topScheduleState = me.ScheduleStates.slice(-1)[0],
 				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
-				trendName = trendType === 'Last2Sprints' ? 'Last2Sprints' : 'LinReg2Spr',
-				projectedTrend = {type:'spline', dashStyle:'Solid', name:trendName, data:topScheduleStateSeries.data.slice()},
+				projectedTrend = {type:'spline', dashStyle:'Solid', name:trendType, data:topScheduleStateSeries.data.slice()},
 				begin=0,
 				end=projectedTrend.data.length-1;
 		
@@ -352,10 +351,8 @@
 			});
 
 			if(!hideTrends){
-				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: 'Last2Sprints'});
+				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
-				var projectedTrend2 = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: 'LinearRegressionLast2Sprints'});
-				data.series.push(projectedTrend2);
 				//rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		

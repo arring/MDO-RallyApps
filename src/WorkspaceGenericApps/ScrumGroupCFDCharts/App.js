@@ -75,9 +75,9 @@
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					//	AND have length > 0 (another bug ('feature') in LBAPI!)
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
-						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
-							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
+						// return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								//(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
+						return me.ReleasesWithNameHash[snapshot.data.Release] && (snapshot.data._ValidFrom != snapshot.data._ValidTo);
 					});						
 					if(records.length > 0){
 						me.TeamStores[project.data.Name] = records;
