@@ -221,9 +221,9 @@
 			var	_6days = 1000 * 60 *60 *24*6;	
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
 			
-			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
-				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
-				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+		 	var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions);
+			/*	aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:400 },
 						legend:{
@@ -245,7 +245,7 @@
 						series: aggregateChartData.series
 					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
-			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
+			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap); */
 			
 			/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
