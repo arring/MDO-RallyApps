@@ -140,7 +140,7 @@
 			//initialize projected trendline
 			var topScheduleState = me.ScheduleStates.slice(-1)[0],
 				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
-				projectedTrend = {type:'spline', dashStyle:'Solid', name:trendType, data:topScheduleStateSeries.data.slice()},
+				projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:topScheduleStateSeries.data.slice()},
 				begin=0,
 				end=projectedTrend.data.length-1;
 		
