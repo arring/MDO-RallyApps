@@ -333,14 +333,19 @@
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
 						projectId = snapshot.data.Project;
-						//console.log( projectId, snapshot.data[lowestPortfolioItemType], me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]], releaseName)
-						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								(!snapshot.data.Release  && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName)) &&
-							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
+						// ////////console.log( projectId, snapshot.data[lowestPortfolioItemType], me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]], releaseName)
+						// //////return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								// //////(!snapshot.data.Release  && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName)) &&
+							// //////(snapshot.data._ValidFrom != snapshot.data._ValidTo);
+							
+							// return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								//(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
+							// (snapshot.data._ValidFrom != snapshot.data._ValidTo);
+						return me.ReleasesWithNameHash[snapshot.data.Release] && (snapshot.data._ValidFrom != snapshot.data._ValidTo);
 					});
 					if(!me.TeamStores[projectId]) me.TeamStores[projectId] = [];
 					me.TeamStores[projectId] = me.TeamStores[projectId].concat(records);
-					me.AllSnapshots = me.AllSnapshots.concat(records);
+					me.AllSnapshots = me.AllSnapshots.concat(records);				
 				});	
 			}));
 		},    
