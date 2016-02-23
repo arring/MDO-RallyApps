@@ -110,6 +110,7 @@
 				'LastSprint', 
 				'Last2Sprints', 
 				'LinearRegression', 
+				'LinearRegressionLast2Sprints', 
 				'LinearRegressionFromStartAccepted',
 				'LinearRegressionFromStartWork'
 			];
@@ -139,7 +140,7 @@
 			//initialize projected trendline
 			var topScheduleState = me.ScheduleStates.slice(-1)[0],
 				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
-				projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:topScheduleStateSeries.data.slice()},
+				projectedTrend = {type:'spline', dashStyle:'Solid', name:trendType, data:topScheduleStateSeries.data.slice()},
 				begin=0,
 				end=projectedTrend.data.length-1;
 		
@@ -224,6 +225,23 @@
 
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(intercept + j*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegressionLast2Sprints'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 20 < 0 ? 0 : end - 20);
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
 					return pt < 0 ? 0 : pt;
 				});	
 			}
@@ -403,7 +421,7 @@
 			if(!hideTrends){
 				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
-				rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
+				//rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		
 			me.setLoading(false);

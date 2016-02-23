@@ -97,11 +97,7 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }).and(
-						Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType+'.Release.Name', value: me.ReleaseRecord.data.Name }))
-					),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
 				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', {
 						property: lowestPortfolioItemType + '.ObjectID',
@@ -162,6 +158,23 @@
 					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
 					me.ProjectOIDNameMap[projectOID] = projectName;
 				});
+				
+				// var projectOIDsToGet = [];
+				// _.each(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
+					// var teamCommits = me.getTeamCommits(portfolioItemRecord);
+					// _.each(teamCommits, function(teamCommit, projectOID){
+						// if(!me.ProjectOIDNameMap[projectOID] && !_.contains(projectOIDsToGet, projectOID)){
+							// projectOIDsToGet.push(projectOID);
+						// }
+					// });
+				// });
+				// return Promise.all(_.map(projectOIDsToGet, function(oid){
+					// return me.loadProject(oid).then(function(projectRecord){
+						// me.ProjectOIDNameMap[projectRecord.data.ObjectID] = projectRecord.data.Name;
+						// me.MatrixProjectMap[projectRecord.data.Name] = projectRecord.data.ObjectID;
+						// me.MatrixUserStoryBreakdown[projectRecord.data.Name] = {};
+					// });
+				// }));
 			});
 		},		
 			
@@ -922,10 +935,10 @@
 						};
 					}),
 					function(item){ 
-						var horizontal = item.teamTypeInfo.horizontal;
-						return (horizontal === 'null' ? '~~~' : horizontal) + item.teamTypeInfo.projectRecord.data.Name; 
+						var horizontal = item.teamTypeInfo ? item.teamTypeInfo.horizontal : 'null';
+						return (horizontal === 'null' ? '~~~' : horizontal) + item.columnCfg.text; 
 					}),
-					function(item){ return item.teamTypeInfo.horizontal; }),
+					function(item){ return item.teamTypeInfo ? item.teamTypeInfo.horizontal : 'null'; }),
 					function(items, horizontal){
 						return {
 							text: horizontal === 'null' ? 'OTHER' : horizontal,
