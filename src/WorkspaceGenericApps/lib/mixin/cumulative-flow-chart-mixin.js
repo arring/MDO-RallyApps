@@ -444,7 +444,7 @@
 				dashStyle: "shortdash",
 				color: "red",
 				data:commitDataPlus,
-				name: "Commitment",
+				name: "Current Commit LCL",
 				type: "spline"
 			});	
 			return data;

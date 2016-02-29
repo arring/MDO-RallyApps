@@ -1399,7 +1399,8 @@
 							{Commitment:'Undecided'},
 							{Commitment:'N/A'},
 							{Commitment:'Committed'},
-							{Commitment:'Not Committed'}
+							{Commitment:'Not Committed'},
+							{Commitment:'WIP'}
 						]
 					}),
 					displayField: 'Commitment'

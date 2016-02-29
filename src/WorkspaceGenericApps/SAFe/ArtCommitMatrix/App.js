@@ -217,7 +217,7 @@
 		getGridHeight: function(){
 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+			return /* iframe.getHeight() - me.down('#navbox').getHeight() - 20; */ 800;
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 

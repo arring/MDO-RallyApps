@@ -277,7 +277,7 @@
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
 				me.AllScrumTargetVelocitySum = 0;
 			return Q.all(_.map(me.CurrentScrum ? [me.CurrentScrum] : me.LeafProjects, function(project){
-				config = {
+				var config = {
 					model: 'Iteration',
 					filters: [{
 						property: "EndDate",
@@ -333,14 +333,6 @@
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
 						projectId = snapshot.data.Project;
-						// ////////console.log( projectId, snapshot.data[lowestPortfolioItemType], me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]], releaseName)
-						// //////return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								// //////(!snapshot.data.Release  && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItemType]] == releaseName)) &&
-							// //////(snapshot.data._ValidFrom != snapshot.data._ValidTo);
-							
-							// return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								//(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
-							// (snapshot.data._ValidFrom != snapshot.data._ValidTo);
 						return me.ReleasesWithNameHash[snapshot.data.Release] && (snapshot.data._ValidFrom != snapshot.data._ValidTo);
 					});
 					if(!me.TeamStores[projectId]) me.TeamStores[projectId] = [];
@@ -490,9 +482,8 @@
 				
 			me.initialAddedDaysCount =  me._getIndexOn(me._dateToStringDisplay(me.changedReleaseStartDate),datemap);
 			me.finalCommitDate = datemap[datemap.length - 1];
-			// commitDataMinus = [];
-			//adding a line for the velocity of train 	
-			var 	targetVelocity =[];
+			//adding a line for the velocity of train
+			var targetVelocity =[];
 			_.each(aggregateChartData.categories,function(f,key){
 				targetVelocity.push(me.AllScrumTargetVelocitySum);
 			});
@@ -501,12 +492,18 @@
 				colorIndex: 1,
 				symbolIndex: 1,
 				dashStyle: "shortdash",
-				color: "purple",
+				color: "#862A51",
 				data:targetVelocity,
 				name: "Available Velocity UCL",
 				type: "line"
 			});
-			me._calcTrainMetric(aggregateChartData);				
+			me._calcTrainMetric(aggregateChartData);	
+			
+/* 			_.each(aggregateChartData.series, function(series,key){
+					if(series.name === "Commitment") 
+					aggregateChartData.series[key].name ="Current Commit LCL";
+				});		 */	
+			
 			$("#retroChart").highcharts(Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 				chart: {
 					height: 400,
@@ -539,7 +536,7 @@
 		_setCharConfigForRetroChart: function(){
 				var me = this,
 				scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit))) * 100;
-			 me.defaultRetroChartConfig = {
+				me.defaultRetroChartConfig = {
 					chart: {
 						type: 'column'
 					},
@@ -624,8 +621,8 @@
 
 				_.each(aggregateChartData.series,function(f){
 				finalAccepted = f.name==="Accepted" ? finalAccepted + f.data[finalCommitIndex] : finalAccepted; 
-				totalinitial = f.name==="Commitment" ? totalinitial + f.data[me.initialAddedDaysCount] : totalinitial;
-				finalCommit = (f.name !="Ideal" && f.name != "Projected" && f.name != "Commitment" && f.name != "Available Velocity UCL") ? finalCommit + f.data[finalCommitIndex] : finalCommit;
+				totalinitial = f.name==="Current Commit LCL" ? totalinitial + f.data[me.initialAddedDaysCount] : totalinitial;
+				finalCommit = (f.name !="Ideal" && f.name != "Projected" && f.name != "Current Commit LCL" && f.name != "Available Velocity UCL") ? finalCommit + f.data[finalCommitIndex] : finalCommit;
 				totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex] : totalProjected;
 				totalideal = f.name === "Ideal" ? totalideal + f.data[finalCommitIndex] : totalideal;
 			});
@@ -1101,7 +1098,7 @@
 					finalCommitIndex = me.aggregateChartData[teamName].categories.length - 1;
 					
 				var totalinitial = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
-					if(s.name== "Projected" || s.name=="Ideal" || s.name === "Commitment") return sum + 0;
+					if(s.name== "Projected" || s.name=="Ideal" || s.name === "Current Commit LCL") return sum + 0;
 					return  sum + s.data[me.initialAddedDaysCount];
 				},0);
 				
@@ -1164,15 +1161,6 @@
 				hash[r.data.Project.Name] = _.filter(me.UserStoryStore.getRange(),function(f){ return f.data.Project.Name === teamName; });
 				return hash;
 			}, {});
-			
-			/* me.dataIntegrity[me.TeamType] = 0; */
-		/* 	var	_6days = 1000 * 60 *60 *24*6;	 */
-/* 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
-			//TODO
-		//	me._getIndexOn(me._dateToStringDisplay(me.changedReleaseStartDate),aggregateChartData.datemap);
-			
-			me.initialAddedDaysCount = (typeof(me.initialAddedDaysCount) === "undefined") ? 6 : me.initialAddedDaysCount ; */
-
 			//Fitness grid 
 			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				healthIndicator = {
@@ -1181,7 +1169,7 @@
 					requireHelp : "<span class='require-attention'>How can I help?</span>",
 					requireHelpImage : "<span><img src='https://rally1.rallydev.com/slm/images/icon_help.gif' alt='Help' title='How can I help?' border='0' height='24' width='24'></span>",
 					reInforce : " (Re Enforce)",
-					good : "<span class='good-job'> (Good)</span>",				
+					good : "<span class='good-job'> (Good)</span>"			
 				};
 				
 			me.scrumData = me._buildScrumDataHashMap(updateOptions,calc,healthIndicator);

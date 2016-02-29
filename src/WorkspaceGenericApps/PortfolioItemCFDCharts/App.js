@@ -112,6 +112,10 @@
 				
 			// Load releases after twelve weeks ago
 			return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
+				me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+					hash[rr.data.ObjectID] = true;
+					return hash;
+				}, {});		
 				me.ReleaseRecords = releaseRecords;
 				var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
 				// If a release parameter is supplied
@@ -121,10 +125,19 @@
 					if(!me.ReleaseRecord) throw 'No release record found for: ' + releaseName;
 				}
 				else me.ReleaseRecord = me.getScopedRelease(me.ReleaseRecords);
-				return me.ReleaseRecord;
+				return me.ReleaseRecord;				
 			});
 		},
-		
+		loadAllChildReleases: function(){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me.loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+						hash[rr.data.ObjectID] = true;
+						return hash;
+					}, {});
+				});
+		},		
 		/**************************************** PortfolioItems Loading *********************************/
 		_loadPortfolioItems: function(){ 
 			var me = this,
@@ -156,10 +169,13 @@
 		_reload: function() {
 			var me = this;
 			me._setchangedReleaseStartDate();
-			return me._setFilteredLowestPortfolioItemRecords().then(me._getStorySnapshots.bind(me)).then(function() {
-				return Q.all([
-					me._getStories(),
-					me._buildCharts()
+			return me.loadAllChildReleases()
+				.then(function(){return me._setFilteredLowestPortfolioItemRecords(); })
+				.then(me._getStorySnapshots.bind(me))
+				.then(function() {
+					return Q.all([
+						me._getStories(),
+						me._buildCharts()
 				]);
 			});
 		},
@@ -262,8 +278,8 @@
 						operator: '>=',
 						value: me.ReleaseRecord.data.ReleaseStartDate
 					}],
-					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID', 'Release'],
-					hydrate: ['ScheduleState', 'Release']
+					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID' , 'Release'],
+					hydrate: ['ScheduleState'/* , 'Release' */]
 				};
 				return me.parallelLoadLookbackStore(config).then(function(store) {
 					// TODO: load only most recent snapshots of projects whose states are set to closed
@@ -273,7 +289,8 @@
 								// Filters to stories who are in the current release or do not have a release, but the lowestPortfolioItemRecord is in the release
 								// TODO: Verify
 								// TODO: filter out closed projects
-								return (!storySnapshot.data.Release || storySnapshot.data.Release.Name.indexOf(me.ReleaseRecord.data.Name) > -1);
+								/* return (!storySnapshot.data.Release && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo)|| storySnapshot.data.Release.Name.indexOf(me.ReleaseRecord.data.Name) > -1); */
+								return me.ReleasesWithNameHash[storySnapshot.data.Release] && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo);								
 							}),
 							lowestPortfolioItemOID = lowestPortfolioItemRecord.data.ObjectID;
 						if (!me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID]) me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID] = [];

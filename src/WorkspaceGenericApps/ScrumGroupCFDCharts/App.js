@@ -130,7 +130,44 @@
 					}, {});
 				});
 		},
-		
+		loadIterations: function(){
+			var me=this;
+			if(me.CurrentTopPortfolioItemName != null) return;//only calcualting for all work
+			var	startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.AllScrumTargetVelocitySum = [];
+				me.ScrumTargetVelocitySum = {};
+			return Q.all(_.map(me.LeafProjects, function(project){
+				var config = {
+					model: 'Iteration',
+					filters: [{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}],
+					fetch: ["PlannedVelocity"],
+					context:{
+						project: project.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:false
+					}
+				};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					var totalTargetVelocity =_.reduce(store.getRange(), function(sum, iteration) {
+						var targetVelocity = iteration.data.PlannedVelocity;
+						return sum + targetVelocity;
+					},0);
+					totalTargetVelocity = Number(totalTargetVelocity) === "NaN" ? 0 : totalTargetVelocity;
+					if(!me.ScrumTargetVelocitySum[project.data.Name]) me.ScrumTargetVelocitySum[project.data.Name] = [];
+					me.ScrumTargetVelocitySum[project.data.Name] = Number(me.ScrumTargetVelocitySum[project.data.Name]) + Number(totalTargetVelocity);
+					me.AllScrumTargetVelocitySum = Number(me.AllScrumTargetVelocitySum) + Number(totalTargetVelocity)		
+				});				
+			}));			
+		},		
 		/******************************************************* Reloading ********************************************************/			
 		hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
@@ -188,7 +225,12 @@
 			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
-				.then(function(){ return me.loadSnapshotStores(); }) 
+				.then(function(){				//load data
+					return Q.all([
+						me.loadIterations(),
+						me.loadSnapshotStores()	
+					]); 
+				})
 				.then(function(){ return me.redrawEverything(); });
 		},
 
@@ -374,6 +416,21 @@
 			/************************************** Scrum Group CHART STUFF *********************************************/
 			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions);
+			if(me.CurrentTopPortfolioItemName === null){
+				var trainTargetVelocity =[];
+				_.each(aggregateChartData.categories,function(f){
+					trainTargetVelocity.push(me.AllScrumTargetVelocitySum);
+				});
+				aggregateChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: trainTargetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});						
+			}
 			var	aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:400 },
@@ -408,7 +465,21 @@
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				
+				var scrumTargetVelocity =[];
+				if(me.CurrentTopPortfolioItemName === null){
+					_.each(scrumChartData.categories,function(f){
+						scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
+					});
+					scrumChartData.series.push({
+						colorIndex: 1,
+						symbolIndex: 1,
+						dashStyle: "shortdash",
+						color: "#862A51",
+						data: scrumTargetVelocity,
+						name: "Available Velocity UCL",
+						type: "line"
+					});						
+				}
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:300 },
