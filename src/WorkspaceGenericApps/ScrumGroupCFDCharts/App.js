@@ -157,6 +157,8 @@
 			return me.filterUserStoriesByTopPortfolioItem()
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
+					if(!me.DeleteCacheButton) me.renderDeleteCache();
+					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
 					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
 					me.renderTopPortfolioItemPicker();
@@ -165,67 +167,221 @@
 					me.setLoading(false);
 				});
 		},
-		reloadEverything:function(){ 
+		
+		reloadData:function(){ 
 			var me=this;
 			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
-				.then(function(){ return me.loadSnapshotStores(); })
-				.then(function(){ return me.redrawEverything(); });
+				.then(function(){ return me.loadSnapshotStores(); });
 		},
-
+		loadConfiguration: function(){
+			var me = this;
+			return me.configureIntelRallyApp().then(function(){
+				var scopeProject = me.getContext().getProject();
+				return me.loadProject(scopeProject.ObjectID);
+			})
+			.then(function(scopeProjectRecord){
+				me.ProjectRecord = scopeProjectRecord;
+				return Q.all([ //parallel loads
+					me.projectInWhichScrumGroup(me.ProjectRecord) /******** load stream 1 *****/
+						.then(function(scrumGroupRootRecord){
+							if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+								me.ScrumGroupRootRecord = scrumGroupRootRecord;
+								return me.loadScrumGroupPortfolioProject(scrumGroupRootRecord);
+							}
+							else return Q.reject('You are not scoped to a valid project.');
+						})
+						.then(function(scrumGroupPortfolioProject){
+							me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+							return me.loadAllLeafProjects(me.ScrumGroupRootRecord);
+						})
+						.then(function(scrums){
+							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
+						}),
+					me.loadAppsPreference() /******** load stream 2 *****/
+						.then(function(appsPref){
+							me.AppsPref = appsPref;
+							var fourteenWeeks = 1000*60*60*24*7*14;
+							return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
+						})
+						.then(function(releaseRecords){
+							me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
+							var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+							if(currentRelease) me.ReleaseRecord = currentRelease;
+							else return Q.reject('This project has no releases.');
+						})	
+				]);
+			});
+		},
+		
+		/******************************************************* Cache operations ********************************************************/		
+		getCache: function(){ //TODO
+			var me = this;
+			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
+			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var deferred = Q.defer();
+			
+			$.ajax({
+				url: url,
+				type: 'GET',
+				success: function(payload){
+					var payloadJSON;
+					try { payloadJSON = JSON.parse(payload); }
+					catch(e){ 
+						console.log('corrupt cache payload'); 
+						deferred.resolve(false);
+					}
+					
+					//intel-rally-app sets these
+					me.BaseUrl = Rally.environment.getServer().getBaseUrl();
+					me.PortfolioItemTypes = payloadJSON.PortfolioItemTypes;
+					me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
+					me.ScrumGroupConfig = payloadJSON.ScrumGroupConfig;
+					me.HorizontalGroupingConfig = payloadJSON.HorizontalGroupingConfig;
+					me.ScheduleStates = payloadJSON.ScheduleStates;
+					
+					//this app sets these
+					me.ProjectRecord = payloadJSON.ProjectRecord;
+					me.ScrumGroupRootRecord = payloadJSON.ScrumGroupRootRecord;
+					me.ScrumGroupPortfolioProject = payloadJSON.ScrumGroupPortfolioProject; 
+					me.LeafProjects = payloadJSON.LeafProjects;
+					me.ReleaseRecords = payloadJSON.ReleaseRecords;
+					me.AppsPref = {};
+					me.ReleaseRecord = payloadJSON.ReleaseRecord;
+					me.ReleasesWithNameHash = payloadJSON.ReleasesWithNameHash; 
+					me.LowestPortfolioItemsHash = payloadJSON.LowestPortfolioItemsHash;
+					me.PortfolioItemMap = payloadJSON.PortfolioItemMap;
+					me.TopPortfolioItemNames = payloadJSON.TopPortfolioItemNames;
+					me.CurrentTopPortfolioItemName = null;
+					me.AllSnapshots = payloadJSON.AllSnapshots;
+					me.TeamStores = payloadJSON.TeamStores;
+					
+					deferred.resolve(true);
+				},
+				error: function(xhr, status, reason){ 
+					if(xhr.status === 404) deferred.resolve(false);
+					else deferred.reject(reason);
+				}
+			});
+			return deferred.promise;
+		},
+		updateCache: function(){
+			var me = this;
+			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
+			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var deferred = Q.defer();
+			var payload = {};
+			
+			payload.PortfolioItemTypes = me.PortfolioItemTypes;
+			payload.ScrumGroupConfig = me.ScrumGroupConfig;
+			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
+			payload.ScheduleStates = me.ScheduleStates;
+			
+			//this app sets these
+			payload.ProjectRecord = {data: me.ProjectRecord.data};
+			payload.ScrumGroupRootRecord = {data: me.ScrumGroupRootRecord.data};
+			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data}; 
+			payload.LeafProjects = _.map(me.LeafProjects, function(lp){ return {data: lp.data}; });
+			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
+			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
+			
+			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
+			payload.PortfolioItemMap = me.PortfolioItemMap;
+			payload.TopPortfolioItemNames = me.TopPortfolioItemNames;
+			payload.AllSnapshots = _.map(me.AllSnapshots, function(ss){ return {raw: ss.raw}; });
+			payload.TeamStores = _.reduce(me.TeamStores, function(map, sss, key){ 
+				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
+				return map;
+			}, {}); 
+			
+			$.ajax({
+				url: url,
+				data: JSON.stringify(payload),
+				type: 'PUT',
+				headers: { 'Content-Type': 'application/json'},
+				success: function(data) { deferred.resolve(data); },
+				error: function(xhr, status, reason){ deferred.reject(reason); }
+			});
+			return deferred.promise;
+		},
+		deleteCache: function(){
+			var me = this;
+			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
+			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var deferred = Q.defer();
+			
+			$.ajax({
+				url: url,
+				type: 'DELETE',
+				success: function(data) { deferred.resolve(data); },
+				error: function(xhr, status, reason){ deferred.reject(reason); }
+			});
+			return deferred.promise;
+		},
+		
 		/******************************************************* LAUNCH ********************************************************/		
 		launch: function(){
 			var me = this;
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
-			me.configureIntelRallyApp()
-				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
+			return Q.all([
+				me.loadAppsPreference().then(function(appsPref){ me.AppsPref = appsPref; }), //cant cache. per user basis
+				me.getCache().then(function(cached){
+					if(!cached){
+						return me.loadConfiguration()
+							.then(function(){ return me.reloadData(); })
+							.then(function(){ 
+								//NOTE: not returning promise here!
+								me.updateCache().fail(function(e){
+									alert(e);
+									console.log(e);
+								});
+							});
+					}
 				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //parallel loads
-						me.projectInWhichScrumGroup(me.ProjectRecord) /******** load stream 1 *****/
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me.loadScrumGroupPortfolioProject(scrumGroupRootRecord);
-								}
-								else return Q.reject('You are not scoped to a valid project.');
-							})
-							.then(function(scrumGroupPortfolioProject){
-								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-								return me.loadAllLeafProjects(me.ScrumGroupRootRecord);
-							})
-							.then(function(scrums){
-								me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
-							}),
-						me.loadAppsPreference() /******** load stream 2 *****/
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
-								var fourteenWeeks = 1000*60*60*24*7*14;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
-							})
-							.then(function(releaseRecords){
-								me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) me.ReleaseRecord = currentRelease;
-								else return Q.reject('This project has no releases.');
-							})
-					]);
-				})
-				.then(function(){ return me.reloadEverything(); })
-				.fail(function(reason){
-					me.setLoading(false);
-					me.alert('ERROR', reason);
-				})
-				.done();
+			])
+			.then(function(){ return me.redrawEverything(); })
+			.fail(function(reason){
+				me.setLoading(false);
+				me.alert('ERROR', reason);
+			})
+			.done();
 		},
 		
 		/*************************************************** RENDERING NavBar **************************************************/
+		renderDeleteCache: function(){
+			var me=this;
+			me.DeleteCacheButton = Ext.getCmp('navBar').add({
+				xtype:'button',
+				text: 'Clear Cached Data',
+				listeners: { 
+					click: function(){
+						me.setLoading('Clearing cache, please wait');
+						return me.deleteCache()
+							.then(function(){ me.setLoading(false); });
+					}
+				}
+			});
+		},
+		renderUpdateCache: function(){
+			var me=this;
+			me.UpdateCacheButton = Ext.getCmp('navBar').add({
+				xtype:'button',
+				text: 'Get Live Data',
+				listeners: { 
+					click: function(){
+						me.setLoading('Pulling Live Data, please wait');
+						return me.loadConfiguration()
+							.then(function(){ return me.reloadData(); })
+							.then(function(){ return me.updateCache(); })
+							.then(function(){ me.setLoading(false); });
+					}
+				}
+			});
+		},
 		releasePickerSelected: function(combo, records){
 			var me=this;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
