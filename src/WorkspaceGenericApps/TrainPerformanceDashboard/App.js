@@ -271,7 +271,7 @@
 					}, {});
 				});
 		},
-		_loadIterations: function(){
+/* 		_loadIterations: function(){
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
@@ -302,7 +302,7 @@
 					},0);
 				});				
 			}));			
-		},		
+		}, */		
 		_loadSnapshotStores: function(){
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -350,7 +350,7 @@
 				inIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '!=', value: releaseName })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '=', value: null })).and(
           Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.Name', operator: 'contains', value: releaseName}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }))),
 				userStoryProjectFilter;
@@ -367,6 +367,7 @@
 					else return newFilter;
 				}, null);
 			else throw "No scrums were found!";
+			
 			return Rally.data.wsapi.Filter.and([
 				userStoryProjectFilter, 
 				Rally.data.wsapi.Filter.or([inIterationButNotReleaseFilter, releaseNameFilter])
@@ -391,7 +392,7 @@
 				return store;
 			});
 		},
-/****************************************************** RENDER Cumulative flow and bar Chart ********************************************************/
+		/****************************************************** Calculations********************************************************/
 		_calculateDataIntegrity: function(projectStoreMap){
 			var me = this;
 			var releaseName = me.ReleaseRecord.data.Name,
@@ -442,6 +443,68 @@
 				}));
 				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyinIterationNotAttachedToRelease + unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
 		},
+		_calcTrainMetric: function(aggregateChartData){
+			var me = this,	totalinitial = 0,	finalCommit = 0, finalAccepted = 0,	totalProjected = 0,	totalideal = 0,
+				finalCommitIndex = aggregateChartData.categories.length - 1;
+
+				_.each(aggregateChartData.series,function(f){
+				finalAccepted = f.name==="Accepted" ? finalAccepted + f.data[finalCommitIndex] : finalAccepted; 
+				totalinitial = f.name==="Current Commit LCL" ? totalinitial + f.data[me.initialAddedDaysCount] : totalinitial;
+				finalCommit = (f.name !="Ideal" && f.name != "Projected" && f.name != "Current Commit LCL" && f.name != "Available Velocity UCL") ? finalCommit + f.data[finalCommitIndex] : finalCommit;
+				totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex] : totalProjected;
+				totalideal = f.name === "Ideal" ? totalideal + f.data[finalCommitIndex] : totalideal;
+			});
+			finalAccepted = (finalCommit === 0) && totalProjected > 0 ? totalProjected : totalideal;
+			finalCommit = (finalCommit === 0) && totalideal > 0 ? totalideal : totalProjected;			
+			me.total = {};
+			me.total.initialCommit = totalinitial;
+			me.total.finalCommit = finalCommit;
+			me.total.finalAccepted = finalAccepted;
+		},	
+		__calcFitnessGridColumnVal: function(teamName,healthIndicator){
+				var me = this,
+					finalCommitIndex = me.aggregateChartData[teamName].categories.length - 1;
+					
+				var totalinitial = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
+					if(s.name== "Projected" || s.name=="Ideal" || s.name === "Current Commit LCL") return sum + 0;
+					return  sum + s.data[me.initialAddedDaysCount];
+				},0);
+				
+				var totalProjected = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
+					if(s.name!= "Projected") return sum + 0;
+					if(typeof(s.data[finalCommitIndex]) == "object") return sum +  s.data[finalCommitIndex].y;
+					else	return sum + s.data[finalCommitIndex];					
+				},0);
+					
+				var totalIdeal = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
+					if(s.name === "Ideal") return sum + s.data[finalCommitIndex];
+					else	return sum + 0;					
+				},0);
+					
+				var DI =  me._calculateDataIntegrity(me.TeamStoresDI[teamName]),
+					scopechange= ((totalIdeal - totalinitial)/totalinitial) * 100 ,
+					acceptToCommit = (totalProjected/totalinitial)*100,
+					teamStatus ="",
+					scopeStatus ="";
+					
+				scopeStatus =  ( scopechange >= -10 && scopechange <= 10.99 )? healthIndicator.good : healthIndicator.requireAttention;
+				teamStatus  = ( DI <= 5 &&	(( scopechange >= -10 && scopechange <= 10.99 )) && acceptToCommit>90 && acceptToCommit<=100.99) ? healthIndicator.recognized : healthIndicator.requireAttention;
+				scopechange = ($.isNumeric(scopechange) ? (scopechange.toFixed(2)> 0 ? '+' + scopechange.toFixed(2) + '%' + scopeStatus : scopechange.toFixed(2) + '%'+ scopeStatus) : "-");
+				acceptToCommit = ($.isNumeric(acceptToCommit) ? (acceptToCommit.toFixed(2) > 90 && acceptToCommit<=100.99 ? acceptToCommit.toFixed(2)+ '%'+ healthIndicator.good : acceptToCommit.toFixed(2) + '%'+ healthIndicator.requireAttention) : "-"); 
+				
+				return {
+					initalCommit : totalinitial,
+					totalFinal : totalIdeal,
+					finalAccepted : totalProjected,
+					scopeChange:  scopechange,
+					acceptToCommit: acceptToCommit,
+					dataIntegrity: DI <= 5 ? DI + healthIndicator.good :DI + healthIndicator.requireAttention,
+					scrumTeam: teamName,
+					status: teamStatus,
+					categories: (teamName.split("-")[0])
+				};				
+		},		
+		/****************************************************** RENDER Cumulative flow and bar Chart ********************************************************/
 		_renderCFDContainer: function(){
 			var me = this;
 			Ext.getCmp('retroBarChartWrapper').removeAll();
@@ -483,7 +546,7 @@
 			me.initialAddedDaysCount =  me._getIndexOn(me._dateToStringDisplay(me.changedReleaseStartDate),datemap);
 			me.finalCommitDate = datemap[datemap.length - 1];
 			//adding a line for the velocity of train
-			var targetVelocity =[];
+/* 			var targetVelocity =[];
 			_.each(aggregateChartData.categories,function(f,key){
 				targetVelocity.push(me.AllScrumTargetVelocitySum);
 			});
@@ -496,7 +559,7 @@
 				data:targetVelocity,
 				name: "Available Velocity UCL",
 				type: "line"
-			});
+			}); */
 			me._calcTrainMetric(aggregateChartData);	
 			
 /* 			_.each(aggregateChartData.series, function(series,key){
@@ -615,24 +678,6 @@
 					}]
 				};				
 		},
-		_calcTrainMetric: function(aggregateChartData){
-			var me = this,	totalinitial = 0,	finalCommit = 0, finalAccepted = 0,	totalProjected = 0,	totalideal = 0,
-				finalCommitIndex = aggregateChartData.categories.length - 1;
-
-				_.each(aggregateChartData.series,function(f){
-				finalAccepted = f.name==="Accepted" ? finalAccepted + f.data[finalCommitIndex] : finalAccepted; 
-				totalinitial = f.name==="Current Commit LCL" ? totalinitial + f.data[me.initialAddedDaysCount] : totalinitial;
-				finalCommit = (f.name !="Ideal" && f.name != "Projected" && f.name != "Current Commit LCL" && f.name != "Available Velocity UCL") ? finalCommit + f.data[finalCommitIndex] : finalCommit;
-				totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex] : totalProjected;
-				totalideal = f.name === "Ideal" ? totalideal + f.data[finalCommitIndex] : totalideal;
-			});
-			finalAccepted = (finalCommit === 0) && totalProjected > 0 ? totalProjected : totalideal;
-			finalCommit = (finalCommit === 0) && totalideal > 0 ? totalideal : totalProjected;			
-			me.total = {};
-			me.total.initialCommit = totalinitial;
-			me.total.finalCommit = finalCommit;
-			me.total.finalAccepted = finalAccepted;
-		},		
 		_renderScopeChangeChart: function(){
 			var me = this,
 			scopeDeltaPerc = ((me.total.finalCommit - me.total.initialCommit)/((me.total.initialCommit))) * 100,
@@ -864,10 +909,11 @@
 				userStorySnapshots = me.AllSnapshots,
 				_10days = 1000 * 60 *60 *24*10,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
-				date1 = me.ReleaseRecord.data.ReleaseStartDate,
-				date2 = new Date(me.datePickerDate),
-				daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) )),
-				startTargetDate = me.releaseStartDateChanged && daysCountDifference >0 ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + daysCountDifference): new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
+				/* daysCountDifference = Rally.util.DateTime.getDifference(new Date(me.changedReleaseStartDate), new Date(me.ReleaseRecord.data.ReleaseStartDate), 'day'), */
+ 				date1 = me.ReleaseRecord.data.ReleaseStartDate,
+				date2 = new Date(me.changedReleaseStartDate), 
+			 	daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) )), 
+				startTargetDate = me.releaseStartDateChanged && daysCountDifference > 0 ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + daysCountDifference): new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
 				finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1),
 				scopeToReleaseGridRows = [],
 				
@@ -1093,49 +1139,6 @@
 			Ext.getCmp('grdScrumHealth').add(scrumDataRequireAttentionGrid);		
 			Ext.getCmp('grdScrumHealth').add(scrumDateReEnforceStoreGrid);	
 		},		
-		__calcFitnessGridColumnVal: function(teamName,healthIndicator){
-				var me = this,
-					finalCommitIndex = me.aggregateChartData[teamName].categories.length - 1;
-					
-				var totalinitial = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
-					if(s.name== "Projected" || s.name=="Ideal" || s.name === "Current Commit LCL") return sum + 0;
-					return  sum + s.data[me.initialAddedDaysCount];
-				},0);
-				
-				var totalProjected = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
-					if(s.name!= "Projected") return sum + 0;
-					if(typeof(s.data[finalCommitIndex]) == "object") return sum +  s.data[finalCommitIndex].y;
-					else	return sum + s.data[finalCommitIndex];					
-				},0);
-					
-				var totalIdeal = _.reduce(me.aggregateChartData[teamName].series,function(sum,s){
-					if(s.name === "Ideal") return sum + s.data[finalCommitIndex];
-					else	return sum + 0;					
-				},0);
-					
-				var DI =  me._calculateDataIntegrity(me.TeamStoresDI[teamName]),
-					scopechange= ((totalIdeal - totalinitial)/totalinitial) * 100 ,
-					acceptToCommit = (totalProjected/totalinitial)*100,
-					teamStatus ="",
-					scopeStatus ="";
-					
-				scopeStatus =  ( scopechange >= -10 && scopechange <= 10.99 )? healthIndicator.good : healthIndicator.requireAttention;
-				teamStatus  = ( DI <= 5 &&	(( scopechange >= -10 && scopechange <= 10.99 )) && acceptToCommit>90 && acceptToCommit<=100.99) ? healthIndicator.recognized : healthIndicator.requireAttention;
-				scopechange = ($.isNumeric(scopechange) ? (scopechange.toFixed(2)> 0 ? '+' + scopechange.toFixed(2) + '%' + scopeStatus : scopechange.toFixed(2) + '%'+ scopeStatus) : "-");
-				acceptToCommit = ($.isNumeric(acceptToCommit) ? (acceptToCommit.toFixed(2) > 90 && acceptToCommit<=100.99 ? acceptToCommit.toFixed(2)+ '%'+ healthIndicator.good : acceptToCommit.toFixed(2) + '%'+ healthIndicator.requireAttention) : "-"); 
-				
-				return {
-					initalCommit : totalinitial,
-					totalFinal : totalIdeal,
-					finalAccepted : totalProjected,
-					scopeChange:  scopechange,
-					acceptToCommit: acceptToCommit,
-					dataIntegrity: DI <= 5 ? DI + healthIndicator.good :DI + healthIndicator.requireAttention,
-					scrumTeam: teamName,
-					status: teamStatus,
-					categories: (teamName.split("-")[0])
-				};				
-		},
 		_buildScrumDataHashMap: function(updateOptions,calc,healthIndicator){
 			var me = this;
 			me.aggregateChartData ={};
@@ -1223,7 +1226,7 @@
 			.then(function(){ 
 				//load data
 				return Q.all([
-					me._loadIterations(),
+					//me._loadIterations(),
 					me._loadStories(),
 					me._loadSnapshotStores()
 				]);

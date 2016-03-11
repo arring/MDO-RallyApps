@@ -339,7 +339,7 @@
 			var me = this,
 				topPortfolioItemType = me.PortfolioItemTypes.slice(-1)[0];
 			me.TopPortfolioItemPicker = me.down('#navBarProductFilter').add({
-				xtype: 'combobox',
+				xtype: 'intelfixedcombo',
 				fieldLabel: topPortfolioItemType,
 				labelWidth: 80,
 				width: 240,

@@ -131,18 +131,20 @@
 		},
 		/******************************************************* Reloading ********************************************************/			
 		hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
+			$('.highcharts-container > svg > text:last-child').hide();
+			//find a way to render only legend to share for all
+			//TODO: find a better way
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-series-group').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis-labels').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-grid').hide();
+			
 		},
 		reloadEverything:function(){
 			var me=this;
 			me.setLoading('Loading Data');		
 			return me.loadAllProjectReleases()
-				.then(function(){ 
-					return Q.all([
-						me.loadIterations(),
-						me.loadSnapshotStores()	
-					]); 				
-				})
+				.then(function(){ return me.loadSnapshotStores();	})
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
 					me.setLoading('Loading Charts');
@@ -259,39 +261,64 @@
 			/************************************** Aggregate panel STUFF *********************************************/
 			var	_6days = 1000 * 60 *60 *24*6;	
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
-			
-		 	var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+			//this is to just render the legend to share among the horizontals
+			//var targetVelocity =[];
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions);
-			/*	aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
-					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
-						chart: { height:400 },
+ 				/*_.each(aggregateChartData.categories,function(f){
+					targetVelocity.push(10);
+				});
+				aggregateChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: targetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});		 */		
+			var aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+					Ext.Object.merge( me.getDefaultCFCConfig(),  me.getCumulativeFlowChartColors(), {
+						chart: { height:110 },
 						legend:{
 							enabled:true,
-							borderWidth:0,
-							width:500,
-							itemWidth:100
+							verticalAlign: "top"
 						},
 						title: {
-							text: me.TeamType
+							text: ""
 						},
-						subtitle:{
-							text: me.ReleaseRecord.data.Name.split(' ')[0]
+						yAxis: {
+							title: {
+								text: ""
+							},
+							labels: {
+								x: -5,
+								y: 4
+							}
 						},
 						xAxis:{
+							tickmarkPlacement: "on",
+							title: {
+								text: "",
+								margin: 10
+							},
+							labels: {
+								y: 20,
+								enabled: false
+							},
 							categories: aggregateChartData.categories,
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
-					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
-				)[0];
-			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap); */
+					})
+				);
 			
-			/************************************** Scrum CHARTS STUFF *********************************************/	
+				/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
 					return (projName.split('-')[1] || '').trim() + projName; 
 				}),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
-			_.each(sortedProjectNames, function(projectName){
+			_.each(sortedProjectNames, function(projectName,key){
 				//Find project Preference for each Train
 				var trainName = projectName.split(" ")[projectName.split(" ").length-1];
 				trainChangedReleaseStartDate = !(me.trainPref[trainName]) || _.isEmpty(me.trainPref[trainName].releases) || !(me.trainPref[trainName].releases[me.ReleaseRecord.data.Name])	? me.changedReleaseStartDate : me.trainPref[trainName].releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
@@ -301,7 +328,7 @@
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				var scrumTargetVelocity =[];
+/* 				var scrumTargetVelocity =[];
 				_.each(scrumChartData.categories,function(f){
 					scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
 				});
@@ -313,11 +340,12 @@
 					data: scrumTargetVelocity,
 					name: "Available Velocity UCL",
 					type: "line"
-				});					
+				});		 */			
+				var enabledLengend = key === 0 ? true : false; 
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:300 },
-						legend: { enabled: false },
+						legend: { enabled : false},
 						title: { text: null },
 						subtitle:{ text: projectName },
 						xAxis: {
@@ -325,7 +353,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,trainChangedReleaseStartDate))
+					},me.getInitialAndfinalCommitPlotLines(scrumChartData,trainChangedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});

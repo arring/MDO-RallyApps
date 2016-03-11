@@ -6,3 +6,35 @@
 	height:360px;
 	width:32%;
 	float:left; }
+/* .scrumCharts-innerCt {
+	border: solid red 1px;
+	margin-top: 50px;
+} */
+
+/* basic positioning */
+.legend { list-style: none; }
+.legend li { float: left; margin-right: 10px;
+    font-size: 12px;
+    font-weight: bold;
+		color:black;
+    cursor: pointer;
+}
+.legend span { border: 1px solid #ccc; float: left; width: 12px; height: 12px; margin: 2px; }
+/* your colors */
+.legend .undefined { background-color: #ababab; }
+.legend .defined { background-color: #e57e3a; }
+.legend .inprogess { background-color: #e5d038; }
+.legend .completed { background-color: #0080ff; }
+.legend .accepted { background-color: #3a874f; }
+.legend .projected { background-color: #26ff00; }
+.legend .ideal { background-color: #000000; }
+.legend .commit { background-color: #ff0000; }
+.legend .velocity { background-color: #862a51; }
+hr {
+  border:none;
+  border-top:1px dotted #f00;
+  color:#fff;
+  background-color:#fff;
+  height:1px;
+  width:50%;
+}
