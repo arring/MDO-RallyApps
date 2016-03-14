@@ -1,0 +1,2535 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>agingstandard</title>
+
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
+    <script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                /** 
+	SUMMARY:
+		This extends Rally.app.app. All Intel Apps should extend from this if they want to use the functionality it provides,
+		as well as numerous other lib/* files that require you to extend from this.
+		
+		If you extend from Intel.lib.IntelRallyApp, you have to call me.configureIntelRallyApp() before anything else in your launch() 
+		function. After you call me.configureIntelRallyApp, you will be able to access a lot of things, such as:
+			- me.ScheduleStates: possible UserStory schedule States
+			- me.PortfolioItemTypes: Ordered Array of PortfolioItem Types. e.g.: ['Feature', 'Milestone', 'Product']
+			- me.ScrumGroupConfig: the scrum group portfolio location config for the workspace
+			- me.HorizontalGroupingConfig: the horizontal scrum groupings by keywords
+			- All the most-used Rally models, such as me.Project, me.UserStory, me.PortfolioItem, etc... 
+		
+	DEPENDENCIES:
+		Q promise library
+		
+	ISSUES:
+		sdk 2.0 does not work with the project function due to a bug in the sdk. use sdk 2.0rc3
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+	
+	//increase timeouts to 2 minutes since rally can be slow sometimes
+	var timeout = 120000;
+	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
+	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
+	
+	//rally's built-in jsonpproxy does not handle timeouts
+	Ext.override(Rally.sdk.data.lookback.JsonPProxy, {
+		setException: function(operation, response){
+			var error = operation.getError() || {};
+			operation.setException(Ext.apply(error, {
+				errors:(response || {}).Errors || []
+			}));
+		}
+	});
+				
+	Ext.define('Intel.lib.IntelRallyApp', {
+		extend: 'Rally.app.App',
+		minWidth:910, //when Rally adds its own scrollbar anyways
+		
+		projectFields: ['ObjectID', 'Releases', 'Children', 'Parent', 'Name', 'TeamMembers'],
+		portfolioItemFields: ['Name', 'ObjectID', 'FormattedID', 'Release','c_TeamCommits', 'c_MoSCoW', 
+			'c_Risks', 'Project', 'PlannedEndDate', 'Parent', 'Children', 'PortfolioItemType', 'Ordinal',
+			'PercentDoneByStoryPlanEstimate'],
+		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
+			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
+		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+		
+		/********************************************** APP CONFIGURATION **************************************/
+		_loadScheduleStates: function(){ 
+			var me=this, deferred = Q.defer();
+			Rally.data.ModelFactory.getModel({
+				type: 'UserStory',
+				success: function(model) {
+					model.getField('ScheduleState').getAllowedValueStore().load({
+						callback: function(records, operation, success) {
+							me.ScheduleStates = _.map(records, function(r){ return r.data.StringValue; });
+							deferred.resolve();
+						}
+					});
+				}
+			});
+			return deferred.promise;
+		},
+		_loadPortfolioItemStatesForEachType: function(){ 
+			var me=this;
+			me.PortfolioItemTypeStates = [];
+			return Q.all(_.map(me.PortfolioItemTypes, function(portfolioType, ordinal){
+				var store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'State',
+					autoLoad:false,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					fetch:['Name', 'Enabled', 'OrderIndex'],
+					filters: [{
+						property: 'TypeDef.Name',
+						value: portfolioType
+					},{
+						property: 'Enabled',
+						value: true
+					}]
+				});
+				return me.reloadStore(store).then(function(store){
+					me.PortfolioItemTypeStates[ordinal] = store.getRange();
+				});
+			}));
+		},
+		_loadPortfolioItemTypes: function(){ 
+			/** loads all the portfolioitem names into sorted array [smallest ordinal --> biggest ordinal] */
+			var me=this,
+				deferred = Q.defer(),
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'TypeDefinition',
+					autoLoad:true,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					fetch:['Ordinal', 'Name'],
+					filters: [{
+						property: 'Parent.Name',
+						value: 'Portfolio Item'
+					},{
+						property: 'Creatable',
+						value: true
+					}],
+					listeners:{
+						load:function(portfolioTypeStore){
+							me.PortfolioItemTypes = _.map(_.sortBy(_.map(portfolioTypeStore.getRange(), 
+								function(item){ return {Name: item.data.Name, Ordinal: item.data.Ordinal}; }),
+								function(item){ return item.Ordinal; }),
+								function(item){ return item.Name; });
+							deferred.resolve();
+						}
+					}
+				});
+			return deferred.promise;
+		},
+		_loadModels: function(){ 
+			/** loads models for project, userstories, and all the portfolio items */
+			var me=this, 
+				promises = [],
+				models = {
+					User: 'User',
+					Project: 'Project',
+					UserStory: 'HierarchicalRequirement',
+					PortfolioItem: 'PortfolioItem'
+				};
+			_.each(me.PortfolioItemTypes, function(name){ models['PortfolioItem/' + name] = 'PortfolioItem/' + name; });
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},
+		_loadScrumGroupConfig: function(){
+			/** scrum-groups are groups of scrums that share the same portfolio. The group of scrums may or may not be a train */
+			/** me.ScrumGroupConfig is an array of these objects: 
+				{
+					ScrumGroupRootProjectOID: configItem.ScrumGroupRootProjectOID || 0,
+					ScrumGroupName: configItem.ScrumGroupName || '',
+					ScrumGroupAndPortfolioLocationTheSame: configItem.ScrumGroupAndPortfolioLocationTheSame ? true : false,
+					PortfolioProjectOID: configItem.PortfolioProjectOID || 0,
+					IsTrain: configItem.IsTrain ? true : false
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: ScrumGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
+					try{ scrumGroupConfig = JSON.parse(configString); }
+					catch(e){ scrumGroupConfig = []; }
+					me.ScrumGroupConfig = scrumGroupConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_loadHorizontalGroupingConfig: function(){
+			/** HorizontalGroupingConfig is this:
+			{
+				enabled: boolean,
+				groups: {
+					<horizontal1Name>: ['keyword1', 'keyword2'],
+					<horizontal2Name>: ['keyword1', 'keyword2'],
+					...
+				}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[HorizontalGroupingConfigPrefName], horizontalGroupingConfig;
+					try{ horizontalGroupingConfig = JSON.parse(configString); }
+					catch(e){ horizontalGroupingConfig = {enabled:false, groups:{}}; }
+					me.HorizontalGroupingConfig = horizontalGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveScrumGroupConfig: function(scrumGroupConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: ScrumGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: HorizontalGroupingConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		configureIntelRallyApp: function(){
+			var me=this;
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
+			return Q.all([
+				me._loadPortfolioItemTypes().then(function(){ 
+					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
+					return Q.all([
+						me._loadModels(),
+						me._loadPortfolioItemStatesForEachType()
+					]);
+				}),
+				me._loadScrumGroupConfig(),
+				me._loadHorizontalGroupingConfig(),
+				me._loadScheduleStates()
+			]);
+		},
+				
+		/**************************** Generic store loading with Q wrapper, returns promise *************************************/		
+		reloadStore: function(store){
+			var deferred = Q.defer();
+			store.load({
+				callback: function(records, operation, success){
+					if(!success) deferred.reject(operation.getError() || 'Could not load data');
+					else deferred.resolve(store);
+				}
+			});
+			return deferred.promise;
+		},
+		
+		/********************************************** LOADING SINGLE MODELS **************************************/	
+		loadProject: function(oid){ 
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.reject('Invalid arguments: loadProject');
+			else if(!me.Project) return Q.reject('IntelRallyApp is not configured!');
+			else {
+				me.Project.load(oid, {
+					fetch: me.projectFields,
+					context: { 
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadUserStory: function(oid, projectRecord){
+			var me = this, deferred = Q.defer();
+			if(!oid) return Q.reject('Invalid arguments: loadUserStory');
+			else if(!me.UserStory) return Q.reject('IntelRallyApp is not configured!');
+			else {
+				me.UserStory.load(oid, {
+					fetch: me.userStoryFields,
+					context: {
+						workspace: projectRecord ? null : me.getContext().getWorkspace()._ref,
+						project: projectRecord ? projectRecord.data._ref : null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadPortfolioItemByType: function(oid, type){
+			var me = this, deferred = Q.defer();
+			if(!oid || !type) return Q.reject('Invalid arguments: loadPortfolioItemByType');
+			else {
+				type = (type.indexOf('PortfolioItem/') === 0) ? type : ('PortfolioItem/' + type);	
+				me[type].load(oid, {
+					fetch: me.portfolioItemFields,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					callback: deferred.resolve
+				});
+				return deferred.promise;
+			}
+		},	
+		loadPortfolioItemByOrdinal: function(oid, ordinal){
+			var me = this, deferred = Q.defer(),
+				type = me.PortfolioItemTypes[ordinal];
+			return me.loadPortfolioItemByType(oid, type);
+		},	
+		
+		/**************************************** ScrumGroup Funcs ***************************************************/
+		projectInWhichScrumGroup: function(projectRecord){ 
+			/** returns scrumgroup the projectRecord is in, otherwise null. */
+			if(!projectRecord) return Q();
+			else {
+				var me=this,
+					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
+					});
+				if(foundScrumGroupConfig) return Q(projectRecord);
+				else { 
+					var parent = projectRecord.data.Parent;
+					if(!parent) return Q();
+					else {
+						return me.loadProject(parent.ObjectID).then(function(parentRecord){
+							return me.projectInWhichScrumGroup(parentRecord);
+						});
+					}
+				}
+			}
+		},
+		loadScrumGroupPortfolioProject: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) return Q.reject('Invalid arguments: loadScrumGroupPortfolioProject');
+			var me=this,
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
+				});
+			if(!foundScrumGroupConfig) return Q.reject('Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum group!');
+			if(foundScrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame) return Q(scrumGroupRootProjectRecord);
+			else return me.loadProject(foundScrumGroupConfig.PortfolioProjectOID);
+		},
+		getScrumGroupName: function(scrumGroupRootProjectRecord){
+			if(!scrumGroupRootProjectRecord) throw 'Invalid arguments: getScrumGroupName';
+			var me=this,
+				foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
+					return scrumGroupConfig.ScrumGroupRootProjectOID == scrumGroupRootProjectRecord.data.ObjectID; 
+				});
+			if(!foundScrumGroupConfig) throw 'Project ' + scrumGroupRootProjectRecord.data.Name + ' is not a scrum-group!';
+			if(foundScrumGroupConfig.ScrumGroupName) return foundScrumGroupConfig.ScrumGroupName;
+			else return scrumGroupRootProjectRecord.data.Name;
+		},
+		loadAllScrumGroups: function(){
+			var me=this,
+				filter = _.reduce(me.ScrumGroupConfig, function(filter, scrumGroupConfig){
+					var newFilter = Ext.create('Rally.data.wsapi.Filter', { property:'ObjectID', value: scrumGroupConfig.ScrumGroupRootProjectOID });
+					return filter ? filter.or(newFilter) : newFilter;
+				}, null);
+			if(!filter) return Q([]);
+			else {
+				var store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.projectFields,
+					filters:[filter],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+				return me.reloadStore(store).then(function(store){ return store.getRange(); });
+			}
+		},
+		getScrumGroupPortfolioObjectIDs: function(){
+			return _.map(me.ScrumGroupConfig, function(item){
+				return item.ScrumGroupAndPortfolioLocationTheSame ? item.ScrumGroupRootProjectOID : item.PortfolioProjectOID;
+			});
+		},
+		getPortfolioOIDForScrumGroupRootProjectRecord: function(scrumGroupRootProjectRecord){
+			var configItem = _.find(this.ScrumGroupConfig, function(item){ 
+				return item.ScrumGroupRootProjectOID === scrumGroupRootProjectRecord.data.ObjectID; 
+			});
+			return configItem.ScrumGroupAndPortfolioLocationTheSame ? configItem.ScrumGroupRootProjectOID : configItem.PortfolioProjectOID;
+		},
+		
+		/**************************************** UserStory Funcs ************************************************/
+		_getUserStoryInReleaseTimeFrameFilter: function(releaseRecord){ 
+			/** only pull look at PortfolioItem Release if US.Release == null */
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(releaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(releaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.ObjectID',
+					value: null
+				}).and(
+					Ext.create('Rally.data.wsapi.Filter', {
+						property: lowestPortfolioItem + '.Release.ReleaseStartDate',
+						operator: '<',
+						value: releaseStartPadding
+					}).and(Ext.create('Rally.data.wsapi.Filter', { 
+						property: lowestPortfolioItem + '.Release.ReleaseDate',
+						operator: '>',
+						value: releaseEndPadding
+					}))
+				)
+			);
+		},
+		loadRandomUserStory: function(projectRecord){
+			if(!projectRecord) return Q.reject('Invalid arguments: loadRandomUserStory');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					disableMetaChangeEvent: true,
+					fetch: false,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{ 
+						property:'Project.ObjectID', 
+						value: projectRecord.data.ObjectID 
+					}]
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		loadRandomUserStoryFromReleaseTimeframe: function(projectRecord, releaseRecord){
+			if(!projectRecord || !releaseRecord) return Q.reject('Invalid arguments: loadRandomUserStoryFromReleaseTimeframe');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:5,
+					pageSize:5,
+					disableMetaChangeEvent: true,
+					fetch: me.userStoryFields,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					sorters: [{
+						property: 'CreationDate', 
+						direction:'DESC'
+					}],
+					filters:[
+						Ext.create('Rally.data.wsapi.Filter', { property:'Project.ObjectID', value: projectRecord.data.ObjectID }).and(
+						me._getUserStoryInReleaseTimeFrameFilter(releaseRecord))
+					]
+				});
+			return me.reloadStore(store).then(function(store){
+				var records = store.data.items;
+				if(records.length) return Q(records[Math.floor(Math.random()*records.length)]);
+				else return Q(undefined);
+			});
+		},
+		loadUserStoryByFID: function(formattedID, projectRecord){
+			if(!formattedID || !projectRecord) return Q.reject('Invalid arguments: loadUserStoryByFID');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'HierarchicalRequirement',
+					limit:1,
+					pageSize:1,
+					disableMetaChangeEvent: true,
+					fetch: ['Name', 'Project', 'ObjectID', 'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: undefined
+					},
+					filters: [{
+						property:'FormattedID',
+						value:formattedID
+					},{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					}]
+				});
+			return me.reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},	
+		
+		/**************************************** PortfolioItem Funcs ************************************************/
+		loadPortfolioItemsOfType: function(portfolioProject, type){
+			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: me.portfolioItemFields,
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store);
+		},		
+		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
+			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: 'PortfolioItem/' + type,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					remoteSort:false,
+					fetch: me.portfolioItemFields,
+					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
+					context:{
+						project: portfolioProject.data._ref,
+						projectScopeDown: true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store);
+		},
+		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
+			if(!portfolioProject || typeof ordinal === 'undefined') return Q.reject('Invalid arguments: loadPortfolioItemsOfOrdinal');
+			var me=this, type = me.PortfolioItemTypes[ordinal];
+			if(type) return me.loadPortfolioItemsOfType(portfolioProject, type);
+			else return Q.reject('Invalid PortfolioItem ordinal');
+		},
+		portfolioItemTypeToOrdinal: function(type){
+			return this.PortfolioItemTypes.indexOf(type);
+		},
+		getPortfolioItemTypeStateByOrdinal: function(ordinal, stateName){
+			return _.find(this.PortfolioItemTypeStates[ordinal], function(state){ return state.data.Name == stateName; });
+		},
+		getPortfolioItemTypeStateByName: function(portfolioType, stateName){
+			return this.getPortfolioItemTypeStateByOrdinal(this.portfolioItemTypeToOrdinal(portfolioType), stateName);
+		},
+		createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap: function(portfolioItemStores){
+			var portfolioItemMap = {};
+			_.each(portfolioItemStores[0].getRange(), function(lowPortfolioItemRecord){ //create the portfolioItem mapping
+				var ordinal = 0, 
+					parentPortfolioItemRecord = lowPortfolioItemRecord,
+					getParentRecord = function(child, parentList){
+						return _.find(parentList, function(parent){ 
+							return child.data.Parent && parent.data.ObjectID == child.data.Parent.ObjectID; 
+						});
+					};
+				while(ordinal < (portfolioItemStores.length-1) && parentPortfolioItemRecord){
+					parentPortfolioItemRecord = getParentRecord(parentPortfolioItemRecord, portfolioItemStores[ordinal+1].getRange());
+					++ordinal;
+				}
+				if(ordinal === (portfolioItemStores.length-1) && parentPortfolioItemRecord) //has a mapping, so add it
+					portfolioItemMap[lowPortfolioItemRecord.data.ObjectID] = parentPortfolioItemRecord.data.Name;
+			});
+			return portfolioItemMap;
+		},
+			
+		/********************************************** Project Funcs ********************************************/
+		/****************************** THESE DO NOT WORK WITH sdk 2.0. USE SDK 2.0rc3 *******************/
+		_storeItemsToProjTree: function(projects){
+			var me=this, projTree = {};
+			for(var i=0, len=projects.length; i<len; ++i){
+				var project = projects[i],
+					thisRef = project.data.ObjectID, 
+					parentRef = project.data.Parent ? project.data.Parent.ObjectID : undefined;
+				if(!projTree[thisRef]) projTree[thisRef] = {};
+				projTree[thisRef].ProjectRecord = project;
+				if(parentRef){
+					if(!projTree[parentRef]) projTree[parentRef] = {};
+					projTree[parentRef][thisRef] = projTree[thisRef];
+				}
+			}
+			return projTree;
+		},
+		_addProjectsWithTeamMembersToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.TeamMembers.Count >0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._addProjectsWithTeamMembersToList(projTree[childProjRef], hash);
+			}
+		},	
+		_allChildProjectToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allChildProjectToList(projTree[childProjRef], hash);
+			}
+		},
+		_allLeafProjectsToList: function(projTree, hash){
+			var me=this, curProj = projTree.ProjectRecord;
+			if(curProj.data.Children.Count === 0) 
+				hash[curProj.data.ObjectID] = curProj;
+			for(var childProjRef in projTree){
+				if(childProjRef !== 'ProjectRecord')
+					me._allLeafProjectsToList(projTree[childProjRef], hash);
+			}
+		},	
+		loadAllProjects: function(){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				var map = _.reduce(store.getRange(), function(map, project){
+					map[project.data.ObjectID] = project;
+					return map;
+				}, {});
+				return map;
+			});	
+		},
+		loadProjectsWithTeamMembers: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				projectsWithTeamMembers = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._addProjectsWithTeamMembersToList(projTree[rootProjectRecord.data.ObjectID], projectsWithTeamMembers);
+					return projectsWithTeamMembers;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.TeamMembers.Count > 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},	
+		loadAllChildrenProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				childrenProjects = {},
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context: {
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allChildProjectToList(projTree[rootProjectRecord.data.ObjectID], childrenProjects);
+					return childrenProjects;
+				} else {
+					return _.reduce(store.getRange(), function(map, project){
+						map[project.data.ObjectID] = project;
+						return map;
+					}, {});
+				}
+			});
+		},
+		loadAllLeafProjects: function(rootProjectRecord){
+			//rootProjectRecord is optional
+			var me=this,
+				leafProjects = {}, 
+				store = Ext.create('Rally.data.wsapi.Store', {
+					model: "Project",
+					fetch: me.projectFields,
+					compact: false,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){
+				if(rootProjectRecord){
+					var projTree = me._storeItemsToProjTree(store.getRange());
+					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+					return leafProjects;
+				} else {
+					return _.reduce(_.filter(store.getRange(),
+						function(project){ return project.data.Children.Count === 0; }),
+						function(map, project){
+							map[project.data.ObjectID] = project;
+							return map;
+						}, {});
+				}
+			});
+		},
+		loadProjectByName: function(projectName){
+			if(!projectName) return Q.reject('Invalid arguments: LPBN');
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Project',
+					limit:1,
+					pageSize:1,
+					fetch: ['Name', 'ObjectID'],
+					disableMetaChangeEvent: true,
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters: [{
+						property:'Name',
+						value:projectName
+					}]
+				});
+			return me.reloadStore(store).then(function(store){
+				return Q(store.data.items.pop());
+			});
+		},
+		
+		/********************************************** Release loading ********************************************/	
+		loadAllReleases: function(projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},	
+		loadReleasesAfterGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesAfterGivenDateByProjectObjID: function(projectObjectID, givenDate){
+			/** gets releases for this project that have release date >= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'>=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},		
+		loadReleasesBeforeGivenDate: function(projectRecord, givenDate){
+			/** gets releases for this project that have release date <= givenDate. returns promise that resolves to the releaseStore */
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					autoLoad:false,
+					disableMetaChangeEvent: true,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'ReleaseDate',
+						operator:'<=',
+						value: new Date(givenDate).toISOString()
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesBetweenDates: function(projectRecord, startDate, endDate){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit: Infinity,
+					autoLoad:false,
+					fetch: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project'],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project: null
+					},
+					filters:[{
+						property:'Project.ObjectID',
+						value: projectRecord.data.ObjectID
+					},{
+						property:'ReleaseDate',
+						operator:'>',
+						value: new Date(startDate).toISOString()
+					},{
+						property:'ReleaseStartDate',
+						operator:'<',
+						value: new Date(endDate).toISOString()
+					}]
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		loadReleasesInTheFuture: function(projectRecord){
+			return this.loadReleasesAfterGivenDate(projectRecord, new Date());
+		},
+		loadReleasesByNameUnderProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					}],
+					context:{
+						project:projectRecord.data._ref,
+						projectScopeDown:true,
+						projectScopeUp:false
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},	
+		loadReleaseByNameForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange().pop(); });
+		},
+		loadReleasesByNameContainsForProject: function(releaseName, projectRecord){
+			var me=this,
+				store = Ext.create('Rally.data.wsapi.Store',{
+					model: 'Release',
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					autoLoad:false,
+					fetch: me.releaseFields,
+					filters:[{
+						property:'Name',
+						operator:'contains',
+						value: releaseName
+					},{
+						property:'Project.ObjectID',
+						value:projectRecord.data.ObjectID
+					}],
+					context:{
+						workspace: me.getContext().getWorkspace()._ref,
+						project:null
+					}
+				});
+			return me.reloadStore(store).then(function(store){ return store.getRange(); });
+		},
+		getScopedRelease: function(releaseRecords, projectOID, appPrefs){			
+			/** gets the most likely release to scope to base on the following order:
+				1) if this.AppPrefs.projs[pid] is set to a release ObjectID, and the ReleaseStore has that release (you need 
+								to use preferences for this one)
+				2) if we are currently in one of the releases
+				3) the closest release planning date to the current date
+			*/
+			var me=this,
+				d = new Date(),
+				rs = releaseRecords,
+				prefOID = appPrefs && appPrefs.projs && appPrefs.projs[projectOID] && appPrefs.projs[projectOID].Release;
+			return (prefOID && _.find(rs, function(r){ return r.data.ObjectID == prefOID; })) ||
+				_.find(rs, function(r){
+					return (new Date(r.data.ReleaseDate) >= d) && (new Date(r.data.ReleaseStartDate) <= d);
+				}) ||
+				_.reduce(rs, function(best, r){
+					if(best===null) return r;
+					else {
+						var d1 = new Date(best.data.ReleaseStartDate)*1, d2 = new Date(r.data.ReleaseStartDate)*1, now = new Date()*1;
+						return (Math.abs(d1-now) < Math.abs(d2-now)) ? best : r;
+					}
+				}, null);
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		This mixin is used if you want to listen to events in the parent window (e.g. useful for rally apps that 
+		resize with browser screen vertically or things that need to know browser scroll position) 
+		You also can artificially fire the events and have the listeners run using fireParentWindowEvent
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		windowListeners = {};
+
+	Ext.define('Intel.lib.mixin.WindowListener', {
+
+		_initWindowEventListener: function(eventName){
+			if(!windowListeners) windowListeners = {};
+			windowListeners[eventName] = [];
+			
+			window.parent['on' + eventName] = function(event){ 
+				var listeners = windowListeners[eventName];
+				for(var i=0, len=listeners.length; i<len; ++i)
+					listeners[i](event);
+			};
+		},
+		
+		/** eventName is something like: resize, scroll, etc... */
+		addWindowEventListener: function(eventName, fn){
+			if(!windowListeners || !windowListeners[eventName]) 
+				this._initWindowEventListener(eventName);
+			windowListeners[eventName].push(fn);
+		},
+		
+		/** eventName is something like: resize, scroll, etc... */
+		fireParentWindowEvent: function(eventName){
+			var me=this;
+			if(!windowListeners || !windowListeners[eventName]) return;
+			var listeners = windowListeners[eventName];
+			for(var i=0, len=listeners.length; i<len; ++i) listeners[i]();
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		this mixin is used to mess with the environment outside of the iframe that the rally app is put in. 
+		
+	DEPENDENCIES:
+		'Intel.lib.mixin.WindowListener' mixed in to app so listen for window events
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	var TOP_BAR_HEIGHT = 40,
+		BOTTOM_BAR_HEIGHT = 24,
+		BOTTOM_IFRAME_PADDING = 20,
+		TITLE_BAR_HEIGHT = 33,
+		IFRAME_HEADER_HEIGHT = 28;
+		
+	Ext.define('Intel.lib.mixin.IframeResize', {
+		requires: ['Intel.lib.mixin.WindowListener'],
+		
+		/**
+			makes app as large as screen, without the padding/margin. 
+			Makes it look more like a built-in rally app instead of a custom app.
+			NOTE: as rally changes their interface overtime, this mixin will have to change as well to compensate for it.
+		*/
+		_fixRallyDashboard: function(){ 
+			if(window && window.frameElement){
+				var me=this,
+					bottomEl = Ext.get(window.frameElement),
+					portlet = bottomEl.up('.x-portlet'), 
+					dashboard = portlet.up('#mydash_portlet'), //has huge padding values
+					titleBar = dashboard.down('.titlebar'), //redundant with app header bar
+					domNodeW = bottomEl.dom, domNodeH = bottomEl.dom,
+					innerHeight = window.parent.innerHeight,
+					innerWidth = window.parent.innerWidth;
+				
+				//remove vertical/horizontal scrolls from top window
+				window.parent.document.body.insertAdjacentHTML('afterend', '<style>html, body {overflow: hidden !important; }</style>');
+				
+				//adjust widths
+				while(true){
+					domNodeW.style.width = (innerWidth - 10) + 'px';
+					domNodeW.style.padding = '0';
+					domNodeW.style.margin = '0';
+					if(domNodeW.id === 'mydash_portlet') break;
+					domNodeW = domNodeW.parentNode;
+				}
+				
+				//adjust heights
+				while(true){
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT + IFRAME_HEADER_HEIGHT + BOTTOM_IFRAME_PADDING) - 10) + 'px';
+					if(domNodeH.classList.contains('x-portlet')) break;
+					domNodeH = domNodeH.parentNode;
+				}
+				while(true){
+					domNodeH.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT + TITLE_BAR_HEIGHT)) + 'px';
+					if(domNodeH.id == 'mydash_portlet') break;
+					domNodeH = domNodeH.parentNode;
+				}
+				dashboard.dom.style.height = (innerHeight - (TOP_BAR_HEIGHT + BOTTOM_BAR_HEIGHT)) + 'px';
+				
+				//final touches LOL
+				dashboard.dom.style.padding = "0 2px 0 2px";
+				titleBar.dom.style.padding = "2px";
+				titleBar.dom.style.margin = "0";
+			}
+		},		
+		initFixRallyDashboard: function(){ 
+			var me=this;
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
+			}
+			me._fixRallyDashboard();
+		},
+
+		/** 
+			hides the draggable resize handle from under the app 
+		*/
+		_disableResizeHandle: function(){ 
+			var me=this, handle;
+			if(window && window.frameElement){
+				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
+				if(handle) {
+					handle.hide();
+					handle.dom.onshow = function(){ if(handle) handle.hide(); };
+				}
+			}
+		},	
+		initDisableResizeHandle: function(){
+			var me=this;
+			if(me.addWindowEventListener){
+				me.addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
+			}
+			me._disableResizeHandle();
+		}
+	});
+}());
+                /**  
+	DESCRIPTION:
+		This mixin gives a window-centered alert or confirm dialog box that isn't ugly. 
+		
+	ISSUES:
+		Sometimes alert.setY() fails so we have to fallback to the ugly built-in alert
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('Intel.lib.mixin.PrettyAlert', {	
+		_getMessageBoxY: function(){ 
+			var me=this,
+				bottomEl = window.frameElement ? Ext.get(window.frameElement) : me.el,
+				ph = window.frameElement ? window.parent.getWindowHeight() : window.innerHeight,
+				ps = window.frameElement ? window.parent.getScrollY() : window.scrollY,
+				ofy = ps + bottomEl.dom.getBoundingClientRect().top, //offset of top of the iframe ==== constant!!!
+				iyOffset = Math.floor(ph/2 - ofy + ps - 50);
+			return iyOffset<0 ? 0 : iyOffset;
+		},
+		
+		_formatString: function(message){
+			message = message || '';
+			return (typeof message === 'string') ? 
+				message : (message.message ? 
+				message.message : JSON.stringify(message, null, '\t'));
+		},
+
+		/** non-ugly alert dialog */
+		alert: function(title, message){
+			if(arguments.length<1) return;
+			if(arguments.length===1){
+				message = title;
+				title = '';
+			}
+			
+			try {
+				Ext.MessageBox.alert(this._formatString(title), this._formatString(message)).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			}
+			catch(e){ alert(this._formatString(message)); }
+		},
+		
+		/** non-ugly confirm dialog */
+		confirm: function(title, message, fn){
+			if(arguments.length<2) return;
+			if(arguments.length===2){
+				fn = message;
+				message = title;
+				title = '';
+			}
+			if(typeof fn !== 'function') fn = function(){};
+			
+			try {
+				Ext.MessageBox.confirm(this._formatString(title), this._formatString(message), fn).setY(this._getMessageBoxY());
+				setTimeout(function(){
+					var x = Ext.MessageBox.down('button');
+					while(x.isHidden()) x = x.nextSibling();
+					x.focus();
+				}, 50);
+			}
+			catch(e){ if(confirm(this._formatString(message))) fn('yes'); else fn('no'); }
+		}
+	});
+}());
+                /** 
+	intel workweek utility module. you can pass in Date objects, strings, or numbers.
+	do not pass in Unix UTC millis though, or you will get wrong answer (eg: dont use Date.UTC(...))
+**/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		intel_ww = {},
+		SECOND = 1000,
+		MINUTE = 60*SECOND,
+		HOUR = 60*MINUTE,
+		DAY = 24*HOUR,
+		WEEK = 7*DAY;
+		
+	Ext.define('Intel.lib.mixin.IntelWorkweek', {
+		/** calculates intel workweek, returns integer */
+		getWorkweek: function(_date){  //ww1 always contains jan 1st
+			var date = new Date(_date),
+				yearStart = new Date(date.getFullYear(), 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01Start = new Date(yearStart - dayIndex*DAY),
+				utcDateMillis = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+				ww01Millis = Date.UTC(ww01Start.getFullYear(), ww01Start.getMonth(), ww01Start.getDate()),
+				timeDiff = utcDateMillis - ww01Millis,
+				ww = Math.floor(timeDiff/WEEK) + 1,
+				leap = (date.getFullYear() % 4 === 0),
+				weekCount = ((leap && dayIndex >= 5) || (!leap && dayIndex === 6 )) ? 53 : 52; //weeks in this year
+			return weekCount < ww ? 1 : ww;
+		},
+		
+		/** returns the number of intel workweeks in the year the date is in */
+		getWeekCount: function(_date){
+			var date = new Date(_date),
+				leap = (date.getFullYear() % 4 === 0),
+				day = new Date(date.getFullYear(), 0, 1).getDay();
+			return ((leap && day >= 5) || (!leap && day === 6 )) ? 53 : 52;
+		},
+		
+		roundDateDownToWeekStart: function(_date){
+			var date = new Date(_date),
+				day = date.getDay(),
+				monthDate = date.getDate(),
+				month = date.getMonth(),
+				year = date.getFullYear(),
+				sundayMidday = new Date(new Date(year, month, monthDate)*1 - (day*DAY - 0.5*DAY)); //daylight savings ._.
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		/**  gets list of Date()'s for each week start between start and end date*/
+		getWorkweekDates: function(startDate, endDate){ //gets list of dates for each week. INCLUSIVE
+			var startWeekDate = this.roundDateDownToWeekStart(startDate),
+				endWeekDate = this.roundDateDownToWeekStart(endDate),
+				startMillis = Date.UTC(startWeekDate.getFullYear(), startWeekDate.getMonth(), startWeekDate.getDate()),
+				endMillis = Date.UTC(endWeekDate.getFullYear(), endWeekDate.getMonth(), endWeekDate.getDate()),
+				totalWeeks = Math.floor((endMillis - startMillis) / WEEK)+1,
+				weeks = new Array(totalWeeks);
+			for(var i=0; i<totalWeeks; ++i) {
+				var sundayMidday = new Date(startWeekDate*1 + (WEEK*i + HOUR*12));
+				weeks[i] = new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+			}
+			return weeks;
+		},
+		
+		/** gets the Date() object of this ww and year */
+		workweekToDate: function(ww, year){ 
+			var yearStart = new Date(year, 0, 1),
+				dayIndex = yearStart.getDay(),
+				ww01StartMidday = new Date(yearStart - (dayIndex*DAY - 0.5*DAY)),
+				sundayMidday = new Date(ww01StartMidday*1 + (ww-1)*WEEK);
+			return new Date(sundayMidday.getFullYear(), sundayMidday.getMonth(), sundayMidday.getDate());
+		},
+		
+		/** assumes DropDown uses Intel.lib.data.WorkweekDropdown model */
+		getWorkweeksForDropdown: function(releaseStartDate, releaseEndDate){ 
+			var workweeks = this.getWorkweekDates(releaseStartDate, releaseEndDate),
+				data = new Array(workweeks.length);
+			for(var i=0, len=workweeks.length; i<len; ++i){
+				data[i] = { 
+					Workweek: 'ww' + this.getWorkweek(workweeks[i]),
+					DateVal: workweeks[i]*1
+				};
+			}
+			return data;
+		}	
+	});
+}());
+                /** 
+	SUMMARY:
+		This is a mixin for using highcharts with rally data data after it is run through the lookback calculator.
+		It just formats the data, and adds trendlines and labels to the charts. 
+		
+		This mixin assumes you are using UserStories with lookback api and you are mapping ScheduleState vs. Time.
+		
+	DEPENDENCIES:
+		'Intel.lib.IntelRallyApp' parent class of app for me.ScheduleStates, 
+		'Intel.lib.mixin.IntelWorkweek' mixed into app for me.getWorkweek,
+		Sylvester math library
+		lodash
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	var ChartsTooltipDatemap = {}, //closure variable that maps the x values to date strings -- per chart
+		RSquaredMap = {},
+		defaultCFCConfig = {
+			chart: {
+				defaultSeriesType: "area",
+				zoomType: "xy"
+			},
+			colors: [
+				'#ABABAB', 
+				'#E57E3A', 
+				'#E5D038', 
+				'#0080FF', 
+				'#3A874F', 
+				'#26FF00',
+				'#000000'
+			],	
+			xAxis: {
+				tickmarkPlacement: "on",
+				title: {
+					text: "Days",
+					margin: 10
+				},
+				labels: {
+					y: 20
+				}
+			},
+			yAxis: {
+				title: {
+					text: "Points"
+				},
+				labels: {
+					x: -5,
+					y: 4
+				}
+			},			
+			tooltip: {
+				formatter: function () {
+					var sum = 0,
+						datemap = ChartsTooltipDatemap[this.series.chart.container.id],
+						rSquaredMap = RSquaredMap[this.series.chart.container.id];
+					for(var i=4; i>= this.series.index; --i) 
+						sum += this.series.chart.series[i].data[this.point.x].y;
+					return "<b>" + this.x + '</b>' + (datemap ? ' (' + datemap[this.point.x] + ')' : '') + 
+						((rSquaredMap && rSquaredMap[this.series.index]) ? '<br/><b>R<sup>2</sup> = ' + rSquaredMap[this.series.index].val : '') + 
+						"<br /><b>" + this.series.name + "</b>: " + ((100*this.y>>0)/100) +
+						(this.series.index <=4 ? "<br /><b>Total</b>: " + ((100*sum>>0)/100) : '');
+				}
+			},
+			plotOptions: {
+				series: {
+					marker: {
+						enabled: false,
+						states: {
+							hover: {
+								enabled: true 
+							}
+						}
+					},
+					groupPadding: 0.01
+				},
+				area: {
+					stacking: 'normal',
+					lineColor: '#666666',
+					lineWidth: 2,
+					marker: {
+						enabled: false
+					}
+				}
+			}
+		};
+
+	Ext.define('Intel.lib.mixin.CumulativeFlowChartMixin', {
+		requires:[
+			'Intel.lib.IntelRallyApp', 
+			'Intel.lib.mixin.IntelWorkweek'
+		],
+		
+		getDefaultCFCConfig: function(){
+			return _.merge({}, defaultCFCConfig);
+		},
+		getCumulativeFlowChartColors: function(){
+			var me=this,
+				colors = me.getDefaultCFCConfig().colors,
+				scheduleStates = me.ScheduleStates;
+			if(scheduleStates.length >= 5) return {colors: colors};
+			else return {colors: colors.slice(0, scheduleStates.length).concat(colors.slice(scheduleStates.length + 1))};
+		},
+		getValidTrendTypes: function(){
+			return [
+				'FromZero', 
+				'FromStartAccepted', 
+				'FromStartWork', 
+				'LastWeek', 
+				'LastSprint', 
+				'Last2Sprints', 
+				'LinearRegression', 
+				'LinearRegressionFromStartAccepted',
+				'LinearRegressionFromStartWork'
+			];
+		},
+		_getRSquared: function(ySeries, fSeries, lastIndex){
+			//using algorithm from http://en.wikipedia.org/wiki/Coefficient_of_determination
+			if(lastIndex <= 0) return 1;
+			var ys = ySeries.data.slice(0, lastIndex),
+				fs = fSeries.data.slice(0, lastIndex),
+				meanY= _.reduce(ys, function(sum, yi){ return sum+(yi|| 0); }, 0)/ys.length,
+				SStot = _.reduce(ys, function(sum, yi){ return sum + Math.pow((yi|| 0)-meanY, 2); }, 0),
+				SSres = _.reduce(fs, function(sum, fi, i){ return sum + Math.pow((ys[i] || 0) - (fi || 0), 2); }, 0);
+			return (1000*(1 - SSres/SStot)>>0)/1000;
+		},
+		_addProjectedTrendline: function(data, options){
+			var me=this,
+				totalPoints = options.totalPoints,
+				trendType = options.trendType,
+				validTypes = me.getValidTrendTypes(),
+				slope, intercept, X, Y, 
+				scheduleStateSeries  = _.filter(data.series, function(s){ return me.ScheduleStates.indexOf(s.name) > -1; }),
+				scheduleStatesSumList = _.times(scheduleStateSeries[0].length, function(n){ 
+					return _.reduce(scheduleStateSeries, function(sum, s){ return sum + (s.data[n] || 0); }, 0);
+				});
+			trendType = _.find(validTypes, function(type){ return type == trendType; }) || validTypes[0];
+				
+			//initialize projected trendline
+			var topScheduleState = me.ScheduleStates.slice(-1)[0],
+				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; }), i, len,
+				projectedTrend = {type:'spline', dashStyle:'Solid', name:'Projected', data:topScheduleStateSeries.data.slice()},
+				begin=0,
+				end=projectedTrend.data.length-1;
+		
+			if(trendType == 'FromZero'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					return (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+				});	
+			}
+			if(trendType == 'FromStartAccepted'){
+				for(i=1;i<projectedTrend.data.length;++i)
+					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});
+			}
+			if(trendType == 'FromStartWork'){
+				for(i=1;i<scheduleStatesSumList.length;++i)
+					if(scheduleStatesSumList[i]!==null && scheduleStatesSumList[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});
+			}
+			if(trendType == 'LastWeek'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0) 
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 5 < 0 ? 0 : end - 5);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LastSprint'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 10 < 0 ? 0 : end - 10);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'Last2Sprints'){
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 20 < 0 ? 0 : end - 20);
+				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegression'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + j*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegressionFromStartAccepted'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=1;i<projectedTrend.data.length;++i)
+					if(projectedTrend.data[i]!==null && projectedTrend.data[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			if(trendType == 'LinearRegressionFromStartWork'){
+				for(i=1;i<scheduleStatesSumList.length;++i)
+					if(scheduleStatesSumList[i]!==null && scheduleStatesSumList[i] !==0){
+						begin = i-1; break; }
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
+			
+			//apply label to correct point if needed IGNORE FIRST POINT!
+			if(slope >= 0){
+				for(i=1,len=projectedTrend.data.length; i<len;++i){
+					if(projectedTrend.data[i] >= totalPoints){
+						projectedTrend.data[i] = {
+							color:'red',
+							marker:{
+								enabled:true,
+								lineWidth:4,
+								symbol:'circle',
+								fillColor:'red',
+								lineColor:'red'
+							},
+							y: projectedTrend.data[i]
+						};
+						break;
+					}	
+				}
+			}
+			return projectedTrend;
+		},
+		updateCumulativeFlowChartData: function(data, options){
+			_.merge({}, options);
+			var me = this, 
+				now = new Date(),
+				trendType = options.trendType,
+				hideTrends = options.hideTrends,
+				todayIndex = -1,
+				datemap = [],
+				rSquaredMap = [];
+
+			//get the index that is today
+			if(new Date(data.categories[0]) > now) todayIndex = -1;
+			else if(new Date(data.categories[data.categories.length - 1]) < now) todayIndex = data.categories.length;
+			else todayIndex = _.reduce(data.categories, function(savedI, c, i){ 
+				if(new Date(c) > now && savedI === -1) savedI = (i-1);
+				return savedI;
+			}, -1);
+			
+			//get top scheduleState series
+			var topScheduleState = me.ScheduleStates.slice(-1)[0],
+				topScheduleStateSeries = _.find(data.series, function(s){ return s.name === topScheduleState; });
+				
+			//get ideal trendline if release has started
+			var totalPoints = (new Date(data.categories[0]) > now ? 0 : 
+					_.reduce(data.series, function(sum, s){return sum + (s.data[s.data.length-1] || 0); 
+				}, 0) || 0),
+				idealTrend, ratio;
+				
+			if(!hideTrends){
+				idealTrend = {type:'spline', dashStyle:'Solid', name:'Ideal', data:new Array(data.categories.length)};
+				ratio = (totalPoints/(data.categories.length-1)) || 0; //for NaN
+				idealTrend.data = _.map(idealTrend.data, function(e, i){ return Math.round(100*(0 + i*ratio))/100; });
+			}
+			
+			//zero future points, convert to workweeks, and set datemap
+			_.each(data.categories, function(c, i, a){
+				var d = new Date(c);
+				a[i] = 'ww' + me.getWorkweek(d);
+				datemap[i] = c;
+				if(d>now){
+					_.each(data.series, function(s, j){
+						s.data = s.data.slice(0, i).concat(_.map(new Array(a.length - i), function(){ return 0; }));
+					});
+				}
+			});
+
+			if(!hideTrends){
+				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
+				data.series.push(projectedTrend);
+				rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
+				data.series.push(idealTrend);
+			}		
+			data.datemap = datemap;
+			data.rSquaredMap = rSquaredMap;
+			
+			return data;
+		},
+		getCumulativeFlowChartTicks: function(startDate, endDate, width){
+			var pixelTickWidth = 40,
+				ticks = width/pixelTickWidth>>0,
+				oneDay = 1000*60*60*24,
+				days = (endDate*1 - startDate*1)/(oneDay/* *5/7 */)>>0, //NOT only workdays (now includes weekends)
+				interval = ((days/ticks>>0)/7>>0)*7;
+			return (interval < 7) ? 7 : interval; //make it weekly at the minimum
+		},
+		setCumulativeFlowChartDatemap: function(chartContainerId, datemap){
+			ChartsTooltipDatemap[chartContainerId] = datemap;
+		},
+		setCumulativeFlowChartRSquaredMap: function(chartContainerId, rSquaredMap){
+			RSquaredMap[chartContainerId] = rSquaredMap;
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		This combo has some built in defaults for static-comboboxes (which means you dont type into it, you just select from it)
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.lib.component.FixedComboBox', {
+		extend:'Ext.form.field.ComboBox',
+		alias: ['widget.intelfixedcombo', 'widget.intelfixedcombobox'],
+		
+		editable: false,	
+		allowBlank:true,
+		queryMode:'local',
+		matchFieldWidth: false,
+		listeners: {
+			change:function(combo, newval, oldval){ 
+				if(newval.length===0) combo.setValue(oldval || ''); 
+			},
+			focus: function(combo) {
+				if(combo.store.findExact(combo.valueField, combo.getValue()) === -1) combo.setValue('');
+				combo.expand();
+			}
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		This is used in grid column configs in the items: [] field for the column. It is a fancy grid column filter component.
+		
+	DEPENDENCIES:
+		Intel.lib.component.FixedComboBox OR <whatever your filterXtype is>
+		Intel.lib.mixin.PrettyAlert
+		
+		Q
+		lodash
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;	
+	
+	Ext.define('Intel.lib.component.GridColumnFilter', {
+		extend:'Ext.container.Container',
+		cls: 'intel-grid-column-filter',
+		alias: ['widget.intelgridcolumnfilter'],
+		mixins: [
+			'Intel.lib.mixin.PrettyAlert'
+		],
+		
+		layout: 'hbox',
+		border:0,
+		flex:1,
+		
+		/**************************************** caller CAN override these **********************************************/
+		filterXtype: 'intelfixedcombo',
+		valueField: null,
+		displayField: null,
+		multiSelect: true,
+		convertDisplayFn: function(value, field, record){ return value; },			//can return promise
+		convertValueFn: function(value, field, record){ return value; },				//can return promise
+		sortFn: function(valueFieldValue, displayFieldValue, record){ return valueFieldValue; },
+		filterFn: function(filterValue, recordValue, valueField, record){ return filterValue === recordValue; },
+		
+		/**************************************** INITIALIZE/PRIVATE METHODS **********************************************/
+		initComponent: function(){
+			var colFilter = this;
+			colFilter.filterValues = [];
+			colFilter.hideClass = 'grid-column-filter-hide-' + (Math.random()*1000000>>0);
+			Ext.DomHelper.append(Ext.getBody(), '<style>.' + colFilter.hideClass + ' { display: none; }</style>');
+			Ext.DomHelper.append(Ext.getBody(), '<style>.intel-grid-column-filter > * { border: none !important; }</style>');
+			colFilter.on('added', function(){ colFilter._initColFilter(); });
+			colFilter.callParent();
+		},
+		
+		_initColFilter: function(){
+			var colFilter = this, 
+				column = colFilter.ownerCt,
+				valueField = colFilter.valueField || column.dataIndex,
+				displayField = colFilter.displayField || valueField;
+			setTimeout(function waitForGrid(){
+				var grid = column.up('grid');
+				if(grid){ 
+					var gridStore = grid.getStore();
+				
+					grid.view.getRowClass = colFilter._createGetRowClassIntercepter(grid.view.getRowClass);
+					colFilter._addItems(gridStore, valueField, displayField);
+					gridStore.on('datachanged', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					gridStore.on('refresh', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					grid.on('edit', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					grid.on('sortchange', function(){ colFilter.applyFilters(); });
+				}
+				else setTimeout(waitForGrid, 20);
+			}, 20);
+		},
+		_addItems: function(gridStore, valueField, displayField){
+			var colFilter = this;
+			colFilter._getStoreOptions(gridStore, valueField, displayField).then(function(storeOptions){
+				colFilter.add([{
+					xtype: colFilter.filterXtype,
+					flex:1,
+					emptyText: 'Add Filter',
+					store: Ext.create('Ext.data.Store', {
+						fields:[
+							{name:'Display', type:'auto'}, 
+							{name:'Value', type:'auto'}
+						],
+						data: storeOptions
+					}),
+					displayField: 'Display',
+					valueField: 'Value',
+					multiSelect: colFilter.multiSelect,
+					listeners:{
+						select: function(combo, selected){
+							if(_.find(selected, function(s){ return s.data.Display === 'Clear'; })) colFilter.clearFilters();
+							else colFilter.setFilterValues(_.map(selected, function(s){ return s.data.Value; }));
+							var store = colFilter.up('grid').store;
+							store.fireEvent('refresh', store);
+						}
+					}
+				}, {xtype:'container', width:5}]);
+				colFilter.doLayout();
+			})
+			.fail(function(reason){ colFilter.alert('ERROR', reason); })
+			.done();
+		},	
+		_getStoreOptions: function(gridStore, valueField, displayField){
+			var grid = this;
+			return Q.all(_.map(gridStore.getRange(), function(record){
+				return Q.all([
+					Q(grid.convertDisplayFn(record.get(displayField), displayField, record)),
+					Q(grid.convertValueFn(record.get(valueField), valueField, record)),
+					Q(record)
+				]);
+			}))
+			.then(function(options){	
+				return [{Display:'Clear', Value: null}].concat(_.sortBy(_.unique(_.map(_.filter(options, 
+					function(option){ return option[0] !== undefined && option[1] !== undefined; }),
+					function(option){ return {Display: option[0], Value: option[1], Record: option[2]}; }),
+					function(option){ return option.Value; }),
+					function(option){ return grid.sortFn(option.Value, option.Display, option.Record); })); 
+			});
+		},
+		_updateStoreOptions: function(gridStore, valueField, displayField){
+			var colFilter = this;
+			colFilter._getStoreOptions(gridStore, valueField, displayField).then(function(newComboOptions){
+				var comboFilter = colFilter.down(colFilter.filterXtype),
+					comboFilterStore = comboFilter.getStore(),
+					oldFilterValues = colFilter.getFilterValues(),
+					newFilterValues = _.filter(oldFilterValues, function(oldFilterValue){
+						return _.find(newComboOptions, function(option){ return option.Value === oldFilterValue; });
+					});
+				
+				comboFilter.store.removeAll();
+				comboFilter.store.add(newComboOptions);
+				colFilter.setFilterValues(newFilterValues);
+			})
+			.fail(function(reason){ colFilter.alert('ERROR', reason); })
+			.done();
+		},
+		
+		_createGetRowClassIntercepter: function(fn){
+			var colFilter = this, column = colFilter.ownerCt;
+			
+			return function(record){
+				var originalCls = (fn || function(){}).apply(null, arguments) || '',
+					valueField = colFilter.valueField || column.dataIndex,
+					isVisible = !colFilter.filterValues.length || _.any(colFilter.filterValues, function(filterValue){ 
+						return colFilter.filterFn(filterValue, record.get(valueField), valueField, record);
+					}); 
+				if(!isVisible) return originalCls + ' ' + colFilter.hideClass;
+				else return originalCls;
+			};
+		},
+		
+		_applyToGridView: function(grid, fn, args){
+			var view = grid.getView(), lockingPartner = view.lockingPartner;
+			view[fn].apply(view, args);
+			if(lockingPartner) lockingPartner[fn].apply(lockingPartner, args);
+		},
+		
+		/****************************************PUBLIC METHODS **********************************************/
+		applyFilters: function(){
+			var colFilter = this,
+				column = colFilter.ownerCt,
+				grid = colFilter.up('grid'),
+				valueField = colFilter.valueField || column.dataIndex;
+			_.each(grid.store.getRange(), function(record, index){
+				var isVisible = !colFilter.filterValues.length || _.any(colFilter.filterValues, function(filterValue){ 
+						return colFilter.filterFn(filterValue, record.get(valueField), valueField, record);
+					}); 
+				if(isVisible) colFilter._applyToGridView(grid, 'removeRowCls', [index, colFilter.hideClass]); 
+				else colFilter._applyToGridView(grid, 'addRowCls', [index, colFilter.hideClass]); 
+			});
+		},
+		getFilterValues: function(){
+			return this.filterValues;
+		},
+		setFilterValues: function(values){
+			var colFilter = this,
+				comboFilter = colFilter.down(colFilter.filterXtype);
+				
+			comboFilter.setValue(values);
+			colFilter.filterValues = values;
+			colFilter.applyFilters();
+		},
+		clearFilters: function(){
+			var colFilter = this,
+				grid = colFilter.up('grid'),
+				comboFilter = colFilter.down(colFilter.filterXtype),
+				recordCount = grid.store.getCount();
+				
+			comboFilter.setValue();
+			colFilter.filterValues = [];
+			while(recordCount--) colFilter._applyToGridView(grid, 'removeRowCls', [recordCount, colFilter.hideClass]); 
+		}
+	});
+}());
+	
+                /** 
+	SUMMARY: 
+		This mixin is used to save user preferences per project, that can follow the user from app to app. So 
+		when you call saveAppsPreference it saves it to a preference filtered by user and the value of me.userAppsPref.
+		
+		Different apps can share the me.userAppsPref which is useful if you have 5 apps that should all scope to the same
+		Release. So if the user scopes to Release R1 on one of the apps, when she goes to any of the other apps, it should
+		scope to Release R1 as well.
+**/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('Intel.lib.mixin.UserAppsPreference', {
+		
+		/** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
+		userAppsPref: 'intel-user-apps-preference',
+		
+		loadAppsPreference: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				filterByUser:true,
+				filterByName: me.userAppsPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me.userAppsPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { projs:{}, refresh:0};}
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveAppsPreference: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {projs:prefs.projs, refresh:prefs.refresh};
+			s[me.userAppsPref] = JSON.stringify(prefs); 
+			Rally.data.PreferenceManager.update({
+				filterByUser: true,
+				filterByName: me.userAppsPref,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		}
+	});
+}());
+                /** 
+	SUMMARY:
+		Use this mixin to load stores that have lots of records. it will load them in parallel instead of serially.
+		what it does is loads 1 page and then based on the totalCount it loads the rest of the pages in parallel.
+		
+		The config you pass to parallelLoadLookbackStore and parallelLoadWsapiStore are the same configs you would pass
+		to Rally.data.lookback.Store (or something like that) and Rally.data.wsapi.Store.
+*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;	
+	
+	Ext.define('Intel.lib.mixin.ParallelLoader', {		
+		parallelLoadWsapiStore: function(config){
+			var me=this, data = [], model;
+			function doStoreLoad(page){
+				var deferred = Q.defer(),
+					store = Ext.create('Rally.data.wsapi.Store', _.merge({}, config, {
+						pageSize:200,
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
+					}));
+				store.loadPage(page);
+				return deferred.promise;
+			}
+			function makeStore(){
+				return Ext.create('Rally.data.wsapi.Store', {
+					model: model,
+					totalCount: data.length,
+					data: data,
+					disableMetaChangeEvent: true,
+					load: function(){}
+				});
+			}
+			return doStoreLoad(1).then(function(store){
+				data = data.concat(store.getRange());
+				model = store.model;
+				var pages = ((store.totalCount/200>>0) + (store.totalCount%200 ? 1 : 0)) || 1;
+				if(pages === 1) return makeStore();
+				else return Q.all(_.times(pages-1, function(pageNum){
+					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
+				})).then(makeStore);
+			});
+		},
+		parallelLoadLookbackStore: function(config){
+			var me=this, data = [], model;
+			function doStoreLoad(page){
+				var deferred = Q.defer(),
+					store = Ext.create('Rally.data.lookback.SnapshotStore', _.merge({}, config, {
+						pageSize:20000,
+						listeners:{ 
+							load: function(store, records, successful){
+								if(!successful) deferred.reject('could not load data from server');
+								else deferred.resolve(store);
+							}
+						}
+					}));
+				store.loadPage(page);
+				return deferred.promise;
+			}
+			function makeStore(){
+				return Ext.create('Rally.data.lookback.SnapshotStore', {
+					model: model,
+					totalCount: data.length,
+					data: data,
+					disableMetaChangeEvent: true,
+					load: function(){}
+				});
+			}
+			return doStoreLoad(1).then(function(store){
+				data = data.concat(store.getRange());
+				model = store.model;
+				var pages = ((store.totalCount/20000>>0) + (store.totalCount%20000 ? 1 : 0)) || 1;
+				if(pages === 1) return makeStore();
+				else return Q.all(_.times(pages-1, function(pageNum){
+					return doStoreLoad(pageNum + 2).then(function(store){ data = data.concat(store.getRange()); });
+				})).then(makeStore);
+			});
+		}
+	});
+}());
+
+                /** 
+	SUMMARY:
+		This mixin is used to communicate between apps the objectID of eachother, so they can link to eachother
+		by saving their ObjectIDs in a preference tied to the workspace. 
+		
+		To get the ObjectID of an app in teh workspace, you need to pass the ClassName of the app,
+		which is the string that you pass you Ext.define(<className>, {appConfigObject})
+	
+	DEPENDENCIES:
+		Q promise library
+**/
+(function(){
+	var Ext = window.Ext4 || window.Ext,
+		customAppRegisterObjectIdPref = 'intel-custom-app-objectid-register-preference';
+
+	Ext.define('Intel.lib.mixin.CustomAppObjectIDRegister', {
+		_loadCustomAppObjectIDSettings: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: customAppRegisterObjectIdPref,
+				success: function(prefs){
+					var map;
+					try{ map = JSON.parse(prefs[customAppRegisterObjectIdPref]); }
+					catch(e){ map = {}; }
+					deferred.resolve(map);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		
+		getCustomAppObjectID: function(appClassName){
+			var me=this;
+			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
+				return customAppOIDSettings[appClassName] || null;
+			});
+		},
+		setCustomAppObjectID: function(appClassName){
+			var me=this, s = {},
+				objectID = window.parent.location.hash.split("/").pop();
+			
+			if(!appClassName) return Q.reject('invalid appClassName');
+			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
+				var deferred = Q.defer();
+				customAppOIDSettings[appClassName] = objectID;
+				s[customAppRegisterObjectIdPref] = JSON.stringify(customAppOIDSettings, null, '  ');
+				Rally.data.PreferenceManager.update({
+					workspace: me.getContext().getWorkspace()._ref,
+					filterByName: customAppRegisterObjectIdPref,
+					settings: s,
+					success: deferred.resolve,
+					failure: deferred.reject
+				});
+				return deferred.promise;
+			});
+		}
+	});
+}());
+                /*
+I can see the table that has kbrief name and the number of days, the IE stage for all the standardization K-briefs
+I can only see those k-briefs that has exceeded the time limit for that particular integrating event ( IE stage)
+I can see means to configure the time limits for each IE stage
+I have means to export to excel
+
+https://palantir.intel.com/sites/PalantirHome/Knowledge%20Briefs/KB-005098.docx
+
+The “age” of a standard has to do with the time it has been in the current column. The columns map to the IE states, so if a standard card is in the “IE3 Pending column” that means it has achieved IE2. The age then is the number of days since the cards column value (in this case c_STDSKANBAN) was last changed.
+*/
+
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	Ext.define('Intel.AgingStandard', {
+		extend: 'Intel.lib.IntelRallyApp',
+		mixins:[
+			'Intel.lib.mixin.WindowListener',
+			'Intel.lib.mixin.PrettyAlert',
+			'Intel.lib.mixin.IframeResize',
+			'Intel.lib.mixin.ParallelLoader',
+			'Intel.lib.mixin.UserAppsPreference'
+		],
+		userAppsPref: 'intel-SAFe-apps-preference',
+		items:[{
+			xtype: 'container',
+			cls: 'navbar-header',
+			items:[{
+				xtype: 'container',
+				id: 'information',
+				cls:'app-wrapper'
+			},{
+				xtype: 'container',
+				id: 'exportBtn'
+			},{
+				xtype:'container',
+				id:'gridKbriefs',
+				itemId:'gridContainer',
+				cls: 'grid-container'
+			},{
+				xtype:'container',
+				id:'gridToExport-container'
+			}]			
+		}],
+		minWidth:910,	 
+		/**___________________________________ APP SETTINGS ___________________________________*/	
+		getSettingsFields: function() {
+			return [
+				{
+					name: 'IE0',
+					xtype: 'rallytextfield'
+				},{
+					name: 'IE1',
+					xtype: 'rallytextfield'
+				},{
+					name: 'IE2',
+					xtype: 'rallytextfield'						
+				},{
+					name: 'IE3',
+					xtype: 'rallytextfield'								
+				},{
+					name: 'IE4',
+					xtype: 'rallytextfield'								
+				}
+			];
+		},
+    config: {
+			defaultSettings: {
+				IE0: '',
+				IE1: '28',
+				IE2: '28',
+				IE3: '84',
+				IE4: '84'
+			}
+    },		
+		/**___________________________________ DATA STORE METHODS ___________________________________*/	
+		/**
+			get all the standardization K-briefs
+			*/
+		getStandardizationKBriefQuery: function(){
+			var me=this;
+			return Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!=' , value: null });
+		},		
+		_loadStandardizationKBrief: function(){
+			var me = this,
+				config = {
+					model: 'HierarchicalRequirement',
+					compact:false,
+					filters: me.getStandardizationKBriefQuery() ,
+					fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg','Iteration','Owner','c_NextIEWW'],
+					context: {
+						workspace:null,
+						project: '/project/' + me.ProjectRecord.data.ObjectID ,
+						projectScopeDown: true,
+						projectScopeUp: false
+					}
+				};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					me.griStoreItems = store.getRange();
+					store.destroyStore();
+				});
+		},
+		_loadStandardizationKBriefSnapshot: function(){
+			var me = this,
+			deferred = Q.defer();
+			Ext.create("Rally.data.lookback.SnapshotStore",
+			{
+				fetch   : [ "_UnformattedID", "_TypeHierarchy", "Name", "PlanEstimate", "c_StdsKanban", "c_KanbanStatus", "ScheduleState",'c_StdsKanbanOrg' ],
+				compact:false,
+				filters :
+				[
+					{
+						property : "_ProjectHierarchy",
+						value    : me.ProjectRecord.data.ObjectID
+					},
+					{
+						property: "_TypeHierarchy",
+						value: { $nin: [ -51009, -51012, -51031, -51078 ] }
+					},
+					{
+						property: "_ValidFrom",
+						value: { $gt: me.twoYearsBackDate }
+					}
+				],
+				sorters :
+				[
+					{
+						property  : "_ValidTo",
+						direction : "ASC"
+					}
+				]
+			}).load(
+			{
+				params:
+				{
+					compress: false,
+					removeUnauthorizedSnapshots: true
+				},
+				callback : function(records, operation, success)
+				{
+					if(!success) deferred.reject('could not load data from server');
+					else {
+						me.UserStoryKbriefSnapShot = _.groupBy(records, function(d){return d.data.ObjectID ;});
+						deferred.resolve(records);
+					}
+				}
+			});	
+		return deferred.promise;					
+		},			
+		/**___________________________________ EXPORTING GRID ___________________________________*/	
+		/**
+			creating a new grid of ignore all the filters or formats
+		*/    
+		_addExportButton: function () {
+			var me = this;
+			Ext.getCmp('exportBtn').add({
+					xtype: 'rallybutton',
+					cls: 'button-export',
+					text: '<i class="fa fa-file-excel-o fa-6"></i>  Export to Excel',
+					handler: me._onClickExport,
+					visible: true,
+					scope:me
+			});
+		},	
+		_onClickExport: function (gridId) {
+			var me = this,
+				gridIdToExport = 'mygrid';			
+			if (/*@cc_on!@*/0) { //Exporting to Excel not supported in IE
+					Ext.Msg.alert('Error', 'Exporting to CSV is not supported in Internet Explorer. Please switch to a different browser and try again.');
+			} 
+			else if (document.getElementById(gridIdToExport) !== null) {
+				me.setLoading('Exporting ...');
+				setTimeout(function () {
+					var template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-' +
+							'microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head>' +
+							'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>' +
+							'{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>' +
+							'</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table>{table}' +
+							'</table></body></html>';
+					var base64 = function (s) {
+							return window.btoa(unescape(encodeURIComponent(s)));
+					};
+					var format = function (s, c) {
+						return s.replace(/{(\w+)}/g, function (m, p) {
+							return c[p];
+						});
+					};
+					var table = document.getElementById(gridIdToExport);
+					var excel_data = '<tr>';
+					_.each(table.innerHTML.match(/<span .*?x-column-header-text.*?>.*?<\/span>/gm), function (column_header_span) {
+						//hack to remove the renderer html
+						column_header_span = column_header_span.replace(/<span .*?x-column-header-inner.*?>/g,'');
+						excel_data += (column_header_span.replace(/span/g, 'td'));
+					}); 
+					excel_data += '</tr>';
+					_.each(table.innerHTML.match(/<tr id="rallygridview.*?<\/tr>/gm), function (line) {/*The RegExp differs according to the way way the grid is created*/
+					//hack for filtered data
+						if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null)
+							excel_data += line.replace(/[^\011\012\015\040-\177]/g, '>>');
+					});							
+					var ctx = {worksheet: name || 'Worksheet', table: excel_data};
+					window.location.href = 'data:application/vnd.ms-excel;base64,' + base64(format(template, ctx));
+					me.setLoading(false);
+				}, 500);
+			}
+		},
+/**___________________________________ CREATING AND RENDERING GRID ___________________________________*/	
+    _createGridStore: function() {
+			var me = this;
+        me._customRecords = [];
+
+        _.each(me.griStoreItems, function(item, index) {
+					//if(item.get('c_StdsKanban').replace("<br />"," ") === "IE4 Pending (Deploy All)" /* && item.get('c_StdsKanbanOrg') === "DCD" */){
+					var kbriefDescription =  item.get('c_StdsKanban').replace("<br />"," ");
+					var ageDays = me._getStageAgeDays(item.get('c_StdsKanban'),item.get('c_StdsKanbanOrg'),item.get('ObjectID'));
+					var defaultAgeDays = me._getAppSetting(item.get('c_StdsKanban'));
+					var owner = item.get('Owner')._refObjectName;
+					var owningGroup = item.get('Iteration')? item.get('Iteration')._refObjectName : "-";
+					var nextReview = item.get('c_NextIEWW');
+					var age = "";
+					var timeLimitFlag = "N/A";
+					if(ageDays > defaultAgeDays){
+						age = ageDays;
+						timeLimitFlag = defaultAgeDays;
+					}else{
+						age = ageDays;
+						timeLimitFlag = defaultAgeDays;
+					}	
+					//some of the stages are not defined
+					if (typeof defaultAgeDays === "undefined" || defaultAgeDays === "" )
+						timeLimitFlag = "N/A";
+						
+					var name = item.get('c_KBrief');
+					var regex = _.isEmpty(name) ? null : name.LinkID.match(/K{1}B{1}.{1}\d{6}/);
+					var kbriefName = regex === null ? "KBrief Not linked" : regex[0].replace(regex[0].slice(2,3),"-") + ".docx";
+          me._customRecords.push({
+                _ref: item.get('_ref'),
+                c_KBrief: kbriefName,
+                Description: item.get('Name'),
+                c_StdsKanban: kbriefDescription,
+								ObjectID: item.get('ObjectID'),
+								TimeLimitFlag: timeLimitFlag ,
+								c_StdsKanbanOrg: item.get('c_StdsKanbanOrg'),
+								Age: age,
+								Owner: owner,
+								OwningGroup:owningGroup,
+								nextReview:nextReview
+
+				});//}
+        }, me);
+    },
+		_getAppSetting: function(c_StdsKanban){
+			var me = this;
+			/* console.log(c_StdsKanban,c_StdsKanban.substr(0,3),me.getSetting(c_StdsKanban.substr(0,3))); */
+			return me.getSetting(c_StdsKanban.substr(0,3));
+		},
+		_getStageAgeDays : function(c_StdsKanban,c_StdsKanbanOrg,ObjectID) {
+			var me = this;
+			var filtered = _.filter(me.UserStoryKbriefSnapShot[ObjectID],function(d){ return d.data.c_StdsKanban === c_StdsKanban; });
+			var userStorySnapShotSortDesc = _.sortBy(me.UserStoryKbriefSnapShot[ObjectID], '_ValidFrom').reverse();
+			
+			var validFrom = "";
+			var snapShotnotFound = true; 
+			//Stage changed considering with in same organization or organization changed but stage remained the same
+			for(i = 0 ; i< userStorySnapShotSortDesc.length ; i ++){
+				if(i < userStorySnapShotSortDesc.length - 1){
+					if((userStorySnapShotSortDesc[i].data.c_StdsKanban !== userStorySnapShotSortDesc[i + 1].data.c_StdsKanban && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg === c_StdsKanbanOrg && 
+						snapShotnotFound && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanban === c_StdsKanban ) ||
+						(userStorySnapShotSortDesc[i].data.c_StdsKanban === userStorySnapShotSortDesc[i + 1].data.c_StdsKanban && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg !== userStorySnapShotSortDesc[i+1].data.c_StdsKanbanOrg && 
+						snapShotnotFound && 
+						userStorySnapShotSortDesc[i].data.c_StdsKanbanOrg === c_StdsKanbanOrg ))						
+						{
+								validFrom = userStorySnapShotSortDesc[i].data._ValidFrom;
+								snapShotnotFound = false;
+						}
+				}
+			}
+		//had the status when it was created
+			if(validFrom === "" ){
+				validFrom = userStorySnapShotSortDesc[userStorySnapShotSortDesc.length - 1].data._ValidFrom;
+			}
+			return  Rally.util.DateTime.getDifference(new Date(), new Date(validFrom), 'day');
+		},
+    _createGrid: function(){
+       var me = this;
+			//create the store that will hold the rows in the table
+			var gridStore = Ext.create('Rally.data.custom.Store', {
+					data: me._customRecords
+				});
+			me.gridColumns = [
+				{
+					text: 'Name of Kbrief',
+					dataIndex: 'c_KBrief',
+					flex: 1,
+					renderer: function(value){
+						if(value.indexOf('Not linked') > -1 ){
+							return value;
+						}else{
+							return "<a href='https://palantir.intel.com/sites/PalantirHome/Knowledge%20Briefs/" + value + "' target = '_blank'>" + value +"</a>";
+						}
+					}
+				},{
+					text: 'Description', 
+					dataIndex: 'Description',
+					flex:2,		
+					sortable:true
+				},{
+					text: 'Standard Owner ', 
+					dataIndex: 'Owner',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]										
+				},{
+					text: 'IE Stage', 
+					dataIndex: 'c_StdsKanban',
+					cls:"helllllo",
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]										
+				},{
+					text: 'Age (Days)', 
+					dataIndex:'Age',
+					renderer: function(value,r){
+						if(r.record.data.Age > r.record.data.TimeLimitFlag){
+							return  "<div class ='red'>" + value + "</div>" ; 
+						}else if( r.record.data.Age <= r.record.data.TimeLimitFlag){
+							return  "<div class ='green'>" + value + "</div>" ; 
+						}else{
+							return value;
+						}						
+					}
+				},{
+					text: 'Checkpoint (Days)', 
+					dataIndex: 'TimeLimitFlag',
+					renderer: function(value,r){
+						var stagingName = r.record.data.c_StdsKanban;
+						if(r.record.data.Age > r.record.data.TimeLimitFlag){
+							return  "<div class ='red'>" + value + "</div> " ;//+ stagingName  ; 
+						}else if( r.record.data.Age <= r.record.data.TimeLimitFlag){
+							return  "<div class ='green'>" + value + "</div>";//+ stagingName ; 
+						}else{
+							return value;
+						}													
+					},
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+				},{//nextReview
+					text: 'nextReview', 
+					dataIndex: 'nextReview',
+					flex:1
+				},{//nextReview
+					text: 'Owning Division', 
+					dataIndex: 'OwningGroup',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+				},{
+					text: 'Global/Local Standards', 
+					dataIndex: 'c_StdsKanbanOrg',
+					flex:1,
+					items:[
+						{ 
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+				}
+			];
+			var g = Ext.create('Rally.ui.grid.Grid', {
+				/* itemId:'mygrid123', */
+				id: 'mygrid',
+				enableEditing:false,
+				disableSelection: true,
+				store: gridStore,
+				columnCfgs:me.gridColumns 
+			});
+			Ext.getCmp('gridKbriefs').add(g);
+		},		
+		_renderInformationHeader: function(){
+				var me = this;
+				var fields = me.getSettingsFields();
+				var notes = "<div><table><tr><span class='stage-configuration-title'>Time limits for each IE stages  </span></tr>";
+				_.each(fields, function(appSetting){
+					appSettingDays = me.getSetting(appSetting.name) !=="" ? me.getSetting(appSetting.name): "N/A";
+					notes += "<td class='stage-configuration'>" + appSetting.name + " : " + appSettingDays + " days </td>";
+				});
+				notes += "</table></div>";
+				Ext.getCmp('information').update(notes);
+		},
+		_loadEverything: function(){
+			var me = this;
+			me._renderInformationHeader();
+			return Q.all([
+				me._loadStandardizationKBriefSnapshot(),
+				me._loadStandardizationKBrief()
+			])
+			.then(function(){
+				me._createGridStore();
+				me._addExportButton();
+			})
+			.then(function(){
+				me._createGrid();
+			})
+			.fail(function(reason){
+				me.setLoading(false);
+				me.alert('ERROR', reason);
+			})
+			.then(function(){ me.setLoading(false); });
+		},
+		/**___________________________________ LAUNCH ___________________________________*/	
+		launch: function(){
+			var me = this;
+			me.setLoading('Loading configuration');
+			/* me.initDisableResizeHandle();
+			me.initFixRallyDashboard(); */
+			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
+				me.setLoading(false);
+				me.alert('ERROR', 'You do not have permissions to edit this project');
+				return;
+			}	
+			me.configureIntelRallyApp()
+				.then(function(){
+					var scopeProject = me.getContext().getProject();
+					return me.loadProject(scopeProject.ObjectID);
+				})
+				.then(function(scopeProjectRecord){
+					me.ProjectRecord = scopeProjectRecord;
+					var _twoYears = 1000 * 60 *60 *24* 365 * 2;
+					var twoYearsBack = new Date(new Date()*1  - _twoYears);
+					me.twoYearsBackDate = twoYearsBack.getFullYear() + "-" + (twoYearsBack.getMonth() + 1) + "-" + twoYearsBack.getDate();
+				})					
+				.then(function(){
+					me._loadEverything();
+				}) 
+				.fail(function(reason){
+					me.setLoading(false);
+					me.alert('ERROR', reason);
+				})
+				.then(function(){ me.setLoading(false); })
+				.done();
+		}
+	});
+}());
+
+            Rally.launchApp('Intel.AgingStandard', {
+                name:"agingstandard",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css"/>
+
+    <style type="text/css">
+        /* .grid-container{
+ margin:20px;
+} */
+.app-wrapper {
+  position: relative;
+  min-width: 950px;
+  margin: 10px;
+  padding: 5px;
+  /* 	background-color:@brand-primary;  */
+  /* border: #3f84a4 solid 1px; */
+}
+.red {
+  color: white;
+  font-weight: bold;
+  background-color: red;
+  padding: 5px;
+  width: 27px;
+  text-align: center;
+}
+.green {
+  color: white;
+  font-weight: bold;
+  padding: 5px;
+  width: 27px;
+  text-align: center;
+  background-color: #52AB0E;
+}
+div#gridToExport {
+  display: none;
+}
+.button-export {
+  margin-left: 88.5%;
+  margin-bottom: 5px;
+}
+.stage-configuration-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.stage-configuration {
+  margin-top: 2px;
+  background-color: #52AB0E;
+  color: white;
+  border: #3f84a4 solid 1px;
+  padding: 5px;
+}
+.fa fa-file-excel-o {
+  background-color: green;
+}
+
+    </style>
+</head>
+<body>
+</body>
+</html>
