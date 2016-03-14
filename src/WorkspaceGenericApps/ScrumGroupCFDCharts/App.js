@@ -215,10 +215,26 @@
 			});
 		},
 		
-		/******************************************************* Cache operations ********************************************************/		
+		/******************************************************* Cache operations ********************************************************/
 		getCache: function(){ //TODO
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
+			var projectOID = me.getContext().getProject().ObjectID;
+			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
+			
+			if(!hasKey){ //if no key, its a cache miss.
+				return Promise.resolve(false);
+			}
+			
+			asdiuhpowqrihgqpo[wriho[wqprig
+			TODO: 
+			1) make sure that we set me.AppsPref.projs[projectOID].Release the first time the page is loaded
+			2) make sure we update me.AppsPref.projs[projectOID].Release every time the release is changed (done)
+			3) make sure updateCache and deleteCache use me.AppsPref.projs[projectOID].Release if they need to 
+			4) move to mixin
+			
+			qwgriho[pqwhrgpoqihwergpqwihgrpowqrg
+			
+			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
 			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
 			var deferred = Q.defer();
 			
@@ -233,7 +249,7 @@
 						deferred.resolve(false);
 					}
 					
-					//intel-rally-app sets these
+					//intel-rally-app sets these (copy these for each app that uses the cache!)
 					me.BaseUrl = Rally.environment.getServer().getBaseUrl();
 					me.PortfolioItemTypes = payloadJSON.PortfolioItemTypes;
 					me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
@@ -268,8 +284,9 @@
 		},
 		updateCache: function(){
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
+			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
+			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
 			var deferred = Q.defer();
 			var payload = {};
 			
@@ -308,7 +325,7 @@
 		},
 		deleteCache: function(){
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID;
+			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
 			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
 			var deferred = Q.defer();
 			
@@ -322,27 +339,32 @@
 		},
 		
 		/******************************************************* LAUNCH ********************************************************/		
+		loadDataFromCacheOrRally: function(){
+			var me = this;
+			return me.getCache().then(function(cacheHit){
+				if(!cacheHit){
+					return me.loadConfiguration()
+						.then(function(){ return me.reloadData(); })
+						.then(function(){ 
+							//NOTE: not returning promise here!
+							me.updateCache().fail(function(e){
+								alert(e);
+								console.log(e);
+							});
+						});
+				}
+			});
+		},
+		
 		launch: function(){
 			var me = this;
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
-			return Q.all([
-				me.loadAppsPreference().then(function(appsPref){ me.AppsPref = appsPref; }), //cant cache. per user basis
-				me.getCache().then(function(cached){
-					if(!cached){
-						return me.loadConfiguration()
-							.then(function(){ return me.reloadData(); })
-							.then(function(){ 
-								//NOTE: not returning promise here!
-								me.updateCache().fail(function(e){
-									alert(e);
-									console.log(e);
-								});
-							});
-					}
-				})
-			])
+			return me.loadAppsPreference().then(function(appsPref){ 
+				me.AppsPref = appsPref; //cant cache. per user basis
+			}), 
+			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.redrawEverything(); })
 			.fail(function(reason){
 				me.setLoading(false);
@@ -391,6 +413,7 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
+				.then(function(){ return me.loadDataFromCacheOrRally(); })
 				.then(function(){ return me.reloadEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })

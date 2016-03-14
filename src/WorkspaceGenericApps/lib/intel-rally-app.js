@@ -308,7 +308,7 @@
 			else {
 				var me=this,
 					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
-						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID;
 					});
 				if(foundScrumGroupConfig) return Q(projectRecord);
 				else { 
