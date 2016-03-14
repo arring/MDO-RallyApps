@@ -1,0 +1,55 @@
+.app {
+ 
+}
+/* .grid-container{
+ margin:20px;
+} */
+@brand-primary: darken(#428bca, 6.5%); 
+
+.app-wrapper {
+position:relative;
+  min-width: 950px;
+  margin:10px;
+	padding:5px;
+/* 	background-color:@brand-primary;  */
+	
+	/* border: #3f84a4 solid 1px; */
+}
+.red{
+    color: white;
+    font-weight: bold;
+    background-color: red;
+    padding: 5px;
+    width: 27px;
+    text-align: center;
+}
+.green{
+    color: white;
+    font-weight: bold;
+    padding: 5px;
+    width: 27px;
+    text-align: center;
+    background-color:#52AB0E;
+}
+div#gridToExport {
+    display: none;
+}
+.button-export{
+	margin-left:88.5%;
+	margin-bottom: 5px;
+}
+.stage-configuration-title{
+	font-size: 14px;
+	text-transform:uppercase;
+	margin-bottom:5px;
+}
+.stage-configuration {
+	margin-top:2px;
+	background-color:#52AB0E;
+	color:white;
+	border: #3f84a4 solid 1px;
+	padding:5px;
+}
+.fa fa-file-excel-o{
+	background-color:green;
+}
