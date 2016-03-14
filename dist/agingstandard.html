@@ -2190,7 +2190,7 @@ The “age” of a standard has to do with the time it has been in the current c
 							return window.btoa(unescape(encodeURIComponent(s)));
 					};
 					var format = function (s, c) {
-						return s.replace(/{(\w+)}/g, function (m, p) {
+						return s.replace(/{(\w+)}/g, function (m, p) {//TODO: fix Error in App.js on line 183: Unescaped '{'.
 							return c[p];
 						});
 					};
