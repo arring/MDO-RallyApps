@@ -13,43 +13,14 @@
 /* 			'Intel.lib.IntelRallyApp', 
 			'Intel.lib.mixin.IntelWorkweek' */
 		],
-		/**___________________________________ APP SETTINGS ___________________________________*/	
-		getSettingsFields: function() {
-			return [
-				{
-					cacheUrl: 'cacheUrl',
-					xtype: 'rallytextfield'
-				}
-			];
-		},
-    config: {
-			defaultSettings: {
-				cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
-			}
-    },		
-		getCache: function(populatePayloadFn){ //TODO
-			var me = this; //app me
+		cacheUrl:'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/',
+		getCache: function(){ //TODO
+			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
 			if (typeof key === 'undefined' ){
 				return Promise.resolve(false);//cache miss		
 			}
-			/* var projectOID = me.getContext().getProject().ObjectID;
-			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-			
-			if(!hasKey){ //if no key, its a cache miss.
-				return Promise.resolve(false);
-			} */
-			// asdiuhpowqrihgqpo[wriho[wqprig
-			// TODO: 
-			// 1) make sure that we set me.AppsPref.projs[projectOID].Release the first time the page is loaded
-			// 2) make sure we update me.AppsPref.projs[projectOID].Release every time the release is changed (done)
-			// 3) make sure updateCache and deleteCache use me.AppsPref.projs[projectOID].Release if they need to 
-			// 4) move to mixin
-			
-			// qwgriho[pqwhrgpoqihwergpqwihgrpowqrg
-			
-			//var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
-			var url = me.getSettingsFields() + key ;
+			var url = me.cacheUrl + key ;
 			var deferred = Q.defer();
 			
 			$.ajax({
@@ -63,7 +34,7 @@
 						deferred.resolve(false);
 					}
 					me.populateAppSetting(payload);
-					populatePayloadFn.call(me, payload);
+					me.populatePayloadFn.call(me, payload);
 					
 					deferred.resolve(true);
 				},
@@ -74,41 +45,16 @@
 			});
 			return deferred.promise;
 		},
-		updateCache: function(keyGenerator,payload){
+		updateCache: function(payload){
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
 			if (typeof key === 'undefined' ){
 				return Promise.resolve(false);//cache miss		
 			}
 			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
-			var url = me.getSettingsFields() + key ;
-			//var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
+			var url = me.cacheUrl + key ;
+			me.updateAppSetting(payload);
 			var deferred = Q.defer();
-/* 			var payload = {};
-			
-			payload.PortfolioItemTypes = me.PortfolioItemTypes;
-			payload.ScrumGroupConfig = me.ScrumGroupConfig;
-			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
-			payload.ScheduleStates = me.ScheduleStates;
-			
-			//this app sets these
-			payload.ProjectRecord = {data: me.ProjectRecord.data};
-			payload.ScrumGroupRootRecord = {data: me.ScrumGroupRootRecord.data};
-			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data}; 
-			payload.LeafProjects = _.map(me.LeafProjects, function(lp){ return {data: lp.data}; });
-			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
-			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
-			
-			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
-			payload.PortfolioItemMap = me.PortfolioItemMap;
-			payload.TopPortfolioItemNames = me.TopPortfolioItemNames;
-			payload.AllSnapshots = _.map(me.AllSnapshots, function(ss){ return {raw: ss.raw}; });
-			payload.TeamStores = _.reduce(me.TeamStores, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
-				return map;
-			}, {});  */
-			
 			$.ajax({
 				url: url,
 				data: JSON.stringify(payload),
@@ -156,7 +102,14 @@
 			me.ScrumGroupConfig = payload.ScrumGroupConfig;
 			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
 			me.ScheduleStates = payload.ScheduleStates;
-		}		
+		},
+		updateAppSetting: function(payload){
+			var me = this;
+			payload.PortfolioItemTypes = me.PortfolioItemTypes;
+			payload.ScrumGroupConfig = me.ScrumGroupConfig;
+			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
+			payload.ScheduleStates = me.ScheduleStates;
+		}	
 /*  		populatePayloadFn: function(payload){
 			var me = this;
 			
