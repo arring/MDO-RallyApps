@@ -27,11 +27,11 @@
 	background-repeat:no-repeat;
 }
 .x-grid-cell.manager-feature-cell{
-	background-image: -o-linear-gradient(left bottom,rgba(0,0,0,0) 75%, rgba(156, 14, 181, 1) 75%) !important;
-	background-image: -moz-linear-gradient(left bottom, rgba(0,0,0,0) 75%, rgba(156, 14, 181, 1)  75%) !important;
-	background-image: -webkit-linear-gradient(left bottom, rgba(0,0,0,0) 75%, rgba(156, 14, 181, 1)  75%) !important;
-	background-image: -ms-linear-gradient(left bottom, rgba(0,0,0,0) 75%, rgba(156, 14, 181, 1) 75%) !important;
-	background-image: linear-gradient(to left bottom, rgba(0,0,0,0) 75%, rgba(156, 14, 181, 1)  75%) !important;
+	background-image: -o-linear-gradient(left bottom,rgba(0,0,0,0) 70%, rgba(156, 14, 181, 1) 70%) !important;
+	background-image: -moz-linear-gradient(left bottom, rgba(0,0,0,0) 70%, rgba(156, 14, 181, 1)  70%) !important;
+	background-image: -webkit-linear-gradient(left bottom, rgba(0,0,0,0) 70%, rgba(156, 14, 181, 1)  70%) !important;
+	background-image: -ms-linear-gradient(left bottom, rgba(0,0,0,0) 70%, rgba(156, 14, 181, 1) 70%) !important;
+	background-image: linear-gradient(to left bottom, rgba(0,0,0,0) 70%, rgba(156, 14, 181, 1)  70%) !important;
 	background-size:100% 20px;
 	background-repeat:no-repeat;
 }
