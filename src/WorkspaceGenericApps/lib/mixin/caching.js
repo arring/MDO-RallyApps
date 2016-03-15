@@ -17,14 +17,14 @@
 		getSettingsFields: function() {
 			return [
 				{
-					cacheUrl: 'url',
+					cacheUrl: 'cacheUrl',
 					xtype: 'rallytextfield'
 				}
 			];
 		},
     config: {
 			defaultSettings: {
-				url: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
+				cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
 			}
     },		
 		getCache: function(populatePayloadFn){ //TODO
@@ -49,7 +49,7 @@
 			// qwgriho[pqwhrgpoqihwergpqwihgrpowqrg
 			
 			//var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var url = me.getSettingsFields() + key ;
 			var deferred = Q.defer();
 			
 			$.ajax({
@@ -62,7 +62,7 @@
 						console.log('corrupt cache payload'); 
 						deferred.resolve(false);
 					}
-					
+					me.populateAppSetting(payload);
 					populatePayloadFn.call(me, payload);
 					
 					deferred.resolve(true);
@@ -74,13 +74,17 @@
 			});
 			return deferred.promise;
 		},
-		updateCache: function(keyGenerator){
+		updateCache: function(keyGenerator,payload){
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
+			var key = me.cacheKeyGenerator(); //generate key for the app
+			if (typeof key === 'undefined' ){
+				return Promise.resolve(false);//cache miss		
+			}
 			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
+			var url = me.getSettingsFields() + key ;
+			//var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
 			var deferred = Q.defer();
-			var payload = {};
+/* 			var payload = {};
 			
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;
 			payload.ScrumGroupConfig = me.ScrumGroupConfig;
@@ -103,7 +107,7 @@
 			payload.TeamStores = _.reduce(me.TeamStores, function(map, sss, key){ 
 				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
 				return map;
-			}, {}); 
+			}, {});  */
 			
 			$.ajax({
 				url: url,
@@ -117,8 +121,12 @@
 		},
 		deleteCache: function(keyGenerator){
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
+			var key = me.cacheKeyGenerator(); //generate key for the app
+			if (typeof key === 'undefined' ){
+				return Promise.resolve(false);//cache miss		
+			}			
+/* 			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
+			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key; */
 			var deferred = Q.defer();
 			
 			$.ajax({
@@ -130,7 +138,7 @@
 			return deferred.promise;
 		},
 		
-		keyGenerator: function(){
+/* 		keyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
@@ -138,9 +146,18 @@
 			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
 			
 			return key
-		},
-		
-		populatePayloadFn: function(payload){
+		}, */
+ 		populateAppSetting: function(payload){
+			var me = this;
+			//intel-rally-app sets these (copy these for each app that uses the cache!)
+			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
+			me.PortfolioItemTypes = payload.PortfolioItemTypes;
+			me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
+			me.ScrumGroupConfig = payload.ScrumGroupConfig;
+			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
+			me.ScheduleStates = payload.ScheduleStates;
+		}		
+/*  		populatePayloadFn: function(payload){
 			var me = this;
 			
 			//intel-rally-app sets these (copy these for each app that uses the cache!)
@@ -152,7 +169,7 @@
 			me.ScheduleStates = payload.ScheduleStates;
 			
 			//this app sets these
-			me.ProjectRecord = payload.ProjectRecord;
+ 			me.ProjectRecord = payload.ProjectRecord;
 			me.ScrumGroupRootRecord = payload.ScrumGroupRootRecord;
 			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
 			me.LeafProjects = payload.LeafProjects;
@@ -165,8 +182,8 @@
 			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
 			me.CurrentTopPortfolioItemName = null;
 			me.AllSnapshots = payload.AllSnapshots;
-			me.TeamStores = payload.TeamStores;
+			me.TeamStores = payload.TeamStores; 
 			
-		}
+		}  */
 	});
 }());		
