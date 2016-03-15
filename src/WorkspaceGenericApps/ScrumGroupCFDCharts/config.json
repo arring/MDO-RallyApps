@@ -19,6 +19,7 @@
       "../lib/component/intel-fixed-combobox.js",
       "../lib/component/intel-release-picker.js",
       "../lib/chart/fast-cumulative-flow-calculator.js",
+      "../lib/mixin/caching.js",
       "App.js"
    ],
    "css": [

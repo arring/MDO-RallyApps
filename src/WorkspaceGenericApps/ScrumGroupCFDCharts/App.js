@@ -17,7 +17,8 @@
 			'Intel.lib.mixin.IntelWorkweek',
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
-			'Intel.lib.mixin.UserAppsPreference'
+			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.Caching'
 		],
 		minWidth:910,
 		items:[{
@@ -216,7 +217,7 @@
 		},
 		
 		/******************************************************* Cache operations ********************************************************/
-		getCache: function(keyGenerator, populatePayloadFn){ //TODO
+/* 		getCache: function(cacheKeyGenerator, populatePayloadFn){ //TODO
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
@@ -234,7 +235,7 @@
 			
 			// qwgriho[pqwhrgpoqihwergpqwihgrpowqrg
 			
-			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+			var key = 'scrum-group-cfd-' + projectOID + '-' + 'R116';// me.AppsPref.projs[projectOID].Release;
 			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
 			var deferred = Q.defer();
 			
@@ -249,7 +250,7 @@
 						deferred.resolve(false);
 					}
 					
-					populatePayloadFn.call(me, payload);
+					me.populatePayloadFn.call(me, payload);
 					
 					deferred.resolve(true);
 				},
@@ -259,19 +260,19 @@
 				}
 			});
 			return deferred.promise;
-		},
-		updateCache: function(keyGenerator){
+		}, */
+		setCachePayLoad: function(cacheKeyGenerator){
 			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
+/* 			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
 			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
 			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
-			var deferred = Q.defer();
+			var deferred = Q.defer(); */
 			var payload = {};
-			
+/* 			
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;
 			payload.ScrumGroupConfig = me.ScrumGroupConfig;
 			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
-			payload.ScheduleStates = me.ScheduleStates;
+			payload.ScheduleStates = me.ScheduleStates; */
 			
 			//this app sets these
 			payload.ProjectRecord = {data: me.ProjectRecord.data};
@@ -290,8 +291,8 @@
 				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
 				return map;
 			}, {}); 
-			
-			$.ajax({
+			return payload;
+/* 			$.ajax({
 				url: url,
 				data: JSON.stringify(payload),
 				type: 'PUT',
@@ -299,9 +300,9 @@
 				success: function(data) { deferred.resolve(data); },
 				error: function(xhr, status, reason){ deferred.reject(reason); }
 			});
-			return deferred.promise;
+			return deferred.promise; */
 		},
-		deleteCache: function(keyGenerator){
+		deleteCache: function(cacheKeyGenerator){
 			var me = this;
 			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
 			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
@@ -316,12 +317,12 @@
 			return deferred.promise;
 		},
 		
-		keyGenerator: function(){
+		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			
-			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+			var key = 'scrum-group-cfd-' + projectOID + '-' + 'R116'; //me.AppsPref.projs[projectOID].Release;
 			
 			return key
 		},
@@ -330,12 +331,12 @@
 			var me = this;
 			
 			//intel-rally-app sets these (copy these for each app that uses the cache!)
-			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
+/* 			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
 			me.PortfolioItemTypes = payload.PortfolioItemTypes;
 			me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
 			me.ScrumGroupConfig = payload.ScrumGroupConfig;
 			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
-			me.ScheduleStates = payload.ScheduleStates;
+			me.ScheduleStates = payload.ScheduleStates; */
 			
 			//this app sets these
 			me.ProjectRecord = payload.ProjectRecord;
@@ -353,7 +354,7 @@
 			me.AllSnapshots = payload.AllSnapshots;
 			me.TeamStores = payload.TeamStores;
 			
-		}
+		},
 		
 		/******************************************************* LAUNCH ********************************************************/		
 		loadDataFromCacheOrRally: function(){
@@ -364,7 +365,8 @@
 						.then(function(){ return me.reloadData(); })
 						.then(function(){ 
 							//NOTE: not returning promise here!
-							me.updateCache().fail(function(e){
+							var payLoad = setCachePayLoad();
+							me.updateCache(payLoad).fail(function(e){
 								alert(e);
 								console.log(e);
 							});
@@ -380,7 +382,7 @@
 			me.setLoading('Loading Configuration');
 			return me.loadAppsPreference().then(function(appsPref){ 
 				me.AppsPref = appsPref; //cant cache. per user basis
-			}), 
+			})
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.redrawEverything(); })
 			.fail(function(reason){
