@@ -217,50 +217,6 @@
 		},
 		
 		/******************************************************* Cache operations ********************************************************/
-/* 		getCache: function(cacheKeyGenerator, populatePayloadFn){ //TODO
-			var me = this;
-			var projectOID = me.getContext().getProject().ObjectID;
-			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-			
-			if(!hasKey){ //if no key, its a cache miss.
-				return Promise.resolve(false);
-			}
-			
-			// asdiuhpowqrihgqpo[wriho[wqprig
-			// TODO: 
-			// 1) make sure that we set me.AppsPref.projs[projectOID].Release the first time the page is loaded
-			// 2) make sure we update me.AppsPref.projs[projectOID].Release every time the release is changed (done)
-			// 3) make sure updateCache and deleteCache use me.AppsPref.projs[projectOID].Release if they need to 
-			// 4) move to mixin
-			
-			// qwgriho[pqwhrgpoqihwergpqwihgrpowqrg
-			
-			var key = 'scrum-group-cfd-' + projectOID + '-' + 'R116';// me.AppsPref.projs[projectOID].Release;
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
-			var deferred = Q.defer();
-			
-			$.ajax({
-				url: url,
-				type: 'GET',
-				success: function(payloadJSON){
-					var payload;
-					try { payload = JSON.parse(payloadJSON); }
-					catch(e){ 
-						console.log('corrupt cache payload'); 
-						deferred.resolve(false);
-					}
-					
-					me.populatePayloadFn.call(me, payload);
-					
-					deferred.resolve(true);
-				},
-				error: function(xhr, status, reason){ 
-					if(xhr.status === 404) deferred.resolve(false);
-					else deferred.reject(reason);
-				}
-			});
-			return deferred.promise;
-		}, */
 		setCachePayLoad: function(cacheKeyGenerator){
 			var me = this;
 /* 			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
@@ -282,6 +238,7 @@
 			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
 			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
 			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
+			payload.AppsPref = me.AppsPref;
 			
 			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
 			payload.PortfolioItemMap = me.PortfolioItemMap;
@@ -302,27 +259,12 @@
 			});
 			return deferred.promise; */
 		},
-		deleteCache: function(cacheKeyGenerator){
-			var me = this;
-			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key;
-			var deferred = Q.defer();
-			
-			$.ajax({
-				url: url,
-				type: 'DELETE',
-				success: function(data) { deferred.resolve(data); },
-				error: function(xhr, status, reason){ deferred.reject(reason); }
-			});
-			return deferred.promise;
-		},
-		
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			
-			var key = 'scrum-group-cfd-' + projectOID + '-' + 'R116'; //me.AppsPref.projs[projectOID].Release;
+			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
 			
 			return key
 		},
@@ -344,7 +286,8 @@
 			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
 			me.LeafProjects = payload.LeafProjects;
 			me.ReleaseRecords = payload.ReleaseRecords;
-			me.AppsPref = {};
+			//me.AppsPref = {};
+			me.AppsPref = payload.AppsPref;
 			me.ReleaseRecord = payload.ReleaseRecord;
 			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
 			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
@@ -365,7 +308,7 @@
 						.then(function(){ return me.reloadData(); })
 						.then(function(){ 
 							//NOTE: not returning promise here!
-							var payLoad = setCachePayLoad();
+							var payLoad = me.setCachePayLoad();
 							me.updateCache(payLoad).fail(function(e){
 								alert(e);
 								console.log(e);
@@ -417,7 +360,10 @@
 						me.setLoading('Pulling Live Data, please wait');
 						return me.loadConfiguration()
 							.then(function(){ return me.reloadData(); })
-							.then(function(){ return me.updateCache(); })
+							.then(function(){ 	
+								var payLoad = me.setCachePayLoad();
+								return me.updateCache(payLoad);
+							})
 							.then(function(){ me.setLoading(false); });
 					}
 				}
@@ -433,7 +379,7 @@
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
 				.then(function(){ return me.loadDataFromCacheOrRally(); })
-				.then(function(){ return me.reloadEverything(); })
+				.then(function(){ return me.redrawEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
 				.done();
