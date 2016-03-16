@@ -200,37 +200,39 @@
 						.then(function(scrums){
 							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
 						}),
-					me.loadAppsPreference() /******** load stream 2 *****/
-						.then(function(appsPref){
-							me.AppsPref = appsPref;
-							var fourteenWeeks = 1000*60*60*24*7*14;
-							return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
-						})
-						.then(function(releaseRecords){
-							me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-							var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-							if(currentRelease) me.ReleaseRecord = currentRelease;
-							else return Q.reject('This project has no releases.');
-						})	
+					Q().then(function(){ /******** load stream 2 *****/
+						var fourteenWeeks = 1000*60*60*24*7*14;
+						return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
+					})
+					.then(function(releaseRecords){
+						me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
+						var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+						if(currentRelease){
+							me.ReleaseRecord = currentRelease;
+							me.AppsPref.projs[me.ProjectRecord.data.ObjectID].Release = me.ReleaseRecord.data.ObjectID; //usually will be no-op
+						}
+						else return Q.reject('This project has no releases.');
+					})	
 				]);
 			});
 		},
 		
-		/******************************************************* Cache operations ********************************************************/
-		setCachePayLoad: function(cacheKeyGenerator){
+		/******************************************************* Caching Mixin operations ********************************************************/
+		getCachePayloadFn: function(payload){
 			var me = this;
-/* 			var key = 'scrum-group-cfd-' + me.getContext().getProject().ObjectID + '-' + me.ReleaseRecord.data.Name;
-			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
-			var url = 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' + key + '?timeout=' + timeout;
-			var deferred = Q.defer(); */
-			var payload = {};
-/* 			
-			payload.PortfolioItemTypes = me.PortfolioItemTypes;
-			payload.ScrumGroupConfig = me.ScrumGroupConfig;
-			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
-			payload.ScheduleStates = me.ScheduleStates; */
 			
-			//this app sets these
+			me.ReleaseRecord = payload.ReleaseRecord;
+			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
+			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
+			me.PortfolioItemMap = payload.PortfolioItemMap;
+			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
+			me.CurrentTopPortfolioItemName = null;
+			me.AllSnapshots = payload.AllSnapshots;
+			me.TeamStores = payload.TeamStores;
+		},
+		setCachePayLoadFn: function(payload){
+			var me = this;
+			
 			payload.ProjectRecord = {data: me.ProjectRecord.data};
 			payload.ScrumGroupRootRecord = {data: me.ScrumGroupRootRecord.data};
 			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data}; 
@@ -238,7 +240,6 @@
 			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
 			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
 			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
-			payload.AppsPref = me.AppsPref;
 			
 			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
 			payload.PortfolioItemMap = me.PortfolioItemMap;
@@ -248,55 +249,19 @@
 				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
 				return map;
 			}, {}); 
-			return payload;
-/* 			$.ajax({
-				url: url,
-				data: JSON.stringify(payload),
-				type: 'PUT',
-				headers: { 'Content-Type': 'application/json'},
-				success: function(data) { deferred.resolve(data); },
-				error: function(xhr, status, reason){ deferred.reject(reason); }
-			});
-			return deferred.promise; */
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			
-			var key = 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
-			
-			return key
+			if(hasKey){
+				return 'scrum-group-cfd-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+			}
+			else return undefined; //no release set
 		},
-		
-		populatePayloadFn: function(payload){
-			var me = this;
-			
-			//intel-rally-app sets these (copy these for each app that uses the cache!)
-/* 			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
-			me.PortfolioItemTypes = payload.PortfolioItemTypes;
-			me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
-			me.ScrumGroupConfig = payload.ScrumGroupConfig;
-			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
-			me.ScheduleStates = payload.ScheduleStates; */
-			
-			//this app sets these
-			me.ProjectRecord = payload.ProjectRecord;
-			me.ScrumGroupRootRecord = payload.ScrumGroupRootRecord;
-			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
-			me.LeafProjects = payload.LeafProjects;
-			me.ReleaseRecords = payload.ReleaseRecords;
-			//me.AppsPref = {};
-			me.AppsPref = payload.AppsPref;
-			me.ReleaseRecord = payload.ReleaseRecord;
-			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
-			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
-			me.PortfolioItemMap = payload.PortfolioItemMap;
-			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
-			me.CurrentTopPortfolioItemName = null;
-			me.AllSnapshots = payload.AllSnapshots;
-			me.TeamStores = payload.TeamStores;
-			
+		getCacheTimeoutDate: function(){
+			return new Date(new Date()*1 + 1000*60*60*24);
 		},
 		
 		/******************************************************* LAUNCH ********************************************************/		
@@ -307,9 +272,12 @@
 					return me.loadConfiguration()
 						.then(function(){ return me.reloadData(); })
 						.then(function(){ 
-							//NOTE: not returning promise here!
-							var payLoad = me.setCachePayLoad();
-							me.updateCache(payLoad).fail(function(e){
+							//NOTE: not returning promise here, performs in the background!
+							Q.all([
+								me.saveAppsPreference(me.AppsPref),
+								me.updateCache()
+							])
+							.fail(function(e){
 								alert(e);
 								console.log(e);
 							});
@@ -360,10 +328,7 @@
 						me.setLoading('Pulling Live Data, please wait');
 						return me.loadConfiguration()
 							.then(function(){ return me.reloadData(); })
-							.then(function(){ 	
-								var payLoad = me.setCachePayLoad();
-								return me.updateCache(payLoad);
-							})
+							.then(function(){ return me.updateCache(); })
 							.then(function(){ me.setLoading(false); });
 					}
 				}

@@ -3,6 +3,19 @@
 	THis file will allows any app with caching enable to get cache 
 	it expects the app using it sets up a key generators
 	the app should have a function call cacheKeyGenerator
+	
+	app MUST impelement the following functions:
+		
+		- cacheKeyGenerator() -> string									(return the 'key' the cache mixin should store/load/delete the data under)
+		- getCacheTimeoutDate() -> Date									(returns the date the cache should timeout from relative to NOW)
+		- getCachePayloadFn(payload)										(JSON data that was returned from the cache is passed to this function after a cache-hit)
+		- setCachePayLoadFn(payload)										(add fields to the json payload to be stored in the cache)
+		
+	the app has the following cache functions added to it:
+	
+		- getCache() -> Promise(cacheHit)                  (cacheHit === true if successfully got cache from server)
+		- updateCache() -> Promise()                       (returns when the cache has been successfully updated)
+		- deleteCache() -> Promise()                       (returns when the cache has been successfully delete)
 */
 
 (function(){
@@ -30,8 +43,9 @@
 						deferred.resolve(false);
 					}
 					//TODO: to think if we need try catch
-					me.populateAppSetting(payload);
-					me.populatePayloadFn.call(me, payload);
+					me.getCacheIntelRallyAppSettings(payload);
+					me.getCachePayloadFn(payload);
+					
 					deferred.resolve(true);
 				},
 				error: function(xhr, status, reason){ 
@@ -41,16 +55,23 @@
 			});
 			return deferred.promise;
 		},
-		updateCache: function(payload){
+		updateCache: function(){
 			var me = this;
+			var payload = {};
 			var key = me.cacheKeyGenerator(); //generate key for the app
+			var timeoutDate = me.getCacheTimeoutDate();
 			if (typeof key === 'undefined' ){
-				return Promise.resolve(false);//cache miss		
+				return Promise.reject('cannot PUT to cache, invalid key');	
 			}
-			var timeout = new Date(new Date()*1 + 1000*60*60*24).toISOString();
-			var url = me.cacheUrl + key ;
-			me.updateAppSetting(payload);
-
+			
+			var url = me.cacheUrl + key;
+			if(timeoutDate){
+				url += '?timeout=' + timeoutDate.toISOString();
+			}
+			
+			me.setIntelRallyAppSettings(payload);
+			me.setCachePayLoadFn(payload);
+			
 			var deferred = Q.defer();
 			$.ajax({
 				url: url,
@@ -65,11 +86,12 @@
 		deleteCache: function(keyGenerator){
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			if (typeof key === 'undefined' ){
-				return Promise.resolve(false);//cache miss		
+			if (typeof key === 'undefined'){
+				return Promise.reject('cannot DELETE from cache, invalid key');	
 			}			
-			var deferred = Q.defer(),
-				url = me.cacheUrl + key ;
+			var deferred = Q.defer();
+			var url = me.cacheUrl + key;
+			
 			$.ajax({
 				url: url,
 				type: 'DELETE',
@@ -78,7 +100,7 @@
 			});
 			return deferred.promise;
 		},
- 		populateAppSetting: function(payload){
+		getCacheIntelRallyAppSettings: function(payload){
 			var me = this;
 			//intel-rally-app sets these (copy these for each app that uses the cache!)
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
@@ -88,7 +110,7 @@
 			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
 			me.ScheduleStates = payload.ScheduleStates;
 		},
-		updateAppSetting: function(payload){
+		setIntelRallyAppSettings: function(payload){
 			var me = this;
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;
 			payload.ScrumGroupConfig = me.ScrumGroupConfig;
