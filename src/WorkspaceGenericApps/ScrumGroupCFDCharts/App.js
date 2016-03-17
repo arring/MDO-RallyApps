@@ -139,7 +139,7 @@
 				me.FilteredTeamStores = {};
 				_.each(me.TeamStores, function(records, teamName){
 					var filteredRecords = _.filter(records, function(record){
-						return me.PortfolioItemMap[record.data[lowestPortfolioItem]] == topPiName;
+						return me.PortfolioItemMap[record.raw[lowestPortfolioItem]] == topPiName;
 					});
 					me.FilteredTeamStores[teamName] = filteredRecords;
 					me.FilteredAllSnapshots = me.FilteredAllSnapshots.concat(filteredRecords);
@@ -209,7 +209,7 @@
 						var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
 						if(currentRelease){
 							me.ReleaseRecord = currentRelease;
-							me.AppsPref.projs[me.ProjectRecord.data.ObjectID].Release = me.ReleaseRecord.data.ObjectID; //usually will be no-op
+							me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
 						}
 						else return Q.reject('This project has no releases.');
 					})	
@@ -221,8 +221,13 @@
 		getCachePayloadFn: function(payload){
 			var me = this;
 			
+			me.ProjectRecord = payload.ProjectRecord;
+			me.ScrumGroupRootRecord = payload.ProjectRecord;
+			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
 			me.ReleaseRecord = payload.ReleaseRecord;
+			me.ReleaseRecords = payload.ReleaseRecords;
 			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
+			
 			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
 			me.PortfolioItemMap = payload.PortfolioItemMap;
 			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
