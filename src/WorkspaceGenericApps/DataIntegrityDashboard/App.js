@@ -957,7 +957,8 @@
 			me.setNewEmailLink();
 			me.removeAllItems();
 			return me.buildGrids()
-				.then(function(){ return Q.all([me.buildRibbon(), me.buildIntegrityIndicator()]); });
+				.then(function(){ return Q.all([me.buildRibbon(), me.buildIntegrityIndicator()]); })
+				.then(function(){ me.setLoading(false)});
 		},
 		
 		/**
