@@ -206,6 +206,7 @@
 			
 			//confused again
 			me.UserStoryStore = payload.UserStoryStore; 
+			me.PortfolioItemStore = payload.PortfolioItemStore
 			
 			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
 	/* 		me.ProjectRecord = payload.ProjectRecord;
@@ -261,6 +262,7 @@
 			
 			//confused again
 			payload.UserStoryStore = _.map(me.UserStoryStore.getRange(), function(ss){return {data: ss.data}; }); 
+			payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function(ss){return {data: ss.data}; });
 			
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
 			
@@ -996,6 +998,8 @@
 		*/
 		getFilteredStories: function(){
 			var me = this;
+			
+			me.userStories = me.cached ? me.UserStoryStore : me.UserStoryStore.getRange();
 			if (!me.isScopedToScrum) {
 				if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
 					if(me.isHorizontalView){
@@ -1003,13 +1007,13 @@
 							m[p.data.ObjectID] = true; 
 							return m; 
 						}, {});
-						return _.filter(me.UserStoryStore.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
+						return _.filter(me.userStories, function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
 					}
-					else return _.filter(me.UserStoryStore.getRange(), function(story){ return story.data.Project.Name === me.ScopedTeamType; });
+					else return _.filter(me.userStories, function(story){ return story.data.Project.Name === me.ScopedTeamType; });
 				}
-				else return me.UserStoryStore.getRange();
+				else return me.userStories;
 			}
-			else return me.UserStoryStore.getRange();
+			else return me.userStories;
 		},
 		
 		/**
@@ -1022,7 +1026,7 @@
 		*/
 		getFilteredLowestPortfolioItems: function(){ 
 			var me = this,
-				portfolioItems = me.PortfolioItemStore.getRange(),
+				portfolioItems = me.cached ? me.PortfolioItemStore : me.PortfolioItemStore.getRange(),
 				activeScrumGroups, activePortfolioOIDs;
 			
 			if(me.isScopedToScrum) return [];
