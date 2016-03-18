@@ -152,8 +152,33 @@
 		/******************************************************* Caching Mixin operations ********************************************************/
 		getCachePayloadFn: function(payload){
 			var me = this;
+			me.ProjectRecord = payload.ProjectRecord;;
+			me.isScopedToScrum = payload.isScopedToScrum ;
+			me.isHorizontalView = payload.isHorizontalView ;
+			//TODO Visit again
+			me.UserStory = payload.UserStory;
+			me.UserStory.getField('ScheduleState') = payload.UserStory.getField('ScheduleState');
+			me.UserStory.getField('ScheduleState').editor = payload.UserStory.getField('ScheduleState').editor;
+			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			
-			me.ProjectRecord = payload.ProjectRecord;
+			me.ReleaseRecords = payload.ReleaseRecords;
+			me.LeafProjects = payload.LeafProjects;
+			me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
+			me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
+			me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
+			//confused
+			me.ScopedTeamType 
+			me.ScopedHorizontal = payload.ScopedHorizontal;
+			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+			me.FilteredLeafProjects = payload.FilteredLeafProjects;
+			me.PortfolioItemToPortfolioProjectMap = payload.PortfolioItemToPortfolioProjectMap;
+			
+			//confused again
+			me.UserStoryStore = payload.UserStoryStore; 
+			
+			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
+	/* 		me.ProjectRecord = payload.ProjectRecord;
 			me.ScrumGroupRootRecord = payload.ProjectRecord;
 			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
 			me.ReleaseRecord = payload.ReleaseRecord;
@@ -165,7 +190,7 @@
 			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
 			me.CurrentTopPortfolioItemName = null;
 			me.AllSnapshots = payload.AllSnapshots;
-			me.TeamStores = payload.TeamStores;
+			me.TeamStores = payload.TeamStores; */
 		},
 		setCachePayLoadFn: function(payload){
 			var me = this;
