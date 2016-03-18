@@ -107,7 +107,7 @@
 		loadConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);
+			me.isScopedToScrum = false;// (me.ProjectRecord.data.Children.Count === 0);
 			me.isHorizontalView = me.getSetting('Horizontal');
 			
 			return me.configureIntelRallyApp()
@@ -204,10 +204,18 @@
 			me.FilteredLeafProjects = payload.FilteredLeafProjects;
 			me.PortfolioItemToPortfolioProjectMap = payload.PortfolioItemToPortfolioProjectMap;
 			
-			//confused again
-			me.UserStoryStore = payload.UserStoryStore; 
-			me.PortfolioItemStore = payload.PortfolioItemStore
-			
+            me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
+                autoLoad: false,
+                model: me.UserStory,
+                pageSize: 200,
+                data: payload.UserStories
+            });
+            me.fixRawUserStoryAttributes();			
+			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
+					autoLoad: false,
+					model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+					pageSize: 200,
+					data: payload.PortfolioItems});
 			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
 	/* 		me.ProjectRecord = payload.ProjectRecord;
 			me.ScrumGroupRootRecord = payload.ProjectRecord;
@@ -261,8 +269,8 @@
 			}, {});
 			
 			//confused again
-			payload.UserStoryStore = _.map(me.UserStoryStore.getRange(), function(ss){return {data: ss.data}; }); 
-			payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function(ss){return {data: ss.data}; });
+			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){return {data: ss.data}; }); 
+			payload.PortfolioItems = _.map(me.PortfolioItemStore.getRange(), function(ss){return {data: ss.data}; });
 			
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
 			
@@ -480,6 +488,7 @@
 					_.find(me.ReleaseRecords, function(release){ return release.data.Name === me.Overrides.ReleaseName; }) : 
 					false) || 
 					me.getScopedRelease(me.ReleaseRecords, null, null);
+                me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
 			});
 		},
 		
@@ -998,9 +1007,7 @@
 			the me.ScopedTeamType set to a value, in which case we need to filter the user stories we have loaded into memory
 		*/
 		getFilteredStories: function(){
-			var me = this;
-			
-			me.userStories = me.cached ? me.UserStoryStore : me.UserStoryStore.getRange();
+			var me = this;			
 			if (!me.isScopedToScrum) {
 				if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
 					if(me.isHorizontalView){
@@ -1008,13 +1015,13 @@
 							m[p.data.ObjectID] = true; 
 							return m; 
 						}, {});
-						return _.filter(me.userStories, function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
+						return _.filter(me.UserStoryStore.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
 					}
-					else return _.filter(me.userStories, function(story){ return story.data.Project.Name === me.ScopedTeamType; });
+					else return _.filter(me.UserStoryStore.getRange(), function(story){ return story.data.Project.Name === me.ScopedTeamType; });
 				}
-				else return me.userStories;
+				else return me.UserStoryStore.getRange();
 			}
-			else return me.userStories;
+			else return me.UserStoryStore.getRange();
 		},
 		
 		/**
@@ -1027,7 +1034,7 @@
 		*/
 		getFilteredLowestPortfolioItems: function(){ 
 			var me = this,
-				portfolioItems = me.cached ? me.PortfolioItemStore : me.PortfolioItemStore.getRange(),
+				portfolioItems = me.PortfolioItemStore.getRange(),
 				activeScrumGroups, activePortfolioOIDs;
 			
 			if(me.isScopedToScrum) return [];
