@@ -179,24 +179,27 @@
 		/******************************************************* Caching Mixin operations ********************************************************/
 		getCachePayloadFn: function(payload){
 			var me = this;
+			
+			me.cached = true;
 			me.ProjectRecord = payload.ProjectRecord;;
 			me.isScopedToScrum = payload.isScopedToScrum ;
 			me.isHorizontalView = payload.isHorizontalView ;
 			//TODO Visit again
-			me.UserStory = payload.UserStory;
+/* 			me.UserStory = payload.UserStory;
 			me.UserStory.getField('ScheduleState') = payload.UserStory.getField('ScheduleState');
-			me.UserStory.getField('ScheduleState').editor = payload.UserStory.getField('ScheduleState').editor;
+			me.UserStory.getField('ScheduleState').editor = payload.UserStory.getField('ScheduleState').editor; */
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			
 			me.ReleaseRecords = payload.ReleaseRecords;
+			me.ReleaseRecord = payload.ReleaseRecord;
 			me.LeafProjects = payload.LeafProjects;
 			me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
 			me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
 			me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
 			//confused
-			me.ScopedTeamType 
-			me.ScopedHorizontal = payload.ScopedHorizontal;
+			//me.ScopedTeamType 
+			//me.ScopedHorizontal = payload.ScopedHorizontal;
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.FilteredLeafProjects = payload.FilteredLeafProjects;
 			me.PortfolioItemToPortfolioProjectMap = payload.PortfolioItemToPortfolioProjectMap;
