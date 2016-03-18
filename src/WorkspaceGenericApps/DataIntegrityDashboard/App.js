@@ -235,7 +235,10 @@
 			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
 			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
 			payload.LeafProjects = _.map(me.LeafProjects, function(rr){ return {data: rr.data}; });
-			payload.LeafProjectsByScrumGroup = me.LeafProjectsByScrumGroup;
+			payload.LeafProjectsByScrumGroup = _.reduce(me.LeafProjectsByScrumGroup, function(map, sss, key){ 
+				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
+				return map;
+			}, {});
 			payload.LeafProjectsByHorizontal = _.reduce(me.LeafProjectsByHorizontal, function(map, sss, key){ 
 				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
 				return map;
