@@ -125,3 +125,7 @@
 /*********************************** TOOLTIP ****************************/
 #heatmap-tooltip-goto-button {
 	margin-top:5px; }
+	
+.x-btn-default-small{
+	margin-right: 5px;	
+	}
