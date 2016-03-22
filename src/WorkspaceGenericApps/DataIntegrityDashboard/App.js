@@ -1241,7 +1241,9 @@
 					var hasData = !!data,
 						countNum = data && data.length,
 						countDen = gridConfig.totalCount,
-						pointNum = data && (100*_.reduce(data, function(sum, item){ return sum + (item.data.PlanEstimate || 0); }, 0)>>0)/100,
+						pointNum = data && (100*_.reduce(data, function(sum, item){ 
+							item = item.data || item;//having issue due to caching so hacking it
+							return sum + (item.PlanEstimate || 0); }, 0)>>0)/100,
 						pointDen = gridConfig.totalPoints,
 						type = (model==='UserStory' ? 'Stories' : lowestPortfolioItemType + 's');
 					return sprintf([
@@ -1518,7 +1520,9 @@
 					gridConfig.data = _.filter(list, gridConfig.filterFn);
 					gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Stories' : lowestPortfolioItemType + 's')] = list;
 					gridConfig.totalCount = list.length;
-					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100;
+					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ 
+						var item = item.data || item; //having issue with cache
+						return sum + item.PlanEstimate; }, 0)>>0)/100;
 					return me.addGrid(gridConfig);
 				}
 			}));
