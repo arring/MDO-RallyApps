@@ -107,7 +107,7 @@
 		loadConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = false;// (me.ProjectRecord.data.Children.Count === 0);
+			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);
 			me.isHorizontalView = me.getSetting('Horizontal');
 			
 			return me.configureIntelRallyApp()
@@ -184,10 +184,6 @@
 			me.ProjectRecord = payload.ProjectRecord;;
 			me.isScopedToScrum = payload.isScopedToScrum ;
 			me.isHorizontalView = payload.isHorizontalView ;
-			//TODO Visit again
-/* 			me.UserStory = payload.UserStory;
-			me.UserStory.getField('ScheduleState') = payload.UserStory.getField('ScheduleState');
-			me.UserStory.getField('ScheduleState').editor = payload.UserStory.getField('ScheduleState').editor; */
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			
@@ -210,30 +206,30 @@
                 pageSize: 200,
                 data: payload.UserStories
             });
+			
             me.fixRawUserStoryAttributes();			
 			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
-					autoLoad: false,
-					model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
-					pageSize: 200,
-					data: payload.PortfolioItems});
+				autoLoad: false,
+				model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+				pageSize: 200,
+				data: payload.PortfolioItems
+			});
+					
 			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
-	/* 		me.ProjectRecord = payload.ProjectRecord;
-			me.ScrumGroupRootRecord = payload.ProjectRecord;
-			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
-			me.ReleaseRecord = payload.ReleaseRecord;
-			me.ReleaseRecords = payload.ReleaseRecords;
-			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
-			
-			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
-			me.PortfolioItemMap = payload.PortfolioItemMap;
-			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
-			me.CurrentTopPortfolioItemName = null;
-			me.AllSnapshots = payload.AllSnapshots;
-			me.TeamStores = payload.TeamStores; */
 		},
 		setCachePayLoadFn: function(payload){
-			var me = this;
+			var me = this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
+				
+			var userStoryFields = ['Name', 'ObjectID', 'Project', 'Owner','Iteration', 
+				'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState', 
+				'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
+				'_refObjectUUID','_type','_objectVersion','_CreatedAt'];
 			
+			var portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
+				'Release', 'Description', 'FormattedID', 'UserStories', 'Parent','_p','_ref',
+				'_refObjectUUID','_type','_objectVersion','_CreatedAt','InvestmentCategory','DirectChildrenCount'];
+
 			payload.ProjectRecord = {data: me.ProjectRecord.data};
 			payload.isScopedToScrum = me.isScopedToScrum ;
 			payload.isHorizontalView = me.isHorizontalView ;
@@ -262,34 +258,24 @@
 			//confused
 			//payloadme.ScopedTeamType //Revisit
 			//payload.ScopedHorizontal = me.ScopedHorizontal; //Revisit
+			
 			payload.FilteredLeafProjects = _.map(me.FilteredLeafProjects, function(rr){ return {data: rr.data}; });
 			payload.PortfolioItemToPortfolioProjectMap = _.reduce(  me.PortfolioItemToPortfolioProjectMap, function(map, sss, key){ 
 				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
 				return map;
 			}, {});
 			
-			//confused again
-			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){return {data: ss.data}; }); 
-			payload.PortfolioItems = _.map(me.PortfolioItemStore.getRange(), function(ss){return {data: ss.data}; });
+			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){ 
+				return _.pick(ss.data,userStoryFields); 
+			}); //store will create data and raw
+			
+			payload.PortfolioItems = _.map(me.PortfolioItemStore.getRange(), function(ss){ 
+				return _.pick(ss.data,portfolioItemFields); 
+			});//just need data and we are creating store :)
 			
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
 			
-/* 			payload.ProjectRecord = {data: me.ProjectRecord.data};
-			payload.ScrumGroupRootRecord = {data: me.ScrumGroupRootRecord.data};
-			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data}; 
-			payload.LeafProjects = _.map(me.LeafProjects, function(lp){ return {data: lp.data}; });
-			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
-			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
 			
-			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
-			payload.PortfolioItemMap = me.PortfolioItemMap;
-			payload.TopPortfolioItemNames = me.TopPortfolioItemNames;
-			payload.AllSnapshots = _.map(me.AllSnapshots, function(ss){ return {raw: ss.raw}; });
-			payload.TeamStores = _.reduce(me.TeamStores, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
-				return map;
-			}, {});  */
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
@@ -309,7 +295,6 @@
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadConfiguration()
-					.then(function(){me.setDefaultForUrlOverride();})
 						.then(function(){return me.loadData(); })
 						.then(function(){ 
 							if(!me.isScopedToScrum){
@@ -325,7 +310,8 @@
 							}
 						});
 				}
-			});
+			})
+			.then(function(){me.setDefaultForUrlOverride();});
 		},
 		__loadModels: function(){ 
 			/** loads models for project, userstories, and all the portfolio items */
@@ -364,7 +350,13 @@
 				me.loadAppsPreference().then(function(appsPref){ 
 					me.AppsPref = appsPref; //cant cache. per user basis
 				}),
-				me.__loadModels()
+				me._loadPortfolioItemTypes().then(function(){ 
+					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
+					return Q.all([
+						me.__loadModels(),
+						me._loadPortfolioItemStatesForEachType()
+					]);
+				})
 			])
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
@@ -608,16 +600,16 @@
 					AND
 				Are in an during the release but not the release OR in the release
 		*/
-		createStoryFilter: function(leafProjects){			
+		createStoryFilter: function(leafProjects){			//NOTE: we are filtering for leaf stories here
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = me.ReleaseRecord.data.ReleaseDate.toISOString(),
 				releaseStartDate = me.ReleaseRecord.data.ReleaseStartDate.toISOString(),
-				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),//this also filters for leaf stories
+				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				leafStoriesInIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '!=', value: releaseName })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '=', value: null })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.Name', operator: 'contains', value: releaseName}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }))),
 				projectFilter = _.reduce(leafProjects, function(filter, leafProject){
@@ -625,10 +617,7 @@
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
 
-			return Rally.data.wsapi.Filter.and([
-				projectFilter, 
-				Rally.data.wsapi.Filter.or([leafStoriesInIterationButNotReleaseFilter, releaseNameFilter])
-			]);
+			return projectFilter.and(leafStoriesInIterationButNotReleaseFilter.or(releaseNameFilter));
 		},
 		
 		/**
@@ -639,7 +628,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 				
 			me.UserStoryFetchFields = ['Name', 'ObjectID', 'Project', 'Owner', 'PlannedEndDate', 'ActualEndDate', 
-				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 
+				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 'DirectChildrenCount',
 				'Release', 'ReleaseStartDate', 'ReleaseDate', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 				'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem];
 			
@@ -1007,7 +996,7 @@
 			the me.ScopedTeamType set to a value, in which case we need to filter the user stories we have loaded into memory
 		*/
 		getFilteredStories: function(){
-			var me = this;			
+			var me = this;
 			if (!me.isScopedToScrum) {
 				if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
 					if(me.isHorizontalView){
@@ -1040,7 +1029,13 @@
 			if(me.isScopedToScrum) return [];
 			else {
 				activeScrumGroups = _.filter(me.ScrumGroupConfig, function(sgc){
-					return _.intersection(me.LeafProjectsByScrumGroup[sgc.ScrumGroupRootProjectOID] || [], me.FilteredLeafProjects).length;
+					//todo
+					return _.filter(me.LeafProjectsByScrumGroup[sgc.ScrumGroupRootProjectOID] || [], function(item1) {
+						return _.some(me.FilteredLeafProjects,function(item2){
+							return item1.data.ObjectID == item2.data.ObjectID;
+						});
+					}).length;
+					
 				});
 				activePortfolioOIDs = _.map(activeScrumGroups, function(sgc){
 					return me.getPortfolioOIDForScrumGroupRootProjectRecord(me.createDummyProjectRecord({ObjectID: sgc.ScrumGroupRootProjectOID}));
@@ -1313,6 +1308,13 @@
 			return grid;
 		},
 		
+		isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
+			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
+				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
+		},	
+		
 		/**
 			Creates grids with filtered results for the user stories/Portfolio items and adds them to the screen
 		*/
@@ -1376,7 +1378,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.Blocked; 
 					}
 				},{
@@ -1392,7 +1394,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
 				},{
@@ -1408,8 +1410,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(item.data.Children.Count === 0) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						var pe = item.data.PlanEstimate;
 						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
@@ -1426,7 +1427,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return !item.data.Iteration; 
 					}
 				},{
@@ -1446,9 +1447,6 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						/**if(!item.data.Iteration || item.data.Release) return false;
-						return item.data.Iteration.StartDate < releaseDate && 
-							item.data.Iteration.EndDate > releaseStartDate;*/
 						if (!item.data.Iteration) return false;
 						return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 							(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
@@ -1470,7 +1468,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration) return false;
 						return new Date(item.data.Iteration.EndDate) < now && item.data.ScheduleState != 'Accepted';
 					}
@@ -1491,7 +1489,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
 							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 						if(item.data.ScheduleState == 'Accepted') return false;

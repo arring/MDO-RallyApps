@@ -43,6 +43,7 @@
 						deferred.resolve(false);
 					}
 					//TODO: to think if we need try catch
+					//me.__loadModels();
 					me.getCacheIntelRallyAppSettings(payload);
 					me.getCachePayloadFn(payload);
 					
