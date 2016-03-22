@@ -261,11 +261,12 @@
 								});								
 							}
 						});
+				}else{
+					me.renderCacheMessage();
 				}
 			})
 			.then(function(){
 				me.setDefaultForUrlOverride();
-				me.renderCacheMessage();
 			});
 		},
 		__loadModels: function(){ 
@@ -790,13 +791,15 @@
 			var me = this;
 			
 			// Conditionally loads controls
-			if(!me.DeleteCacheButton) me.renderDeleteCache();
-			if(!me.UpdateCacheButton) me.renderUpdateCache();
+			if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
+			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
+				me.DeleteCacheButton.hide();
+				me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
 			}
