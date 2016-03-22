@@ -32,6 +32,9 @@
 			Two columns (referred to as Left and Right) for grids
 		*/
 		items:[{
+			xtype:'container',
+			id: 'cacheButtonsContainer'
+			},{
 			xtype: 'container',
 			id: 'navContainer',
 			layout:'hbox',
@@ -44,6 +47,9 @@
 				xtype:'container',
 				id: 'emailLinkContainer',
 				width: 150
+			},{ 
+				xtype:'container',
+				id: 'cacheMessageContainer'
 			},{ 
 				xtype:'container',
 				id: 'integrityIndicatorContainer',
@@ -294,6 +300,7 @@
 			var me = this;
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
+					Ext.getCmp('cacheMessageContainer').removeAll();
 					return me.loadConfiguration()
 						.then(function(){return me.loadData(); })
 						.then(function(){ 
@@ -311,7 +318,10 @@
 						});
 				}
 			})
-			.then(function(){me.setDefaultForUrlOverride();});
+			.then(function(){
+				me.setDefaultForUrlOverride();
+				me.renderCacheMessage();
+			});
 		},
 		__loadModels: function(){ 
 			/** loads models for project, userstories, and all the portfolio items */
@@ -727,6 +737,46 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
+		renderDeleteCache: function(){
+			var me=this;
+			me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				xtype:'button',
+				text: 'Clear Cached Data',
+				listeners: { 
+					click: function(){
+						me.setLoading('Clearing cache, please wait');
+						return me.deleteCache()
+							.then(function(){ me.setLoading(false); });
+					}
+				}
+			});
+		},
+		renderUpdateCache: function(){
+			var me=this;
+			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				xtype:'button',
+				text: 'Get Live Data',
+				listeners: { 
+					click: function(){
+						me.setLoading('Pulling Live Data, please wait');
+						Ext.getCmp('cacheMessageContainer').removeAll();
+						return me.loadConfiguration()
+							.then(function(){return me.loadData(); })
+							.then(function(){ 
+								if(!me.isScopedToScrum){
+									//NOTE: not returning promise here, performs in the background!
+									me.updateCache();
+								}
+							})
+							.then(function(){ me.setLoading(false); }); 						
+/* 						return me.loadConfiguration()
+							.then(function(){ return me.reloadData(); })
+							.then(function(){ return me.updateCache(); })
+							.then(function(){ me.setLoading(false); }); */
+					}
+				}
+			});
+		},		
 		renderReleasePicker: function(){
 			var me = this;
 			me.ReleasePicker = Ext.getCmp('controlsContainer').add({
@@ -830,7 +880,14 @@
 				html: '<a href="' + me.generateMailtoLink() + '">Email this view</a>'
 			});
 		},
-		
+		renderCacheMessage: function() {
+			var me = this;
+			Ext.getCmp('cacheMessageContainer').add({
+				xtype: 'label',
+				width:'100%',
+				html: 'You are looking at the cached version of the data'
+			});
+		},		
 		/**
 			Loads all nav controls
 		*/
@@ -838,6 +895,8 @@
 			var me = this;
 			
 			// Conditionally loads controls
+			if(!me.DeleteCacheButton) me.renderDeleteCache();
+			if(!me.UpdateCacheButton) me.renderUpdateCache();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
