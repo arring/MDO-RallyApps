@@ -198,7 +198,7 @@
 			//me.ScopedHorizontal = payload.ScopedHorizontal;
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.FilteredLeafProjects = payload.FilteredLeafProjects;
-			me.PortfolioItemToPortfolioProjectMap = payload.PortfolioItemToPortfolioProjectMap;
+			me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
 			
             me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
                 autoLoad: false,
@@ -208,12 +208,12 @@
             });
 			
             me.fixRawUserStoryAttributes();			
-			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
+ 			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
 				autoLoad: false,
 				model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
 				pageSize: 200,
-				data: payload.PortfolioItems
-			});
+				data: []
+			}); 
 					
 			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
 		},
@@ -260,18 +260,18 @@
 			//payload.ScopedHorizontal = me.ScopedHorizontal; //Revisit
 			
 			payload.FilteredLeafProjects = _.map(me.FilteredLeafProjects, function(rr){ return {data: rr.data}; });
-			payload.PortfolioItemToPortfolioProjectMap = _.reduce(  me.PortfolioItemToPortfolioProjectMap, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
+			payload.PortfolioProjectToPortfolioItemMap = _.reduce(  me.PortfolioProjectToPortfolioItemMap, function(map, sss, key){ 
+				map[key] = _.map(sss, function(ss){ return  _.pick(ss.data,portfolioItemFields); });
 				return map;
 			}, {});
 			
 			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){ 
 				return _.pick(ss.data,userStoryFields); 
 			}); //store will create data and raw
-			
+		/* 	
 			payload.PortfolioItems = _.map(me.PortfolioItemStore.getRange(), function(ss){ 
 				return _.pick(ss.data,portfolioItemFields); 
-			});//just need data and we are creating store :)
+			});//just need data and we are creating store :) */
 			
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
 			
@@ -565,7 +565,7 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
 			
-			me.PortfolioItemToPortfolioProjectMap = {};
+			me.PortfolioProjectToPortfolioItemMap = {};
 			return Q.all(_.map(me.ScrumGroupPortfolioOIDs, function(portfolioOID){
 				var store = Ext.create('Rally.data.wsapi.Store', {
 					model: me['PortfolioItem/' + lowestPortfolioItemType],
@@ -581,7 +581,7 @@
 					}
 				});
 				return me.reloadStore(store).tap(function(store){ 
-					me.PortfolioItemToPortfolioProjectMap[portfolioOID] = store.getRange();
+					me.PortfolioProjectToPortfolioItemMap[portfolioOID] = store.getRange();
 				});
 			}))
 			.then(function(stores){ 
@@ -1023,7 +1023,7 @@
 		*/
 		getFilteredLowestPortfolioItems: function(){ 
 			var me = this,
-				portfolioItems = me.PortfolioItemStore.getRange(),
+				/* portfolioItems = me.PortfolioItemStore.getRange(), */
 				activeScrumGroups, activePortfolioOIDs;
 			
 			if(me.isScopedToScrum) return [];
@@ -1040,7 +1040,7 @@
 				activePortfolioOIDs = _.map(activeScrumGroups, function(sgc){
 					return me.getPortfolioOIDForScrumGroupRootProjectRecord(me.createDummyProjectRecord({ObjectID: sgc.ScrumGroupRootProjectOID}));
 				});
-				return [].concat.apply([], _.map(activePortfolioOIDs, function(oid){ return me.PortfolioItemToPortfolioProjectMap[oid]; }));
+				return [].concat.apply([], _.map(activePortfolioOIDs, function(oid){ return me.PortfolioProjectToPortfolioItemMap[oid]; }));
 			}
 		},
 		
@@ -1504,8 +1504,9 @@
 					columns: defaultLowestPortfolioItemColumns,
 					side: 'Right',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						return !me.PortfolioUserStoryCount[item.data.ObjectID];
+						item = item.data || item;//having issue due to caching so hacking it
+						if(!item.Release || item.Release.Name != releaseName) return false;
+						return !me.PortfolioUserStoryCount[item.ObjectID];
 					}
 				}];
 
