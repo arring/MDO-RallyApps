@@ -15,14 +15,17 @@
       "../lib/mixin/intel-workweek.js",
       "../lib/mixin/cumulative-flow-chart-mixin.js",
       "../lib/mixin/parallel-loader.js",
+      "../lib/mixin/cfd-project-preference.js",
       "../lib/mixin/user-apps-preference.js",
       "../lib/component/intel-fixed-combobox.js",
       "../lib/component/intel-release-picker.js",
+      "../lib/component/intel-release-date-change-picker.js",
       "../lib/chart/fast-cumulative-flow-calculator.js",
       "App.js"
    ],
    "css": [
       "../lib/css/base.css",
-      "app.css"
+      "app.css",
+      "../lib/css/intel-release-date-change-picker.css"
    ]
 }

@@ -339,16 +339,16 @@
 					AND
 				Are in an during the release but not the release OR in the release
 		*/
-		createStoryFilter: function(leafProjects){			
+		createStoryFilter: function(leafProjects){			//NOTE: we are filtering for leaf stories here
 			var me = this,
 				releaseName = me.ReleaseRecord.data.Name,
 				releaseDate = me.ReleaseRecord.data.ReleaseDate.toISOString(),
 				releaseStartDate = me.ReleaseRecord.data.ReleaseStartDate.toISOString(),
-				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),//this also filters for leaf stories
+				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				leafStoriesInIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.EndDate', operator:'>', value:releaseStartDate})).and(
-					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '!=', value: releaseName })).and(
+					Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', operator: '=', value: null })).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.Name', operator: 'contains', value: releaseName}).and(
 					Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }))),
 				projectFilter = _.reduce(leafProjects, function(filter, leafProject){
@@ -356,10 +356,7 @@
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
 
-			return Rally.data.wsapi.Filter.and([
-				projectFilter, 
-				Rally.data.wsapi.Filter.or([leafStoriesInIterationButNotReleaseFilter, releaseNameFilter])
-			]);
+			return projectFilter.and(leafStoriesInIterationButNotReleaseFilter.or(releaseNameFilter));
 		},
 		
 		/**
@@ -370,7 +367,7 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 				
 			me.UserStoryFetchFields = ['Name', 'ObjectID', 'Project', 'Owner', 'PlannedEndDate', 'ActualEndDate', 
-				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 
+				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 'DirectChildrenCount',
 				'Release', 'ReleaseStartDate', 'ReleaseDate', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
 				'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem];
 			
@@ -1043,6 +1040,13 @@
 			return grid;
 		},
 		
+		isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0];
+			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
+				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
+		},	
+		
 		/**
 			Creates grids with filtered results for the user stories/Portfolio items and adds them to the screen
 		*/
@@ -1106,7 +1110,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.Blocked; 
 					}
 				},{
@@ -1122,7 +1126,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
 				},{
@@ -1138,8 +1142,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(item.data.Children.Count === 0) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						var pe = item.data.PlanEstimate;
 						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
@@ -1156,7 +1159,7 @@
 					}]),
 					side: 'Left',
 					filterFn:function(item){ 
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						return !item.data.Iteration; 
 					}
 				},{
@@ -1176,9 +1179,6 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						/**if(!item.data.Iteration || item.data.Release) return false;
-						return item.data.Iteration.StartDate < releaseDate && 
-							item.data.Iteration.EndDate > releaseStartDate;*/
 						if (!item.data.Iteration) return false;
 						return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 							(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
@@ -1200,7 +1200,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration) return false;
 						return new Date(item.data.Iteration.EndDate) < now && item.data.ScheduleState != 'Accepted';
 					}
@@ -1221,7 +1221,7 @@
 					}]),
 					side: 'Right',
 					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						if((item.data.Release || {}).Name !== releaseName) return false;
 						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
 							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 						if(item.data.ScheduleState == 'Accepted') return false;
