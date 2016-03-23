@@ -1256,8 +1256,7 @@
 						TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
 						Commitment: teamCommit.Commitment || 'Undecided',
 						Objective: teamCommit.Objective || '',
-						Expected: teamCommit.Expected || false,
-						FeatureStatus: teamCommit.FeatureStatus || false
+						Expected: teamCommit.Expected || false
 					};
 				});
 				
