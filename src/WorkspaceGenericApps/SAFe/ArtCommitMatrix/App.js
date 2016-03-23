@@ -216,7 +216,7 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
- 			var me = this, 
+			var me = this, 
 				iframe = Ext.get(window.frameElement);
 			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
 		},
@@ -252,7 +252,7 @@
 			}
 		},	
 		getDistanceFromBottomOfScreen: function(innerY){
- 			var me = this, 
+			var me = this, 
 				iframe = window.frameElement,
 				iframeOffsetY = window.parent.getScrollY() + iframe.getBoundingClientRect().top,
 				actualY = iframeOffsetY + innerY;
