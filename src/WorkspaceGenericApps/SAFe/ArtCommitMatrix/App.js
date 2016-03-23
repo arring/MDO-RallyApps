@@ -1,8 +1,6 @@
 /** 
 	this app will probably get buggy if you have multiple projects with the same name or portfolioItems with the same name
 	Because i never tested for that.
-	getDistanceFromBottomOfScreen uncomment code if you want to run it locally
-	getGridHeight ucomment code if you want to run it locally
 */
 (function(){
 	var Ext = window.Ext4 || window.Ext,
@@ -218,10 +216,9 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
-/* 			var me = this, 
+ 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   */
-			return 800;
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 
@@ -255,12 +252,11 @@
 			}
 		},	
 		getDistanceFromBottomOfScreen: function(innerY){
-/* 			var me = this, 
+ 			var me = this, 
 				iframe = window.frameElement,
 				iframeOffsetY = window.parent.getScrollY() + iframe.getBoundingClientRect().top,
 				actualY = iframeOffsetY + innerY;
-			return window.parent.getWindowHeight() - actualY;   */
-			return 800;
+			return window.parent.getWindowHeight() - actualY;   
 		},
 			
 		getIntersectingUserStoriesData: function(portfolioItemRecord, projectName){
