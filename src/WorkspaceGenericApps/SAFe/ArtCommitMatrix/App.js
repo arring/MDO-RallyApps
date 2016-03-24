@@ -71,7 +71,7 @@
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
 			var me=this, deferred = Q.defer();
-			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank"];
+			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank"];
 			me.enqueue(function(done){
 				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
@@ -740,19 +740,19 @@
 
 		/************************************************************* RENDER ********************************************************************/
 		renderMatrixGrid: function(){
+			debugger;
 			var me = this,
 				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''],
 				sortedPortfolioItems = _.sortBy(me.PortfolioItemStore.getRange(), function(p){ return p.data.DragAndDropRank; }),
 				matrixRecords = _.map(sortedPortfolioItems, function(portfolioItemRecord, index){
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
-						PortfolioItemRank: index+1,
+						PortfolioItemRank: index + 1,
 						PortfolioItemName: portfolioItemRecord.data.Name,
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: portfolioItemRecord.data.PlannedEndDate*1,
 						TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
-						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
-						Rank: portfolioItemRecord.data.DragAndDropRank
+						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined'
 					};
 				}),
 				makeDoSortFn = function(fn){
@@ -824,11 +824,11 @@
 				}]	
 			},{
 				text: 'Rank',
-        dataIndex: 'PortfolioItemRank',
-        width: 50,
+				dataIndex: 'PortfolioItemRank',
+				width: 50,
 				sortable:true,
 				locked:true
-				},{
+			},{
 				text:'#', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:50,
