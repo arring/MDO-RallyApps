@@ -271,7 +271,7 @@
 					}, {});
 				});
 		},
-/* 		_loadIterations: function(){
+		/*_loadIterations: function(){
 			var me=this,
 				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
 				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
@@ -302,7 +302,7 @@
 					},0);
 				});				
 			}));			
-		}, */		
+		},*/		
 		_loadSnapshotStores: function(){
 			var me = this, 
 				releaseStart = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
@@ -546,7 +546,7 @@
 			me.initialAddedDaysCount =  me._getIndexOn(me._dateToStringDisplay(me.changedReleaseStartDate),datemap);
 			me.finalCommitDate = datemap[datemap.length - 1];
 			//adding a line for the velocity of train
-/* 			var targetVelocity =[];
+			/*var targetVelocity =[];
 			_.each(aggregateChartData.categories,function(f,key){
 				targetVelocity.push(me.AllScrumTargetVelocitySum);
 			});
@@ -562,7 +562,7 @@
 			}); */
 			me._calcTrainMetric(aggregateChartData);	
 			
-/* 			_.each(aggregateChartData.series, function(series,key){
+			/*_.each(aggregateChartData.series, function(series,key){
 					if(series.name === "Commitment") 
 					aggregateChartData.series[key].name ="Current Commit LCL";
 				});		 */	
@@ -910,9 +910,9 @@
 				_10days = 1000 * 60 *60 *24*10,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				/* daysCountDifference = Rally.util.DateTime.getDifference(new Date(me.changedReleaseStartDate), new Date(me.ReleaseRecord.data.ReleaseStartDate), 'day'), */
- 				date1 = me.ReleaseRecord.data.ReleaseStartDate,
+				date1 = me.ReleaseRecord.data.ReleaseStartDate,
 				date2 = new Date(me.changedReleaseStartDate), 
-			 	daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) )), 
+				daysCountDifference = Math.floor(( Date.parse(date2) - Date.parse(date1) )), 
 				startTargetDate = me.releaseStartDateChanged && daysCountDifference > 0 ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + daysCountDifference): new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + _10days),
 				finalTargetDate = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1),
 				scopeToReleaseGridRows = [],

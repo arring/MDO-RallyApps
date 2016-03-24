@@ -265,7 +265,7 @@
 			//var targetVelocity =[];
 			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions);
- 				/*_.each(aggregateChartData.categories,function(f){
+			/*_.each(aggregateChartData.categories,function(f){
 					targetVelocity.push(10);
 				});
 				aggregateChartData.series.push({
@@ -328,7 +328,7 @@
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-/* 				var scrumTargetVelocity =[];
+				/*var scrumTargetVelocity =[];
 				_.each(scrumChartData.categories,function(f){
 					scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
 				});

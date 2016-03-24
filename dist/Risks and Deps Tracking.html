@@ -3073,6 +3073,7 @@
 			{name: 'TopPortfolioItemName', type:'string'},
 			{name: 'Commitment', type: 'string'},
 			{name: 'Expected', type: 'boolean'},
+			{name: 'FeatureStatus', type: 'boolean'},
 			{name: 'Objective', type:'string'}
 		]
 	});
@@ -3150,7 +3151,8 @@
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
 			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'MoSCoW', type: 'string'}
+			{name: 'MoSCoW', type: 'string'},
+			{name: 'Rank', type: 'string'}
 		]
 	});
 	
@@ -5874,6 +5876,24 @@
   background-size: 100% 30px;
   background-repeat: no-repeat;
 }
+.x-grid-cell.manager-expected-feature-cell {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 30px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-feature-cell {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
 .x-grid-cell.manager-expected-cell-small {
   background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
@@ -5892,12 +5912,49 @@
   background-size: 100% 20px;
   background-repeat: no-repeat;
 }
+.x-grid-cell.manager-feature-cell-small {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-expected-feature-cell-small {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-comment-feature-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
 .x-grid-cell.manager-expected-comment-cell-small {
   background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.manager-expected-feature-comment-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), /* comment blue */ -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), /* expected yellow */ -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  /* feature purple */
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
   background-size: 100% 20px;
   background-repeat: no-repeat;
 }

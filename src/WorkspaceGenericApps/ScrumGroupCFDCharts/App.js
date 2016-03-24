@@ -130,7 +130,7 @@
 					}, {});
 				});
 		},
-/* 		loadIterations: function(){
+		/*loadIterations: function(){
 			var me=this;
 			if(me.CurrentTopPortfolioItemName != null) return;//only calcualting for all work
 			var	startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
@@ -411,7 +411,7 @@
 			/************************************** Scrum Group CHART STUFF *********************************************/
 			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions);
-/* 			if(me.CurrentTopPortfolioItemName === null){
+			/*if(me.CurrentTopPortfolioItemName === null){
 				var trainTargetVelocity =[];
 				_.each(aggregateChartData.categories,function(f){
 					trainTargetVelocity.push(me.AllScrumTargetVelocitySum);
@@ -459,7 +459,7 @@
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-/* 				var scrumTargetVelocity =[];
+				/*var scrumTargetVelocity =[];
 				if(me.CurrentTopPortfolioItemName === null){
 					_.each(scrumChartData.categories,function(f){
 						scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
