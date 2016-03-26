@@ -113,8 +113,7 @@
 		loadConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);
-			me.isHorizontalView = me.getSetting('Horizontal');
+			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -126,8 +125,11 @@
 			.then(function(){ return me.registerCustomAppId(); })
 			.then(function(){ return me.loadScrumGroups(); })
 			.then(function(){ return me.loadReleases(); })
-			.then(function(){ return me.loadProjects(); });
-		},
+			.then(function(){ return me.loadProjects(); })
+            .then(function(){                
+                me.setDefaultForUrlOverride();           		
+             });
+		 },
 		setDefaultForUrlOverride: function(){
 			var me = this;
 			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
@@ -159,7 +161,7 @@
 			var me = this;
 			me.ProjectRecord = payload.ProjectRecord;
 			me.isScopedToScrum = payload.isScopedToScrum ;
-			me.isHorizontalView = payload.isHorizontalView ;
+			//me.isHorizontalView = payload.isHorizontalView ;
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			me.ReleaseRecords = payload.ReleaseRecords;
@@ -184,7 +186,8 @@
 				pageSize: 200,
 				data: []
 			}); 
-			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;		
+			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
+            me.ScopedHorizontalPicker = payload.ScopedHorizontalPicker;	
 		},
 		setCachePayLoadFn: function(payload){
 			var me = this,
@@ -199,7 +202,7 @@
 					'DirectChildrenCount'];
 			payload.ProjectRecord = {data: me.ProjectRecord.data};
 			payload.isScopedToScrum = me.isScopedToScrum ;
-			payload.isHorizontalView = me.isHorizontalView ;
+			//payload.isHorizontalView = me.isHorizontalView ;
 			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(rr){ return {data: rr.data}; });
 			payload.ScrumGroupPortfolioOIDs = me.ScrumGroupPortfolioOIDs;
 			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
@@ -227,14 +230,16 @@
 				return _.pick(ss.data,userStoryFields); 
 			}); //store will create data and raw
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
+            //For Horizontal data integrity
+            payload.ScopedHorizontalPicker = me.ScopedHorizontalPicker; 
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-			
-			if(hasKey){
-				return 'DI-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+			var appType = me.isHorizontalView ? 'H': 'V';
+			if(hasKey) {                
+				return 'DI-' + appType + '-'+ projectOID + '-' + me.AppsPref.projs[projectOID].Release;
 			}
 			else return undefined; //no release set
 		},
@@ -243,6 +248,7 @@
 		},
 		loadDataFromCacheOrRally: function(){
 			var me = this;
+            me.isHorizontalView = me.getSetting('Horizontal');
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					Ext.getCmp('cacheMessageContainer').removeAll();
@@ -266,9 +272,32 @@
 				}
 			})
 			.then(function(){
-				me.setDefaultForUrlOverride();
-			});
-		},
+                //the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
+                if(!me.isScopedToScrum){
+                    me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+                    if(me.isHorizontalView){
+                        if(me.ScopedTeamType){
+                            if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+                            me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+                        }
+                        else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
+                        
+                        if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
+                            throw me.ScopedHorizontal + ' is not a valid horizontal';
+                    }
+                    else {
+                        if(me.ScopedTeamType){
+                            if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
+                            var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
+                                return p.data.Name === me.ScopedTeamType;
+                            });
+                            if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+                        }
+                    }
+                    }	                
+                //	me.setDefaultForUrlOverride();
+                });
+        },
 		__loadModels: function(){ 
 			/** loads models for project, userstories, and all the portfolio items */
 			var me=this, 
