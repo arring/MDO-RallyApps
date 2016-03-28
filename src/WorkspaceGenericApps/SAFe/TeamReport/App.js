@@ -276,16 +276,17 @@
 			*/
 		loadSTDNCIData: function(){
 			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 				
 			var totalPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
 				var isLeaf = us.data.DirectChildrenCount === 0;
-				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				var inRelease = (us.data.Release || {}).Name === releaseName;
 				return (isLeaf && inRelease) ? sum + (us.data.PlanEstimate || 0) : sum;
 			}, 0);
 			var stdnciPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
 				var isLeaf = us.data.DirectChildrenCount === 0;
-				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				var inRelease = (us.data.Release || {}).Name === releaseName;
 				var isStdci = (me.PortfolioItemMap[(us.data[lowestPortfolioItem] || {}).ObjectID] || '').indexOf('STDNCI') >= 0;
 				return (isLeaf && inRelease && isStdci) ? sum + (us.data.PlanEstimate || 0) : sum;
 			}, 0);
@@ -308,37 +309,38 @@
 			return [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				})
 			},{
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-					if(item.data.Children.Count === 0) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
 			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return !item.data.Iteration; 
 				})
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
-					// if(!item.data.Iteration || item.data.Release) return false;
-					// return new Date(item.data.Iteration.StartDate) < new Date(releaseDate) && 
-						// new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
-					if (!item.data.Iteration) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+					if(!item.data.Iteration) return false;
 					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 				})
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					if(!item.data.Iteration || !item.data[lowestPortfolioItem] || 
 						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 					if(item.data.ScheduleState == 'Accepted') return false;

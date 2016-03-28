@@ -19,12 +19,22 @@
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
 			'Intel.lib.mixin.CustomAppObjectIDRegister'
 		],
 		items: [{
 			xtype:'container',
-			id:'nav'
+			id:'nav',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
+		},{
+			xtype:'container',
+			id:'navBarProductFilter',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -43,7 +53,8 @@
 			layout:'column',
 			width:'100%'
 		}],
-		
+		userAppsPref: 'intel-PortfolioItem-CFD',
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',		
 		/**************************************** Launch ******************************************/
 		launch: function() {
 			var me = this;
@@ -51,6 +62,10 @@
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
 			me.configureIntelRallyApp()
+				.then(me.loadCfdProjPreference()/******** load stream 2 *****/
+						.then(function(cfdprojPref){
+							me.cfdProjReleasePref = cfdprojPref;
+						}))
 				.then(me._getCommitMatrixObjectID.bind(me))
 				.then(me._loadScrumGroupPortfolioProject.bind(me))
 				.then(me._getReleaseRecords.bind(me))
@@ -76,6 +91,7 @@
 		_loadScrumGroupPortfolioProject: function(){
 			var me = this;
 			return me.loadProject(me.getContext().getProject().ObjectID).then(function(projectRecord){
+				me.ProjectRecord = projectRecord;
 				return me.projectInWhichScrumGroup(projectRecord).then(function(scrumGroupRootRecord){
 					if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
 						me.ScrumGroupRootRecord = scrumGroupRootRecord;
@@ -96,6 +112,10 @@
 				
 			// Load releases after twelve weeks ago
 			return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
+				me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+					hash[rr.data.ObjectID] = true;
+					return hash;
+				}, {});		
 				me.ReleaseRecords = releaseRecords;
 				var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
 				// If a release parameter is supplied
@@ -105,10 +125,19 @@
 					if(!me.ReleaseRecord) throw 'No release record found for: ' + releaseName;
 				}
 				else me.ReleaseRecord = me.getScopedRelease(me.ReleaseRecords);
-				return me.ReleaseRecord;
+				return me.ReleaseRecord;				
 			});
 		},
-		
+		loadAllChildReleases: function(){ 
+			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+			return me.loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
+				.then(function(releaseRecords){
+					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
+						hash[rr.data.ObjectID] = true;
+						return hash;
+					}, {});
+				});
+		},		
 		/**************************************** PortfolioItems Loading *********************************/
 		_loadPortfolioItems: function(){ 
 			var me = this,
@@ -139,10 +168,14 @@
 		/**************************************** Reload *******************************************/
 		_reload: function() {
 			var me = this;
-			return me._setFilteredLowestPortfolioItemRecords().then(me._getStorySnapshots.bind(me)).then(function() {
-				return Q.all([
-					me._getStories(),
-					me._buildCharts()
+			me._setchangedReleaseStartDate();
+			return me.loadAllChildReleases()
+				.then(function(){return me._setFilteredLowestPortfolioItemRecords(); })
+				.then(me._getStorySnapshots.bind(me))
+				.then(function() {
+					return Q.all([
+						me._getStories(),
+						me._buildCharts()
 				]);
 			});
 		},
@@ -245,8 +278,8 @@
 						operator: '>=',
 						value: me.ReleaseRecord.data.ReleaseStartDate
 					}],
-					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID', 'Release'],
-					hydrate: ['ScheduleState', 'Release']
+					fetch: ['ScheduleState', 'PlanEstimate', '_ValidFrom', '_ValidTo', 'ObjectID' , 'Release'],
+					hydrate: ['ScheduleState'/* , 'Release' */]
 				};
 				return me.parallelLoadLookbackStore(config).then(function(store) {
 					// TODO: load only most recent snapshots of projects whose states are set to closed
@@ -256,7 +289,8 @@
 								// Filters to stories who are in the current release or do not have a release, but the lowestPortfolioItemRecord is in the release
 								// TODO: Verify
 								// TODO: filter out closed projects
-								return (!storySnapshot.data.Release || storySnapshot.data.Release.Name.indexOf(me.ReleaseRecord.data.Name) > -1);
+								/* return (!storySnapshot.data.Release && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo)|| storySnapshot.data.Release.Name.indexOf(me.ReleaseRecord.data.Name) > -1); */
+								return me.ReleasesWithNameHash[storySnapshot.data.Release] && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo);								
 							}),
 							lowestPortfolioItemOID = lowestPortfolioItemRecord.data.ObjectID;
 						if (!me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID]) me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID] = [];
@@ -275,6 +309,8 @@
 		_buildControls: function() {
 			var me = this;
 			me.down('#nav').removeAll();
+			me.down('#navBarProductFilter').removeAll();
+			
 			me._buildReleasePicker();
 			me._buildTopPortfolioItemPicker();
 		},
@@ -296,15 +332,14 @@
 				}
 			});
 		},
-		
 		/*
 		 *	Creates the topPortfolioItem picker
 		 */
 		_buildTopPortfolioItemPicker: function() {
 			var me = this,
 				topPortfolioItemType = me.PortfolioItemTypes.slice(-1)[0];
-			me.TopPortfolioItemPicker = me.down('#nav').add({
-				xtype: 'combobox',
+			me.TopPortfolioItemPicker = me.down('#navBarProductFilter').add({
+				xtype: 'intelfixedcombo',
 				fieldLabel: topPortfolioItemType,
 				labelWidth: 80,
 				width: 240,
@@ -352,9 +387,11 @@
 		_buildTopPortfolioItemChart: function(calc) {
 			var me = this,
 				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
-				releaseEnd = me.ReleaseRecord.data.ReleaseDate,
-				options = {trendType: 'Last2Sprints'},
-				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), options),
+				releaseEnd = me.ReleaseRecord.data.ReleaseDate;
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
+			var updateOptions = {trendType:'Last2Sprints',date: me.changedReleaseStartDate},
+				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),				
 				topPortfolioItemChartContainer = $('#top-pi-chart-innerCt').highcharts(
 					Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: {
@@ -381,7 +418,7 @@
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: topPortfolioItemChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(topPortfolioItemChartData,me.changedReleaseStartDate))
 				)[0];
 			me.setCumulativeFlowChartDatemap(topPortfolioItemChartContainer.childNodes[0].id, topPortfolioItemChartData.datemap);
 		},
@@ -398,12 +435,17 @@
 					return lowestPortfolioItemRecord.data.FormattedID;
 				}),
 				lowestPortfolioItemChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32),
-				lowestPortfolioItemCharts = $('#lowest-pi-charts-innerCt'),
-				options = {trendType: 'Last2Sprints'};
+				lowestPortfolioItemCharts = $('#lowest-pi-charts-innerCt');
+				
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
+			
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate};			
+
 			_.each(sortedFilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				if(me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID]) {
 					var snapshots = me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID],
-						lowestPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(snapshots), options),
+						lowestPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(snapshots), updateOptions),
 						lowestPortfolioItemChartID = 'lowest-pi-chart-no-' + (lowestPortfolioItemCharts.children().length + 1);
 					lowestPortfolioItemCharts.append('<div class="lowest-pi-chart" id="' + lowestPortfolioItemChartID + '"></div>');
 					var lowestPortfolioItemChartContainer = $('#' + lowestPortfolioItemChartID).highcharts(
@@ -457,7 +499,7 @@
 							series: lowestPortfolioItemChartData.series,
 							lowestPortfolioItemOID: lowestPortfolioItemRecord.data.ObjectID 
 							// This above line magically makes the lowestPortfolioItem immediately available to us in the event handler
-						})
+						},me.getInitialAndfinalCommitPlotLines(lowestPortfolioItemChartData,me.changedReleaseStartDate))
 					)[0];
 					me.setCumulativeFlowChartDatemap(lowestPortfolioItemChartContainer.childNodes[0].id, lowestPortfolioItemChartData.datemap);
 				}
@@ -467,7 +509,20 @@
 		_hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
 		},
-		
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_setchangedReleaseStartDate: function(){
+			var me = this;
+			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] = {};
+			me.releaseStartDateChanged = _.isEmpty(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]) ? false : true;
+			if(me.releaseStartDateChanged){
+				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
+			}					
+		},		
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+		},	
+		/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************** Event Handling **********************************/
 		_releasePickerSelected: function(combo, records) {
 			var me = this;
@@ -478,9 +533,11 @@
 			me._loadPortfolioItems()
 				.then(me._buildControls.bind(me))
 				.then(me._reload.bind(me))
+				/* .then(me.saveCfdAppsPreference(me.cfdProjReleasePref)) */
+				.then(me._resetVariableAfterReleasePickerSelected())
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
-				.done();
+				.done();			
 		},
 		
 		/*

@@ -1311,7 +1311,7 @@
 		
 		_getHorizontalTeamTypeInfo: function(projectRecord){
 			var me=this,
-				scrumName = projectRecord.data.Name.split('-')[0].trim(),
+				scrumName = projectRecord.data.Name.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
@@ -1394,7 +1394,7 @@
 		
 		_getHorizontalTeamTypeInfoFromProjectName: function(projectName){
 			var me=this,
-				scrumName = projectName.split('-')[0].trim(),
+				scrumName = projectName.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
@@ -2537,12 +2537,8 @@
 			*/
 		getUserStoryQuery: function(){
 			var me=this,
-				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-													Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null }).and(
-													Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItemType + '.Release.Name', value: me.ReleaseRecord.data.Name }))
-												),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);
@@ -2558,11 +2554,8 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-													Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: null }).and(
-													Ext.create('Rally.data.wsapi.Filter', { property: lowestPortfolioItemType + '.Release.Name', value: me.ReleaseRecord.data.Name }))
-												)
-												.and(Ext.create('Rally.data.wsapi.Filter', {property: 'Feature.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: me.ReleaseRecord.data.Name }).and(
+												Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType + '.Parent.Parent.Name', operator:'contains', value: STDN_CI_TOKEN })),
 				projectFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Project.Children.Name', value: null });
 				
 			return releaseFilter.and(leafFilter).and(projectFilter);

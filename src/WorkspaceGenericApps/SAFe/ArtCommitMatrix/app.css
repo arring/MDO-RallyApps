@@ -36,7 +36,8 @@
 .x-grid-header-ct .not-dispositioned-project .x-column-header-inner.x-column-header-over,
 .x-grid-body .x-grid-row-selected .not-committed-portfolio-item.x-grid-cell,
 .x-grid-body .x-grid-row-over .not-committed-portfolio-item.x-grid-cell { 
-	background-image:none !important;
+	/* background-image:none !important; commented it for purple traingle: Revisit*/
+	background-image:none !important;;
 	background-color:rgba(255, 0, 0, 0.70) !important; }
 
 .x-grid-header-ct .dispositioned-project .x-column-header-inner { background-color:rgba(0, 255, 0, 0.50) !important; }
@@ -53,3 +54,13 @@
 .x-column-header-inner {
 	text-align: center;
 	height:100 !important; }
+.feature-porfolio-items{
+	position: relative;}
+.feature-help{
+  color: white;
+	font-size: 0.6rem;
+	position: absolute;
+	left: -3px;
+	top: 6px;}
+.porfolio-items{
+	float:right;}

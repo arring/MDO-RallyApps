@@ -3132,6 +3132,7 @@
 			{name: 'TopPortfolioItemName', type:'string'},
 			{name: 'Commitment', type: 'string'},
 			{name: 'Expected', type: 'boolean'},
+			{name: 'FeatureStatus', type: 'boolean'},
 			{name: 'Objective', type:'string'}
 		]
 	});
@@ -3209,7 +3210,8 @@
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
 			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'MoSCoW', type: 'string'}
+			{name: 'MoSCoW', type: 'string'},
+			{name: 'Rank', type: 'string'}
 		]
 	});
 	
@@ -4969,16 +4971,17 @@
 			*/
 		loadSTDNCIData: function(){
 			var me=this,
+				releaseName = me.ReleaseRecord.data.Name,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
 				
 			var totalPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
 				var isLeaf = us.data.DirectChildrenCount === 0;
-				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				var inRelease = (us.data.Release || {}).Name === releaseName;
 				return (isLeaf && inRelease) ? sum + (us.data.PlanEstimate || 0) : sum;
 			}, 0);
 			var stdnciPointsInRelease = _.reduce(me.UserStoryStore.getRange(), function(sum, us){
 				var isLeaf = us.data.DirectChildrenCount === 0;
-				var inRelease = me.isUserStoryInRelease(us, me.ReleaseRecord);
+				var inRelease = (us.data.Release || {}).Name === releaseName;
 				var isStdci = (me.PortfolioItemMap[(us.data[lowestPortfolioItem] || {}).ObjectID] || '').indexOf('STDNCI') >= 0;
 				return (isLeaf && inRelease && isStdci) ? sum + (us.data.PlanEstimate || 0) : sum;
 			}, 0);
@@ -5001,37 +5004,38 @@
 			return [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				})
 			},{
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-					if(item.data.Children.Count === 0) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
 			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return !item.data.Iteration; 
 				})
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
-					// if(!item.data.Iteration || item.data.Release) return false;
-					// return new Date(item.data.Iteration.StartDate) < new Date(releaseDate) && 
-						// new Date(item.data.Iteration.EndDate) > new Date(releaseStartDate);
-					if (!item.data.Iteration) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+					if(!item.data.Iteration) return false;
 					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 				})
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
-					if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					if(!item.data.Iteration || !item.data[lowestPortfolioItem] || 
 						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 					if(item.data.ScheduleState == 'Accepted') return false;
@@ -7717,6 +7721,24 @@
   background-size: 100% 30px;
   background-repeat: no-repeat;
 }
+.x-grid-cell.manager-expected-feature-cell {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 30px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-feature-cell {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 70%, #9c0eb5 70%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
 .x-grid-cell.manager-expected-cell-small {
   background-image: -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
@@ -7735,12 +7757,49 @@
   background-size: 100% 20px;
   background-repeat: no-repeat;
 }
+.x-grid-cell.manager-feature-cell-small {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-expected-feature-cell-small {
+  background-image: -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-image: linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.x-grid-cell.manager-comment-feature-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
 .x-grid-cell.manager-expected-comment-cell-small {
   background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
   background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%) !important;
+  background-size: 100% 20px;
+  background-repeat: no-repeat;
+}
+.manager-expected-feature-comment-cell-small {
+  background-image: -o-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), /* comment blue */ -o-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), /* expected yellow */ -o-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  /* feature purple */
+  background-image: -moz-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -moz-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -moz-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -webkit-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -webkit-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -webkit-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: -ms-linear-gradient(left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), -ms-linear-gradient(right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), -ms-linear-gradient(left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
+  background-image: linear-gradient(to left top, rgba(0, 0, 0, 0) 75%, #4c4cff 75%), linear-gradient(to right top, rgba(0, 0, 0, 0) 75%, #fbff00 75%), linear-gradient(to left bottom, rgba(0, 0, 0, 0) 75%, #9c0eb5 75%) !important;
   background-size: 100% 20px;
   background-repeat: no-repeat;
 }

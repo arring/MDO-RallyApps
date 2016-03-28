@@ -1,4 +1,5 @@
-/**
+
+                /**
 	This is the hyper-optimized version of the Data Integrity Dashboard. It is capable of viewing
 	integrity both horizontally and vertically. Use of lodash is minimized for the sake of reducing
 	function overhead and increasing performance (SS: i dont think lodash usage is as big a deal as network
@@ -20,8 +21,7 @@
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
 			'Intel.lib.mixin.CustomAppObjectIDRegister',
-			'Intel.lib.mixin.HorizontalTeamTypes',
-			'Intel.lib.mixin.Caching'
+			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		minWidth:1100,
 		
@@ -32,9 +32,6 @@
 			Two columns (referred to as Left and Right) for grids
 		*/
 		items:[{
-			xtype:'container',
-			id: 'cacheButtonsContainer'
-			},{
 			xtype: 'container',
 			id: 'navContainer',
 			layout:'hbox',
@@ -47,9 +44,6 @@
 				xtype:'container',
 				id: 'emailLinkContainer',
 				width: 150
-			},{ 
-				xtype:'container',
-				id: 'cacheMessageContainer'
 			},{ 
 				xtype:'container',
 				id: 'integrityIndicatorContainer',
@@ -100,25 +94,29 @@
 			'#FFDC00', //YELLOW
 			'#0074D9' //BLUE
 		],
+		
 		userAppsPref: 'intel-SAFe-apps-preference',
 		
 		/**************************************** Settings ***************************************/
 		settingsScope: 'workspace',
 		getSettingsFields: function() {
-			return [{name: 'Horizontal', xtype: 'rallycheckboxfield'},{name: 'cacheUrl',xtype: 'rallytextfield'}];
+			return [{name: 'Horizontal', xtype: 'rallycheckboxfield'}];
 		},
-		config: {
-			defaultSettings: {
-				cacheUrl:''
-			}
-		},			
+		
 		/**************************************** Launch *****************************************/
-		loadConfiguration: function(){
+		launch: function() {
 			var me = this;
-			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
+			me.setLoading('Loading Configuration');
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.initRemoveTooltipOnScroll();
+			me.processURLOverrides();
 			
-			return me.configureIntelRallyApp()
+			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
+			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);
+			me.isHorizontalView = me.getSetting('Horizontal');
+
+			me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
 				me.fixScheduleStateEditor();
@@ -129,233 +127,36 @@
 			.then(function(){ return me.loadScrumGroups(); })
 			.then(function(){ return me.loadReleases(); })
 			.then(function(){ return me.loadProjects(); })
-            .then(function(){
-				me.setDefaultForUrlOverride();
-             });
-		},
-		setDefaultForUrlOverride: function(){
-			var me = this;
-			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-			if(!me.isScopedToScrum){
-				me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-				if(me.isHorizontalView){
-					if(me.ScopedTeamType){
-						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-						me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
-					}
-					else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-					
-					if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-						throw me.ScopedHorizontal + ' is not a valid horizontal';
-				}
-				else {
-					if(me.ScopedTeamType){
-						if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-						var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-							return p.data.Name === me.ScopedTeamType;
-						});
-						if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
-					}
-				}
-			}			
-		},
-		/******************************************************* Caching Mixin operations ********************************************************/
-		_getAppSetting: function(){
-			var me = this;
-			return me.getSetting('cacheUrl');
-		},	
-		getCachePayloadFn: function(payload){
-			var me = this;
-			me.ProjectRecord = payload.ProjectRecord;
-			me.isScopedToScrum = payload.isScopedToScrum ;
-			//me.isHorizontalView = payload.isHorizontalView ;
-			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
-			me.ReleaseRecords = payload.ReleaseRecords;
-			me.ReleaseRecord = payload.ReleaseRecord;
-			me.LeafProjects = payload.LeafProjects;
-			me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
-			me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
-			me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
-			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-			me.FilteredLeafProjects = payload.FilteredLeafProjects;
-			me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
-            me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
-                autoLoad: false,
-                model: me.UserStory,
-                pageSize: 200,
-                data: payload.UserStories
-            });
-            me.fixRawUserStoryAttributes();			
-			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
-				autoLoad: false,
-				model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
-				pageSize: 200,
-				data: []
-			}); 
-			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
-            me.ScopedHorizontalPicker = payload.ScopedHorizontalPicker;	
-		},
-		setCachePayLoadFn: function(payload){
-			var me = this,
-				lowestPortfolioItem = me.PortfolioItemTypes[0],
-				userStoryFields = ['Name', 'ObjectID', 'Project', 'Owner','Iteration', 
-					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState', 
-					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
-					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
-				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
-					'Release', 'Description', 'FormattedID', 'UserStories', 'Parent','_p','_ref',
-					'_refObjectUUID','_type','_objectVersion','_CreatedAt','InvestmentCategory',
-					'DirectChildrenCount'];
-			payload.ProjectRecord = {data: me.ProjectRecord.data};
-			payload.isScopedToScrum = me.isScopedToScrum ;
-			//payload.isHorizontalView = me.isHorizontalView ;
-			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(rr){ return {data: rr.data}; });
-			payload.ScrumGroupPortfolioOIDs = me.ScrumGroupPortfolioOIDs;
-			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
-			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-			payload.LeafProjects = _.map(me.LeafProjects, function(rr){ return {data: rr.data}; });
-			payload.LeafProjectsByScrumGroup = _.reduce(me.LeafProjectsByScrumGroup, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
-				return map;
-			}, {});
-			payload.LeafProjectsByHorizontal = _.reduce(me.LeafProjectsByHorizontal, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
-				return map;
-			}, {});
-			payload.LeafProjectsByTeamTypeComponent = _.reduce( me.LeafProjectsByTeamTypeComponent, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
-				return map;
-			}, {});
-			payload.FilteredLeafProjects = _.map(me.FilteredLeafProjects, function(rr){ return {data: rr.data}; });
-			payload.PortfolioProjectToPortfolioItemMap = _.reduce(  me.PortfolioProjectToPortfolioItemMap, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return  _.pick(ss.data,portfolioItemFields); });
-				return map;
-			}, {});
-			
-			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){ 
-				return _.pick(ss.data,userStoryFields); 
-			}); //store will create data and raw
-			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
-            //For Horizontal data integrity
-            payload.ScopedHorizontalPicker = me.ScopedHorizontalPicker; 
-		},
-		cacheKeyGenerator: function(){
-			var me = this;
-			var projectOID = me.getContext().getProject().ObjectID;
-			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-			var appType = me.isHorizontalView ? 'H': 'V';
-			if(hasKey) {                
-				return 'DI-' + appType + '-'+ projectOID + '-' + me.AppsPref.projs[projectOID].Release;
-			}
-			else return undefined; //no release set
-		},
-		getCacheTimeoutDate: function(){
-			return new Date(new Date()*1 + 1000*60*60*24);
-		},
-		loadDataFromCacheOrRally: function(){
-			var me = this;
-            me.isHorizontalView = me.getSetting('Horizontal');
-			return me.getCache().then(function(cacheHit){
-				if(!cacheHit){
-					Ext.getCmp('cacheMessageContainer').removeAll();
-					return me.loadConfiguration()
-						.then(function(){return me.loadData(); })
-						.then(function(){ 
-							if(!me.isScopedToScrum){
-								//NOTE: not returning promise here, performs in the background!
-								Q.all([
-									me.saveAppsPreference(me.AppsPref),
-									me.updateCache()
-								])
-								.fail(function(e){
-									alert(e);
-									console.log(e);
-								});								
-							}
-						});
-				}else{
-					me.renderCacheMessage();
-				}
-			})
 			.then(function(){
-                //the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-                if(!me.isScopedToScrum){
-                    me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-                    if(me.isHorizontalView){
-                        if(me.ScopedTeamType){
-                            if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-                            me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
-                        }
-                        else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-                        
-                        if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-                            throw me.ScopedHorizontal + ' is not a valid horizontal';
-                    }
-                    else {
-                        if(me.ScopedTeamType){
-                            if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-                            var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-                                return p.data.Name === me.ScopedTeamType;
-                            });
-                            if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
-                        }
-                    }
-				}					
-             });
-        },
-		__loadModels: function(){ 
-			/** loads models for project, userstories, and all the portfolio items */
-			var me=this, 
-				promises = [],
-				models = {
-					User: 'User',
-					Project: 'Project',
-					UserStory: 'HierarchicalRequirement',
-					PortfolioItem: 'PortfolioItem'
-				};
-			_.each(me.PortfolioItemTypes, function(name){ models['PortfolioItem/' + name] = 'PortfolioItem/' + name; });
-			_.each(models, function(modelType, modelName){
-				var deferred = Q.defer();
-				Rally.data.WsapiModelFactory.getModel({
-					type:modelType, 
-					success: function(loadedModel){ 
-						me[modelName] = loadedModel;
-						deferred.resolve();
+				//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
+				if(!me.isScopedToScrum){
+					me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+					if(me.isHorizontalView){
+						if(me.ScopedTeamType){
+							if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+							me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+						}
+						else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
+						
+						if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
+							throw me.ScopedHorizontal + ' is not a valid horizontal';
 					}
-				});
-				promises.push(deferred.promise);
-			});
-			return Q.all(promises);
-		},		
-		launch: function() {
-			var me = this;
-
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
-			me.initRemoveTooltipOnScroll();
-			me.processURLOverrides();
-			
-			me.setLoading('Loading Configuration');
-			Q.all([
-				me.loadAppsPreference().then(function(appsPref){ 
-					me.AppsPref = appsPref; //cant cache. per user basis
-				}),
-				me._loadPortfolioItemTypes().then(function(){ 
-					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
-					return Q.all([
-						me.__loadModels(),
-						me._loadPortfolioItemStatesForEachType()
-					]);
-				})
-			])
-			.then(function(){ return me.loadDataFromCacheOrRally(); })
-			.then(function(){ return me.loadUI(); })
-			.fail(function(reason){
-				me.setLoading(false);
-				me.alert('ERROR', reason);
+					else {
+						if(me.ScopedTeamType){
+							if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
+							var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
+								return p.data.Name === me.ScopedTeamType;
+							});
+							if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+						}
+					}
+				}
 			})
-			.done();			
+			.then(function(){return me.loadData(); })
+			.then(function(){ return me.loadUI(); })
+			.fail(function(reason){ me.alert('ERROR', reason || 'Unknown error'); })
+			.then(function(){ me.setLoading(false); })
+			.done();
 		},
 
 		/**************************************** registerCustomAppId ***************************************/
@@ -420,7 +221,6 @@
 					_.find(me.ReleaseRecords, function(release){ return release.data.Name === me.Overrides.ReleaseName; }) : 
 					false) || 
 					me.getScopedRelease(me.ReleaseRecords, null, null);
-                me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
 			});
 		},
 		
@@ -505,7 +305,7 @@
 			var me = this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0];
 			
-			me.PortfolioProjectToPortfolioItemMap = {};
+			me.PortfolioItemToPortfolioProjectMap = {};
 			return Q.all(_.map(me.ScrumGroupPortfolioOIDs, function(portfolioOID){
 				var store = Ext.create('Rally.data.wsapi.Store', {
 					model: me['PortfolioItem/' + lowestPortfolioItemType],
@@ -521,7 +321,7 @@
 					}
 				});
 				return me.reloadStore(store).tap(function(store){ 
-					me.PortfolioProjectToPortfolioItemMap[portfolioOID] = store.getRange();
+					me.PortfolioItemToPortfolioProjectMap[portfolioOID] = store.getRange();
 				});
 			}))
 			.then(function(stores){ 
@@ -667,47 +467,6 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		renderDeleteCache: function(){
-			var me=this;
-			me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				xtype:'button',
-				text: 'Clear Cached Data',
-				listeners: { 
-					click: function(){
-						me.setLoading('Clearing cache, please wait');
-						return me.deleteCache()
-							.then(function(){ me.setLoading(false); });
-					}
-				}
-			});
-		},
-		renderUpdateCache: function(){
-			var me=this;
-			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				xtype:'button',
-				text: 'Get Live Data',
-				listeners: { 
-					click: function(){
-						me.setLoading('Pulling Live Data, please wait');
-						Ext.getCmp('cacheMessageContainer').removeAll();
-						return me.loadConfiguration()
-							.then(function(){return me.loadData(); })
-							.then(function(){ 
-								//NOTE: not returning promise here, performs in the background!
-								Q.all([
-									me.saveAppsPreference(me.AppsPref),
-									me.updateCache()
-								])
-								.fail(function(e){
-									alert(e);
-									console.log(e);
-								});
-							})
-							.then(function(){ me.setLoading(false); });			
-					}
-				}
-			});
-		},		
 		renderReleasePicker: function(){
 			var me = this;
 			me.ReleasePicker = Ext.getCmp('controlsContainer').add({
@@ -811,14 +570,7 @@
 				html: '<a href="' + me.generateMailtoLink() + '">Email this view</a>'
 			});
 		},
-		renderCacheMessage: function() {
-			var me = this;
-			Ext.getCmp('cacheMessageContainer').add({
-				xtype: 'label',
-				width:'100%',
-				html: 'You are looking at the cached version of the data'
-			});
-		},		
+		
 		/**
 			Loads all nav controls
 		*/
@@ -826,15 +578,11 @@
 			var me = this;
 			
 			// Conditionally loads controls
-			if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
-			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
-				me.DeleteCacheButton.hide();
-				me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
 			}
@@ -947,8 +695,7 @@
 			me.setNewEmailLink();
 			me.removeAllItems();
 			return me.buildGrids()
-				.then(function(){ return Q.all([me.buildRibbon(), me.buildIntegrityIndicator()]); })
-				.then(function(){ me.setLoading(false);});
+				.then(function(){ return Q.all([me.buildRibbon(), me.buildIntegrityIndicator()]); });
 		},
 		
 		/**
@@ -1015,24 +762,18 @@
 		*/
 		getFilteredLowestPortfolioItems: function(){ 
 			var me = this,
-				/* portfolioItems = me.PortfolioItemStore.getRange(), */
+				portfolioItems = me.PortfolioItemStore.getRange(),
 				activeScrumGroups, activePortfolioOIDs;
 			
 			if(me.isScopedToScrum) return [];
 			else {
 				activeScrumGroups = _.filter(me.ScrumGroupConfig, function(sgc){
-					//todo
-					return _.filter(me.LeafProjectsByScrumGroup[sgc.ScrumGroupRootProjectOID] || [], function(item1) {
-						return _.some(me.FilteredLeafProjects,function(item2){
-							return item1.data.ObjectID == item2.data.ObjectID;
-						});
-					}).length;
-					
+					return _.intersection(me.LeafProjectsByScrumGroup[sgc.ScrumGroupRootProjectOID] || [], me.FilteredLeafProjects).length;
 				});
 				activePortfolioOIDs = _.map(activeScrumGroups, function(sgc){
 					return me.getPortfolioOIDForScrumGroupRootProjectRecord(me.createDummyProjectRecord({ObjectID: sgc.ScrumGroupRootProjectOID}));
 				});
-				return [].concat.apply([], _.map(activePortfolioOIDs, function(oid){ return me.PortfolioProjectToPortfolioItemMap[oid]; }));
+				return [].concat.apply([], _.map(activePortfolioOIDs, function(oid){ return me.PortfolioItemToPortfolioProjectMap[oid]; }));
 			}
 		},
 		
@@ -1233,9 +974,7 @@
 					var hasData = !!data,
 						countNum = data && data.length,
 						countDen = gridConfig.totalCount,
-						pointNum = data && (100*_.reduce(data, function(sum, item){ 
-							item = item.data || item;//having issue due to caching so hacking it
-							return sum + (item.PlanEstimate || 0); }, 0)>>0)/100,
+						pointNum = data && (100*_.reduce(data, function(sum, item){ return sum + (item.data.PlanEstimate || 0); }, 0)>>0)/100,
 						pointDen = gridConfig.totalPoints,
 						type = (model==='UserStory' ? 'Stories' : lowestPortfolioItemType + 's');
 					return sprintf([
@@ -1498,9 +1237,8 @@
 					columns: defaultLowestPortfolioItemColumns,
 					side: 'Right',
 					filterFn:function(item){ 
-						item = item.data || item;//having issue due to caching so hacking it
-						if(!item.Release || item.Release.Name != releaseName) return false;
-						return !me.PortfolioUserStoryCount[item.ObjectID];
+						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+						return !me.PortfolioUserStoryCount[item.data.ObjectID];
 					}
 				}];
 
@@ -1512,9 +1250,7 @@
 					gridConfig.data = _.filter(list, gridConfig.filterFn);
 					gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Stories' : lowestPortfolioItemType + 's')] = list;
 					gridConfig.totalCount = list.length;
-					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ 
-						item = item.data || item; //having issue with cache
-						return sum + item.PlanEstimate; }, 0)>>0)/100;
+					gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){ return sum + item.data.PlanEstimate; }, 0)>>0)/100;
 					return me.addGrid(gridConfig);
 				}
 			}));
@@ -1788,3 +1524,5 @@
 		}
 	});
 })();
+
+

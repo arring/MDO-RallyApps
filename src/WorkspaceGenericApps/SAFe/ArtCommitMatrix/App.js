@@ -71,6 +71,7 @@
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
 			var me=this, deferred = Q.defer();
+			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank"];
 			me.enqueue(function(done){
 				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
@@ -97,11 +98,7 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
-				releaseFilter = 
-					Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }).or(
-						Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:null }).and(
-						Ext.create('Rally.data.wsapi.Filter', {property: lowestPortfolioItemType+'.Release.Name', value: me.ReleaseRecord.data.Name }))
-					),
+				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
 				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
 					var newFilter = Ext.create('Rally.data.wsapi.Filter', {
 						property: lowestPortfolioItemType + '.ObjectID',
@@ -162,6 +159,23 @@
 					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
 					me.ProjectOIDNameMap[projectOID] = projectName;
 				});
+				
+				// var projectOIDsToGet = [];
+				// _.each(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
+					// var teamCommits = me.getTeamCommits(portfolioItemRecord);
+					// _.each(teamCommits, function(teamCommit, projectOID){
+						// if(!me.ProjectOIDNameMap[projectOID] && !_.contains(projectOIDsToGet, projectOID)){
+							// projectOIDsToGet.push(projectOID);
+						// }
+					// });
+				// });
+				// return Promise.all(_.map(projectOIDsToGet, function(oid){
+					// return me.loadProject(oid).then(function(projectRecord){
+						// me.ProjectOIDNameMap[projectRecord.data.ObjectID] = projectRecord.data.Name;
+						// me.MatrixProjectMap[projectRecord.data.Name] = projectRecord.data.ObjectID;
+						// me.MatrixUserStoryBreakdown[projectRecord.data.Name] = {};
+					// });
+				// }));
 			});
 		},		
 			
@@ -204,7 +218,7 @@
 		getGridHeight: function(){
 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 
@@ -212,7 +226,7 @@
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);
+			); 
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -242,7 +256,7 @@
 				iframe = window.frameElement,
 				iframeOffsetY = window.parent.getScrollY() + iframe.getBoundingClientRect().top,
 				actualY = iframeOffsetY + innerY;
-			return window.parent.getWindowHeight() - actualY;
+			return window.parent.getWindowHeight() - actualY;   
 		},
 			
 		getIntersectingUserStoriesData: function(portfolioItemRecord, projectName){
@@ -274,8 +288,12 @@
 			}
 			else if(me.ViewMode == '% Done') cls += '';
 			
-			if(config.expected && config.ceComment) cls += ' manager-expected-comment-cell-small';
+			if(config.expected && config.ceComment && config.featurestatus) cls += ' manager-expected-feature-comment-cell-small';
+			else if (config.expected && config.ceComment) cls += ' manager-expected-comment-cell-small';
+			else if (config.ceComment && config.featurestatus) cls += ' manager-comment-feature-cell-small';
+			else if(config.expected && config.featurestatus) cls += ' manager-expected-feature-cell-small';
 			else if(config.expected) cls += ' manager-expected-cell-small';
+			else if(config.featurestatus) cls += ' manager-feature-cell-small';
 			else if(config.ceComment) cls += ' manager-comment-cell-small';
 			
 			return cls;
@@ -304,8 +322,9 @@
 			return true;
 		},
 		updateCell: function(portfolioItemRecord, projectName, rowIndex, columnIndex){
-			var me=this,
-				tableRowDOM = me.MatrixGrid.view.getNode(rowIndex),
+			var me=this;
+			
+			var	tableRowDOM = me.MatrixGrid.view.getNode(rowIndex),
 				td = tableRowDOM.childNodes[columnIndex],
 				teamCommit = me.getTeamCommit(portfolioItemRecord, projectName),
 				userStoriesData = me.getIntersectingUserStoriesData(portfolioItemRecord, projectName),
@@ -314,12 +333,14 @@
 					completedPoints: (100*me.getCompletedUserStoryPoints(userStoriesData)>>0)/100,
 					totalPoints: (100*me.getTotalUserStoryPoints(userStoriesData)>>0)/100,
 					expected: teamCommit.Expected || false,
+					featurestatus: teamCommit.FeatureStatus || false,
 					ceComment: !!teamCommit.CEComment || false,
 					commitment: teamCommit.Commitment || 'Undecided'
 				},
 				
 				colorClassBase = 'intel-team-commits-',
 				expectedClass = 'manager-expected-cell-small',
+				featureClass = 'manager-feature-cell-small',
 				commentClass = 'manager-comment-cell-small',
 				expectedCommentClass = 'manager-expected-comment-cell-small',
 				
@@ -332,13 +353,14 @@
 				oldBackgroundColor = td.style.backgroundColor,
 				oldInnerHTML = td.childNodes[0].innerHTML,
 				oldExpected = classList.contains(expectedClass),
+				oldFeatureHelp = classList.contains(featureClass),
 				oldComment = classList.contains(commentClass),
 				oldExpectedComment = classList.contains(expectedCommentClass),
 				oldColorClass = _.find(classList, function(c){ return c.indexOf(colorClassBase) > -1; }) || '';
 			
-			if(((config.expected && !config.ceComment) && !(oldExpected && !oldComment && !oldExpectedComment)) ||
-					((!config.expected && config.ceComment) && !(!oldExpected && oldComment && !oldExpectedComment)) ||
-					((config.expected && config.ceComment) && !(!oldExpected && !oldComment && oldExpectedComment)) ||
+			if(((config.expected && config.featurestatus && !config.ceComment) && !(oldExpected && !oldComment && !oldExpectedComment)) ||
+					((!config.expected && config.featurestatus && config.ceComment) && !(!oldExpected && oldComment && !oldExpectedComment)) ||
+					((config.expected && config.featurestatus && config.ceComment) && !(!oldExpected && !oldComment && oldExpectedComment)) ||
 					(!me.areColorsTheSame(newBackgroundColor, oldBackgroundColor)) ||
 					(newColorClass != oldColorClass) || 
 					(newInnerHTML != oldInnerHTML)){		
@@ -620,7 +642,8 @@
 					data: [
 						{ClickMode:'Flag'},
 						{ClickMode:'Comment'},
-						{ClickMode:'Details'}
+						{ClickMode:'Details'},
+						{ClickMode:'Feature Help Needed'}
 					]
 				}),
 				displayField: 'ClickMode',
@@ -686,7 +709,7 @@
 			var me=this;
 			me.MatrixLegend = me.down('#navboxRight').add({
 				xtype:'container',
-				width:120,	
+				width:150,	
 				layout: {
 					type:'vbox',
 					align:'stretch',
@@ -694,7 +717,7 @@
 				},
 				border:true,
 				frame:false,
-				items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected', 'CE Comment'], function(name){
+				items: _.map(['Committed', 'Not Committed', 'N/A', 'Undefined', 'Expected', 'CE Comment','Feature Help Needed'], function(name){
 					var color;
 					if(name === 'Undecided') color='white';
 					if(name === 'N/A') color='rgba(224, 224, 224, 0.50)'; //grey
@@ -702,9 +725,10 @@
 					if(name === 'Not Committed') color='rgba(255, 0, 0, 0.50)';//red
 					if(name === 'Expected') color='rgba(251, 255, 0, 0.50)'; //yellow
 					if(name === 'CE Comment') color='rgba(76, 76, 255, 0.50)'; //blue
+					if(name === 'Feature Help Needed') color='rgba(170, 92, 183, 0.50)'; //purple
 					return {
 						xtype: 'container',
-						width:120,
+						width: 150,
 						border:false,
 						frame:false,
 						html:'<div class="intel-legend-item">' + name + 
@@ -718,7 +742,7 @@
 		renderMatrixGrid: function(){
 			var me = this,
 				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''],
-				sortedPortfolioItems = _.sortBy(me.PortfolioItemStore.getRange(), function(p){ return MoSCoWRanks.indexOf(p.data.c_MoSCoW); }),
+				sortedPortfolioItems = _.sortBy(me.PortfolioItemStore.getRange(), function(p){ return p.data.DragAndDropRank; }),
 				matrixRecords = _.map(sortedPortfolioItems, function(portfolioItemRecord, index){
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
@@ -727,7 +751,8 @@
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: portfolioItemRecord.data.PlannedEndDate*1,
 						TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
-						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined'
+						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
+						Rank: portfolioItemRecord.data.DragAndDropRank
 					};
 				}),
 				makeDoSortFn = function(fn){
@@ -798,6 +823,12 @@
 					sortFn: function(MoSCoW){ return MoSCoWRanks.indexOf(MoSCoW); }
 				}]	
 			},{
+				text: 'Rank',
+        dataIndex: 'PortfolioItemRank',
+        width: 50,
+				sortable:true,
+				locked:true
+				},{
 				text:'#', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:50,
@@ -805,12 +836,15 @@
 				locked:true,
 				renderer:function(formattedID, meta, matrixRecord){
 					var portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ return item.data.FormattedID == formattedID; });
+					var totalFeatureHelp = _.filter(me.getTeamCommits(portfolioItemRecord), function(val,key){return val.FeatureStatus === true; });
+					var featureHelpCount = totalFeatureHelp.length > 0 ? totalFeatureHelp.length : "";
 					if(me.ViewMode == 'Normal'){
 						if(me.isPortfolioItemNotCommittedOrHasNoStories(portfolioItemRecord)) meta.tdCls += ' not-committed-portfolio-item';
+						if(totalFeatureHelp.length > 0 ) meta.tdCls += ' manager-feature-cell';
 					}
 					if(portfolioItemRecord.data.Project){
-						return '<a href="' + me.BaseUrl + '/#/' + portfolioItemRecord.data.Project.ObjectID + 'd/detail/portfolioitem/' + 
-							me.PortfolioItemTypes[0] + '/' + portfolioItemRecord.data.ObjectID + '" target="_blank">' + formattedID + '</a>';
+						return '<div class="feature-porfolio-items"><div class="feature-help">'+ featureHelpCount + '</div>' + '<div class="porfolio-items"><a href=' + me.BaseUrl + '/#/' + portfolioItemRecord.data.Project.ObjectID + 'd/detail/portfolioitem/' + 
+							me.PortfolioItemTypes[0] + '/' + portfolioItemRecord.data.ObjectID + '" target="_blank">' + formattedID + '</a></div></div>';
 					}
 					else return name;
 				}
@@ -903,6 +937,7 @@
 								completedPoints: (100*me.getCompletedUserStoryPoints(userStoriesData)>>0)/100,
 								totalPoints: (100*me.getTotalUserStoryPoints(userStoriesData)>>0)/100,
 								expected: teamCommit.Expected || false,
+								featurestatus: teamCommit.FeatureStatus || false,
 								ceComment: !!teamCommit.CEComment || false,
 								commitment: teamCommit.Commitment || 'Undecided'
 							};
@@ -922,10 +957,10 @@
 						};
 					}),
 					function(item){ 
-						var horizontal = item.teamTypeInfo.horizontal;
-						return (horizontal === 'null' ? '~~~' : horizontal) + item.teamTypeInfo.projectRecord.data.Name; 
+						var horizontal = item.teamTypeInfo ? item.teamTypeInfo.horizontal : 'null';
+						return (horizontal === 'null' ? '~~~' : horizontal) + item.columnCfg.text; 
 					}),
-					function(item){ return item.teamTypeInfo.horizontal; }),
+					function(item){ return item.teamTypeInfo ? item.teamTypeInfo.horizontal : 'null'; }),
 					function(items, horizontal){
 						return {
 							text: horizontal === 'null' ? 'OTHER' : horizontal,
@@ -982,6 +1017,29 @@
 									.done();
 							}, 'PortfolioItemQueue'); //Race condition avoided between me.PortfolioItemStore and the User's actions
 						}
+						if(me.ClickMode == 'Feature Help Needed'){
+							me.MatrixGrid.setLoading('Saving');
+							me.enqueue(function(done){
+								me.loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
+									.then(function(portfolioItemRecord){
+										var tcae = me.getTeamCommit(portfolioItemRecord, projectName);
+										return me.setTeamCommitsField(portfolioItemRecord, projectName, 'FeatureStatus', !tcae.FeatureStatus);
+									})
+									.then(function(portfolioItemRecord){
+										var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+											return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+										});
+										storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
+										me.MatrixGrid.view.refreshNode(matrixStore.indexOf(matrixRecord));
+									})
+									.fail(function(reason){ me.alert('ERROR', reason); })
+									.then(function(){
+										me.MatrixGrid.setLoading(false);
+										done();
+									})
+									.done();
+							}, 'PortfolioItemQueue'); //Race condition avoided between me.PortfolioItemStore and the User's actions
+						}						
 						return false;
 					}, 
 					edit: function(editor, e){
@@ -1173,6 +1231,34 @@
 																			.done();
 																	}, 'PortfolioItemQueue');
 																}
+															},{
+																xtype:'checkbox',
+																width:140,
+																boxLabel:'Feature Help Needed',
+																checked:teamCommit.FeatureStatus,
+																handler:function(checkbox, checked){
+																	me.tooltip.panel.setLoading('Saving');
+																	me.enqueue(function(done){
+																		me.loadPortfolioItemByOrdinal(portfolioItemRecord.data.ObjectID, 0)
+																			.then(function(portfolioItemRecord){
+																				var tcae = me.getTeamCommit(portfolioItemRecord, projectName);
+																				return me.setTeamCommitsField(portfolioItemRecord, projectName, 'FeatureStatus', !tcae.FeatureStatus);
+																			})
+																			.then(function(portfolioItemRecord){
+																				var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(item){ 
+																					return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+																				});
+																				storePortfolioItemRecord.data.c_TeamCommits = portfolioItemRecord.data.c_TeamCommits;
+																				me.MatrixGrid.view.refreshNode(matrixStore.indexOf(matrixRecord));
+																			})
+																			.fail(function(reason){ me.alert('ERROR', reason); })
+																			.then(function(portfolioItemRecord){
+																				me.tooltip.panel.setLoading(false);
+																				done();
+																			})
+																			.done();
+																	}, 'PortfolioItemQueue');
+																}																
 															}]
 														},{
 															xtype:'textarea',

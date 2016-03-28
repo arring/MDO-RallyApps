@@ -18,12 +18,33 @@
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-			'Intel.lib.mixin.Caching'
+			'Intel.lib.mixin.Caching',
+			'Intel.lib.mixin.CfdProjectPreference'
 		],
 		minWidth:910,
 		items:[{
 			xtype:'container',
-			id:'navBar'
+			layout:'hbox',
+			items:[{
+				xtype:'container',
+				id: 'cacheButtonsContainer'
+			},{
+				xtype:'container',
+				id: 'cacheMessageContainer',
+				cls:'cachemessagecontainer'		
+			}]
+			},{
+			xtype:'container',
+			id:'navBar',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
+		},{
+			xtype:'container',
+			id:'navBarProductFilter',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -42,9 +63,17 @@
 			layout:'column',
 			width:'100%'
 		}],
-		
+		/**___________________________________ APP SETTINGS ___________________________________*/	
+		getSettingsFields: function() {
+			return [{name: 'cacheUrl',xtype: 'rallytextfield'}];
+		},	
+		config: {
+			defaultSettings: {
+				cacheUrl:''
+			}
+		},
 		userAppsPref: 'intel-ScrumGroup-CFD',
-		
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
 			/** NOTE: _ValiTo is non-inclusive, _ValidFrom is inclusive **/
@@ -76,9 +105,9 @@
 					//only keep snapshots where (release.name == releaseName || (!release && portfolioItem.Release.Name == releaseName))
 					//	AND have length > 0 (another bug ('feature') in LBAPI!)
 					var records = _.filter(snapshotStore.getRange(), function(snapshot){
-						return (me.ReleasesWithNameHash[snapshot.data.Release] || 
-								(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
-							(snapshot.data._ValidFrom != snapshot.data._ValidTo);
+						// return (me.ReleasesWithNameHash[snapshot.data.Release] || 
+								//(!snapshot.data.Release && me.LowestPortfolioItemsHash[snapshot.data[lowestPortfolioItem]] == releaseName)) &&
+						return me.ReleasesWithNameHash[snapshot.data.Release] && (snapshot.data._ValidFrom != snapshot.data._ValidTo);
 					});						
 					if(records.length > 0){
 						me.TeamStores[project.data.Name] = records;
@@ -122,7 +151,44 @@
 					}, {});
 				});
 		},
-		
+		/*loadIterations: function(){
+			var me=this;
+			if(me.CurrentTopPortfolioItemName != null) return;//only calcualting for all work
+			var	startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.AllScrumTargetVelocitySum = [];
+				me.ScrumTargetVelocitySum = {};
+			return Q.all(_.map(me.LeafProjects, function(project){
+				var config = {
+					model: 'Iteration',
+					filters: [{
+						property: "EndDate",
+						operator: ">=",
+						value: startDate
+					},{
+						property: "StartDate",
+						operator: "<=",
+						value: endDate  
+					}],
+					fetch: ["PlannedVelocity"],
+					context:{
+						project: project.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:false
+					}
+				};
+				return me.parallelLoadWsapiStore(config).then(function(store){
+					var totalTargetVelocity =_.reduce(store.getRange(), function(sum, iteration) {
+						var targetVelocity = iteration.data.PlannedVelocity;
+						return sum + targetVelocity;
+					},0);
+					totalTargetVelocity = Number(totalTargetVelocity) === "NaN" ? 0 : totalTargetVelocity;
+					if(!me.ScrumTargetVelocitySum[project.data.Name]) me.ScrumTargetVelocitySum[project.data.Name] = [];
+					me.ScrumTargetVelocitySum[project.data.Name] = Number(me.ScrumTargetVelocitySum[project.data.Name]) + Number(totalTargetVelocity);
+					me.AllScrumTargetVelocitySum = Number(me.AllScrumTargetVelocitySum) + Number(totalTargetVelocity)		
+				});				
+			}));			
+		}, */		
 		/******************************************************* Reloading ********************************************************/			
 		hideHighchartsLinks: function(){ 
 			$('.highcharts-container > svg > text:last-child').hide(); 
@@ -162,19 +228,28 @@
 					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
 					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
+					me._checkToRenderCFDCalendar();
 					me.renderTopPortfolioItemPicker();
 					me.renderCharts();
-					me.hideHighchartsLinks();
+					me.hideHighchartsLinks(); 
 					me.setLoading(false);
 				});
 		},
-		
-		reloadData:function(){ 
+		redrawChartAfterReleaseDateChanged: function(){
+			var me=this;
+			me.setLoading('Loading Charts');	
+			$('#scrumCharts-innerCt').empty();
+			me.renderCharts();
+			me.hideHighchartsLinks(); 
+			me.setLoading(false);
+		},
+		reloadEverything:function(){ 
 			var me=this;
 			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
-				.then(function(){ return me.loadSnapshotStores(); });
+				.then(function(){ return me.loadSnapshotStores(); })
+				.then(function(){ return me.redrawEverything(); });
 		},
 		loadConfiguration: function(){
 			var me = this;
@@ -218,12 +293,17 @@
 		},
 		
 		/******************************************************* Caching Mixin operations ********************************************************/
+		_getAppSetting: function(){
+			var me = this;
+			return me.getSetting('cacheUrl');
+		},		
 		getCachePayloadFn: function(payload){
 			var me = this;
 			
 			me.ProjectRecord = payload.ProjectRecord;
 			me.ScrumGroupRootRecord = payload.ProjectRecord;
 			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
+			me.LeafProjects = payload.LeafProjects;
 			me.ReleaseRecord = payload.ReleaseRecord;
 			me.ReleaseRecords = payload.ReleaseRecords;
 			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
@@ -268,14 +348,21 @@
 		getCacheTimeoutDate: function(){
 			return new Date(new Date()*1 + 1000*60*60*24);
 		},
-		
+		renderCacheMessage: function() {
+			var me = this;
+			Ext.getCmp('cacheMessageContainer').add({
+				xtype: 'label',
+				width:'100%',
+				html: 'You are looking at the cached version of the data'
+			});
+		},			
 		/******************************************************* LAUNCH ********************************************************/		
 		loadDataFromCacheOrRally: function(){
 			var me = this;
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadConfiguration()
-						.then(function(){ return me.reloadData(); })
+						.then(function(){ return me.reloadEverything(); })
 						.then(function(){ 
 							//NOTE: not returning promise here, performs in the background!
 							Q.all([
@@ -287,6 +374,8 @@
 								console.log(e);
 							});
 						});
+				}else{
+					me.renderCacheMessage();
 				}
 			});
 		},
@@ -298,6 +387,11 @@
 			me.setLoading('Loading Configuration');
 			return me.loadAppsPreference().then(function(appsPref){ 
 				me.AppsPref = appsPref; //cant cache. per user basis
+			})
+			.then(function(){ 
+				return me.loadCfdProjPreference()
+					.then(function(cfdprojPref){
+						me.cfdProjReleasePref = cfdprojPref;});
 			})
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.redrawEverything(); })
@@ -311,7 +405,7 @@
 		/*************************************************** RENDERING NavBar **************************************************/
 		renderDeleteCache: function(){
 			var me=this;
-			me.DeleteCacheButton = Ext.getCmp('navBar').add({
+			me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
 				xtype:'button',
 				text: 'Clear Cached Data',
 				listeners: { 
@@ -325,14 +419,15 @@
 		},
 		renderUpdateCache: function(){
 			var me=this;
-			me.UpdateCacheButton = Ext.getCmp('navBar').add({
+			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
 				xtype:'button',
 				text: 'Get Live Data',
 				listeners: { 
 					click: function(){
 						me.setLoading('Pulling Live Data, please wait');
+						Ext.getCmp('cacheMessageContainer').removeAll();
 						return me.loadConfiguration()
-							.then(function(){ return me.reloadData(); })
+							.then(function(){ return me.reloadEverything(); })
 							.then(function(){ return me.updateCache(); })
 							.then(function(){ me.setLoading(false); });
 					}
@@ -341,6 +436,7 @@
 		},
 		releasePickerSelected: function(combo, records){
 			var me=this;
+			Ext.getCmp('cacheMessageContainer').removeAll();
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
@@ -348,7 +444,7 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
-				.then(function(){ return me.loadDataFromCacheOrRally(); })
+				.then(function(){ return me.loadDataFromCacheOrRally(); })//TODO: dont have to load configuration when release picker is selected 
 				.then(function(){ return me.redrawEverything(); })
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
@@ -365,6 +461,55 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_setchangedReleaseStartDate: function(){
+			var me = this;
+			if(typeof me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] !== 'object') me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name] = {};
+			me.releaseStartDateChanged = _.isEmpty(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]) ? false : true;
+			if(me.releaseStartDateChanged){
+				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
+			}					
+		},		
+		_checkToRenderCFDCalendar: function(){
+			var me = this;
+			me._setchangedReleaseStartDate();
+			if(!me.optionSelectReleaseDate && me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())){
+				if(Ext.getCmp('releasedatepicker-wrapper')) Ext.getCmp('releasedatepicker-wrapper').destroy();//redrawing everything for new release
+				me._renderOptiontoSelectReleaseDate();
+			}
+		},
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+				me.optionSelectReleaseDate = undefined;
+		},	
+		_renderOptiontoSelectReleaseDate:function(){
+			var me = this;
+			me.optionSelectReleaseDate = Ext.getCmp('navBar').add({
+				xtype:'intelreleasedatachangepicker',
+				labelWidth: 80,
+				width: 240,
+				ProjectRecord: me.ProjectRecord,
+				currentRelease: me.ReleaseRecord,
+				cfdProjReleasePref : me.cfdProjReleasePref,
+				initialLoad: true,
+				listeners: { releaseDateChanged: me._releaseDateChangePickerSelected.bind(me)}
+			});	
+		},		
+		_releaseDateChangePickerSelected: function(date,cfdappPref){
+			var me = this;
+			me.setLoading(true);
+			me.saveCfdProjPreference(cfdappPref)
+				.then(function(){ 
+					me.changedReleaseStartDate = date;
+					me.redrawChartAfterReleaseDateChanged(); 
+				})
+				.fail(function(reason){ me.alert('ERROR', reason); me.setLoading(false); })
+				.then(function(){ me.setLoading(false); })
+				.done();
+			
+		},
+		/*End: CFD Release Start Date Selection Option Component*/
 		topPortfolioItemPickerSelected: function(combo, records){
 			var me=this, 
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
@@ -377,7 +522,7 @@
 		renderTopPortfolioItemPicker: function(){
 			var me=this,
 				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
-			me.TopPortfolioItemPicker = Ext.getCmp('navBar').add({
+			me.TopPortfolioItemPicker = Ext.getCmp('navBarProductFilter').add({
 				xtype:'intelfixedcombo',
 				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
 				labelWidth: 80,
@@ -402,18 +547,35 @@
 					endDate: releaseEnd,
 					scheduleStates: me.ScheduleStates
 				});
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
 
 			/************************************** Scrum Group CHART STUFF *********************************************/
-			var updateOptions = {trendType:'Last2Sprints'},
-				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions),
-				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredAllSnapshots), updateOptions);
+			/*if(me.CurrentTopPortfolioItemName === null){
+				var trainTargetVelocity =[];
+				_.each(aggregateChartData.categories,function(f){
+					trainTargetVelocity.push(me.AllScrumTargetVelocitySum);
+				});
+				aggregateChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: trainTargetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});						
+			} */
+			var	aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:400 },
 						legend:{
 							enabled:true,
 							borderWidth:0,
-							width:500,
-							itemWidth:100
+							width:600/* ,
+							itemWidth:130  */
 						},
 						title: {
 							text: me.getScrumGroupName(me.ScrumGroupRootRecord)
@@ -427,20 +589,33 @@
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(aggregateChartData,me.changedReleaseStartDate))
 				)[0];
 			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
-
 			/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.FilteredTeamStores), function(projName){ return projName; }),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
 			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'Last2Sprints'},
+				var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.FilteredTeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				
+				/*var scrumTargetVelocity =[];
+				if(me.CurrentTopPortfolioItemName === null){
+					_.each(scrumChartData.categories,function(f){
+						scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
+					});
+					scrumChartData.series.push({
+						colorIndex: 1,
+						symbolIndex: 1,
+						dashStyle: "shortdash",
+						color: "#862A51",
+						data: scrumTargetVelocity,
+						name: "Available Velocity UCL",
+						type: "line"
+					});						
+				} */
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:300 },
@@ -452,7 +627,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					})
+					} ,me.getInitialAndfinalCommitPlotLines(scrumChartData,me.changedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});
