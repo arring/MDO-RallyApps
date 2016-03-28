@@ -31,13 +31,16 @@
 			}
 			var url = me.cacheUrl + key ;
 			var deferred = Q.defer();
-			
+			           
 			$.ajax({
 				url: url,
 				type: 'GET',
 				success: function(payloadJSON){
-					var payload;
-					try { payload = JSON.parse(payloadJSON); }
+					var payload;//replace payloadJSON with data
+                    
+					try { 
+                        payload = JSON.parse( LZMA.decompress(payloadJSON));                            
+                     }
 					catch(e){ 
 						console.log('corrupt cache payload'); 
 						deferred.resolve(false);
@@ -69,19 +72,27 @@
 			if(timeoutDate){
 				url += '?timeout=' + timeoutDate.toISOString();
 			}
-			
+            
+            //replace payload with data?
 			me.setIntelRallyAppSettings(payload);
-			me.setCachePayLoadFn(payload);
-			
+			me.setCachePayLoadFn(payload);	         
+            		
 			var deferred = Q.defer();
-			$.ajax({
-				url: url,
-				data: JSON.stringify(payload),
-				type: 'PUT',
-				headers: { 'Content-Type': 'application/json'},
-				success: function(data) { deferred.resolve(data); },
-				error: function(xhr, status, reason){ deferred.reject(reason); }
-			});
+            LZMA.compress(JSON.stringify(payload), 1, function(compressedData,error) {
+                if(error){
+                    deferred.reject(error);
+                }else
+               	$.ajax({
+                    url: url,
+                    //data: JSON.stringify(payload),
+                    data: compressedData,
+                    type: 'PUT',
+                    headers: { 'Content-Type': 'application/json'},
+                    success: function(data) { deferred.resolve(data); },
+                    error: function(xhr, status, reason){ deferred.reject(reason); }                   
+                }); 
+            });
+		
 			return deferred.promise;
 		},
 		deleteCache: function(keyGenerator){

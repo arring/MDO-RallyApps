@@ -10,6 +10,8 @@
       "https://code.highcharts.com/modules/heatmap.src.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
       "https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.3/sprintf.js",
+      "https://cdn.rawgit.com/nmrugg/LZMA-JS/master/src/lzma_worker.js",
+      "https://cdn.rawgit.com/floydpink/lzwCompress.js/master/lzwCompress.js",
       "../lib/intel-rally-app.js",
       "../lib/mixin/window-listener.js",
       "../lib/mixin/iframe-resize.js",
