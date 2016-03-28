@@ -25,7 +25,7 @@
 			{name: 'Expected', type: 'boolean'},
 			{name: 'FeatureStatus', type: 'boolean'},
 			{name: 'Objective', type:'string'},
-			{name: 'Rank', type: 'string'}
+			{name: 'PortfolioItemRank', type: 'number'}
 		]
 	});
 
