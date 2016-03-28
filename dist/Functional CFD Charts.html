@@ -1352,6 +1352,7 @@
 				'LastSprint', 
 				'Last2Sprints', 
 				'LinearRegression', 
+				'LinearRegressionLast2Sprints', 
 				'LinearRegressionFromStartAccepted',
 				'LinearRegressionFromStartWork'
 			];
@@ -1469,6 +1470,23 @@
 					return pt < 0 ? 0 : pt;
 				});	
 			}
+			if(trendType == 'LinearRegressionLast2Sprints'){
+				//(Xt*X)^-1*Xt*Y = b 
+				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
+					if(projectedTrend.data[i]!==0){
+						end = i; break; }
+				begin = (end - 20 < 0 ? 0 : end - 20);
+				X = $M(_.map(projectedTrend.data.slice(begin, end), function(p, j){ return [1, j]; }));
+				Y = $M(_.map(projectedTrend.data.slice(begin, end), function(p){ return p; }));
+				b = X.transpose().multiply(X).inverse().multiply(X.transpose().multiply(Y));
+				slope = b.elements[1][0];
+				intercept = b.elements[0][0];
+
+				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
+					var pt = (100*(intercept + (j-begin)*slope)>>0)/100;
+					return pt < 0 ? 0 : pt;
+				});	
+			}
 			if(trendType == 'LinearRegressionFromStartAccepted'){
 				//(Xt*X)^-1*Xt*Y = b 
 				for(i=1;i<projectedTrend.data.length;++i)
@@ -1528,12 +1546,80 @@
 			}
 			return projectedTrend;
 		},
+				/** binsearches for the closest date to 'date' */
+		_getIndexHelper:function(date, dateArray){ 
+			var curVal = (dateArray.length/2), curInt = (curVal>>0), div=(curVal/2), lastInt=-1;
+			while(curInt !== lastInt){
+				if(dateArray[curInt]===date) return curInt;
+				else if(dateArray[curInt]>date) curVal-=div;
+				else curVal+=div;
+				div/=2;
+				lastInt = curInt;
+				curInt = curVal>>0;
+			}
+			return curInt;
+		},
+		/** returns index in dateArra of date after or on the input date */
+		_getIndexOnOrAfter: function(date, dateArray){ 
+			if(dateArray.length===0) return -1;
+			var pos = this._getIndexHelper(date, dateArray);
+			if(pos===dateArray.length-1) { if(dateArray[pos] >= date) return pos; else return -1; } //either start of list or everything is after 'date'
+			else if(dateArray[pos] >= date) return pos;
+			else return pos+1;
+		},
+		_getIndexOn: function(date, dateArray){
+			var indexOn = !!dateArray ? dateArray.indexOf(date) : 0;
+			return indexOn >= 0 ? indexOn : 0;
+		},
+		_dateToStringDisplay: function (date) {
+			var date_regex = /^(0[1-9]|1[0-2])\/(0[1-9]|1\d|2\d|3[01])\/(19|20)\d{2}$/ ;
+			return (!(date_regex.test(date))) ? Ext.Date.format(new Date(date), 'm/d/Y'): date;
+		},		
+		getInitialAndfinalCommitPlotLines: function(aggregateChartData,changedReleaseStartDate){
+			var me = this,
+				selectedDayIndex = me._getIndexOn(me._dateToStringDisplay(changedReleaseStartDate),aggregateChartData.datemap);
+			xAxisPlotLines = {
+					plotLines: [{
+						color: '#58FAF4', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: selectedDayIndex, // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Original Commit ',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white',
+								background:'#40d0ed'
+							}
+						}						
+					},{
+						color: '#58FAF4', // Color value
+						dashStyle: 'shortdash', // Style of the plot line. Default to solid
+						type: "spline",
+						value: [aggregateChartData.categories.length - 1], // Value of where the line will appear
+						width: 2,
+						zIndex: 5,
+						label : {
+							text : 'Final Workload & Accepted',
+							style:{
+								color:'black',
+								'text-shadow': '0 1px 0 white'
+							}
+						}						
+						
+					}]
+				};
+			return {xAxis:xAxisPlotLines};
+		},
 		updateCumulativeFlowChartData: function(data, options){
 			_.merge({}, options);
 			var me = this, 
 				now = new Date(),
 				trendType = options.trendType,
 				hideTrends = options.hideTrends,
+				selectedDate = me._dateToStringDisplay(options.date);
 				todayIndex = -1,
 				datemap = [],
 				rSquaredMap = [];
@@ -1577,12 +1663,32 @@
 			if(!hideTrends){
 				var projectedTrend = me._addProjectedTrendline(data, {totalPoints: totalPoints, trendType: trendType});
 				data.series.push(projectedTrend);
-				rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
+				//rSquaredMap[data.series.length-1] = {val: me._getRSquared(projectedTrend, topScheduleStateSeries, todayIndex)};				
 				data.series.push(idealTrend);
 			}		
+			me.setLoading(false);
 			data.datemap = datemap;
 			data.rSquaredMap = rSquaredMap;
-			
+			/*Adding initial Commit line*/
+			var selectedDayIndex = me._getIndexOn(selectedDate,datemap);
+			var commitDataPlus = [];
+			var totalinitial = 0;
+			_.each(data.series,function(f){
+				if(me.ScheduleStates.indexOf(f.name) >= 0)
+				totalinitial = totalinitial + f.data[selectedDayIndex];
+			});
+			_.each(data.categories,function(f,key){
+				commitDataPlus.push(totalinitial);//commitDataMinus.push(total.initialCommit - 10);
+			});	
+				data.series.push({
+				colorIndex: 1,
+				symbolIndex: 1,
+				dashStyle: "shortdash",
+				color: "red",
+				data:commitDataPlus,
+				name: "Current Commit LCL",
+				type: "spline"
+			});	
 			return data;
 		},
 		getCumulativeFlowChartTicks: function(startDate, endDate, width){
@@ -1688,6 +1794,82 @@
 
                 /** 
 	SUMMARY: 
+		This mixin is used to save user preferences per project per release, that can follow the user from one cumulative flow chart app to app. So 
+		when you call saveAppsPreference it saves it to a preference filtered by user and the value of me.cfdProjPref.
+		
+		Different apps can share the me.cfdProjPref which is useful if you have 5 apps that should all scope to the same
+		Release. So if the user scopes to Release R1 on one of the apps, when she goes to any of the other apps, it should
+		scope to Release R1 as well.
+**/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+
+	Ext.define('Intel.lib.mixin.CfdProjectPreference', {
+		
+		/** preference name SHOULD be overridden, unless you want all apps to share default preference-name */
+		cfdProjPref : 'intel-workspace-admin-cfd-releasedatechange',
+
+		loadCfdProjPreference: function(){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				project: me.getContext().getProject()._ref,
+				filterByName: me.cfdProjPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me.cfdProjPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { releases:{}, refresh:0};}
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		loadCfdProjPreferenceForTrain: function(pref){
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				project: pref,
+				filterByName: me.cfdProjPref,
+				success: function(prefs) {
+					var appPrefs = prefs[me.cfdProjPref];
+					try{ appPrefs = JSON.parse(appPrefs); }
+					catch(e){ appPrefs = { releases:{}, refresh:0};}
+					deferred.resolve(appPrefs);
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
+		loadCfdAllTrainPreference: function(){
+			var me=this, deferred = Q.defer(), AllTrain = [];
+				me.trainPref = {};
+			return Q.all(_.map(me.ScrumGroupConfig, function(item){
+					if (item.IsTrain){ 
+						var projectRef = "https://rally1.rallydev.com/slm/webservice/v2.0/project/" + item.ScrumGroupRootProjectOID;
+						return me.loadCfdProjPreferenceForTrain(projectRef)
+							.then(function(tPref){
+								me.trainPref[item.ScrumGroupName] = tPref;
+						});
+					}
+				})
+			);			
+		},
+		saveCfdProjPreference: function(prefs){
+			var me=this, s = {}, deferred = Q.defer();
+			prefs = {releases:prefs.releases, refresh:prefs.refresh};
+			s[me.cfdProjPref] = JSON.stringify(prefs); 
+			Rally.data.PreferenceManager.update({
+				project:me.getContext().getProject()._ref,
+				filterByName: me.cfdProjPref,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		}		
+	});
+}());
+                /** 
+	SUMMARY: 
 		This mixin is used to save user preferences per project, that can follow the user from app to app. So 
 		when you call saveAppsPreference it saves it to a preference filtered by user and the value of me.userAppsPref.
 		
@@ -1759,7 +1941,7 @@
 		
 		_getHorizontalTeamTypeInfo: function(projectRecord){
 			var me=this,
-				scrumName = projectRecord.data.Name.split('-')[0].trim(),
+				scrumName = projectRecord.data.Name.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
@@ -1842,7 +2024,7 @@
 		
 		_getHorizontalTeamTypeInfoFromProjectName: function(projectName){
 			var me=this,
-				scrumName = projectName.split('-')[0].trim(),
+				scrumName = projectName.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
@@ -2002,6 +2184,121 @@
 
                 /** 
 	SUMMARY:
+		This component is an easy release date picker based off Rally.ui.picker.DatePicker. Example:
+			{
+				xtype:'intelreleasedatachangepicker',
+				labelWidth: 80,
+				width: 240,
+				ProjectRecord: me.ProjectRecord,
+				currentRelease: me.ReleaseRecord,
+				me.cfdProjReleasePref : me.cfdProjReleasePref,
+				initialLoad: true,
+				listeners: { ReleaseDateChangeOptionSelected: me._renderReleaseDateChangePicker.bind(me) }
+			}		
+		YOU MUST PASS IT 3 THINGS IN THE CONFIG
+			1: Project Record 
+			2: currentRelease (what to show as initial value
+			3: if its initial load
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;
+	
+	Ext.define('Intel.lib.component.ReleaseDateChangePicker', {
+		extend:'Ext.container.Container',
+		requires:['Rally.ui.picker.DatePicker',
+			'Ext.button.Button'],
+		alias: ['widget.intelreleasedatachangepicker'],
+
+		/**________________________________________ YOU MUST SUPPLY THESE ________________________________________*/
+		ProjectRecord: null,
+		currentRelease: null,
+		cfdProjReleasePref: null, 
+		initialLoad: null,
+		items:[],
+		/**________________________________________ INITIALIZE/PRIVATE METHODS ________________________________________*/
+		initComponent: function(){
+			var me = this;
+			if(me.initialLoad){
+				me._renderOption();
+			} else {
+				me._renderCalendarAndButton();
+			}
+			me.callParent(arguments);
+		},
+		/**________________________________________ Render Option to render Calendar and button ________________________________________*/
+		_renderOption: function(){
+			var me = this;
+			Ext.apply(me,{
+				xtype:'container',
+				id:'releasedatepicker-wrapper',
+				width:'390px',
+				layout:{
+					type:'hbox'
+				},
+				items:[{
+					xtype:'component',
+					id:'cntClickForDateChange',
+					cls:'clickForDateChange',
+					autoEl: {
+						tag: 'a',
+						html: 'Please Click here to change the Release Start Date'
+					},
+					listeners   : {
+						el : {
+							click: {
+								element: 'el', //bind to the underlying el property on the panel
+								fn: function(){ 
+									me._renderCalendarAndButton();
+								}
+							}
+						}
+					}
+				}]	
+			});			
+		},
+		/**________________________________________ Render Calendar and button ________________________________________*/		
+		_renderCalendarAndButton: function(){
+			var me = this;
+			var datePickerDefaultDate;
+			var rid = me.currentRelease.data.Name;
+			var pid = me.ProjectRecord.data.ObjectID;			
+			me.fieldLabel = 'Select Release Start Date';
+			me.labelWidth = 140;
+			if(typeof me.cfdProjReleasePref.releases[rid] !== 'object') me.cfdProjReleasePref.releases[rid] = {};
+			me.minValue= new Date(new Date(me.currentRelease.data.ReleaseStartDate)*1 /* + _6days */);
+			me.value = _.isEmpty(me.cfdProjReleasePref.releases[rid]) ? me.minValue: new Date(me.cfdProjReleasePref.releases[rid].ReleaseStartDate) ;
+			me.maxValue = me.currentRelease.data.ReleaseDate > new Date() ? new Date() : me.currentRelease.data.ReleaseDate;
+			me.showToday = false;
+			Ext.getCmp('releasedatepicker-wrapper').removeAll();
+			Ext.getCmp('releasedatepicker-wrapper').add({
+				xtype: 'rallydatefield',
+				id:'ReleaseDatePicker',
+				fieldLabel: 'Select Release Start Date',
+				labelWidth:140,
+				minValue: me.minValue,
+				maxValue: me.maxValue,
+				value: me.value,
+				showToday:false
+				},{
+				xtype:'button',
+				text: 'Update',
+				id: "btnUpdateReleaseDate",
+				scope: me,
+				handler: function() {
+					//when the button is click
+					//save the date in the app preference
+					var dateSelected = Ext.getCmp('ReleaseDatePicker').value;
+					me.cfdProjReleasePref.releases[rid] = me.cfdProjReleasePref.releases[rid] || {};
+					me.cfdProjReleasePref.releases[rid].ReleaseStartDate = dateSelected; 
+					me.fireEvent('releaseDateChanged',dateSelected,me.cfdProjReleasePref);	
+				}	
+			});			
+		}
+	});
+}());
+
+                /** 
+	SUMMARY:
 		Fast CFD Calculator is a lot faster than the rally build in calculators because this is not a generic 
 		calculator. it specifically is used to aggregate items with PlanEstimate and ScheduleState fields in an area chart
 		between two dates. Example app using this is Train CFD Charts.
@@ -2125,12 +2422,16 @@
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		minWidth:910,
 		items:[{
 			xtype:'container',
-			id:'navBar'
+			id:'navBar',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -2151,6 +2452,7 @@
 		}],
 
 		userAppsPref: 'intel-Func-CFD',
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
@@ -2195,26 +2497,74 @@
 					.then(function(releases){ if(releases.length) me.ReleasesWithName.push(releases); });
 			}));
 		},
-
+		loadIterations: function(){
+			var me=this,
+				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.ScrumTargetVelocitySum = {};
+				return Q.all(_.map(me.ProjectsOfFunction, function(projectRecord){
+					var config = {
+						model: 'Iteration',
+						filters: [{
+							property: "EndDate",
+							operator: ">=",
+							value: startDate
+						},{
+							property: "StartDate",
+							operator: "<=",
+							value: endDate  
+						}],
+						fetch: ["PlannedVelocity"],
+						context:{
+							project: projectRecord.data._ref,
+							projectScopeUp:false,
+							projectScopeDown:false
+						}
+					};
+					return me.parallelLoadWsapiStore(config).then(function(store){
+						var totalTargetVelocity =_.reduce(store.getRange(), function(sum, iteration) {
+							var targetVelocity = iteration.data.PlannedVelocity;
+							return sum + targetVelocity;
+						},0);
+						totalTargetVelocity = Number(totalTargetVelocity) === "NaN" ? 0 : totalTargetVelocity;
+						if(!me.ScrumTargetVelocitySum[projectRecord.data.Name]) me.ScrumTargetVelocitySum[projectRecord.data.Name] = [];
+						me.ScrumTargetVelocitySum[projectRecord.data.Name] = Number(me.ScrumTargetVelocitySum[projectRecord.data.Name]) + Number(totalTargetVelocity);
+					});		
+				}));
+		},
 		/******************************************************* Reloading ********************************************************/			
 		hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
+			$('.highcharts-container > svg > text:last-child').hide();
+			//find a way to render only legend to share for all
+			//TODO: find a better way
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-series-group').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis-labels').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-grid').hide();
+			
 		},
 		reloadEverything:function(){
 			var me=this;
 			me.setLoading('Loading Data');		
 			return me.loadAllProjectReleases()
-				.then(function(){ return me.loadSnapshotStores(); })
+				.then(function(){ return me.loadSnapshotStores();	})
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
-					me.setLoading('Loading Charts');	
-					if(!me.ReleasePicker) me.renderReleasePicker();
+					me.setLoading('Loading Charts');
+					if(!me.ReleasePicker) me.renderReleasePicker();	
 					me.renderCharts();
 					me.hideHighchartsLinks();
 					me.setLoading(false);
 				});
 		},
-
+		redrawChartAfterReleaseDateChanged: function(){
+			var me=this;
+			me.setLoading('Loading Charts');	
+			$('#scrumCharts-innerCt').empty();
+			me.renderCharts();
+			me.hideHighchartsLinks(); 
+			me.setLoading(false);
+		},
 		/******************************************************* LAUNCH ********************************************************/		
 		launch: function(){
 			var me = this;
@@ -2239,7 +2589,8 @@
 									return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
 								});
 							}),
-						me.loadAppsPreference()	/******** load stream 2 *****/
+							me.loadCfdAllTrainPreference(),
+							me.loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
@@ -2269,10 +2620,13 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
-				.then(function(){ return me.reloadEverything(); })
+				.then(function(){ 
+					me._resetVariableAfterReleasePickerSelected();
+					return me.reloadEverything(); 
+				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
-				.done();
+				.done();			
 		},		
 		renderReleasePicker: function(){
 			var me=this;
@@ -2285,7 +2639,12 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},
-		
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+		},
+		/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************************** RENDERING CHARTS ******************************************/
 		renderCharts: function(){
 			var me = this, 
@@ -2303,48 +2662,93 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var updateOptions = {trendType:'Last2Sprints'},
-				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
-				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
-					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
-						chart: { height:400 },
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+			//this is to just render the legend to share among the horizontals
+			//var targetVelocity =[];
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions);
+			/*_.each(aggregateChartData.categories,function(f){
+					targetVelocity.push(10);
+				});
+				aggregateChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: targetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});		 */		
+			var aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+					Ext.Object.merge( me.getDefaultCFCConfig(),  me.getCumulativeFlowChartColors(), {
+						chart: { height:110 },
 						legend:{
 							enabled:true,
-							borderWidth:0,
-							width:500,
-							itemWidth:100
+							verticalAlign: "top"
 						},
 						title: {
-							text: me.TeamType
+							text: ""
 						},
-						subtitle:{
-							text: me.ReleaseRecord.data.Name.split(' ')[0]
+						yAxis: {
+							title: {
+								text: ""
+							},
+							labels: {
+								x: -5,
+								y: 4
+							}
 						},
 						xAxis:{
+							tickmarkPlacement: "on",
+							title: {
+								text: "",
+								margin: 10
+							},
+							labels: {
+								y: 20,
+								enabled: false
+							},
 							categories: aggregateChartData.categories,
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
 					})
-				)[0];
-			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
+				);
 			
-			/************************************** Scrum CHARTS STUFF *********************************************/	
+				/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
 					return (projName.split('-')[1] || '').trim() + projName; 
 				}),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
-			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'Last2Sprints'},
+			_.each(sortedProjectNames, function(projectName,key){
+				//Find project Preference for each Train
+				var trainName = projectName.split(" ")[projectName.split(" ").length-1];
+				trainChangedReleaseStartDate = !(me.trainPref[trainName]) || _.isEmpty(me.trainPref[trainName].releases) || !(me.trainPref[trainName].releases[me.ReleaseRecord.data.Name])	? me.changedReleaseStartDate : me.trainPref[trainName].releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
+
+				var updateOptions = {trendType:'Last2Sprints',date:trainChangedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				
+				/*var scrumTargetVelocity =[];
+				_.each(scrumChartData.categories,function(f){
+					scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
+				});
+				scrumChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: scrumTargetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});		 */			
+				var enabledLengend = key === 0 ? true : false; 
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:300 },
-						legend: { enabled: false },
+						legend: { enabled : false},
 						title: { text: null },
 						subtitle:{ text: projectName },
 						xAxis: {
@@ -2352,7 +2756,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(scrumChartData,trainChangedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});
@@ -2407,6 +2811,86 @@
   height: 360px;
   width: 32%;
   float: left;
+}
+/* .scrumCharts-innerCt {
+	border: solid red 1px;
+	margin-top: 50px;
+} */
+/* basic positioning */
+.legend {
+  list-style: none;
+}
+.legend li {
+  float: left;
+  margin-right: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  color: black;
+  cursor: pointer;
+}
+.legend span {
+  border: 1px solid #ccc;
+  float: left;
+  width: 12px;
+  height: 12px;
+  margin: 2px;
+}
+/* your colors */
+.legend .undefined {
+  background-color: #ababab;
+}
+.legend .defined {
+  background-color: #e57e3a;
+}
+.legend .inprogess {
+  background-color: #e5d038;
+}
+.legend .completed {
+  background-color: #0080ff;
+}
+.legend .accepted {
+  background-color: #3a874f;
+}
+.legend .projected {
+  background-color: #26ff00;
+}
+.legend .ideal {
+  background-color: #000000;
+}
+.legend .commit {
+  background-color: #ff0000;
+}
+.legend .velocity {
+  background-color: #862a51;
+}
+hr {
+  border: none;
+  border-top: 1px dotted #f00;
+  color: #fff;
+  background-color: #fff;
+  height: 1px;
+  width: 50%;
+}
+
+    </style>
+
+    <style type="text/css">
+        #releasedatepicker-wrapper {
+  padding-left: 5px;
+}
+.rui-triggerfield .icon-calendar {
+  padding: 3px 3px 5px 4px;
+}
+.clickForDateChange {
+  text-decoration: underline;
+  font-style: italic;
+  cursor: pointer;
+  padding-top: 5px;
+  padding-left: 5px;
+  margin-left: 5px;
+}
+#btnUpdateReleaseDate {
+  margin-left: 5px;
 }
 
     </style>

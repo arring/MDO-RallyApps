@@ -1,0 +1,17 @@
+#releasedatepicker-wrapper{
+padding-left:5px;
+}
+.rui-triggerfield .icon-calendar {
+    padding: 3px 3px 5px 4px;
+}
+.clickForDateChange{
+	text-decoration:underline;
+	font-style:italic;
+	cursor: pointer;
+	padding-top: 5px;
+	padding-left: 5px;
+	margin-left:5px;
+}
+#btnUpdateReleaseDate{
+	margin-left:5px;
+}

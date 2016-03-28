@@ -19,12 +19,16 @@
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.HorizontalTeamTypes'
 		],
 		minWidth:910,
 		items:[{
 			xtype:'container',
-			id:'navBar'
+			id:'navBar',
+			layout:'hbox',
+			align: 'left',
+			width: '600px'
 		},{
 			xtype:'container',
 			width:'100%',
@@ -45,6 +49,7 @@
 		}],
 
 		userAppsPref: 'intel-Func-CFD',
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 
 		/****************************************************** DATA STORE METHODS ********************************************************/
 		loadSnapshotStores: function(){
@@ -89,26 +94,74 @@
 					.then(function(releases){ if(releases.length) me.ReleasesWithName.push(releases); });
 			}));
 		},
-
+		loadIterations: function(){
+			var me=this,
+				startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+				endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
+				me.ScrumTargetVelocitySum = {};
+				return Q.all(_.map(me.ProjectsOfFunction, function(projectRecord){
+					var config = {
+						model: 'Iteration',
+						filters: [{
+							property: "EndDate",
+							operator: ">=",
+							value: startDate
+						},{
+							property: "StartDate",
+							operator: "<=",
+							value: endDate  
+						}],
+						fetch: ["PlannedVelocity"],
+						context:{
+							project: projectRecord.data._ref,
+							projectScopeUp:false,
+							projectScopeDown:false
+						}
+					};
+					return me.parallelLoadWsapiStore(config).then(function(store){
+						var totalTargetVelocity =_.reduce(store.getRange(), function(sum, iteration) {
+							var targetVelocity = iteration.data.PlannedVelocity;
+							return sum + targetVelocity;
+						},0);
+						totalTargetVelocity = Number(totalTargetVelocity) === "NaN" ? 0 : totalTargetVelocity;
+						if(!me.ScrumTargetVelocitySum[projectRecord.data.Name]) me.ScrumTargetVelocitySum[projectRecord.data.Name] = [];
+						me.ScrumTargetVelocitySum[projectRecord.data.Name] = Number(me.ScrumTargetVelocitySum[projectRecord.data.Name]) + Number(totalTargetVelocity);
+					});		
+				}));
+		},
 		/******************************************************* Reloading ********************************************************/			
 		hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
+			$('.highcharts-container > svg > text:last-child').hide();
+			//find a way to render only legend to share for all
+			//TODO: find a better way
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-series-group').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-axis-labels').hide();
+			$('#aggregateChart-innerCt .highcharts-container .highcharts-grid').hide();
+			
 		},
 		reloadEverything:function(){
 			var me=this;
 			me.setLoading('Loading Data');		
 			return me.loadAllProjectReleases()
-				.then(function(){ return me.loadSnapshotStores(); })
+				.then(function(){ return me.loadSnapshotStores();	})
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
-					me.setLoading('Loading Charts');	
-					if(!me.ReleasePicker) me.renderReleasePicker();
+					me.setLoading('Loading Charts');
+					if(!me.ReleasePicker) me.renderReleasePicker();	
 					me.renderCharts();
 					me.hideHighchartsLinks();
 					me.setLoading(false);
 				});
 		},
-
+		redrawChartAfterReleaseDateChanged: function(){
+			var me=this;
+			me.setLoading('Loading Charts');	
+			$('#scrumCharts-innerCt').empty();
+			me.renderCharts();
+			me.hideHighchartsLinks(); 
+			me.setLoading(false);
+		},
 		/******************************************************* LAUNCH ********************************************************/		
 		launch: function(){
 			var me = this;
@@ -133,7 +186,8 @@
 									return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
 								});
 							}),
-						me.loadAppsPreference()	/******** load stream 2 *****/
+							me.loadCfdAllTrainPreference(),
+							me.loadAppsPreference() /******** load stream 2 *****/
 							.then(function(appsPref){
 								me.AppsPref = appsPref;
 								var twelveWeeks = 1000*60*60*24*7*12;
@@ -163,10 +217,13 @@
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
 			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
 			me.saveAppsPreference(me.AppsPref)
-				.then(function(){ return me.reloadEverything(); })
+				.then(function(){ 
+					me._resetVariableAfterReleasePickerSelected();
+					return me.reloadEverything(); 
+				})
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
-				.done();
+				.done();			
 		},		
 		renderReleasePicker: function(){
 			var me=this;
@@ -179,7 +236,12 @@
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
 		},
-		
+		/*Start: CFD Release Start Date Selection Option Component*/
+		_resetVariableAfterReleasePickerSelected: function(){
+				var me = this;
+				me.changedReleaseStartDate = undefined;
+		},
+		/*End: CFD Release Start Date Selection Option Component*/		
 		/**************************************************** RENDERING CHARTS ******************************************/
 		renderCharts: function(){
 			var me = this, 
@@ -197,48 +259,93 @@
 			}	
 
 			/************************************** Aggregate panel STUFF *********************************************/
-			var updateOptions = {trendType:'Last2Sprints'},
-				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),
-				aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
-					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
-						chart: { height:400 },
+			var	_6days = 1000 * 60 *60 *24*6;	
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+			//this is to just render the legend to share among the horizontals
+			//var targetVelocity =[];
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate},
+				aggregateChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions);
+			/*_.each(aggregateChartData.categories,function(f){
+					targetVelocity.push(10);
+				});
+				aggregateChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: targetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});		 */		
+			var aggregateChartContainer = $('#aggregateChart-innerCt').highcharts(
+					Ext.Object.merge( me.getDefaultCFCConfig(),  me.getCumulativeFlowChartColors(), {
+						chart: { height:110 },
 						legend:{
 							enabled:true,
-							borderWidth:0,
-							width:500,
-							itemWidth:100
+							verticalAlign: "top"
 						},
 						title: {
-							text: me.TeamType
+							text: ""
 						},
-						subtitle:{
-							text: me.ReleaseRecord.data.Name.split(' ')[0]
+						yAxis: {
+							title: {
+								text: ""
+							},
+							labels: {
+								x: -5,
+								y: 4
+							}
 						},
 						xAxis:{
+							tickmarkPlacement: "on",
+							title: {
+								text: "",
+								margin: 10
+							},
+							labels: {
+								y: 20,
+								enabled: false
+							},
 							categories: aggregateChartData.categories,
 							tickInterval: me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.66)
 						},
 						series: aggregateChartData.series
 					})
-				)[0];
-			me.setCumulativeFlowChartDatemap(aggregateChartContainer.childNodes[0].id, aggregateChartData.datemap);
+				);
 			
-			/************************************** Scrum CHARTS STUFF *********************************************/	
+				/************************************** Scrum CHARTS STUFF *********************************************/	
 			var sortedProjectNames = _.sortBy(Object.keys(me.TeamStores), function(projName){ 
 					return (projName.split('-')[1] || '').trim() + projName; 
 				}),
 				scrumChartConfiguredChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32);
-			_.each(sortedProjectNames, function(projectName){
-				var updateOptions = {trendType:'Last2Sprints'},
+			_.each(sortedProjectNames, function(projectName,key){
+				//Find project Preference for each Train
+				var trainName = projectName.split(" ")[projectName.split(" ").length-1];
+				trainChangedReleaseStartDate = !(me.trainPref[trainName]) || _.isEmpty(me.trainPref[trainName].releases) || !(me.trainPref[trainName].releases[me.ReleaseRecord.data.Name])	? me.changedReleaseStartDate : me.trainPref[trainName].releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
+
+				var updateOptions = {trendType:'Last2Sprints',date:trainChangedReleaseStartDate},
 					scrumChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.TeamStores[projectName]), updateOptions),		
 					scrumCharts = $('#scrumCharts-innerCt'),
 					scrumChartID = 'scrumChart-no-' + (scrumCharts.children().length + 1);
 				scrumCharts.append('<div class="scrum-chart" id="' + scrumChartID + '"></div>');
-				
+				/*var scrumTargetVelocity =[];
+				_.each(scrumChartData.categories,function(f){
+					scrumTargetVelocity.push(me.ScrumTargetVelocitySum[projectName]);
+				});
+				scrumChartData.series.push({
+					colorIndex: 1,
+					symbolIndex: 1,
+					dashStyle: "shortdash",
+					color: "#862A51",
+					data: scrumTargetVelocity,
+					name: "Available Velocity UCL",
+					type: "line"
+				});		 */			
+				var enabledLengend = key === 0 ? true : false; 
 				var chartContainersContainer = $('#' + scrumChartID).highcharts(
 					Ext.Object.merge(me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: { height:300 },
-						legend: { enabled: false },
+						legend: { enabled : false},
 						title: { text: null },
 						subtitle:{ text: projectName },
 						xAxis: {
@@ -246,7 +353,7 @@
 							tickInterval: scrumChartConfiguredChartTicks
 						},
 						series: scrumChartData.series
-					})
+					},me.getInitialAndfinalCommitPlotLines(scrumChartData,trainChangedReleaseStartDate))
 				)[0];
 				me.setCumulativeFlowChartDatemap(chartContainersContainer.childNodes[0].id, scrumChartData.datemap);
 			});

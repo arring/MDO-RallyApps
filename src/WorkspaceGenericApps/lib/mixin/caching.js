@@ -10,6 +10,7 @@
 		- getCacheTimeoutDate() -> Date									(returns the date the cache should timeout from relative to NOW)
 		- getCachePayloadFn(payload)										(JSON data that was returned from the cache is passed to this function after a cache-hit)
 		- setCachePayLoadFn(payload)										(add fields to the json payload to be stored in the cache)
+		- appSetting														(add app setting for the cacheUrl)
 		
 	the app has the following cache functions added to it:
 	
@@ -22,14 +23,14 @@
 	var Ext = window.Ext4 || window.Ext;
 
 	Ext.define('Intel.lib.mixin.Caching', {
-		cacheUrl:'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/',
 		getCache: function(){ //TODO
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			if (typeof key === 'undefined' ){
+			var cacheUrl = me._getAppSetting();
+			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
 				return Promise.resolve(false);//cache miss		
 			}
-			var url = me.cacheUrl + key ;
+			var url = cacheUrl + key ;
 			var deferred = Q.defer();
 			           
 			$.ajax({
@@ -63,12 +64,13 @@
 			var me = this;
 			var payload = {};
 			var key = me.cacheKeyGenerator(); //generate key for the app
+			var cacheUrl = me._getAppSetting();
 			var timeoutDate = me.getCacheTimeoutDate();
-			if (typeof key === 'undefined' ){
+			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
 				return Promise.reject('cannot PUT to cache, invalid key');	
 			}
 			
-			var url = me.cacheUrl + key;
+			var url = cacheUrl + key;
 			if(timeoutDate){
 				url += '?timeout=' + timeoutDate.toISOString();
 			}
@@ -98,11 +100,12 @@
 		deleteCache: function(keyGenerator){
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			if (typeof key === 'undefined'){
+			var cacheUrl = me._getAppSetting();
+			if (typeof key === 'undefined' || _.isEmpty(cacheUrl)){
 				return Promise.reject('cannot DELETE from cache, invalid key');	
 			}			
 			var deferred = Q.defer();
-			var url = me.cacheUrl + key;
+			var url = cacheUrl + key;
 			
 			$.ajax({
 				url: url,

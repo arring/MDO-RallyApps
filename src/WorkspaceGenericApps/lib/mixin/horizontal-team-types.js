@@ -24,7 +24,7 @@
 		
 		_getHorizontalTeamTypeInfo: function(projectRecord){
 			var me=this,
-				scrumName = projectRecord.data.Name.split('-')[0].trim(),
+				scrumName = projectRecord.data.Name.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
@@ -107,7 +107,7 @@
 		
 		_getHorizontalTeamTypeInfoFromProjectName: function(projectName){
 			var me=this,
-				scrumName = projectName.split('-')[0].trim(),
+				scrumName = projectName.split('-')[0].replace(/\(.*\)/g, '').trim(),
 				scrumTeamType = scrumName.split(/\d/)[0].trim(),
 				number = (scrumTeamType === scrumName ? 1 : parseInt(scrumName.split(scrumTeamType)[1], 10)),
 				notInHorizontalObject = {
