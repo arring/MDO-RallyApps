@@ -1238,8 +1238,8 @@
 		
 		/**___________________________________ RENDER GRIDS ___________________________________*/	
 		renderTeamCommitsGrid: function(){
-			var me = this,
-				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''];
+			var me = this;
+			// var MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', '']; 
 			
 			me.teamCommitsCountHash = {};
 			me.teamCommitsEstimateHash = {};
@@ -1251,7 +1251,7 @@
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
 						PortfolioItemRank: index+1,
-						PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
+					//	PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
 						PortfolioItemName: portfolioItemRecord.data.Name,
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: new Date(portfolioItemRecord.data.PlannedEndDate)*1,
@@ -1286,14 +1286,14 @@
 								teamCommitsRecord.set('Objective', newVal.Objective || '');
 							if(teamCommitsRecord.data.Expected != newVal.Expected)
 								teamCommitsRecord.set('Expected', newVal.Expected);
-							if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
-								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined');
+							/* if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
+								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined'); */
 						}
 					});
 					teamCommitsStore.resumeEvents();
 				}
 			});
-			var teamCommitsColumns = [{
+			var teamCommitsColumns = [/* {
 				text:'MoSCoW',
 				dataIndex:'PortfolioItemMoSCoW',
 				tdCls: 'moscow-cell',
@@ -1320,7 +1320,7 @@
 					sortFn: function(moscow){ return MoSCoWRanks.indexOf(moscow); },
 					convertDisplayFn: function(val){ if(val === '') return 'Undefined'; else return val; }
 				}]
-			},{
+			}, */{
 				text: 'Rank',
 				dataIndex: 'PortfolioItemRank',
 				width: 50,

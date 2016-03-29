@@ -71,7 +71,7 @@
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
 			var me=this, deferred = Q.defer();
-			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank"];
+			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", /* "c_MoSCoW", */ "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank"];
 			me.enqueue(function(done){
 				Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 					return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
@@ -218,7 +218,7 @@
 		getGridHeight: function(){
 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 
@@ -226,7 +226,7 @@
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			); 
+			);   
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -740,9 +740,8 @@
 
 		/************************************************************* RENDER ********************************************************************/
 		renderMatrixGrid: function(){
-			debugger;
 			var me = this,
-				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''],
+				/* MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''], */
 				sortedPortfolioItems = _.sortBy(me.PortfolioItemStore.getRange(), function(p){ return p.data.DragAndDropRank; }),
 				matrixRecords = _.map(sortedPortfolioItems, function(portfolioItemRecord, index){
 					return {
@@ -751,8 +750,8 @@
 						PortfolioItemName: portfolioItemRecord.data.Name,
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: portfolioItemRecord.data.PlannedEndDate*1,
-						TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
-						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined'
+						TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID]/* ,
+						MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined' */
 					};
 				}),
 				makeDoSortFn = function(fn){
@@ -785,8 +784,8 @@
 							portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
 								return portfolioItemRecord.data.ObjectID == matrixRecord.data.PortfolioItemObjectID;
 							});
-						if(matrixRecord.data.MoSCoW != portfolioItemRecord.data.c_MoSCoW)
-							matrixRecord.set('MoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined');
+							// if(matrixRecord.data.MoSCoW != portfolioItemRecord.data.c_MoSCoW)
+							// matrixRecord.set('MoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined'); 
 						_.each(projectNames, function(projectName, colIndex){
 							var changedContents = me.updateCell(portfolioItemRecord, projectName, rowIndex, colIndex);
 							if(changedContents) refreshWholeRow = true;
@@ -797,7 +796,7 @@
 				}
 			});
 
-			var lockedColumns = [{
+			var lockedColumns = [/* {
 				text:'MoSCoW', 
 				dataIndex:'MoSCoW',
 				tdCls: 'moscow-cell intel-editor-cell',	
@@ -822,7 +821,7 @@
 					xtype:'intelgridcolumnfilter',
 					sortFn: function(MoSCoW){ return MoSCoWRanks.indexOf(MoSCoW); }
 				}]	
-			},{
+			}, */{
 				text: 'Rank',
 				dataIndex: 'PortfolioItemRank',
 				width: 50,
@@ -993,7 +992,7 @@
 						var projectName = e.column.text,
 							matrixRecord = e.record;
 							
-						if(projectName == 'MoSCoW') return;
+						//if(projectName == 'MoSCoW') return;
 						if(me.ClickMode == 'Flag'){
 							me.MatrixGrid.setLoading('Saving');
 							me.enqueue(function(done){
@@ -1048,7 +1047,7 @@
 							value = e.value,
 							originalValue = e.originalValue;
 						
-						if(field != 'MoSCoW') return;
+						//if(field != 'MoSCoW') return;
 						if(value == originalValue) return;
 						if(!value){
 							matrixRecord.set(field, originalValue);
@@ -1056,9 +1055,9 @@
 						}
 						me.MatrixGrid.setLoading('Saving');
 					
-						_.find(me.PortfolioItemStore.getRange(), function(item){ //set this here temporarily in case intelUpdate gets called while in queue
-							return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
-						}).data.c_MoSCoW = value;
+						// _.find(me.PortfolioItemStore.getRange(), function(item){ //set this here temporarily in case intelUpdate gets called while in queue
+							// return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
+						// }).data.c_MoSCoW = value; 
 						
 						me.enqueue(function(done){
 							me.loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
@@ -1073,7 +1072,7 @@
 													return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
 												});
 												storePortfolioItemRecord.data.c_MoSCoW = portfolioItemRecord.data.c_MoSCoW;
-												matrixRecord.data.MoSCoW = portfolioItemRecord.data.c_MoSCoW; //need this in case intelUpdate gets called while in queue
+											//	matrixRecord.data.MoSCoW = portfolioItemRecord.data.c_MoSCoW; //need this in case intelUpdate gets called while in queue
 												me.MatrixGrid.view.refreshNode(matrixStore.indexOf(matrixRecord));
 												deferred.resolve();
 											}
