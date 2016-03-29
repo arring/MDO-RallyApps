@@ -109,7 +109,7 @@
 		},
 		config: {
 			defaultSettings: {
-				cacheUrl:''
+				cacheUrl:'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
 			}
 		},			
 		/**************************************** Launch *****************************************/
@@ -255,7 +255,7 @@
 		},
 		loadDataFromCacheOrRally: function(){
 			var me = this;
-            me.isHorizontalView = true;//me.getSetting('Horizontal');
+      me.isHorizontalView = true;//me.getSetting('Horizontal');
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					Ext.getCmp('cacheMessageContainer').removeAll();

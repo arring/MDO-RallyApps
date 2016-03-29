@@ -36,22 +36,32 @@
 			$.ajax({
 				url: url,
 				type: 'GET',
-				success: function(payloadJSON){
+				dataType : 'text',
+				success: function(compressedPayLoadJSON){
+					debugger;
 					var payload;//replace payloadJSON with data
-                    
-					try { 
-                        payload = JSON.parse( LZMA.decompress(payloadJSON));                            
-                     }
-					catch(e){ 
-						console.log('corrupt cache payload'); 
-						deferred.resolve(false);
-					}
-					//TODO: to think if we need try catch
-					//me.__loadModels();
-					me.getCacheIntelRallyAppSettings(payload);
-					me.getCachePayloadFn(payload);
-					
-					deferred.resolve(true);
+					console.log(new Date());
+					LZMA.decompress(compressedPayLoadJSON, function(payloadJSON,error) {
+						console.log(new Date());
+						if(error){
+							console.log('corrupt cache payload'); 
+							deferred.resolve(false);
+						}else{
+							try { 
+								payload = JSON.Parse(payloadJSON);
+								console.log(new Date());
+								//TODO: to think if we need try catch
+								//me.__loadModels();
+								me.getCacheIntelRallyAppSettings(payload);
+								me.getCachePayloadFn(payload);
+								deferred.resolve(true);										
+							}             
+							catch(e){ 
+								console.log('corrupt cache payload'); 
+								deferred.resolve(false);
+							}
+						}
+					});
 				},
 				error: function(xhr, status, reason){ 
 					if(xhr.status === 404) deferred.resolve(false);
@@ -80,21 +90,20 @@
 			me.setCachePayLoadFn(payload);	         
             		
 			var deferred = Q.defer();
-            LZMA.compress(JSON.stringify(payload), 1, function(compressedData,error) {
-                if(error){
-                    deferred.reject(error);
-                }else
-               	$.ajax({
-                    url: url,
-                    //data: JSON.stringify(payload),
-                    data: compressedData,
-                    type: 'PUT',
-                    headers: { 'Content-Type': 'application/json'},
-                    success: function(data) { deferred.resolve(data); },
-                    error: function(xhr, status, reason){ deferred.reject(reason); }                   
-                }); 
-            });
-		
+			LZMA.compress(JSON.stringify(payload), 1, function(compressedData,error) {
+					if(error){
+							deferred.reject(error);
+					}else
+					$.ajax({
+							url: url,
+							//data: JSON.stringify(payload),
+							data: compressedData,
+							type: 'PUT',
+							headers: { 'Content-Type':'text/plain'},
+							success: function(data) { deferred.resolve(data); },
+							error: function(xhr, status, reason){ deferred.reject(reason); }                   
+					}); 
+			});
 			return deferred.promise;
 		},
 		deleteCache: function(keyGenerator){
