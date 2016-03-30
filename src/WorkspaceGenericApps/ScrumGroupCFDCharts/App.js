@@ -293,7 +293,7 @@
 		},
 		
 		/******************************************************* Caching Mixin operations ********************************************************/
-		_getAppSetting: function(){
+		getCacheUrlSetting: function(){
 			var me = this;
 			return me.getSetting('cacheUrl');
 		},		

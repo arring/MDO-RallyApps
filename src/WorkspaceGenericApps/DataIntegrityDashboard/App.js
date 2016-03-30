@@ -129,124 +129,154 @@
 			.then(function(){ return me.loadScrumGroups(); })
 			.then(function(){ return me.loadReleases(); })
 			.then(function(){ return me.loadProjects(); })
-            .then(function(){
-				me.setDefaultForUrlOverride();
-             });
-		},
-		setDefaultForUrlOverride: function(){
-			var me = this;
-			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-			if(!me.isScopedToScrum){
-				me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-				if(me.isHorizontalView){
-					if(me.ScopedTeamType){
-						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-						me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+			.then(function(){ 
+				//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
+				if(!me.isScopedToScrum){
+					me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+					if(me.isHorizontalView){
+						if(me.ScopedTeamType){
+							if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+							me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+						}
+						else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
+						
+						if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
+							throw me.ScopedHorizontal + ' is not a valid horizontal';
 					}
-					else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-					
-					if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-						throw me.ScopedHorizontal + ' is not a valid horizontal';
-				}
-				else {
-					if(me.ScopedTeamType){
-						if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-						var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-							return p.data.Name === me.ScopedTeamType;
-						});
-						if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+					else {
+						if(me.ScopedTeamType){
+							if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
+							var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
+								return p.data.Name === me.ScopedTeamType;
+							});
+							if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+						}
 					}
 				}
-			}			
+			});
 		},
+		
 		/******************************************************* Caching Mixin operations ********************************************************/
-		_getAppSetting: function(){
+		_loadModelsForCachedView: function(){ 
+			var me=this, 
+				promises = [],
+				models = { UserStory: 'HierarchicalRequirement' };
+			models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},		
+		
+		getCacheUrlSetting: function(){
 			var me = this;
 			return me.getSetting('cacheUrl');
 		},	
 		getCachePayloadFn: function(payload){
 			var me = this;
-			me.ProjectRecord = payload.ProjectRecord;
-			me.isScopedToScrum = payload.isScopedToScrum ;
-			//me.isHorizontalView = payload.isHorizontalView ;
-			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
-			me.ReleaseRecords = payload.ReleaseRecords;
-			me.ReleaseRecord = payload.ReleaseRecord;
-			me.LeafProjects = payload.LeafProjects;
-			me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
-			me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
-			me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
-			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-			me.FilteredLeafProjects = payload.FilteredLeafProjects;
-			me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
-            me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
-                autoLoad: false,
-                model: me.UserStory,
-                pageSize: 200,
-                data: payload.UserStories
-            });
-            me.fixRawUserStoryAttributes();			
-			me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
-				autoLoad: false,
-				model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
-				pageSize: 200,
-				data: []
-			}); 
-			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
-            me.ScopedHorizontalPicker = payload.ScopedHorizontalPicker;	
+			
+			return me._loadModelsForCachedView().then(function(){
+				me.ProjectRecord = payload.ProjectRecord;
+				me.isScopedToScrum = payload.isScopedToScrum ;
+				//me.isHorizontalView = payload.isHorizontalView ;
+				me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+				me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
+				me.ReleaseRecords = payload.ReleaseRecords;
+				me.ReleaseRecord = payload.ReleaseRecord;
+				me.LeafProjects = payload.LeafProjects;
+				me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
+				me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
+				me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
+				me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+				me.FilteredLeafProjects = payload.FilteredLeafProjects;
+				me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
+				me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
+						autoLoad: false,
+						model: me.UserStory,
+						pageSize: 200,
+						data: payload.UserStories
+				});
+				me.fixRawUserStoryAttributes();			
+				me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
+					autoLoad: false,
+					model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+					pageSize: 200,
+					data: []
+				}); 
+				me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
+			});
 		},
 		setCachePayLoadFn: function(payload){
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
-				userStoryFields = ['Name', 'ObjectID', 'Project', 'Owner','Iteration', 
+				userStoryFields = ['Name', 'ObjectID', 'Project', 'Iteration', 
 					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState', 
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
 				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
 					'Release', 'Description', 'FormattedID', 'UserStories', 'Parent','_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt','InvestmentCategory',
-					'DirectChildrenCount'];
-			payload.ProjectRecord = {data: me.ProjectRecord.data};
+					'DirectChildrenCount'],
+				projectFields = ['Children', 'Name', 'ObjectID', 'Parent'];
+
+			function filterProjectData(projectData){
+				var data = _.pick(projectData, projectFields);
+				data.Parent = _.pick(data.Parent, projectFields);
+				data.Children = _.pick(data.Children, ['Count']);
+				return { data: data };
+			}
+			function filterUserStoryForCache(userStoryRecord){
+				var data = _.pick(userStoryRecord.data, userStoryFields);
+				data.Iteration = data.Iteration ? _.pick(data.Iteration, ['EndDate', 'Name', 'ObjectID', 'StartDate']) : null;
+				data.Project =  _.pick(data.Project, ['Name', 'ObjectID']);
+				data.Release = data.Release ? _.pick(data.Release, ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate']) : null;
+				return data;
+			}
+			
+			payload.ProjectRecord = filterProjectData(me.ProjectRecord.data);
 			payload.isScopedToScrum = me.isScopedToScrum ;
 			//payload.isHorizontalView = me.isHorizontalView ;
-			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(rr){ return {data: rr.data}; });
+			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(ss){ return filterProjectData(ss.data); });
 			payload.ScrumGroupPortfolioOIDs = me.ScrumGroupPortfolioOIDs;
 			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
 			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-			payload.LeafProjects = _.map(me.LeafProjects, function(rr){ return {data: rr.data}; });
+			payload.LeafProjects = _.map(me.LeafProjects, function(ss){ return filterProjectData(ss.data); });
 			payload.LeafProjectsByScrumGroup = _.reduce(me.LeafProjectsByScrumGroup, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
+				map[key] = _.map(sss, function(ss){ return filterProjectData(ss.data); });
 				return map;
 			}, {});
 			payload.LeafProjectsByHorizontal = _.reduce(me.LeafProjectsByHorizontal, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
+				map[key] = _.map(sss, function(ss){ return filterProjectData(ss.data); });
 				return map;
 			}, {});
 			payload.LeafProjectsByTeamTypeComponent = _.reduce( me.LeafProjectsByTeamTypeComponent, function(map, sss, key){ 
-				map[key] = _.map(sss, function(ss){ return {data: ss.data}; });
+				map[key] = _.map(sss, function(ss){ return filterProjectData(ss.data); });
 				return map;
 			}, {});
-			payload.FilteredLeafProjects = _.map(me.FilteredLeafProjects, function(rr){ return {data: rr.data}; });
+			payload.FilteredLeafProjects = _.map(me.FilteredLeafProjects, function(ss){ return filterProjectData(ss.data); });
 			payload.PortfolioProjectToPortfolioItemMap = _.reduce(  me.PortfolioProjectToPortfolioItemMap, function(map, sss, key){ 
 				map[key] = _.map(sss, function(ss){ return  _.pick(ss.data,portfolioItemFields); });
 				return map;
 			}, {});
 			
-			payload.UserStories = _.map(me.UserStoryStore.getRange(), function(ss){ 
-				return _.pick(ss.data,userStoryFields); 
-			}); //store will create data and raw
+			payload.UserStories = _.map(me.UserStoryStore.getRange(), filterUserStoryForCache);
+			//store will create data and raw
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
-            //For Horizontal data integrity
-            payload.ScopedHorizontalPicker = me.ScopedHorizontalPicker; 
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-			var appType = me.isHorizontalView ? 'H': 'V';
 			if(hasKey) {                
-				return 'DI-' + appType + '-'+ projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+				return 'DI-' + (me.isHorizontalView ? me.ScopedHorizontal : projectOID) + '-' + me.AppsPref.projs[projectOID].Release;
 			}
 			else return undefined; //no release set
 		},
@@ -279,55 +309,33 @@
 				}
 			})
 			.then(function(){
-                //the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-                if(!me.isScopedToScrum){
-                    me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-                    if(me.isHorizontalView){
-                        if(me.ScopedTeamType){
-                            if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-                            me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
-                        }
-                        else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-                        
-                        if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-                            throw me.ScopedHorizontal + ' is not a valid horizontal';
-                    }
-                    else {
-                        if(me.ScopedTeamType){
-                            if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-                            var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-                                return p.data.Name === me.ScopedTeamType;
-                            });
-                            if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
-                        }
-                    }
-				}					
-             });
-        },
-		__loadModels: function(){ 
-			/** loads models for project, userstories, and all the portfolio items */
-			var me=this, 
-				promises = [],
-				models = {
-					User: 'User',
-					Project: 'Project',
-					UserStory: 'HierarchicalRequirement',
-					PortfolioItem: 'PortfolioItem'
-				};
-			_.each(me.PortfolioItemTypes, function(name){ models['PortfolioItem/' + name] = 'PortfolioItem/' + name; });
-			_.each(models, function(modelType, modelName){
-				var deferred = Q.defer();
-				Rally.data.WsapiModelFactory.getModel({
-					type:modelType, 
-					success: function(loadedModel){ 
-						me[modelName] = loadedModel;
-						deferred.resolve();
+				//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
+				if(!me.isScopedToScrum){
+					me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+					if(me.isHorizontalView){
+							if(me.ScopedTeamType){
+									if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+									me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+							}
+							else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
+							
+							if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
+									throw me.ScopedHorizontal + ' is not a valid horizontal';
 					}
-				});
-				promises.push(deferred.promise);
+					else {
+							if(me.ScopedTeamType){
+									if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
+									var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
+											return p.data.Name === me.ScopedTeamType;
+									});
+									if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+							}
+					}
+				}					
 			});
-			return Q.all(promises);
-		},		
+		},
+		
+		/******************************************************* LAUNCH ********************************************************/
 		launch: function() {
 			var me = this;
 
@@ -337,18 +345,9 @@
 			me.processURLOverrides();
 			
 			me.setLoading('Loading Configuration');
-			Q.all([
-				me.loadAppsPreference().then(function(appsPref){ 
-					me.AppsPref = appsPref; //cant cache. per user basis
-				}),
-				me._loadPortfolioItemTypes().then(function(){ 
-					me.userStoryFields.push(me.PortfolioItemTypes[0]);  
-					return Q.all([
-						me.__loadModels(),
-						me._loadPortfolioItemStatesForEachType()
-					]);
-				})
-			])
+			me.loadAppsPreference().then(function(appsPref){ 
+				me.AppsPref = appsPref; //cant cache. per user basis
+			})
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
 			.fail(function(reason){
@@ -541,10 +540,10 @@
 				Are in an during the release but not the release OR in the release
 		*/
 		createStoryFilter: function(leafProjects){			//NOTE: we are filtering for leaf stories here
-			var me = this,
+			var me = this,	
 				releaseName = me.ReleaseRecord.data.Name,
-				releaseDate = me.ReleaseRecord.data.ReleaseDate.toISOString(),
-				releaseStartDate = me.ReleaseRecord.data.ReleaseStartDate.toISOString(),
+				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate).toISOString(),
+				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate).toISOString(),
 				releaseNameFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'Release.Name', value: releaseName }),
 				leafStoriesInIterationButNotReleaseFilter =
 					Ext.create('Rally.data.wsapi.Filter', { property: 'Iteration.StartDate', operator:'<', value:releaseDate}).and(

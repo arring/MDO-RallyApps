@@ -17,111 +17,91 @@
 		- getCache() -> Promise(cacheHit)                  (cacheHit === true if successfully got cache from server)
 		- updateCache() -> Promise()                       (returns when the cache has been successfully updated)
 		- deleteCache() -> Promise()                       (returns when the cache has been successfully delete)
+		
+	the config.json MUST include the following files:
+		https://cdn.rawgit.com/henrya/js-jquery/master/BinaryTransport/jquery.binarytransport.js
+	
+	useful readings:
+		http://stackoverflow.com/questions/6965107/converting-between-strings-and-arraybuffers/9673053#9673053
+		https://github.com/nodeca/pako
 */
 
 (function(){
 	var Ext = window.Ext4 || window.Ext;
 
 	Ext.define('Intel.lib.mixin.Caching', {
-		getCache: function(){ //TODO
+		getCache: function(){
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me._getAppSetting();
+			var cacheUrl = me.getCacheUrlSetting();
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
 				return Promise.resolve(false);//cache miss		
 			}
 			var url = cacheUrl + key ;
 			var deferred = Q.defer();
-			           
+			
 			$.ajax({
 				url: url,
-				type: 'GET',
-				dataType : 'text',
-				success: function(compressedPayLoadJSON){
-					var payload;//replace payloadJSON with data
-					console.log(new Date());
-					LZMA.decompress(compressedPayLoadJSON, function(payloadJSON,error) {
-						console.log(new Date());
-						if(error){
-							console.log('corrupt cache payload'); 
-							deferred.resolve(false);
-						}else{
-							try { 
-								payload = JSON.Parse(payloadJSON);
-								console.log(new Date());
-								//TODO: to think if we need try catch
-								//me.__loadModels();
-								me.getCacheIntelRallyAppSettings(payload);
-								me.getCachePayloadFn(payload);
-								deferred.resolve(true);										
-							}             
-							catch(e){ 
-								console.log('corrupt cache payload'); 
-								deferred.resolve(false);
-							}
-						}
-					});
+				method: 'GET',
+				processData: false,
+				dataType: 'text',
+				success: function(requestData){ 
+					try { 
+						payload = JSON.parse(requestData);
+						me.getCacheIntelRallyAppSettings(payload);
+						Q(me.getCachePayloadFn(payload)).then(function(){ 
+							deferred.resolve(true); 
+						});
+					}             
+					catch(e){ 
+						console.log('corrupt cache payload'); 
+						deferred.resolve(false);
+					}
 				},
-				error: function(xhr, status, reason){ 
-					if(xhr.status === 404) deferred.resolve(false);
-					else deferred.reject(reason);
+				error: function(reason){ 
+					console.log('cache GET error', reason); 
+					deferred.resolve(false); 
 				}
 			});
+			
 			return deferred.promise;
 		},
 		updateCache: function(){
 			var me = this;
 			var payload = {};
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me._getAppSetting();
+			var cacheUrl = me.getCacheUrlSetting();
 			var timeoutDate = me.getCacheTimeoutDate();
+			var url = cacheUrl + key;
+			var deferred = Q.defer();
+			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
 				return Promise.reject('cannot PUT to cache, invalid key');	
 			}
 			
-			var url = cacheUrl + key;
 			if(timeoutDate){
 				url += '?timeout=' + timeoutDate.toISOString();
 			}
             
-            //replace payload with data?
 			me.setIntelRallyAppSettings(payload);
-			me.setCachePayLoadFn(payload);	
-			// debugger;
-			// var content = null;
-			// var zip = new JSZip();
-			// var fileName = key;
-			// zip.load(JSON.stringify(payload));
-			//zip.file(fileName , JSON.stringify(payload),{binary:true});
-			// content = zip.generate({
-				// type: 'uint8array',
-				// encodeFileName: function (string) {
-					// return iconv.encode(string, 'your-encoding');
-				// }
-			// });           		
-			var deferred = Q.defer();
-			LZMA.compress(JSON.stringify(payload), 1, function(compressedData,error) {
-				// var compressedData= new Uint8Array(compressedData); 
-					if(error){
-							deferred.reject(error);
-					}else
-					$.ajax({
-							url: url,
-							//data: JSON.stringify(payload),
-							data: compressedData ,
-							processData: false,
-							type: 'PUT',
-							headers: { 'Content-Type':'application/octet-stream'},
-							success: function(data) { deferred.resolve(data); },
-							error: function(xhr, status, reason){ deferred.reject(reason); }                   
-					}); 
+			me.setCachePayLoadFn(payload);		
+			
+			$.ajax({
+				url: url,
+				method: 'PUT',
+				headers: {'Content-Type': 'text/plain'},
+				data: JSON.stringify(payload),
+				processData: false,
+				success: function(){ deferred.resolve(); },
+				error: function(reason){ deferred.reject(reason); }
 			});
+
 			return deferred.promise;
 		},
 		deleteCache: function(keyGenerator){
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me._getAppSetting();
+			var cacheUrl = me.getCacheUrlSetting();
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl)){
 				return Promise.reject('cannot DELETE from cache, invalid key');	
 			}			
