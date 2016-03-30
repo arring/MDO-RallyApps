@@ -38,7 +38,6 @@
 				type: 'GET',
 				dataType : 'text',
 				success: function(compressedPayLoadJSON){
-					debugger;
 					var payload;//replace payloadJSON with data
 					console.log(new Date());
 					LZMA.decompress(compressedPayLoadJSON, function(payloadJSON,error) {
@@ -87,19 +86,32 @@
             
             //replace payload with data?
 			me.setIntelRallyAppSettings(payload);
-			me.setCachePayLoadFn(payload);	         
-            		
+			me.setCachePayLoadFn(payload);	
+			// debugger;
+			// var content = null;
+			// var zip = new JSZip();
+			// var fileName = key;
+			// zip.load(JSON.stringify(payload));
+			//zip.file(fileName , JSON.stringify(payload),{binary:true});
+			// content = zip.generate({
+				// type: 'uint8array',
+				// encodeFileName: function (string) {
+					// return iconv.encode(string, 'your-encoding');
+				// }
+			// });           		
 			var deferred = Q.defer();
 			LZMA.compress(JSON.stringify(payload), 1, function(compressedData,error) {
+				// var compressedData= new Uint8Array(compressedData); 
 					if(error){
 							deferred.reject(error);
 					}else
 					$.ajax({
 							url: url,
 							//data: JSON.stringify(payload),
-							data: compressedData,
+							data: compressedData ,
+							processData: false,
 							type: 'PUT',
-							headers: { 'Content-Type':'text/plain'},
+							headers: { 'Content-Type':'application/octet-stream'},
 							success: function(data) { deferred.resolve(data); },
 							error: function(xhr, status, reason){ deferred.reject(reason); }                   
 					}); 
