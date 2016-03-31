@@ -105,13 +105,20 @@
 		/**************************************** Settings ***************************************/
 		settingsScope: 'workspace',
 		getSettingsFields: function() {
-			return [{name: 'Horizontal', xtype: 'rallycheckboxfield'},{name: 'cacheUrl',xtype: 'rallytextfield'}];
+			return [{
+				name: 'Horizontal', 
+				xtype: 'rallycheckboxfield'
+			},{
+				name: 'cacheUrl',
+				xtype: 'rallytextfield'
+			}];
 		},
 		config: {
 			defaultSettings: {
-				cacheUrl:'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
+				cacheUrl:'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/' //CHANGE THIS!
 			}
-		},			
+		},
+		
 		/**************************************** Launch *****************************************/
 		loadConfiguration: function(){
 			var me = this;
@@ -129,31 +136,7 @@
 			.then(function(){ return me.loadScrumGroups(); })
 			.then(function(){ return me.loadReleases(); })
 			.then(function(){ return me.loadProjects(); })
-			.then(function(){ 
-				//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-				if(!me.isScopedToScrum){
-					me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-					if(me.isHorizontalView){
-						if(me.ScopedTeamType){
-							if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-							me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
-						}
-						else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-						
-						if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-							throw me.ScopedHorizontal + ' is not a valid horizontal';
-					}
-					else {
-						if(me.ScopedTeamType){
-							if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-							var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-								return p.data.Name === me.ScopedTeamType;
-							});
-							if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
-						}
-					}
-				}
-			});
+			.then(function(){ me.applyScopingOverrides(); });
 		},
 		
 		/******************************************************* Caching Mixin operations ********************************************************/
@@ -183,21 +166,23 @@
 		getCachePayloadFn: function(payload){
 			var me = this;
 			
+			me.ProjectRecord = payload.ProjectRecord;
+			me.isScopedToScrum = payload.isScopedToScrum ;
+			//me.isHorizontalView = payload.isHorizontalView ;
+			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
+			me.ReleaseRecords = payload.ReleaseRecords;
+			me.ReleaseRecord = payload.ReleaseRecord;
+			me.LeafProjects = payload.LeafProjects;
+			me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
+			me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
+			me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
+			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+			me.FilteredLeafProjects = payload.FilteredLeafProjects;
+			me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
+			me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
+			
 			return me._loadModelsForCachedView().then(function(){
-				me.ProjectRecord = payload.ProjectRecord;
-				me.isScopedToScrum = payload.isScopedToScrum ;
-				//me.isHorizontalView = payload.isHorizontalView ;
-				me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-				me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
-				me.ReleaseRecords = payload.ReleaseRecords;
-				me.ReleaseRecord = payload.ReleaseRecord;
-				me.LeafProjects = payload.LeafProjects;
-				me.LeafProjectsByScrumGroup = payload.LeafProjectsByScrumGroup;
-				me.LeafProjectsByHorizontal = payload.LeafProjectsByHorizontal;
-				me.LeafProjectsByTeamTypeComponent = payload.LeafProjectsByTeamTypeComponent;
-				me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-				me.FilteredLeafProjects = payload.FilteredLeafProjects;
-				me.PortfolioProjectToPortfolioItemMap = payload.PortfolioProjectToPortfolioItemMap;
 				me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
 						autoLoad: false,
 						model: me.UserStory,
@@ -211,7 +196,6 @@
 					pageSize: 200,
 					data: []
 				}); 
-				me.PortfolioUserStoryCount = payload.PortfolioUserStoryCount;	
 			});
 		},
 		setCachePayLoadFn: function(payload){
@@ -283,8 +267,11 @@
 		getCacheTimeoutDate: function(){
 			return new Date(new Date()*1 + 1000*60*60*24);
 		},
+		
+		/******************************************************* LAUNCH ********************************************************/
 		loadDataFromCacheOrRally: function(){
 			var me = this;
+			
       me.isHorizontalView = true;//me.getSetting('Horizontal');
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
@@ -295,7 +282,7 @@
 							if(!me.isScopedToScrum){
 								//NOTE: not returning promise here, performs in the background!
 								Q.all([
-									me.saveAppsPreference(me.AppsPref),
+									me.saveAppsPreference(me.AppsPref), //ADD for horizontal as well as train!
 									me.updateCache()
 								])
 								.fail(function(e){
@@ -305,37 +292,12 @@
 							}
 						});
 				}else{
+					me.applyScopingOverrides();
 					me.renderCacheMessage();
 				}
-			})
-			.then(function(){
-				//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
-				if(!me.isScopedToScrum){
-					me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
-					if(me.isHorizontalView){
-							if(me.ScopedTeamType){
-									if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
-									me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
-							}
-							else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
-							
-							if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
-									throw me.ScopedHorizontal + ' is not a valid horizontal';
-					}
-					else {
-							if(me.ScopedTeamType){
-									if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
-									var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
-											return p.data.Name === me.ScopedTeamType;
-									});
-									if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
-							}
-					}
-				}					
 			});
 		},
 		
-		/******************************************************* LAUNCH ********************************************************/
 		launch: function() {
 			var me = this;
 
@@ -419,7 +381,7 @@
 					_.find(me.ReleaseRecords, function(release){ return release.data.Name === me.Overrides.ReleaseName; }) : 
 					false) || 
 					me.getScopedRelease(me.ReleaseRecords, null, null);
-                me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
+				me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
 			});
 		},
 		
@@ -452,6 +414,34 @@
 					}
 				});
 			}));
+		},
+		
+		applyScopingOverrides: function(){
+			var me = this;
+			
+			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
+			if(!me.isScopedToScrum){
+				me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+				if(me.isHorizontalView){
+					if(me.ScopedTeamType){
+						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+						me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
+					}
+					else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
+					
+					if(typeof me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] === 'undefined')
+						throw me.ScopedHorizontal + ' is not a valid horizontal';
+				}
+				else {
+					if(me.ScopedTeamType){
+						if(!me.ScrumGroupRootRecords.length) throw "cannot specify team when not in ScrumGroup";
+						var matchingTeam = _.find(me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID], function(p){ 
+							return p.data.Name === me.ScopedTeamType;
+						});
+						if(!matchingTeam) throw me.ScopedTeamType + " is not a valid team";
+					}
+				}
+			}
 		},
 		
 		/**************************************** Data Loading ************************************/

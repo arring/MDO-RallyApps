@@ -1,29 +1,46 @@
 /** 
 	SUMMARY:
-	THis file will allows any app with caching enable to get cache 
-	it expects the app using it sets up a key generators
-	the app should have a function call cacheKeyGenerator
 	
+	------------------------------------------------ RALLY APP REQUIREMENTS ---------------------------------------------------------------------
 	app MUST impelement the following functions:
 		
-		- cacheKeyGenerator() -> string									(return the 'key' the cache mixin should store/load/delete the data under)
-		- getCacheTimeoutDate() -> Date									(returns the date the cache should timeout from relative to NOW)
-		- getCachePayloadFn(payload)										(JSON data that was returned from the cache is passed to this function after a cache-hit)
-		- setCachePayLoadFn(payload)										(add fields to the json payload to be stored in the cache)
-		- appSetting														(add app setting for the cacheUrl)
-		
+		- cacheKeyGenerator() -> string										(return the 'key' the cache mixin should store/load/delete the data under)
+		- getCacheTimeoutDate() -> Date										(returns the date the cache should timeout from relative to NOW)
+		- getCachePayloadFn(payload)											(JSON data that was returned from the cache is passed to this function after a cache-hit)
+		- setCachePayLoadFn(payload)											(add fields to the json payload to be stored in the cache)
+		- getCacheUrlSetting()														(add app setting for the cacheUrl)
+
 	the app has the following cache functions added to it:
 	
-		- getCache() -> Promise(cacheHit)                  (cacheHit === true if successfully got cache from server)
-		- updateCache() -> Promise()                       (returns when the cache has been successfully updated)
-		- deleteCache() -> Promise()                       (returns when the cache has been successfully delete)
-		
-	the config.json MUST include the following files:
-		https://cdn.rawgit.com/henrya/js-jquery/master/BinaryTransport/jquery.binarytransport.js
+		- getCache() -> Promise(cacheHit)                 (cacheHit === true if successfully got cache from server)
+		- updateCache() -> Promise()                      (returns when the cache has been successfully updated)
+		- deleteCache() -> Promise()                      (returns when the cache has been successfully delete)
 	
-	useful readings:
-		http://stackoverflow.com/questions/6965107/converting-between-strings-and-arraybuffers/9673053#9673053
-		https://github.com/nodeca/pako
+	------------------------------------------------ SERVER REQUIREMENTS ---------------------------------------------------------------------
+	This mixin is used to enable caching for large apps that pull lots of data. This requires that you also
+	set up a server to handle the key/value database. The server should support timeouts and it should 
+	gzip the PUTted cache JSON payloads for faster transmission times for the cache hits (35 MB takes a while
+	to send, gzip can take a 35 MB JSON down to 1 MB). Since the server should gzip, it should also set the 
+	Content-Encoding = gzip when it returns cached data. Lastly, you should also have an updater script that
+	runs periodically and updates the cache. This cache mixin and the updater script should agree to the following
+	terms:
+	
+		the script loads the page with the following query parameter:
+			rally/projectId/stuff/data-ingrity-oibjectid?cache-update-script=true
+
+		the app adds an invisible div with id="cache-mixin-update-complete" 
+
+		The script (phantomjs probably), should wait for the above <div> to be placed to know it is finished. There 
+		should be a 5 minute timeout for errors on loading as well:
+		
+			setTimeout(function isCacheUpdateFinished(){
+				if(casper.getElementById("cache-mixin-update-complete") === null){
+					setTimout(isCacheUpdateFinished, 1000);
+				}
+				else {
+					//we KNOW its finished updating here
+				}
+			}, 1000);
 */
 
 (function(){
@@ -34,11 +51,13 @@
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
 			var cacheUrl = me.getCacheUrlSetting();
-			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
-				return Promise.resolve(false);//cache miss		
-			}
+			var isUpdateScript = me._isCacheUpdateScript();
 			var url = cacheUrl + key ;
 			var deferred = Q.defer();
+			
+			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript){
+				return Promise.resolve(false); //pretend there was cache miss		
+			}
 			
 			$.ajax({
 				url: url,
@@ -48,7 +67,7 @@
 				success: function(requestData){ 
 					try { 
 						payload = JSON.parse(requestData);
-						me.getCacheIntelRallyAppSettings(payload);
+						me._getCacheIntelRallyAppSettings(payload);
 						Q(me.getCachePayloadFn(payload)).then(function(){ 
 							deferred.resolve(true); 
 						});
@@ -72,6 +91,7 @@
 			var key = me.cacheKeyGenerator(); //generate key for the app
 			var cacheUrl = me.getCacheUrlSetting();
 			var timeoutDate = me.getCacheTimeoutDate();
+			var isUpdateScript = me._isCacheUpdateScript();
 			var url = cacheUrl + key;
 			var deferred = Q.defer();
 			
@@ -83,7 +103,7 @@
 				url += '?timeout=' + timeoutDate.toISOString();
 			}
             
-			me.setIntelRallyAppSettings(payload);
+			me._setIntelRallyAppSettings(payload);
 			me.setCachePayLoadFn(payload);		
 			
 			$.ajax({
@@ -92,7 +112,12 @@
 				headers: {'Content-Type': 'text/plain'},
 				data: JSON.stringify(payload),
 				processData: false,
-				success: function(){ deferred.resolve(); },
+				success: function(){
+					if(isUpdateScript){
+						$('body').append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
+					}
+					deferred.resolve(); 
+				},
 				error: function(reason){ deferred.reject(reason); }
 			});
 
@@ -102,11 +127,12 @@
 			var me = this;
 			var key = me.cacheKeyGenerator(); //generate key for the app
 			var cacheUrl = me.getCacheUrlSetting();
+			var deferred = Q.defer();
+			var url = cacheUrl + key;
+			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl)){
 				return Promise.reject('cannot DELETE from cache, invalid key');	
 			}			
-			var deferred = Q.defer();
-			var url = cacheUrl + key;
 			
 			$.ajax({
 				url: url,
@@ -114,9 +140,13 @@
 				success: function(data) { deferred.resolve(data); },
 				error: function(xhr, status, reason){ deferred.reject(reason); }
 			});
+			
 			return deferred.promise;
 		},
-		getCacheIntelRallyAppSettings: function(payload){
+		_isCacheUpdateScript: function(){
+			return decodeURI(window.parent.location.search).indexOf('cache-update-script=true') > -1;
+		},
+		_getCacheIntelRallyAppSettings: function(payload){
 			var me = this;
 			//intel-rally-app sets these (copy these for each app that uses the cache!)
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
@@ -126,7 +156,7 @@
 			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
 			me.ScheduleStates = payload.ScheduleStates;
 		},
-		setIntelRallyAppSettings: function(payload){
+		_setIntelRallyAppSettings: function(payload){
 			var me = this;
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;
 			payload.ScrumGroupConfig = me.ScrumGroupConfig;

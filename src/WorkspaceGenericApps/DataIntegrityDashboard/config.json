@@ -5,7 +5,6 @@
    "sdk": "2.0rc3",
    "javascript": [
       "https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.2/jquery.js",
-      "https://cdn.rawgit.com/henrya/js-jquery/master/BinaryTransport/jquery.binarytransport.js",
       "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
       "https://code.highcharts.com/highcharts.src.js",
       "https://code.highcharts.com/modules/heatmap.src.js",
