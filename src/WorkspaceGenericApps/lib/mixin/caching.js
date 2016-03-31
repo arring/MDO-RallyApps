@@ -32,15 +32,6 @@
 
 		The script (phantomjs probably), should wait for the above <div> to be placed to know it is finished. There 
 		should be a 5 minute timeout for errors on loading as well:
-		
-			setTimeout(function isCacheUpdateFinished(){
-				if(casper.getElementById("cache-mixin-update-complete") === null){
-					setTimout(isCacheUpdateFinished, 1000);
-				}
-				else {
-					//we KNOW its finished updating here
-				}
-			}, 1000);
 */
 
 (function(){
@@ -106,6 +97,7 @@
 			me._setIntelRallyAppSettings(payload);
 			me.setCachePayLoadFn(payload);		
 			
+			$('#cache-mixin-update-complete').remove(); //remove and add each time
 			$.ajax({
 				url: url,
 				method: 'PUT',
