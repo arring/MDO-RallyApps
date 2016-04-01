@@ -294,7 +294,7 @@
 		launch: function() {
 			var me = this;
 
-      me.isHorizontalView = me.getSetting('Horizontal');
+			me.isHorizontalView = me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
