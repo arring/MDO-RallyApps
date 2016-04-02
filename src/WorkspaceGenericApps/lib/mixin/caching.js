@@ -47,7 +47,7 @@
 			var deferred = Q.defer();
 			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript){
-				return Promise.resolve(false); //pretend there was cache miss		
+				return Q.resolve(false); //pretend there was cache miss		
 			}
 			
 			$.ajax({
@@ -87,7 +87,7 @@
 			var deferred = Q.defer();
 			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
-				return Promise.reject('cannot PUT to cache, invalid key');	
+				return Q.reject('cannot PUT to cache, invalid key');	
 			}
 			
 			if(timeoutDate){
@@ -96,8 +96,7 @@
             
 			me._setIntelRallyAppSettings(payload);
 			me.setCachePayLoadFn(payload);		
-			
-			$('#cache-mixin-update-complete').remove(); //remove and add each time
+			$('#cache-mixin-update-complete', window.parent.document).remove();//remove and add each time
 			$.ajax({
 				url: url,
 				method: 'PUT',
@@ -106,7 +105,7 @@
 				processData: false,
 				success: function(){
 					if(isUpdateScript){
-						$('body').append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
+						$(window.parent.document.body).append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
 					}
 					deferred.resolve(); 
 				},
@@ -123,7 +122,7 @@
 			var url = cacheUrl + key;
 			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl)){
-				return Promise.reject('cannot DELETE from cache, invalid key');	
+				return Q.reject('cannot DELETE from cache, invalid key');	
 			}			
 			
 			$.ajax({
@@ -136,7 +135,7 @@
 			return deferred.promise;
 		},
 		_isCacheUpdateScript: function(){
-			return decodeURI(window.parent.location.search).indexOf('cache-update-script=true') > -1;
+			return decodeURI(window.parent.location.href).indexOf('cache-update-script=true') > -1;
 		},
 		_getCacheIntelRallyAppSettings: function(payload){
 			var me = this;
