@@ -216,17 +216,19 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
-			var me = this, 
+/* 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  */ 
+			return 800;
 		},
 		getGridWidth: function(columnCfgs){
-			var me = this; 
+/* 			var me = this; 
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);   
+			);  */  
+			return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -843,7 +845,7 @@
 					}
 					if(portfolioItemRecord.data.Project){
 						return '<div class="feature-porfolio-items"><div class="feature-help">'+ featureHelpCount + '</div>' + '<div class="porfolio-items"><a href=' + me.BaseUrl + '/#/' + portfolioItemRecord.data.Project.ObjectID + 'd/detail/portfolioitem/' + 
-							me.PortfolioItemTypes[0] + '/' + portfolioItemRecord.data.ObjectID + '" target="_blank">' + formattedID + '</a></div></div>';
+							me.PortfolioItemTypes[0] + '/' + portfolioItemRecord.data.ObjectID + ' target="_blank">' + formattedID + '</a></div></div>';
 					}
 					else return name;
 				}
