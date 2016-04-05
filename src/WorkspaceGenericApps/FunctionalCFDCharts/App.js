@@ -29,7 +29,7 @@
             layout: 'hbox',
             items: [{
                 xtype: 'container',
-                id: 'cacheButtonsContainer',
+                id: 'cacheButtonsContainer'
             }, {
                     xtype: 'container',
                     id: 'cacheMessageContainer',
@@ -60,7 +60,7 @@
                 width: '100%'
             }],
         /**------------------------------------------------APP SETTINGS---------------------------------------------------- */
-        getSettingsFiled: function() {
+        getSettingsField: function() {
             return [{ name: 'cacheUrl', xtype: 'rallyTextField' }];
         },
         config: {
@@ -349,49 +349,6 @@
                 .done();
         },
 
-        // launch: function(){
-        // 	var me = this;
-        // 	me.initDisableResizeHandle();
-        // 	me.initFixRallyDashboard();
-        // 	me.setLoading('Loading Configuration');
-        // 	me.configureIntelRallyApp()
-        // 		.then(function(){
-        // 			var scopeProject = me.getContext().getProject();
-        // 			return me.loadProject(scopeProject.ObjectID);
-        // 		})
-        // 		.then(function(scopeProjectRecord){
-        // 			me.ProjectRecord = scopeProjectRecord;
-        // 			return Q.all([ //parallel loads
-        // 				me.loadAllLeafProjects() /******** load stream 1 *****/
-        // 					.then(function(leafProjects){
-        // 						me.LeafProjects = leafProjects;
-        // 						if(!me.LeafProjects[me.ProjectRecord.data.ObjectID]) 
-        // 							return Q.reject('You are not Scoped to a valid Project');
-        // 						me.TeamType = me.getAllHorizontalTeamTypeInfos([me.ProjectRecord])[0].teamType;
-        // 						me.ProjectsOfFunction = _.filter(me.LeafProjects, function(projectRecord){
-        // 							return me.getAllHorizontalTeamTypeInfos([projectRecord])[0].teamType === me.TeamType; 
-        // 						});
-        // 					}),
-        // 					me.loadCfdAllTrainPreference(),
-        // 					me.loadAppsPreference() /******** load stream 2 *****/
-        // 					.then(function(appsPref){
-        // 						me.AppsPref = appsPref;
-        // 						var twelveWeeks = 1000*60*60*24*7*12;
-        // 						return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-        // 					})
-        // 					.then(function(releaseRecords){
-        // 						me.ReleaseRecords = releaseRecords;
-        // 						var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-        // 						if(currentRelease) me.ReleaseRecord = currentRelease;
-        // 						else return Q.reject('This project has no releases.');
-        // 					})
-        // 			]);
-        // 		})
-        // 		.then(function(){	return me.reloadEverything(); })
-        // 		.fail(function(reason){ me.alert('ERROR', reason); })
-        // 		.then(function(){ me.setLoading(false); })
-        // 		.done();
-        // },
 
         /**************************************************** RENDERING Navbar ******************************************/
         renderDeleteCache: function() {
@@ -420,8 +377,7 @@
                         return me.loadConfiguration()
                             .then(function() { return me.reloadEverything(); })
                             .then(function() { return me.updateCache(); })
-                            .then(function() { me.setLoading(false); })
-
+                            .then(function() { me.setLoading(false); });
                     }
                 }
             });
