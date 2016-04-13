@@ -3296,12 +3296,16 @@
 		_calcTrainMetric: function(aggregateChartData){
 			var me = this,	totalinitial = 0,	finalCommit = 0, finalAccepted = 0,	totalProjected = 0,	totalideal = 0,
 				finalCommitIndex = aggregateChartData.categories.length - 1;
-
-				_.each(aggregateChartData.series,function(f){
+				
+			_.each(aggregateChartData.series,function(f){
 				finalAccepted = f.name==="Accepted" ? finalAccepted + f.data[finalCommitIndex] : finalAccepted; 
 				totalinitial = f.name==="Current Commit LCL" ? totalinitial + f.data[me.initialAddedDaysCount] : totalinitial;
 				finalCommit = (f.name !="Ideal" && f.name != "Projected" && f.name != "Current Commit LCL" && f.name != "Available Velocity UCL") ? finalCommit + f.data[finalCommitIndex] : finalCommit;
-				totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex] : totalProjected;
+				if(f.name === "Projected"  && typeof f.data[finalCommitIndex] === "object"){
+					totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex].y : totalProjected;
+				}else{
+					totalProjected = f.name === "Projected" ? totalProjected + f.data[finalCommitIndex] : totalProjected;
+				}
 				totalideal = f.name === "Ideal" ? totalideal + f.data[finalCommitIndex] : totalideal;
 			});
 			finalAccepted = (finalCommit === 0) && totalProjected > 0 ? totalProjected : totalideal;
