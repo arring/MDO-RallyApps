@@ -45,7 +45,7 @@
 			var isUpdateScript = me._isCacheUpdateScript();
 			var url = cacheUrl + key ;
 			var deferred = Q.defer();
-			
+			$('#cache-mixin-update-complete', window.parent.document).remove();//remove and add each time			
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript){
 				return Q.resolve(false); //pretend there was cache miss		
 			}
@@ -96,7 +96,6 @@
             
 			me._setIntelRallyAppSettings(payload);
 			me.setCachePayLoadFn(payload);		
-			$('#cache-mixin-update-complete', window.parent.document).remove();//remove and add each time
 			$.ajax({
 				url: url,
 				method: 'PUT',
