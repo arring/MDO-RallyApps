@@ -82,6 +82,7 @@
 		/**___________________________________ DATA STORE METHODS ___________________________________*/
 		loadPortfolioItems: function(){ 
 			var me=this;
+			me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank"];
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
 						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
@@ -1237,19 +1238,20 @@
 		
 		/**___________________________________ RENDER GRIDS ___________________________________*/	
 		renderTeamCommitsGrid: function(){
-			var me = this,
-				MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', ''];
+			var me = this;
+			// var MoSCoWRanks = ['Must Have', 'Should Have', 'Could Have', 'Won\'t Have', 'Undefined', '']; 
 			
 			me.teamCommitsCountHash = {};
 			me.teamCommitsEstimateHash = {};
 			
 			var customTeamCommitsRecords = _.map(_.sortBy(me.PortfolioItemStore.getRecords(), 
-				function(portfolioItemRecord){ return MoSCoWRanks.indexOf(portfolioItemRecord.data.c_MoSCoW); }),
+				function(portfolioItemRecord){ return portfolioItemRecord.data.DragAndDropRank; /* return MoSCoWRanks.indexOf(portfolioItemRecord.data.c_MoSCoW); */ }),
 				function(portfolioItemRecord, index){
 					var teamCommit = me.getTeamCommit(portfolioItemRecord);
 					return {
 						PortfolioItemObjectID: portfolioItemRecord.data.ObjectID,
-						PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
+						PortfolioItemRank: index+1,
+					//	PortfolioItemMoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined',
 						PortfolioItemName: portfolioItemRecord.data.Name,
 						PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
 						PortfolioItemPlannedEnd: new Date(portfolioItemRecord.data.PlannedEndDate)*1,
@@ -1284,14 +1286,14 @@
 								teamCommitsRecord.set('Objective', newVal.Objective || '');
 							if(teamCommitsRecord.data.Expected != newVal.Expected)
 								teamCommitsRecord.set('Expected', newVal.Expected);
-							if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
-								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined');
+							/* if(teamCommitsRecord.data.PortfolioItemMoSCoW != portfolioItemRecord.data.c_MoSCoW)
+								teamCommitsRecord.set('PortfolioItemMoSCoW', portfolioItemRecord.data.c_MoSCoW || 'Undefined'); */
 						}
 					});
 					teamCommitsStore.resumeEvents();
 				}
 			});
-			var teamCommitsColumns = [{
+			var teamCommitsColumns = [/* {
 				text:'MoSCoW',
 				dataIndex:'PortfolioItemMoSCoW',
 				tdCls: 'moscow-cell',
@@ -1318,6 +1320,11 @@
 					sortFn: function(moscow){ return MoSCoWRanks.indexOf(moscow); },
 					convertDisplayFn: function(val){ if(val === '') return 'Undefined'; else return val; }
 				}]
+			}, */{
+				text: 'Rank',
+				dataIndex: 'PortfolioItemRank',
+				width: 50,
+				sortable:true
 			},{
 				text:'ID', 
 				dataIndex:'PortfolioItemFormattedID',

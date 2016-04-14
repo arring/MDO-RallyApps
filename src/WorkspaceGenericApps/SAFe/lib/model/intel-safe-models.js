@@ -24,7 +24,8 @@
 			{name: 'Commitment', type: 'string'},
 			{name: 'Expected', type: 'boolean'},
 			{name: 'FeatureStatus', type: 'boolean'},
-			{name: 'Objective', type:'string'}
+			{name: 'Objective', type:'string'},
+			{name: 'PortfolioItemRank', type: 'number'}
 		]
 	});
 
@@ -101,8 +102,7 @@
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
 			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'MoSCoW', type: 'string'},
-			{name: 'Rank', type: 'string'}
+			{name: 'MoSCoW', type: 'string'}
 		]
 	});
 	
