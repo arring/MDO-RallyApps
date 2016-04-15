@@ -216,19 +216,17 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
-/* 			var me = this, 
+ 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  */ 
-			return 800;
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
 		},
 		getGridWidth: function(columnCfgs){
-/* 			var me = this; 
+		var me = this; 
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);  */  
-			return 800;
+			); 
 		},	
 		changeGridSize: function(){
 			var me=this;
