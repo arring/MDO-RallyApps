@@ -25,16 +25,29 @@
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
+            'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
 			'Intel.lib.mixin.HorizontalTeamTypes',
-			'Intel.lib.mixin.CustomAppObjectIDRegister'
+			'Intel.lib.mixin.CustomAppObjectIDRegister',
+            'Intel.lib.mixin.Caching'
 		],
-		
-		layout: {
+        
+        
+		//minWidth:910,
+        layout: {
 			type:'vbox',
 			align:'stretch',
 			pack:'start'
 		},
+        items:[{
+            xtype: 'container',
+            id:'cacheButtonsContainer',
+        },{
+            xtype:'container',
+            id: 'cacheMessageContainer',
+            cls: 'cachemessageContainer'
+        },{
+       
 		items:[{
 			xtype:'container',
 			itemId:'navbox',
@@ -63,9 +76,23 @@
 					pack:'end'
 				}
 			}]
-		}],
+		}]
+        }],
 		minWidth:910,
+
+        
 		
+   
+
+		/*--------------------------------------------APP SETTINGS----------------------------------- */
+        getSettingField: function() {
+            return[{ name: 'cacheUrl', xtype: 'rallyTextField' }];
+        },
+        config: {
+            defaultSettings: {
+                cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
+            }
+        },
 		userAppsPref: 'intel-SAFe-apps-preference',
 
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
@@ -216,17 +243,14 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
-			var me = this, 
-				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+			//var me = this, 
+			// 	iframe = Ext.get(window.frameElement);
+			// return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+            return 800;
 		},
 		getGridWidth: function(columnCfgs){
-			var me = this; 
-			if(!me.MatrixGrid) return;
-			else return Math.min(
-				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
-				window.innerWidth - 20
-			); 
+			// 
+            return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -241,6 +265,26 @@
 		},	
 
 		/**___________________________________ UTILITY FUNCTIONS ___________________________________*/
+        fixRawUserStoryAttributes: function() {
+            var me = this,
+            stories = me.UserStoryStore.getRange();
+            for(var i in stories){
+                for(var j in me.UserStoryFetchFields){
+                    if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
+                
+                }
+            }
+        },
+        
+        fixRawPortFolioItemAttributes: function() {
+            var me = this,
+            portFolioItems = me.PortfolioItemStore.getRange();
+            for(var i in portFolios){
+                for(var j in me.portfolioItemFields){
+                    if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
+                }
+            }
+        },
 		clearToolTip: function(){
 			var me = this;
 			if(me.tooltip){
@@ -481,15 +525,40 @@
 			var me = this;
 			return me.loadPortfolioItems().then(function(){ return me.loadUserStories(); });
 		},
+        
+        redrawEverything: function() {
+          var me = this;
+          me.setLoading(' Loading matrix');
+          me.clearEverything();
+      //    return me.reloadStores()
+        //  .then (function(){
+          if(me.DeleteCacheButton) me.renderDeleteCache();
+          if(!me.UpdateCacheButton) me.renderUpdateCache();
+          if(!me.ReleasePicker){
+              me.renderReleasePicker();
+              me.renderClickModePicker();
+              me.renderViewModePicker();
+              me.renderClearFiltersButton();
+              me.renderMatrixLegend();  
+              me.showGrids();
+          }
+          
+       //   })
+        // .then(function(){  me.setLoading(false);   })
+        //   
+          me.setLoading(false);            
+        },
 		
-		reloadEverything: function(){
+        reloadEverything: function(){
 			var me=this;
 
 			me.setLoading('Loading Data');
 			me.enqueue(function(done){
-				me.reloadStores()
+			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
+                        if(!me.DeleteCacheButton) me.renderDeleteCache();
+                        if(!me.UpdateCacheButton) me.renderUpdateCache();                        
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
 							me.renderClickModePicker();
@@ -505,6 +574,31 @@
 					.done();
 			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
 		},
+		// reloadEverything: function(){
+		// 	var me=this;
+
+		// 	me.setLoading('Loading Data');
+		// 	me.enqueue(function(done){
+		// 		me.reloadStores()
+		// 			.then(function(){
+		// 				me.clearEverything();
+        //                 if(!me.DeleteCacheButton) me.renderDeleteCache();
+        //                 if(!me.UpdateCacheButton) me.renderUpdateCache();                        
+		// 				if(!me.ReleasePicker){
+		// 					me.renderReleasePicker();
+		// 					me.renderClickModePicker();
+		// 					me.renderViewModePicker();
+		// 					me.renderClearFiltersButton();
+		// 					me.renderMatrixLegend();
+		// 				}				
+		// 			})
+		// 			.then(function(){ me.updateGrids(); })
+		// 			.then(function(){ me.showGrids(); })
+		// 			.fail(function(reason){ me.alert('ERROR', reason); })
+		// 			.then(function(){ me.setLoading(false); done(); })
+		// 			.done();
+		// 	}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
+		// },
 		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
 		refreshDataFunc: function(){
@@ -528,24 +622,147 @@
 		setRefreshInterval: function(){
 			var me=this;
 			me.clearRefreshInterval();
-			me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, 25000);
+		//	me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, 25000);
 		},
-			
-		/**___________________________________ LAUNCH ___________________________________*/	
-		launch: function(){
-			var me = this;
-			me.setLoading('Loading configuration');
-			me.ClickMode = 'Details';
-			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
-			me.initGridResize();
-			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
-				me.setLoading(false);
-				me.alert('ERROR', 'You do not have permissions to edit this project');
-				return;
-			}	
-			me.configureIntelRallyApp()
+        /*********************************************Rally Cache Mixin Operation ******************************** */
+        
+     	_loadModelsForCachedView: function(){ 
+			var me=this, 
+				promises = [],
+				models = { UserStory: 'HierarchicalRequirement' };
+			models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+			_.each(models, function(modelType, modelName){
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type:modelType, 
+					success: function(loadedModel){ 
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
+				});
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
+		},		
+        getCacheUrlSetting: function() {
+            var me = this;
+            return me.getSetting('cacheUrl');            
+        },
+        
+               
+        getCachePayloadFn: function() {
+            var me = this;
+            me.ProjectRecord = payload.ProjectRecord;
+            me.ReleaseRecord = payload.ReleaseRecord;
+            me.ReleaseRecords = payload.ReleaseRecords;
+            me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+            me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject;
+            me.PortfolioItemMap = payload.PortfolioItemMap;   
+                  
+          
+           // me.ProjectsWithTeamMembers = payload.ProjectsWithTeamMembers;          
+            me.AllProjects = payload.AllProjects;
+            me.PortfolioItemStore = payload.PortfolioItemStore;
+            return me._loadModelsForCachedView().then(function(){
+              	me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
+						autoLoad: false,
+						model: me.UserStory,
+						pageSize: 200,
+						data: payload.UserStories
+				});
+                me.fixRawUserStoryAttributes();
+			//	me.fixRawPortFolioItemAttributes();
+                me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
+                    autoLoad: false,
+                    model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+                    pageSize: 200,
+                    data:payload.PortfolioItemStore
+                    
+                });
+            });
+            
+        },
+        setCachePayLoadFn: function(payload) {
+            var me = this;
+            projectFields = ['Children','Name','ObjectID','Parent'];
+            me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank"];
+            function filterProjectData(projectData){
+                var data = _.pick(projectData,projectFields);
+                data.Parent = _.pick(data.Parent,projectFields);
+                data.children = _.pick(data.children,'[Count]');
+                return{data:data};
+                
+            }
+            
+            function filterPortfolioItemForCache(portfolioItem){
+                var data = _.pick(portfolioItem, me.portfolioItemFields);
+                  return{data:data};
+            }
+            payload.MatrixProjectMap = me.MatrixProjectMap;
+            payload.ProjectOIDNameMap = me.ProjectOIDNameMap;
+				
+            payload.MatrixUserStoryBreakdown =  me.MatrixUserStoryBreakdown;
+            payload.ProjectRecord = {data:me.ProjectRecord.data};
+            payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+            payload.ScrumGroupRootRecords =_.map(me.ScrumGroupRootRecords,function(ss){ return {data: ss.data};});
+            payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data};
+            payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
+            payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data:rr.data};});
+            payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+            payload.PortfolioItemTypes = me.PortfolioItemTypes;
+            //payload.UserStories = _.map(me.UserStoryStore.getRange(), function(us) { return { data: us.data};});
+            payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function (ps) { return {data: ps.data};});
+           // payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function (ps) { return filterPortfolioItemForCache(ps.data);});
+            payload.PortfolioItemMap = me.PortfolioItemMap;
+          // payload.PortfolioItemMap = _.reduce(me.PortfolioItemMap, function(map,sss,key){
+        //        map[key]= _map(sss,function(ss) { return _.pick(ss.data,me.portfolioItemFields);});
+        //        return map;
+        //    }, {});
+     
+           
+        },
+		cacheKeyGenerator: function() {
+            var me = this;
+            var projectOID = me.getContext().getProject().ObjectID;
+            var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
+            if (hasKey) {
+                return 'CmtMatx-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
+            }
+            else return undefined;
+          
+            
+        },
+        
+        getCacheTimeoutDate: function(){
+            return new Date(new Date()*1 + 1000*60*60*24);
+        },
+        loadDataCacheorRally: function() {
+            var me = this;
+            return me.getCache().then(function(cacheHit) {
+                if (!cacheHit) {
+                    return me.loadConfiguration()
+                        .then(function() { return me.reloadEverything(); })
+                        .then(function() {
+                            me.enqueue(function(done) {
+                                Q.all([
+                                    me.saveAppsPreference(me.AppsPref),
+                                    me.updateCache()
+                                ])
+                                    .fail(function(e) {
+                                        alert(e);
+                                        console.log(e);
+                                    });                           
+                            }, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()
+                         });
+                } else {
+                    me.renderCacheMessage();
+                    me.redrawEverything();
+                }
+            });
+        },
+        loadConfiguration: function() {
+            var me = this;
+           return  me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();
 					return me.loadProject(scopeProject.ObjectID);
@@ -574,7 +791,10 @@
 							.then(function(releaseRecords){
 								me.ReleaseRecords = releaseRecords;
 								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) me.ReleaseRecord = currentRelease;
+								if(currentRelease) {
+                                    me.ReleaseRecord = currentRelease;                                   
+                                    me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = { Release: me.ReleaseRecord.data.ObjectID }; //usually will be no-op
+                                }
 								else return Q.reject('This project has no releases.');
 							}),
 						me.loadProjectsWithTeamMembers(me.ProjectRecord)
@@ -588,10 +808,78 @@
 						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 					]);
 				})
-				.then(function(){ 
-					me.setRefreshInterval(); 
-					return me.reloadEverything(); 
-				})
+            
+            
+        },
+		/**___________________________________ LAUNCH ___________________________________*/	
+		launch: function(){
+			var me = this;
+			me.setLoading('Loading configuration');
+			me.ClickMode = 'Details';
+			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
+			me.initDisableResizeHandle();
+			me.initFixRallyDashboard();
+			me.initGridResize();
+			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
+				me.setLoading(false);
+				me.alert('ERROR', 'You do not have permissions to edit this project');
+				return;
+			}	
+            return Q.all([ me.loadAppsPreference().then (function(appsPref) {
+                me.AppsPref = appsPref;
+            })])
+			// me.configureIntelRallyApp()
+			// 	.then(function(){
+			// 		var scopeProject = me.getContext().getProject();
+			// 		return me.loadProject(scopeProject.ObjectID);
+			// 	})
+			// 	.then(function(scopeProjectRecord){
+			// 		me.ProjectRecord = scopeProjectRecord;
+			// 		return Q.all([
+			// 			me.projectInWhichScrumGroup(me.ProjectRecord)
+			// 				.then(function(scrumGroupRootRecord){
+			// 					if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+			// 						me.ScrumGroupRootRecord = scrumGroupRootRecord;
+			// 						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+			// 							.then(function(scrumGroupPortfolioProject){
+			// 								if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+			// 								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+			// 							});
+			// 					} 
+			// 					else return Q.reject('You are not scoped to a valid project');
+			// 				}),
+			// 			me.loadAppsPreference()
+			// 				.then(function(appsPref){
+			// 					me.AppsPref = appsPref;
+			// 					var twelveWeeks = 1000*60*60*24*7*12;
+			// 					return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+			// 				})
+			// 				.then(function(releaseRecords){
+			// 					me.ReleaseRecords = releaseRecords;
+			// 					var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+			// 					if(currentRelease) me.ReleaseRecord = currentRelease;
+			// 					else return Q.reject('This project has no releases.');
+			// 				}),
+			// 			me.loadProjectsWithTeamMembers(me.ProjectRecord)
+			// 				.then(function(projectsWithTeamMembers){ 
+			// 					me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+			// 				}),
+			// 			me.loadAllChildrenProjects()
+			// 				.then(function(allProjects){ 
+			// 					me.AllProjects = allProjects; 
+			// 				}),
+			// 			me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
+			// 		]);
+			// 	})
+            .then ( function() { return me.setRefreshInterval(); })
+            .then( function() { return me.loadDataCacheorRally(); })
+           // .then( function() { return me.redrawEverything(); })
+           //.then( function (){ return me.redrawEverything();})
+            // .then(function(){ 
+			// 		me.setRefreshInterval(); 
+			// 	//	return me.reloadEverything();
+            //        
+			// 	})
 				.fail(function(reason){
 					me.setLoading(false);
 					me.alert('ERROR', reason);
@@ -600,6 +888,45 @@
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
+        renderCacheMessage: function(){
+            var me = this;
+            Ext.getCmp('cacheMessageContainer').add({
+                xtype: 'label',
+                width:'100%',
+                html: 'You are looking at the cached version of the data'
+            });
+        },
+        renderDeleteCache: function() {
+            var me = this;
+            me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+                xtype: 'button',
+                text: 'clear cache data',
+                listeners: {
+                    click: function() {
+                        me.setLoading('Clearing cache, please wait');
+                        return me.deleteCache()
+                            .then(function() { me.setLoading(false); });
+                    }
+                }
+            });
+        },
+        renderUpdateCache: function() {
+          var me = this;
+          me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+              xtype: 'button',
+              text: 'Get Live Data',
+              listeners: {
+                  click: function() {
+                      me.setLoading(' Getting live data, please wait');
+                      Ext.getCmp('cacheMessageContainer').removeAll();
+                      return me.loadConfiguration()
+                        .then(function() { return me.reloadEverything();})
+                        .then(function() { return me.updateCache(); })
+                        .then(function() { me.setLoading(false); });
+                  }
+              }
+          });
+        },
 		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
@@ -991,8 +1318,7 @@
 					sortchange: function(){ me.clearToolTip(); },
 					beforeedit: function(editor, e){
 						var projectName = e.column.text,
-							matrixRecord = e.record;
-							
+							matrixRecord = e.record;							
 						if(projectName == 'MoSCoW') return;
 						if(me.ClickMode == 'Flag'){
 							me.MatrixGrid.setLoading('Saving');
