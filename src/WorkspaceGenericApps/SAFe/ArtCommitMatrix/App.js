@@ -534,9 +534,7 @@
         redrawEverything: function() {
           var me = this;
           me.setLoading(' Loading matrix');
-          me.clearEverything();
-      //    return me.reloadStores()
-        //  .then (function(){
+          me.clearEverything();  
           if(me.DeleteCacheButton) me.renderDeleteCache();
           if(!me.UpdateCacheButton) me.renderUpdateCache();
           if(!me.ReleasePicker){
@@ -547,10 +545,7 @@
               me.renderMatrixLegend();  
               me.showGrids();
           }
-          
-       //   })
-        // .then(function(){  me.setLoading(false);   })
-        //   
+    
           me.setLoading(false);            
         },
 		
@@ -579,31 +574,6 @@
 					.done();
 			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
 		},
-		// reloadEverything: function(){
-		// 	var me=this;
-
-		// 	me.setLoading('Loading Data');
-		// 	me.enqueue(function(done){
-		// 		me.reloadStores()
-		// 			.then(function(){
-		// 				me.clearEverything();
-        //                 if(!me.DeleteCacheButton) me.renderDeleteCache();
-        //                 if(!me.UpdateCacheButton) me.renderUpdateCache();                        
-		// 				if(!me.ReleasePicker){
-		// 					me.renderReleasePicker();
-		// 					me.renderClickModePicker();
-		// 					me.renderViewModePicker();
-		// 					me.renderClearFiltersButton();
-		// 					me.renderMatrixLegend();
-		// 				}				
-		// 			})
-		// 			.then(function(){ me.updateGrids(); })
-		// 			.then(function(){ me.showGrids(); })
-		// 			.fail(function(reason){ me.alert('ERROR', reason); })
-		// 			.then(function(){ me.setLoading(false); done(); })
-		// 			.done();
-		// 	}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
-		// },
 		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
 		refreshDataFunc: function(){
@@ -663,34 +633,29 @@
             me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
             me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject;
             me.PortfolioItemMap = payload.PortfolioItemMap;   
-                  
-          
-           // me.ProjectsWithTeamMembers = payload.ProjectsWithTeamMembers;          
+            me.MatrixProjectMap = payload.MatrixProjectMap;
+            me.ProjectOIDNameMap = payload.ProjectOIDNameMap;				
+            me.MatrixUserStoryBreakdown = payload.MatrixUserStoryBreakdown;            
             me.AllProjects = payload.AllProjects;
-            me.PortfolioItemStore = payload.PortfolioItemStore;
-            return me._loadModelsForCachedView().then(function(){
-              	me.UserStoryStore = Ext.create('Rally.data.wsapi.Store', {
-						autoLoad: false,
-						model: me.UserStory,
-						pageSize: 200,
-						data: payload.UserStories
-				});
-                me.fixRawUserStoryAttributes();
-			//	me.fixRawPortFolioItemAttributes();
-                me.PortfolioItemStore = Ext.create('Rally.data.custom.Store', {
-                    autoLoad: false,
+        
+
+			return me._loadModelsForCachedView().then(function(){
+            me.PortfolioItemStore = Ext.create('Rally.data.wsapi.Store', {                  
                     model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
                     pageSize: 200,
-                    data:payload.PortfolioItemStore
+                    data:payload.PortfolioItemStoreData,
+                    disableMetaChangeEvent: true,
+                    load: function(){}
                     
-                });
+                });     
             });
             
         },
         setCachePayLoadFn: function(payload) {
             var me = this;
             projectFields = ['Children','Name','ObjectID','Parent'];
-            me.portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank"];
+            portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank",
+            '_p','_ref','_refObjectUUID','_type','_objectVersion','_CreatedAt'];
             function filterProjectData(projectData){
                 var data = _.pick(projectData,projectFields);
                 data.Parent = _.pick(data.Parent,projectFields);
@@ -700,8 +665,8 @@
             }
             
             function filterPortfolioItemForCache(portfolioItem){
-                var data = _.pick(portfolioItem, me.portfolioItemFields);
-                  return{data:data};
+                var data = _.pick(portfolioItem, portfolioItemFields);
+                  return data;
             }
             payload.MatrixProjectMap = me.MatrixProjectMap;
             payload.ProjectOIDNameMap = me.ProjectOIDNameMap;
@@ -714,16 +679,9 @@
             payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
             payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data:rr.data};});
             payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-            payload.PortfolioItemTypes = me.PortfolioItemTypes;
-            //payload.UserStories = _.map(me.UserStoryStore.getRange(), function(us) { return { data: us.data};});
-            payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function (ps) { return {data: ps.data};});
-           // payload.PortfolioItemStore = _.map(me.PortfolioItemStore.getRange(), function (ps) { return filterPortfolioItemForCache(ps.data);});
+            payload.PortfolioItemTypes = me.PortfolioItemTypes;            
+            payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
             payload.PortfolioItemMap = me.PortfolioItemMap;
-          // payload.PortfolioItemMap = _.reduce(me.PortfolioItemMap, function(map,sss,key){
-        //        map[key]= _map(sss,function(ss) { return _.pick(ss.data,me.portfolioItemFields);});
-        //        return map;
-        //    }, {});
-     
            
         },
 		cacheKeyGenerator: function() {
