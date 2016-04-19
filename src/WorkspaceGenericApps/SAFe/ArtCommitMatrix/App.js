@@ -86,11 +86,19 @@
 
 		/*--------------------------------------------APP SETTINGS----------------------------------- */
         getSettingField: function() {
-            return[{ name: 'cacheUrl', xtype: 'rallyTextField' }];
+            return[{
+                name: 'cacheUrl', 
+                xtype: 'rallyTextField' 
+            },{
+                name: 'enableRefreshData',
+                xtype: 'rallyCheckboxField'
+                
+              }];
         },
         config: {
             defaultSettings: {
-                cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/'
+                cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/',
+                enableRefreshData: 'false'
             }
         },
 		userAppsPref: 'intel-SAFe-apps-preference',
@@ -456,7 +464,7 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-		updateGridHeader: function(projectName){
+		updateGridHeader: function(projectName){            	           
 			var me=this,
 				column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
 				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
@@ -597,7 +605,8 @@
 		setRefreshInterval: function(){
 			var me=this;
 			me.clearRefreshInterval();
-		//	me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, 25000);
+            if(me.IsEnableRefreshData)
+		    	me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, 25000);
 		},
         /*********************************************Rally Cache Mixin Operation ******************************** */
         
@@ -623,7 +632,7 @@
             var me = this;
             return me.getSetting('cacheUrl');            
         },
-        
+       
                
         getCachePayloadFn: function() {
             var me = this;
@@ -777,6 +786,7 @@
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
+            me.IsEnableRefreshData = me.getSetting('enableRefreshData');
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
