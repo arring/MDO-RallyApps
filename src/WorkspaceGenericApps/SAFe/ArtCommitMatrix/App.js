@@ -466,7 +466,7 @@
 		},
 		updateGridHeader: function(projectName){            	           
 			var me=this;
-            if(!me.MatrixGrid) renderMatrixGrid();//TODO: verify if this is correct
+            if(!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
 				var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
 				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
 				shouldHaveItems = me.ViewMode === '% Done';
