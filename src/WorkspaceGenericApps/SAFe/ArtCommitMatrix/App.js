@@ -251,19 +251,19 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
-/* 			var me = this, 
+ 			var me = this, 
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  */ 
-			return 800;
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
+			//return 800;
 		},
 		getGridWidth: function(columnCfgs){
-/* 			var me = this; 
+			var me = this; 
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);  */  
-			return 800;
+			);    
+			//return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -465,8 +465,9 @@
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
 		updateGridHeader: function(projectName){            	           
-			var me=this,
-				column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
+			var me=this;
+            if(!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
+				var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
 				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
 				shouldHaveItems = me.ViewMode === '% Done';
 			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
