@@ -232,7 +232,8 @@
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
-			var horizontalName = me.isHorizontalView ? me.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : "";
+			var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
+			var horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			
 			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + releaseOID;

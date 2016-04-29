@@ -22,8 +22,8 @@
 		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
 	
-	//increase timeouts to 2 minutes since rally can be slow sometimes
-	var timeout = 120000;
+	//increase timeouts to 5 minutes since rally can be slow sometimes
+	var timeout = 300000;
 	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
 	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
 	
