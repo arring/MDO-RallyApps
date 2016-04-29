@@ -682,11 +682,13 @@
             payload.ProjectOIDNameMap = me.ProjectOIDNameMap;
 				
             payload.MatrixUserStoryBreakdown =  me.MatrixUserStoryBreakdown;
-            payload.ProjectRecord = {data:me.ProjectRecord.data};
+            //payload.ProjectRecord ={data:me.ProjectRecord.data};
+            payload.ProjectRecord= filterProjectData(me.ProjectRecord.data);
             payload.ReleaseRecord = {data: me.ReleaseRecord.data};
             payload.ScrumGroupRootRecords =_.map(me.ScrumGroupRootRecords,function(ss){ return {data: ss.data};});
             payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data};
-            payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
+            //payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
+            payload.AllProjects = _.map(me.AllProjects,function(ap){ return filterProjectData(ap.data);});
             payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data:rr.data};});
             payload.ReleaseRecord = {data: me.ReleaseRecord.data};
             payload.PortfolioItemTypes = me.PortfolioItemTypes;            
