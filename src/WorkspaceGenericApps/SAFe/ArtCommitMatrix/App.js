@@ -97,7 +97,7 @@
         },
         config: {
             defaultSettings: {
-                cacheUrl: 'https://mdoproceffrpt:45555/api/v1.0/custom/rally-app-cache/',
+                cacheUrl: '',
                 enableRefreshData: 'false'
             }
         },
