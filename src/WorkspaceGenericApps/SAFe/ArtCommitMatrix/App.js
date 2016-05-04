@@ -216,7 +216,7 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function(){
- 			var me = this, 
+			var me = this, 
 				iframe = Ext.get(window.frameElement);
 			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
 		},
