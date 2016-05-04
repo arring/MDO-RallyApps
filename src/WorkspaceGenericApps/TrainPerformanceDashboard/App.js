@@ -458,8 +458,8 @@
 				}
 				totalideal = f.name === "Ideal" ? totalideal + f.data[finalCommitIndex] : totalideal;
 			});
-			finalAccepted = (finalCommit === 0) && totalProjected > 0 ? totalProjected : totalideal;
-			finalCommit = (finalCommit === 0) && totalideal > 0 ? totalideal : totalProjected;			
+			finalAccepted = (finalCommit === 0) && totalProjected > 0 ? totalProjected : finalAccepted;
+			finalCommit = (finalCommit === 0) && totalideal > 0 ? totalideal : finalCommit;			
 			me.total = {};
 			me.total.initialCommit = totalinitial;
 			me.total.finalCommit = finalCommit;
