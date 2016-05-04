@@ -41,7 +41,7 @@
 		},
         items:[{
             xtype: 'container',
-            id:'cacheButtonsContainer',
+            id:'cacheButtonsContainer'
         },{
             xtype:'container',
             id: 'cacheMessageContainer',
@@ -91,7 +91,7 @@
                 name: 'cacheUrl', 
                 xtype: 'rallytextfield' 
             },{
-                name: 'enableRefreshData',
+                name: 'dataRefresh',
                 xtype: 'rallycheckboxfield'
                 
               }];
@@ -99,7 +99,7 @@
         config: {
             defaultSettings: {
                 cacheUrl: '',
-                enableRefreshData: 'false'
+                dataRefresh: 'false'
             }
         },
 		userAppsPref: 'intel-SAFe-apps-preference',
@@ -194,24 +194,7 @@
 					if(!me.MatrixProjectMap[projectName]) me.MatrixProjectMap[projectName] = projectRecord.data.ObjectID;
 					if(!me.MatrixUserStoryBreakdown[projectName]) me.MatrixUserStoryBreakdown[projectName] = {};
 					me.ProjectOIDNameMap[projectOID] = projectName;
-				});
-				
-				// var projectOIDsToGet = [];
-				// _.each(me.PortfolioItemStore.getRange(), function(portfolioItemRecord){
-					// var teamCommits = me.getTeamCommits(portfolioItemRecord);
-					// _.each(teamCommits, function(teamCommit, projectOID){
-						// if(!me.ProjectOIDNameMap[projectOID] && !_.contains(projectOIDsToGet, projectOID)){
-							// projectOIDsToGet.push(projectOID);
-						// }
-					// });
-				// });
-				// return Promise.all(_.map(projectOIDsToGet, function(oid){
-					// return me.loadProject(oid).then(function(projectRecord){
-						// me.ProjectOIDNameMap[projectRecord.data.ObjectID] = projectRecord.data.Name;
-						// me.MatrixProjectMap[projectRecord.data.Name] = projectRecord.data.ObjectID;
-						// me.MatrixUserStoryBreakdown[projectRecord.data.Name] = {};
-					// });
-				// }));
+				});			
 			});
 		},		
 			
@@ -251,12 +234,12 @@
 		},
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
-		getGridHeight: function(){
- 			var me = this, 
-				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
-			//return 800;
-		},
+        getGridHeight: function() {
+            var me = this,
+                iframe = Ext.get(window.frameElement);
+            return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+            //return 800;
+        },
 		getGridWidth: function(columnCfgs){
 			var me = this; 
 			if(!me.MatrixGrid) return;
@@ -465,17 +448,17 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-		updateGridHeader: function(projectName){            	           
-			var me=this;
-            if(!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
-				var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column){ return column.text == projectName; }),
-				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
-				shouldHaveItems = me.ViewMode === '% Done';
-			_.each(possibleClasses, function(cls){ column.el.removeCls(cls); });
-			while(column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
-			if(shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
-			column.el.addCls(me.getProjectHeaderCls(projectName));
-		},
+        updateGridHeader: function(projectName) {
+            var me = this;
+            if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
+            var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
+                possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
+                shouldHaveItems = me.ViewMode === '% Done';
+            _.each(possibleClasses, function(cls) { column.el.removeCls(cls); });
+            while (column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
+            if (shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
+            column.el.addCls(me.getProjectHeaderCls(projectName));
+        },
 	
 		updateTotalPercentCell: function(matrixRecord, index){
 			var me=this,
@@ -604,32 +587,32 @@
 				me.RefreshInterval = undefined; 
 			}	
 		},
-		setRefreshInterval: function(){
-			var me=this;
-			me.clearRefreshInterval();
-            if(me.IsEnableRefreshData)
-		    	me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, 25000);
-		},
+        setRefreshInterval: function() {
+            var me = this;
+            me.clearRefreshInterval();
+            if (me.IsDataRefresh)
+                me.RefreshInterval = setInterval(function() { me.refreshDataFunc(); }, 25000);
+        },
         /*********************************************Rally Cache Mixin Operation ******************************** */
         
-     	_loadModelsForCachedView: function(){ 
-			var me=this, 
-				promises = [],
-				models = { UserStory: 'HierarchicalRequirement' };
-			models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
-			_.each(models, function(modelType, modelName){
-				var deferred = Q.defer();
-				Rally.data.WsapiModelFactory.getModel({
-					type:modelType, 
-					success: function(loadedModel){ 
-						me[modelName] = loadedModel;
-						deferred.resolve();
-					}
-				});
-				promises.push(deferred.promise);
-			});
-			return Q.all(promises);
-		},		
+        _loadModelsForCachedView: function() {
+            var me = this,
+                promises = [],
+                models = { UserStory: 'HierarchicalRequirement' };
+            models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+            _.each(models, function(modelType, modelName) {
+                var deferred = Q.defer();
+                Rally.data.WsapiModelFactory.getModel({
+                    type: modelType,
+                    success: function(loadedModel) {
+                        me[modelName] = loadedModel;
+                        deferred.resolve();
+                    }
+                });
+                promises.push(deferred.promise);
+            });
+            return Q.all(promises);
+        },		
         getCacheUrlSetting: function() {
             var me = this;
             return me.getSetting('cacheUrl');            
@@ -783,14 +766,14 @@
 							}),
 						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 					]);
-				})
+				});
             
             
         },
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
-            me.IsEnableRefreshData = me.getSetting('enableRefreshData');
+            me.IsDataRefresh = me.getSetting('dataRefresh');
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
@@ -804,59 +787,9 @@
 			}	
             return Q.all([ me.loadAppsPreference().then (function(appsPref) {
                 me.AppsPref = appsPref;
-            })])
-			// me.configureIntelRallyApp()
-			// 	.then(function(){
-			// 		var scopeProject = me.getContext().getProject();
-			// 		return me.loadProject(scopeProject.ObjectID);
-			// 	})
-			// 	.then(function(scopeProjectRecord){
-			// 		me.ProjectRecord = scopeProjectRecord;
-			// 		return Q.all([
-			// 			me.projectInWhichScrumGroup(me.ProjectRecord)
-			// 				.then(function(scrumGroupRootRecord){
-			// 					if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-			// 						me.ScrumGroupRootRecord = scrumGroupRootRecord;
-			// 						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-			// 							.then(function(scrumGroupPortfolioProject){
-			// 								if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
-			// 								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-			// 							});
-			// 					} 
-			// 					else return Q.reject('You are not scoped to a valid project');
-			// 				}),
-			// 			me.loadAppsPreference()
-			// 				.then(function(appsPref){
-			// 					me.AppsPref = appsPref;
-			// 					var twelveWeeks = 1000*60*60*24*7*12;
-			// 					return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-			// 				})
-			// 				.then(function(releaseRecords){
-			// 					me.ReleaseRecords = releaseRecords;
-			// 					var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-			// 					if(currentRelease) me.ReleaseRecord = currentRelease;
-			// 					else return Q.reject('This project has no releases.');
-			// 				}),
-			// 			me.loadProjectsWithTeamMembers(me.ProjectRecord)
-			// 				.then(function(projectsWithTeamMembers){ 
-			// 					me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
-			// 				}),
-			// 			me.loadAllChildrenProjects()
-			// 				.then(function(allProjects){ 
-			// 					me.AllProjects = allProjects; 
-			// 				}),
-			// 			me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
-			// 		]);
-			// 	})
+            })])			
             .then ( function() { return me.setRefreshInterval(); })
-            .then( function() { return me.loadDataCacheorRally(); })
-           // .then( function() { return me.redrawEverything(); })
-           //.then( function (){ return me.redrawEverything();})
-            // .then(function(){ 
-			// 		me.setRefreshInterval(); 
-			// 	//	return me.reloadEverything();
-            //        
-			// 	})
+            .then( function() { return me.loadDataCacheorRally(); })       
 				.fail(function(reason){
 					me.setLoading(false);
 					me.alert('ERROR', reason);
