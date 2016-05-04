@@ -85,13 +85,14 @@
    
 
 		/*--------------------------------------------APP SETTINGS----------------------------------- */
-        getSettingField: function() {
-            return[{
+        settingsScope: 'workspace',
+        getSettingsFields: function() {
+            return [{
                 name: 'cacheUrl', 
-                xtype: 'rallyTextField' 
+                xtype: 'rallytextfield' 
             },{
                 name: 'enableRefreshData',
-                xtype: 'rallyCheckboxField'
+                xtype: 'rallycheckboxfield'
                 
               }];
         },
