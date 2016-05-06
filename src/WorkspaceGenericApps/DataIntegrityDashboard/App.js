@@ -234,12 +234,13 @@
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
+			var horizontalName = "";
 			if(me.isHorizontalView){
 				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
-				var horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
+				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
 				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
 			}
- 			var releaseOID = me.ReleaseRecord.data.ObjectID;
+			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			
 			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + releaseOID;
 		},
