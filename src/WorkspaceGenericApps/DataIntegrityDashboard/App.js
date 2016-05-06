@@ -181,7 +181,7 @@
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				userStoryFields = ['Name', 'ObjectID', 'Project', 'Iteration', 
-					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState', 
+					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner', 
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
 				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
@@ -198,8 +198,9 @@
 			}
 			function filterUserStoryForCache(userStoryRecord){
 				var data = _.pick(userStoryRecord.data, userStoryFields);
-				data.Iteration = data.Iteration ? _.pick(data.Iteration, ['EndDate', 'Name', 'ObjectID', 'StartDate']) : null;
-				data.Project =  _.pick(data.Project, ['Name', 'ObjectID']);
+				data.Iteration = data.Iteration ? _.pick(data.Iteration, ['EndDate', 'Name', 'ObjectID', 'StartDate','_refObjectName']) : null;
+				data.Project =  _.pick(data.Project, ['Name', 'ObjectID','_refObjectName']);
+				data.Owner =  _.pick(data.Owner, ['_refObjectName']);
 				data.Release = data.Release ? _.pick(data.Release, ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate']) : null;
 				return data;
 			}
@@ -227,14 +228,18 @@
 				return map;
 			}, {});	
 			payload.PortfolioUserStoryCount = me.PortfolioUserStoryCount;
+
 			payload.UserStories = _.map(me.UserStoryStore.getRange(), filterUserStoryForCache);
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
-			var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
-			var horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
-			var releaseOID = me.ReleaseRecord.data.ObjectID;
+			if(me.isHorizontalView){
+				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
+				var horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
+				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
+			}
+ 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			
 			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + releaseOID;
 		},
@@ -286,7 +291,6 @@
 		},
 		loadCacheIndependentConfig: function(){
 			var me = this;
-			
 			return Q.all([
 				me.isHorizontalView ? me._loadHorizontalGroupingConfig() : Q(),
 				me.loadReleases()
