@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = me.getSetting('Horizontal');
+			me.isHorizontalView =false;// me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -596,6 +596,14 @@
 					pageSize: 200,
 					data: [].concat.apply([], _.invoke(stores, 'getRange'))
 				});
+					/* US436545: Remove this to get back improperly sized user stories */
+				_.each(me.UserStoryStore.getRange(), function(item,key){
+					var pe = item.data.PlanEstimate;
+					if(pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16){
+						console.log(me.UserStoryStore.data.Name,item.data.PlanEstimate);
+						me.UserStoryStore.removeAt(key);
+					}
+				});				
 				me.fixRawUserStoryAttributes();
 			});
 		},
@@ -883,10 +891,11 @@
 				pointDen = userStoryGrids[0].originalConfig.totalPoints,
 				storyPer,
 				pointPer;
-				
 			// Sums the point estimates and number of stories
 			_.each(userStoryGrids, function(grid){
-				_.each(grid.originalConfig.data, function(item){ storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0; });
+				_.each(grid.originalConfig.data, function(item){ 
+					storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0; 
+				});
 			});
 			pointNum = (100*(pointDen - _.reduce(storyNum, function(sum, planEstimate){ return sum + planEstimate; }, 0))>>0)/100;
 			storyNum = storyDen - Object.keys(storyNum).length;
@@ -1388,7 +1397,7 @@
 						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
-				},{
+				},/* US436545{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Improperly Sized Stories',
@@ -1405,7 +1414,7 @@
 						var pe = item.data.PlanEstimate;
 						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
-				},{
+				}, */{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Stories in Release without Iteration',
