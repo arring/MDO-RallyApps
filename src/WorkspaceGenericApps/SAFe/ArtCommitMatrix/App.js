@@ -31,15 +31,13 @@
 			'Intel.lib.mixin.CustomAppObjectIDRegister',
             'Intel.lib.mixin.Caching'
 		],
-        
-        
 		//minWidth:910,
-        layout: {
+		layout: {
 			type:'vbox',
 			align:'stretch',
 			pack:'start'
 		},
-        items:[{
+		items:[{
             xtype: 'container',
             id:'cacheButtonsContainer'
         },{
@@ -79,31 +77,25 @@
 		}]
         }],
 		minWidth:910,
-
-        
-		
-   
-
 		/*--------------------------------------------APP SETTINGS----------------------------------- */
-        settingsScope: 'workspace',
-        getSettingsFields: function() {
-            return [{
-                name: 'cacheUrl', 
-                xtype: 'rallytextfield' 
-            },{
-                name: 'dataRefresh',
-                xtype: 'rallycheckboxfield'
-                
-              }];
-        },
-        config: {
-            defaultSettings: {
-                cacheUrl: '',
-                dataRefresh: 'false'
-            }
-        },
+		settingsScope: 'workspace',
+		getSettingsFields: function() {
+				return [{
+						name: 'cacheUrl', 
+						xtype: 'rallytextfield' 
+				},{
+						name: 'dataRefresh',
+						xtype: 'rallycheckboxfield'
+						
+					}];
+		},
+		config: {
+			defaultSettings: {
+					cacheUrl: '',
+					dataRefresh: 'false'
+			}
+    },
 		userAppsPref: 'intel-SAFe-apps-preference',
-
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
 			var me=this, deferred = Q.defer();
@@ -234,19 +226,19 @@
 		},
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
-        getGridHeight: function() {
-            var me = this,
-                iframe = Ext.get(window.frameElement);
-            return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
-            //return 800;
-        },
+		getGridHeight: function() {
+			var me = this,
+					iframe = Ext.get(window.frameElement);
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20; 
+			// return 800;
+		},
 		getGridWidth: function(columnCfgs){
-			var me = this; 
+	 		var me = this; 
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);    
+			);   
 			//return 800;
 		},	
 		changeGridSize: function(){
@@ -262,26 +254,26 @@
 		},	
 
 		/**___________________________________ UTILITY FUNCTIONS ___________________________________*/
-        fixRawUserStoryAttributes: function() {
-            var me = this,
-            stories = me.UserStoryStore.getRange();
-            for(var i in stories){
-                for(var j in me.UserStoryFetchFields){
-                    if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
-                
-                }
-            }
-        },
-        
-        fixRawPortFolioItemAttributes: function() {
-            var me = this,
-            portFolioItems = me.PortfolioItemStore.getRange();
-            for(var i in portFolios){
-                for(var j in me.portfolioItemFields){
-                    if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
-                }
-            }
-        },
+		fixRawUserStoryAttributes: function() {
+			var me = this,
+			stories = me.UserStoryStore.getRange();
+			for(var i in stories){
+					for(var j in me.UserStoryFetchFields){
+							if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
+					
+					}
+			}
+		},
+		
+		fixRawPortFolioItemAttributes: function() {
+			var me = this,
+			portFolioItems = me.PortfolioItemStore.getRange();
+			for(var i in portFolios){
+					for(var j in me.portfolioItemFields){
+							if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
+					}
+			}
+		},
 		clearToolTip: function(){
 			var me = this;
 			if(me.tooltip){
@@ -312,7 +304,6 @@
 					(userStoryData.PlanEstimate || 0) : 0);
 			}, 0);
 		},
-					
 		getCellCls: function(config){
 			var me=this,
 				colorClassBase = ' intel-team-commits-',
@@ -448,7 +439,7 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-        updateGridHeader: function(projectName) {
+    updateGridHeader: function(projectName) {
             var me = this;
             if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
             var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
@@ -524,25 +515,24 @@
 			return me.loadPortfolioItems().then(function(){ return me.loadUserStories(); });
 		},
         
-        redrawEverything: function() {
-          var me = this;
-          me.setLoading(' Loading matrix');
-          me.clearEverything();  
-          if(me.DeleteCacheButton) me.renderDeleteCache();
-          if(!me.UpdateCacheButton) me.renderUpdateCache();
-          if(!me.ReleasePicker){
-              me.renderReleasePicker();
-              me.renderClickModePicker();
-              me.renderViewModePicker();
-              me.renderClearFiltersButton();
-              me.renderMatrixLegend();  
-              me.showGrids();
-          }
-    
-          me.setLoading(false);            
-        },
-		
-        reloadEverything: function(){
+		redrawEverything: function() {
+			var me = this;
+			me.setLoading(' Loading matrix');
+			me.clearEverything();  
+			//if(me.DeleteCacheButton) me.renderDeleteCache();
+			if(!me.UpdateCacheButton) me.renderUpdateCache();
+			if(!me.ReleasePicker){
+					me.renderReleasePicker();
+					me.renderClickModePicker();
+					me.renderViewModePicker();
+					me.renderClearFiltersButton();
+					me.renderMatrixLegend();  
+			}
+			me.showGrids();
+			me.setLoading(false);            
+		},
+
+		reloadEverything: function(){
 			var me=this;
 
 			me.setLoading('Loading Data');
@@ -550,8 +540,8 @@
 			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
-                        if(!me.DeleteCacheButton) me.renderDeleteCache();
-                        if(!me.UpdateCacheButton) me.renderUpdateCache();                        
+					 // if(!me.DeleteCacheButton) me.renderDeleteCache();
+						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
 							me.renderClickModePicker();
@@ -567,7 +557,33 @@
 					.done();
 			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
 		},
-		
+		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
+		//REVISIT
+		releasePickerSelected_reloadEverything: function(){
+			var me=this;
+
+			me.setLoading('Loading Data');
+			me.enqueue(function(done){
+			return me.reloadStores()
+					.then(function(){
+						me.clearEverything();
+					 // if(!me.DeleteCacheButton) me.renderDeleteCache();
+						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
+						if(!me.ReleasePicker){
+							me.renderReleasePicker();
+							me.renderClickModePicker();
+							me.renderViewModePicker();
+							me.renderClearFiltersButton();
+							me.renderMatrixLegend();
+						}				
+					})
+					.then(function(){ me.updateGrids(); })
+					.then(function(){ me.showGrids(); })
+					.fail(function(reason){ me.alert('ERROR', reason); })
+					.then(function(){ me.setLoading(false); done(); })
+					.done();
+			}, 'releaseSelectedRefresh'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
+		},		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
 		refreshDataFunc: function(){
 			var me=this;
@@ -587,7 +603,7 @@
 				me.RefreshInterval = undefined; 
 			}	
 		},
-        setRefreshInterval: function() {
+		setRefreshInterval: function() {
             var me = this;
             me.clearRefreshInterval();
             if (me.IsDataRefresh)
@@ -595,185 +611,264 @@
         },
         /*********************************************Rally Cache Mixin Operation ******************************** */
         
-        _loadModelsForCachedView: function() {
-            var me = this,
-                promises = [],
-                models = { UserStory: 'HierarchicalRequirement' };
-            models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
-            _.each(models, function(modelType, modelName) {
-                var deferred = Q.defer();
-                Rally.data.WsapiModelFactory.getModel({
-                    type: modelType,
-                    success: function(loadedModel) {
-                        me[modelName] = loadedModel;
-                        deferred.resolve();
-                    }
-                });
-                promises.push(deferred.promise);
-            });
-            return Q.all(promises);
-        },		
-        getCacheUrlSetting: function() {
+		_loadModelsForCachedView: function() {
+				var me = this,
+						promises = [],
+						models = { UserStory: 'HierarchicalRequirement' };
+				models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+				_.each(models, function(modelType, modelName) {
+						var deferred = Q.defer();
+						Rally.data.WsapiModelFactory.getModel({
+								type: modelType,
+								success: function(loadedModel) {
+										me[modelName] = loadedModel;
+										deferred.resolve();
+								}
+						});
+						promises.push(deferred.promise);
+				});
+				return Q.all(promises);
+		},		
+		getCacheUrlSetting: function() {
             var me = this;
             return me.getSetting('cacheUrl');            
-        },
-       
-               
-        getCachePayloadFn: function() {
-            var me = this;
-            me.ProjectRecord = payload.ProjectRecord;
-            me.ReleaseRecord = payload.ReleaseRecord;
-            me.ReleaseRecords = payload.ReleaseRecords;
-            me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
-            me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject;
-            me.PortfolioItemMap = payload.PortfolioItemMap;   
-            me.MatrixProjectMap = payload.MatrixProjectMap;
-            me.ProjectOIDNameMap = payload.ProjectOIDNameMap;				
-            me.MatrixUserStoryBreakdown = payload.MatrixUserStoryBreakdown;            
-            me.AllProjects = payload.AllProjects;
-        
-
+    },
+		getCachePayloadFn: function() {
+			var me = this;
+			me.ProjectRecord = payload.ProjectRecord;
+			me.ReleaseRecord = payload.ReleaseRecord;
+			me.ReleaseRecords = payload.ReleaseRecords;
+			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
+			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject;
+			me.PortfolioItemMap = payload.PortfolioItemMap;   
+			me.MatrixProjectMap = payload.MatrixProjectMap;
+			me.ProjectOIDNameMap = payload.ProjectOIDNameMap;				
+			me.MatrixUserStoryBreakdown = payload.MatrixUserStoryBreakdown;            
+			me.AllProjects = payload.AllProjects;
 			return me._loadModelsForCachedView().then(function(){
-            me.PortfolioItemStore = Ext.create('Rally.data.wsapi.Store', {                  
-                    model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
-                    pageSize: 200,
-                    data:payload.PortfolioItemStoreData,
-                    disableMetaChangeEvent: true,
-                    load: function(){}
-                    
-                });     
-            });
-            
-        },
-        setCachePayLoadFn: function(payload) {
-            var me = this;
-            projectFields = ['Children','Name','ObjectID','Parent'];
-            portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank",
-            '_p','_ref','_refObjectUUID','_type','_objectVersion','_CreatedAt'];
-            function filterProjectData(projectData){
-                var data = _.pick(projectData,projectFields);
-                data.Parent = _.pick(data.Parent,projectFields);
-                data.children = _.pick(data.children,'[Count]');
-                return{data:data};
-                
-            }
-            
-            function filterPortfolioItemForCache(portfolioItem){
-                var data = _.pick(portfolioItem, portfolioItemFields);
-                  return data;
-            }
-            payload.MatrixProjectMap = me.MatrixProjectMap;
-            payload.ProjectOIDNameMap = me.ProjectOIDNameMap;
-				
-            payload.MatrixUserStoryBreakdown =  me.MatrixUserStoryBreakdown;
-            //payload.ProjectRecord ={data:me.ProjectRecord.data};
-            payload.ProjectRecord= filterProjectData(me.ProjectRecord.data);
-            payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-            payload.ScrumGroupRootRecords =_.map(me.ScrumGroupRootRecords,function(ss){ return {data: ss.data};});
-            payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data};
-            //payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
-            payload.AllProjects = _.map(me.AllProjects,function(ap){ return filterProjectData(ap.data);});
-            payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data:rr.data};});
-            payload.ReleaseRecord = {data: me.ReleaseRecord.data};
-            payload.PortfolioItemTypes = me.PortfolioItemTypes;            
-            payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
-            payload.PortfolioItemMap = me.PortfolioItemMap;
-           
-        },
-		cacheKeyGenerator: function() {
-            var me = this;
-            var projectOID = me.getContext().getProject().ObjectID;
-            var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
-            if (hasKey) {
-                return 'CmtMatx-' + projectOID + '-' + me.AppsPref.projs[projectOID].Release;
-            }
-            else return undefined;
-          
-            
-        },
-        
-        getCacheTimeoutDate: function(){
-            return new Date(new Date()*1 + 1000*60*60*24);
-        },
-        loadDataCacheorRally: function() {
-            var me = this;
-            return me.getCache().then(function(cacheHit) {
-                if (!cacheHit) {
-                    return me.loadConfiguration()
-                        .then(function() { return me.reloadEverything(); })
-                        .then(function() {
-                            me.enqueue(function(done) {
-                                Q.all([
-                                    me.saveAppsPreference(me.AppsPref),
-                                    me.updateCache()
-                                ])
-                                    .fail(function(e) {
-                                        alert(e);
-                                        console.log(e);
-                                    });                           
-                            }, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()
-                         });
-                } else {
-                    me.renderCacheMessage();
-                    me.redrawEverything();
-                }
-            });
-        },
-        loadConfiguration: function() {
-            var me = this;
-           return  me.configureIntelRallyApp()
-				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
-				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([
-						me.projectInWhichScrumGroup(me.ProjectRecord)
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-										.then(function(scrumGroupPortfolioProject){
-											if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
-											me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										});
-								} 
-								else return Q.reject('You are not scoped to a valid project');
-							}),
-						me.loadAppsPreference()
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
-								var twelveWeeks = 1000*60*60*24*7*12;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-							})
-							.then(function(releaseRecords){
-								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) {
-                                    me.ReleaseRecord = currentRelease;                                   
-                                    me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = { Release: me.ReleaseRecord.data.ObjectID }; //usually will be no-op
-                                }
-								else return Q.reject('This project has no releases.');
-							}),
-						me.loadProjectsWithTeamMembers(me.ProjectRecord)
-							.then(function(projectsWithTeamMembers){ 
-								me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
-							}),
-						me.loadAllChildrenProjects()
-							.then(function(allProjects){ 
-								me.AllProjects = allProjects; 
-							}),
-						me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
-					]);
+				me.PortfolioItemStore = Ext.create('Rally.data.wsapi.Store', {                  
+						model: me['PortfolioItem/' + me.PortfolioItemTypes[0]],
+						pageSize: 200,
+						data:payload.PortfolioItemStoreData,
+						disableMetaChangeEvent: true,
+						load: function(){}
+					});     
 				});
-            
-            
-        },
+		},
+		setCachePayLoadFn: function(payload) {
+			var me = this;
+			projectFields = ['Children','Name','ObjectID','Parent'];
+			portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank",
+			'_p','_ref','_refObjectUUID','_type','_objectVersion','_CreatedAt'];
+			function filterProjectData(projectData){
+					var data = _.pick(projectData,projectFields);
+					data.Parent = _.pick(data.Parent,projectFields);
+					data.children = _.pick(data.children,'[Count]');
+					return{data:data};
+					
+			}
+			
+			function filterPortfolioItemForCache(portfolioItem){
+					var data = _.pick(portfolioItem, portfolioItemFields);
+						return data;
+			}
+			payload.MatrixProjectMap = me.MatrixProjectMap;
+			payload.ProjectOIDNameMap = me.ProjectOIDNameMap;
+	
+			payload.MatrixUserStoryBreakdown =  me.MatrixUserStoryBreakdown;
+			//payload.ProjectRecord ={data:me.ProjectRecord.data};
+			payload.ProjectRecord= filterProjectData(me.ProjectRecord.data);
+			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+			payload.ScrumGroupRootRecords =_.map(me.ScrumGroupRootRecords,function(ss){ return {data: ss.data};});
+			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data};
+			//payload.AllProjects = _.map(me.AllProjects,function(ap){ return {data: ap.data};});
+			payload.AllProjects = _.map(me.AllProjects,function(ap){ return filterProjectData(ap.data);});
+			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data:rr.data};});
+			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+			payload.PortfolioItemTypes = me.PortfolioItemTypes;            
+			payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
+			payload.PortfolioItemMap = me.PortfolioItemMap;
+    },
+		cacheKeyGenerator: function() {
+			var me = this;
+			var projectOID = me.getContext().getProject().ObjectID;
+			var releaseOID = me.ReleaseRecord.data.ObjectID;
+		//	var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
+			var hasKey = typeof(releaseOID) === 'number';
+			if (hasKey) {
+					return 'CmtMatx-' + projectOID + '-' + releaseOID;
+			}
+			else return undefined;
+    },
+        
+		getCacheTimeoutDate: function(){
+				return new Date(new Date()*1 + 1000*60*60*24);
+		},
+		loadDataCacheorRally: function() {
+			var me = this;
+			return me.getCache().then(function(cacheHit) {
+					if (!cacheHit) {
+							return me.loadConfiguration()
+									.then(function() { return me.reloadEverything(); })
+									.then(function() {
+											me.enqueue(function(done) {
+													Q.all([
+															//me.saveAppsPreference(me.AppsPref),
+															me.updateCache()
+													])
+													.fail(function(e) {
+															alert(e);
+															console.log(e);
+													});                           
+											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()
+									});
+					} else {
+							me.renderCacheMessage();
+							me.redrawEverything();
+					}
+			});
+		},
+		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
+		//REVISIT
+		releasePickerSelected_loadDataCacheorRally: function() {
+			var me = this;
+			return me.getCache().then(function(cacheHit) {
+					if (!cacheHit) {
+							return me.releasePickerSelected_loadConfiguration()
+									.then(function() { return me.releasePickerSelected_reloadEverything(); })
+									.then(function() {
+											me.enqueue(function(done) {
+													Q.all([
+															//me.saveAppsPreference(me.AppsPref),
+															me.updateCache()
+													])
+													.fail(function(e) {
+															alert(e);
+															console.log(e);
+													});                           
+											}, 'releaseSelectedRefresh'); //check the queue in Reloadeverything()
+									});
+					} else {
+							me.renderCacheMessage();
+							me.redrawEverything();
+					}
+			});
+		},
+		/**************************************** Loading Config Items ***********************************/		
+		/**
+			load releases for current scoped project and set the me.ReleaseRecord appropriately.
+		*/
+		createDummyProjectRecord: function(dataObject) {
+			return { data: dataObject };
+		},
+		loadReleases: function() {
+			var me = this,
+				twelveWeeksAgo = new Date(new Date()*1 - 12*7*24*60*60*1000),
+				projectRecord = me.createDummyProjectRecord(me.getContext().getProject());
+			
+			return me.loadReleasesAfterGivenDate(projectRecord, twelveWeeksAgo).then(function(releaseRecords){
+				me.ReleaseRecords = releaseRecords;
+				
+				// Set the current release to the release we're in or the closest release to the date
+				// Important! This sets the current release to an overridden value if necessary
+				me.ReleaseRecord = (me.isStandalone ? 
+					_.find(me.ReleaseRecords, function(release){ return release.data.Name === me.Overrides.ReleaseName; }) : 
+					false) || 
+					me.getScopedRelease(me.ReleaseRecords, null, null);
+			});
+		},		
+		loadConfiguration: function() {
+      var me = this;
+			var twelveWeeks = 1000*60*60*24*7*12;
+			return  me.configureIntelRallyApp()
+			.then(function(){
+				var scopeProject = me.getContext().getProject();
+				return me.loadProject(scopeProject.ObjectID);
+			})
+			.then(function(scopeProjectRecord){
+				me.ProjectRecord = scopeProjectRecord;
+				return Q.all([
+					me.projectInWhichScrumGroup(me.ProjectRecord)
+						.then(function(scrumGroupRootRecord){
+							if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+								me.ScrumGroupRootRecord = scrumGroupRootRecord;
+								return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+									.then(function(scrumGroupPortfolioProject){
+										if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+									});
+							} 
+							else return Q.reject('You are not scoped to a valid project');
+						}),
+					// me.loadAppsPreference()
+						// .then(function(appsPref){
+							// me.AppsPref = appsPref;
+							// var twelveWeeks = 1000*60*60*24*7*12;
+							// return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+						// })
+						me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks))
+						.then(function(releaseRecords){
+							me.ReleaseRecords = releaseRecords;
+							var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID/* , me.AppsPref */);
+							if(currentRelease) {
+								me.ReleaseRecord = currentRelease;                                   
+							//	me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = { Release: me.ReleaseRecord.data.ObjectID }; //usually will be no-op
+							}
+							else return Q.reject('This project has no releases.');
+						}),
+					me.loadProjectsWithTeamMembers(me.ProjectRecord)
+						.then(function(projectsWithTeamMembers){ 
+							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+						}),
+					me.loadAllChildrenProjects()
+						.then(function(allProjects){ 
+							me.AllProjects = allProjects; 
+						}),
+					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
+				]);
+			});
+     },
+		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
+		//REVISIT
+		 releasePickerSelected_loadConfiguration: function() {
+      var me = this;
+			var twelveWeeks = 1000*60*60*24*7*12;
+			return  me.configureIntelRallyApp()
+			.then(function(){
+				var scopeProject = me.getContext().getProject();
+				return me.loadProject(scopeProject.ObjectID);
+			})
+			.then(function(scopeProjectRecord){
+				me.ProjectRecord = scopeProjectRecord;
+				return Q.all([
+					me.projectInWhichScrumGroup(me.ProjectRecord)
+						.then(function(scrumGroupRootRecord){
+							if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+								me.ScrumGroupRootRecord = scrumGroupRootRecord;
+								return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+									.then(function(scrumGroupPortfolioProject){
+										if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
+										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+									});
+							} 
+							else return Q.reject('You are not scoped to a valid project');
+						}),
+					me.loadProjectsWithTeamMembers(me.ProjectRecord)
+						.then(function(projectsWithTeamMembers){ 
+							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+						}),
+					me.loadAllChildrenProjects()
+						.then(function(allProjects){ 
+							me.AllProjects = allProjects; 
+						}),
+					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
+				]);
+			});
+     },		 
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
-            me.IsDataRefresh = me.getSetting('dataRefresh');
+      me.IsDataRefresh = me.getSetting('dataRefresh');
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
@@ -785,68 +880,68 @@
 				me.alert('ERROR', 'You do not have permissions to edit this project');
 				return;
 			}	
-            return Q.all([ me.loadAppsPreference().then (function(appsPref) {
-                me.AppsPref = appsPref;
-            })])			
-            .then ( function() { return me.setRefreshInterval(); })
-            .then( function() { return me.loadDataCacheorRally(); })       
-				.fail(function(reason){
-					me.setLoading(false);
-					me.alert('ERROR', reason);
-				})
-				.done();
+			return Q.all([me.loadReleases()])			
+			.then ( function() { return me.setRefreshInterval(); })
+			.then( function() { return me.loadDataCacheorRally(); })       
+			.fail(function(reason){
+				me.setLoading(false);
+				me.alert('ERROR', reason);
+			})
+			.done();
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
-        renderCacheMessage: function(){
-            var me = this;
-            Ext.getCmp('cacheMessageContainer').add({
-                xtype: 'label',
-                width:'100%',
-                html: 'You are looking at the cached version of the data'
-            });
-        },
-        renderDeleteCache: function() {
-            var me = this;
-            me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-                xtype: 'button',
-                text: 'clear cache data',
-                listeners: {
-                    click: function() {
-                        me.setLoading('Clearing cache, please wait');
-                        return me.deleteCache()
-                            .then(function() { me.setLoading(false); });
-                    }
-                }
-            });
-        },
-        renderUpdateCache: function() {
-          var me = this;
-          me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-              xtype: 'button',
-              text: 'Get Live Data',
-              listeners: {
-                  click: function() {
-                      me.setLoading(' Getting live data, please wait');
-                      Ext.getCmp('cacheMessageContainer').removeAll();
-                      return me.loadConfiguration()
-                        .then(function() { return me.reloadEverything();})
-                        .then(function() { return me.updateCache(); })
-                        .then(function() { me.setLoading(false); });
-                  }
-              }
-          });
-        },
+		renderCacheMessage: function(){
+			var me = this;
+			Ext.getCmp('cacheMessageContainer').add({
+					xtype: 'label',
+					width:'100%',
+					html: 'You are looking at the cached version of the data'
+			});
+		},
+		// renderDeleteCache: function() {
+			// var me = this;
+			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+					// xtype: 'button',
+					// text: 'clear cache data',
+					// listeners: {
+							// click: function() {
+									// me.setLoading('Clearing cache, please wait');
+									// return me.deleteCache()
+											// .then(function() { me.setLoading(false); });
+							// }
+					// }
+			// });
+		// },
+		renderUpdateCache: function() {
+			var me = this;
+			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+					xtype: 'button',
+					text: 'Get Live Data',
+					listeners: {
+							click: function() {
+									me.setLoading(' Getting live data, please wait');
+									Ext.getCmp('cacheMessageContainer').removeAll();
+									return me.loadConfiguration()
+										.then(function() { return me.reloadEverything();})
+										.then(function() { return me.updateCache(); })
+										.then(function() { me.setLoading(false); });
+							}
+					}
+			});
+     },
 		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
+			Ext.getCmp('cacheMessageContainer').removeAll();
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-			me.setLoading("Saving Preference");
+			me.setLoading("Loading data");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			me.saveAppsPreference(me.AppsPref)
-				.then(function(){ me.reloadEverything(); })
-				.done();
+			return me.releasePickerSelected_loadDataCacheorRally();
+			//if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			// me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			// me.saveAppsPreference(me.AppsPref)
+				// .then( function() { return me.loadDataCacheorRally_2(); })    
+				// .done();
 		},				
 		renderReleasePicker: function(){
 			var me=this;

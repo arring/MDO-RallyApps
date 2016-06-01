@@ -241,8 +241,8 @@
 				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
-			
-			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + releaseOID;
+			var releaseName = me.ReleaseRecord.data.Name;
+			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
 		},
 		getCacheTimeoutDate: function(){
 			return new Date(new Date()*1 + 1000*60*60*24);
@@ -668,20 +668,20 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		renderDeleteCache: function(){
-			var me=this;
-			me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				xtype:'button',
-				text: 'Clear Cached Data',
-				listeners: { 
-					click: function(){
-						me.setLoading('Clearing cache, please wait');
-						return me.deleteCache()
-							.then(function(){ me.setLoading(false); });
-					}
-				}
-			});
-		},
+		// renderDeleteCache: function(){
+			// var me=this;
+			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				// xtype:'button',
+				// text: 'Clear Cached Data',
+				// listeners: { 
+					// click: function(){
+						// me.setLoading('Clearing cache, please wait');
+						// return me.deleteCache()
+							// .then(function(){ me.setLoading(false); });
+					// }
+				// }
+			// });
+		// }, 
 		renderUpdateCache: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
@@ -823,7 +823,7 @@
 			var me = this;
 			
 			// Conditionally loads controls
-			if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
+			//if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
 			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
