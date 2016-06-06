@@ -895,7 +895,7 @@
 			Ext.getCmp('cacheMessageContainer').add({
 					xtype: 'label',
 					width:'100%',
-					html: 'You are looking at the cached version of the data'
+					html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
 		},
 		// renderDeleteCache: function() {
