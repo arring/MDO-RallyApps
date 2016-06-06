@@ -233,13 +233,13 @@
 			// return 800;
 		},
 		getGridWidth: function(columnCfgs){
-	 		var me = this; 
+			var me = this; 
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
 			);   
-			//return 800;
+			// return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -540,7 +540,6 @@
 			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
-					 // if(!me.DeleteCacheButton) me.renderDeleteCache();
 						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
@@ -561,13 +560,11 @@
 		//REVISIT
 		releasePickerSelected_reloadEverything: function(){
 			var me=this;
-
 			me.setLoading('Loading Data');
 			me.enqueue(function(done){
 			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
-					 // if(!me.DeleteCacheButton) me.renderDeleteCache();
 						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
@@ -695,7 +692,7 @@
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 		//	var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			var hasKey = typeof(releaseOID) === 'number';
-			if (hasKey) {
+			if (hasKey && me.IsDataRefresh === false) {
 					return 'CmtMatx-' + projectOID + '-' + releaseOID;
 			}
 			else return undefined;
@@ -711,6 +708,7 @@
 							return me.loadConfiguration()
 									.then(function() { return me.reloadEverything(); })
 									.then(function() {
+										if(me.IsDataRefresh === false){
 											me.enqueue(function(done) {
 													Q.all([
 															//me.saveAppsPreference(me.AppsPref),
@@ -720,7 +718,8 @@
 															alert(e);
 															console.log(e);
 													});                           
-											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()
+											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()											
+										}
 									});
 					} else {
 							me.renderCacheMessage();
@@ -830,8 +829,8 @@
      },
 		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
 		//REVISIT
-		 releasePickerSelected_loadConfiguration: function() {
-      var me = this;
+		releasePickerSelected_loadConfiguration: function() {
+			var me = this;
 			var twelveWeeks = 1000*60*60*24*7*12;
 			return  me.configureIntelRallyApp()
 			.then(function(){
@@ -864,7 +863,7 @@
 					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 				]);
 			});
-     },		 
+    },		 
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
@@ -881,7 +880,7 @@
 				return;
 			}	
 			return Q.all([me.loadReleases()])			
-			.then ( function() { return me.setRefreshInterval(); })
+			.then ( function() {  me.setRefreshInterval(); })
 			.then( function() { return me.loadDataCacheorRally(); })       
 			.fail(function(reason){
 				me.setLoading(false);

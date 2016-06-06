@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView =false;// me.getSetting('Horizontal');
+			me.isHorizontalView = me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
