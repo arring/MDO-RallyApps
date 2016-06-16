@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = me.getSetting('Horizontal');
+			me.isHorizontalView = false;//me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -571,7 +571,7 @@
 			me.UserStoryFetchFields = ['Name', 'ObjectID', 'Project', 'Owner', 'PlannedEndDate', 'ActualEndDate', 
 				'StartDate', 'EndDate', 'Iteration[StartDate;EndDate]', 'DirectChildrenCount',
 				'Release', 'ReleaseStartDate', 'ReleaseDate', 'PlanEstimate', 'FormattedID', 'ScheduleState', 
-				'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem];
+				'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', 'Description', lowestPortfolioItem];
 			
 			if(!me.FilteredLeafProjects) throw "No leaf projects for userstory filter";
 			
@@ -1456,6 +1456,10 @@
 						text:'ScheduleState',
 						dataIndex:'ScheduleState',
 						tdCls:'editor-cell'
+					},{
+						text:'Description',
+						dataIndex:'Description',
+						tdCls:'editor-cell'
 					}]),
 					side: 'Right',
 					filterFn:function(item){
@@ -1499,7 +1503,33 @@
 						if(!item.Release || item.Release.Name != releaseName) return false;
 						return !me.PortfolioUserStoryCount[item.ObjectID];
 					}
-				}];
+				},{
+					showIfLeafProject:true,
+					showIfHorizontalMode:true,
+					title: 'User Stories with No Description',
+					id: 'grid-features-with-no-description-for-user-stories',
+					model: 'UserStory',
+					columns: defaultUserStoryColumns.concat([{
+						text:'Iteration',
+						dataIndex:'Iteration',
+						editor:false
+					},{
+						text:'ScheduleState',
+						dataIndex:'ScheduleState',
+						tdCls:'editor-cell'
+					},{
+						text:'Description',
+						dataIndex:'Description',
+						tdCls:'editor-cell'
+					}]),
+					side: 'Right',
+					filterFn:function(item){						
+						if(item.data.Description) return false;												
+						return !item.data.Description;
+					}
+				}
+				
+				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){
 				if(!gridConfig.showIfLeafProject && (me.isScopedToScrum || me.ScopedTeamType)) return Q();
