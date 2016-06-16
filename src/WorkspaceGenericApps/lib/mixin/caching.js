@@ -55,8 +55,9 @@
 				method: 'GET',
 				processData: false,
 				dataType: 'text',
-				success: function(requestData){ 
+				success: function(requestData, status, xhr){ 
 					try { 
+						me.lastCacheModified = Rally.util.DateTime.format(new Date(xhr.getResponseHeader('Last-Modified')), 'D M d Y h:i:s a') + " (Pacific Daylight Time)";
 						payload = JSON.parse(requestData);
 						me._getCacheIntelRallyAppSettings(payload);
 						Q(me.getCachePayloadFn(payload)).then(function(){ 

@@ -241,8 +241,8 @@
 				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
-			
-			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + releaseOID;
+			var releaseName = me.ReleaseRecord.data.Name;
+			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
 		},
 		getCacheTimeoutDate: function(){
 			return new Date(new Date()*1 + 1000*60*60*24);
@@ -596,6 +596,14 @@
 					pageSize: 200,
 					data: [].concat.apply([], _.invoke(stores, 'getRange'))
 				});
+					/* US436545: Remove this to get back improperly sized user stories */
+				_.each(me.UserStoryStore.getRange(), function(item,key){
+					var pe = item.data.PlanEstimate;
+					if(pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16){
+						console.log(me.UserStoryStore.data.Name,item.data.PlanEstimate);
+						me.UserStoryStore.removeAt(key);
+					}
+				});				
 				me.fixRawUserStoryAttributes();
 			});
 		},
@@ -668,20 +676,20 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		renderDeleteCache: function(){
-			var me=this;
-			me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				xtype:'button',
-				text: 'Clear Cached Data',
-				listeners: { 
-					click: function(){
-						me.setLoading('Clearing cache, please wait');
-						return me.deleteCache()
-							.then(function(){ me.setLoading(false); });
-					}
-				}
-			});
-		},
+		// renderDeleteCache: function(){
+			// var me=this;
+			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				// xtype:'button',
+				// text: 'Clear Cached Data',
+				// listeners: { 
+					// click: function(){
+						// me.setLoading('Clearing cache, please wait');
+						// return me.deleteCache()
+							// .then(function(){ me.setLoading(false); });
+					// }
+				// }
+			// });
+		// }, 
 		renderUpdateCache: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
@@ -813,7 +821,7 @@
 			Ext.getCmp('cacheMessageContainer').add({
 				xtype: 'label',
 				width:'100%',
-				html: 'You are looking at the cached version of the data'
+				html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
 		},		
 		/**
@@ -823,7 +831,7 @@
 			var me = this;
 			
 			// Conditionally loads controls
-			if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
+			//if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
 			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
@@ -883,10 +891,11 @@
 				pointDen = userStoryGrids[0].originalConfig.totalPoints,
 				storyPer,
 				pointPer;
-				
 			// Sums the point estimates and number of stories
 			_.each(userStoryGrids, function(grid){
-				_.each(grid.originalConfig.data, function(item){ storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0; });
+				_.each(grid.originalConfig.data, function(item){ 
+					storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0; 
+				});
 			});
 			pointNum = (100*(pointDen - _.reduce(storyNum, function(sum, planEstimate){ return sum + planEstimate; }, 0))>>0)/100;
 			storyNum = storyDen - Object.keys(storyNum).length;
@@ -1388,7 +1397,7 @@
 						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
-				},{
+				},/* US436545{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Improperly Sized Stories',
@@ -1405,7 +1414,7 @@
 						var pe = item.data.PlanEstimate;
 						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 					}
-				},{
+				}, */{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Stories in Release without Iteration',

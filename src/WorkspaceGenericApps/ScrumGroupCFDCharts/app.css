@@ -8,5 +8,8 @@
 	float:left; } 
 .cachemessagecontainer{
 	width: 90%;
-    padding-left: 70%;
+  padding-left: 50%;
+}
+.modified-date{
+	color: green;
 }
