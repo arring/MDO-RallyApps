@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = false;//me.getSetting('Horizontal');
+			me.isHorizontalView = me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = false;//(me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -1532,12 +1532,13 @@
 						tdCls:'editor-cell'
 					}]),
 					side: 'Right',
-					filterFn:function(item){						
+					filterFn:function(item){
+						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
 						if(item.data.Description) return false;												
-						return !item.data.Description;
+						if(!item.data.Iteration) return false;											
+						return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;						
 					}
-				}
-				
+				}				
 				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){
