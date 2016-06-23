@@ -674,35 +674,59 @@
 				}
 			});
 		},
+		getPorfolioProjectFilterQuery: function(rootProjectRecord){
+			//filter out porfolio as project if train and porfolio is under same project
+			//rootProjectRecord is optional
+			var me = this,
+				deferred = Q.defer(),
+				filter = [];
+			me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === rootProjectRecord.data.ObjectID; })[0];
+			if(!rootProjectRecord || me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame) return Q();
+			if(me.ScrumGroupPortfolioProject){
+				filter =  Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+				return Q(filter);
+			}else{
+			return me.loadScrumGroupPortfolioProject(rootProjectRecord)
+				.then(function(scrumGroupPortfolioProject){
+					me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+					filter =   Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+					return Q(filter);
+				});				
+			}
+		},
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
-			var me=this,
-				leafProjects = {}, 
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: "Project",
-					fetch: me.projectFields,
-					compact: false,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project:null
-					}
+			var me = this,
+			leafProjects = {};
+			return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+				.then(function(filter){
+					var store = Ext.create('Rally.data.wsapi.Store', {
+							model: "Project",
+							fetch: me.projectFields,
+							filters: filter ? [filter] : [],
+							compact: false,
+							limit:Infinity,
+							disableMetaChangeEvent: true,
+							context:{
+								workspace: me.getContext().getWorkspace()._ref,
+								project:null
+							}
+						});	
+					return me.reloadStore(store).then(function(store){
+						if(rootProjectRecord){
+							var projTree = me._storeItemsToProjTree(store.getRange());
+							me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+							return leafProjects;
+						} else {
+							return _.reduce(_.filter(store.getRange(),
+								function(project){ return project.data.Children.Count === 0; }),
+								function(map, project){
+									map[project.data.ObjectID] = project;
+									return map;
+								}, {});
+						}
+					});					
 				});
-			return me.reloadStore(store).then(function(store){
-				if(rootProjectRecord){
-					var projTree = me._storeItemsToProjTree(store.getRange());
-					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
-					return leafProjects;
-				} else {
-					return _.reduce(_.filter(store.getRange(),
-						function(project){ return project.data.Children.Count === 0; }),
-						function(map, project){
-							map[project.data.ObjectID] = project;
-							return map;
-						}, {});
-				}
-			});
 		},
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');

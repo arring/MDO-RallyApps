@@ -413,6 +413,7 @@
 		
 		launch: function(){
 			var me = this;
+			debugger;
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');

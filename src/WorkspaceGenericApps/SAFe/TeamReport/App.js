@@ -314,7 +314,7 @@
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				})
-			},{
+			},/* {
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
 					if((item.data.Release || {}).Name !== releaseName) return false;
@@ -322,7 +322,7 @@
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
-			},{
+			}, */{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
 					if((item.data.Release || {}).Name !== releaseName) return false;

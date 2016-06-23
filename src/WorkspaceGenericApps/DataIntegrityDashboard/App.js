@@ -1125,7 +1125,6 @@
 				}).reverse(),
 				chartData = [],
 				selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
-				
 			// Get the data for each scrum from each grid
 			_.each(userStoryGrids, function(grid, gindex) {
 				_.each(_.sortBy(me.FilteredLeafProjects, function(p){ return p.data.Name; }), function(project, pindex){

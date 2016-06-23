@@ -125,6 +125,7 @@
 		getUserStoryQuery: function(portfolioItemRecords){
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
+				storyNotAttachedToPorfolio =	Ext.create('Rally.data.wsapi.Filter', { property: 'Project.Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID }),
 				leafFilter = Ext.create('Rally.data.wsapi.Filter', { property: 'DirectChildrenCount', value: 0 }),
 				releaseFilter = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value: me.ReleaseRecord.data.Name }),
 				portfolioItemFilter = _.reduce(portfolioItemRecords, function(filter, portfolioItemRecord){
@@ -134,7 +135,8 @@
 					});
 					return filter ? filter.or(newFilter) : newFilter;
 				}, null);
-			return portfolioItemFilter ? releaseFilter.and(leafFilter).and(portfolioItemFilter) : null;
+				var finalFilter = me.ScrumGroupAndPortfolioConfig ? releaseFilter.and(leafFilter).and(portfolioItemFilter) : releaseFilter.and(leafFilter).and(storyNotAttachedToPorfolio).and(portfolioItemFilter);
+				return portfolioItemFilter ? finalFilter : null;
 		},
 		loadUserStories: function(){
 			/** note: lets say the lowest portfolioItemType is 'Feature'. If we want to get child user stories under a particular Feature,
@@ -160,6 +162,7 @@
 					};
 				return me.parallelLoadWsapiStore(config).then(function(store){
 					_.each(store.getRange(), function(storyRecord){
+						//Some user stories are attached to Portfolio which we want to ignore
 						var portfolioItemName = storyRecord.data[lowestPortfolioItemType].Name,
 							projectName = storyRecord.data.Project.Name,
 							projectOID = storyRecord.data.Project.ObjectID;		
@@ -179,7 +182,7 @@
 				me.MatrixProjectMap = newMatrixProjectMap;
 				me.ProjectOIDNameMap = newProjectOIDNameMap;
 						
-					//always show the teams under the scrum-group that have teamMembers > 0, even if they are not contributing this release
+				//always show the teams under the scrum-group that have teamMembers > 0, even if they are not contributing this release
 				_.each(me.ProjectsWithTeamMembers, function(projectRecord){
 					var projectName = projectRecord.data.Name,
 						projectOID = projectRecord.data.ObjectID;
@@ -192,8 +195,8 @@
 			
 		/**___________________________________ TEAM COMMITS STUFF ___________________________________**/	
 		getTeamCommits: function(portfolioItemRecord){
-			var me=this,
-				tcString = portfolioItemRecord.data.c_TeamCommits;
+			var me=this;
+			var	tcString = portfolioItemRecord.data.c_TeamCommits;
 			try{ return JSON.parse(atob(tcString)) || {}; }
 			catch(e){ return {}; }
 		},	
@@ -456,6 +459,7 @@
 				portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(piRecord){ 
 					return piRecord.data.ObjectID == matrixRecord.data.PortfolioItemObjectID; 
 				});
+			if(!portfolioItemRecord) return;
 			if(me.ViewMode != '% Done' || !portfolioItemRecord) return;
 			var config = _.reduce(_.sortBy(_.keys(me.MatrixUserStoryBreakdown)), function(sumConfig, projectName){
 				var teamCommit = me.getTeamCommit(portfolioItemRecord, projectName),
@@ -736,6 +740,7 @@
 							return me.releasePickerSelected_loadConfiguration()
 									.then(function() { return me.releasePickerSelected_reloadEverything(); })
 									.then(function() {
+										if(me.IsDataRefresh === false){
 											me.enqueue(function(done) {
 													Q.all([
 															//me.saveAppsPreference(me.AppsPref),
@@ -745,7 +750,8 @@
 															alert(e);
 															console.log(e);
 													});                           
-											}, 'releaseSelectedRefresh'); //check the queue in Reloadeverything()
+											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()											
+										}
 									});
 					} else {
 							me.renderCacheMessage();
@@ -795,6 +801,7 @@
 									.then(function(scrumGroupPortfolioProject){
 										if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
 										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+										me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === me.ProjectRecord.data.ObjectID; })[0];
 									});
 							} 
 							else return Q.reject('You are not scoped to a valid project');
@@ -818,6 +825,12 @@
 					me.loadProjectsWithTeamMembers(me.ProjectRecord)
 						.then(function(projectsWithTeamMembers){ 
 							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+							//ignore portfolio as project if train and portfolio is in the same location
+								_.each(me.ProjectsWithTeamMembers, function(f) {
+								var parentObjectID = f.data.Parent ? f.data.Parent.ObjectID : 0; 
+								if ((f.data.ObjectID === me.ScrumGroupPortfolioProject.data.ObjectID || parentObjectID === me.ScrumGroupPortfolioProject.data.ObjectID ) && me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame === false	|| (f.data.ObjectID === me.ProjectRecord.data.ObjectID))
+									delete me.ProjectsWithTeamMembers [f.data.ObjectID || f.data.Parent.ObjectID];
+							});
 						}),
 					me.loadAllChildrenProjects()
 						.then(function(allProjects){ 
@@ -848,6 +861,7 @@
 									.then(function(scrumGroupPortfolioProject){
 										if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
 										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+										me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === me.ProjectRecord.data.ObjectID ;})[0];
 									});
 							} 
 							else return Q.reject('You are not scoped to a valid project');
@@ -855,6 +869,12 @@
 					me.loadProjectsWithTeamMembers(me.ProjectRecord)
 						.then(function(projectsWithTeamMembers){ 
 							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
+							//ignore portfolio as project if train and portfolio is in the same location
+								_.each(me.ProjectsWithTeamMembers, function(f) {
+								var parentObjectID = f.data.Parent ? f.data.Parent.ObjectID : 0; 
+								if ((f.data.ObjectID === me.ScrumGroupPortfolioProject.data.ObjectID || parentObjectID === me.ScrumGroupPortfolioProject.data.ObjectID ) && me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame === false	|| (f.data.ObjectID === me.ProjectRecord.data.ObjectID))
+									delete me.ProjectsWithTeamMembers [f.data.ObjectID || f.data.Parent.ObjectID];
+							});							
 						}),
 					me.loadAllChildrenProjects()
 						.then(function(allProjects){ 

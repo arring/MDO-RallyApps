@@ -49,7 +49,6 @@
 			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript){
 				return Q.resolve(false); //pretend there was cache miss		
 			}
-			
 			$.ajax({
 				url: url,
 				method: 'GET',
