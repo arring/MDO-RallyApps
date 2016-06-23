@@ -19,8 +19,8 @@
 	Ext.define('Intel.lib.chart.FastCumulativeFlowCalculator', {		
 		constructor:function(options){
 			this.scheduleStates = options.scheduleStates;
-			this.startDate = options.startDate;
-			this.endDate = options.endDate;
+			this.startDate = options.startDate ? new Date(options.startDate) : null;
+			this.endDate = options.endDate ? new Date(options.endDate) : null;
 		},
 		
 		_getDates:function(){

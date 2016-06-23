@@ -18,10 +18,22 @@
 			'Intel.lib.mixin.CumulativeFlowChartMixin',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
+			'Intel.lib.mixin.Caching',
 			'Intel.lib.mixin.CfdProjectPreference'
 		],
 		minWidth:910,
 		items:[{
+			xtype:'container',
+			layout:'hbox',
+			items:[{
+				xtype:'container',
+				id: 'cacheButtonsContainer'
+			},{
+				xtype:'container',
+				id: 'cacheMessageContainer',
+				cls:'cachemessagecontainer'		
+			}]
+			},{
 			xtype:'container',
 			id:'navBar',
 			layout:'hbox',
@@ -51,6 +63,15 @@
 			layout:'column',
 			width:'100%'
 		}],
+		/**___________________________________ APP SETTINGS ___________________________________*/	
+		getSettingsFields: function() {
+			return [{name: 'cacheUrl',xtype: 'rallytextfield'}];
+		},	
+		config: {
+			defaultSettings: {
+				cacheUrl:''
+			}
+		},
 		userAppsPref: 'intel-ScrumGroup-CFD',
 		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 		/****************************************************** DATA STORE METHODS ********************************************************/
@@ -184,7 +205,7 @@
 				me.FilteredTeamStores = {};
 				_.each(me.TeamStores, function(records, teamName){
 					var filteredRecords = _.filter(records, function(record){
-						return me.PortfolioItemMap[record.data[lowestPortfolioItem]] == topPiName;
+						return me.PortfolioItemMap[record.raw[lowestPortfolioItem]] == topPiName;
 					});
 					me.FilteredTeamStores[teamName] = filteredRecords;
 					me.FilteredAllSnapshots = me.FilteredAllSnapshots.concat(filteredRecords);
@@ -203,6 +224,8 @@
 			return me.filterUserStoriesByTopPortfolioItem()
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
+					//if(!me.DeleteCacheButton) me.renderDeleteCache();
+					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
 					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
 					me._checkToRenderCFDCalendar();
@@ -210,7 +233,7 @@
 					me.renderCharts();
 					me.hideHighchartsLinks(); 
 					me.setLoading(false);
-				});
+					});
 		},
 		redrawChartAfterReleaseDateChanged: function(){
 			var me=this;
@@ -225,88 +248,238 @@
 			me.setLoading('Loading Data');	
 			return me.loadAllChildReleases()
 				.then(function(){ return me.loadPortfolioItems(); })
-				.then(function(){	return me.loadSnapshotStores(); })
+				.then(function(){ return me.loadSnapshotStores(); })
 				.then(function(){ return me.redrawEverything(); });
 		},
-
+		/**************************************** Loading Config Items ***********************************/		
+		/**
+			load releases for current scoped project and set the me.ReleaseRecord appropriately.
+		*/
+		createDummyProjectRecord: function(dataObject) {
+			return { data: dataObject };
+		},
+		loadReleases: function() {
+			var me = this,
+				twelveWeeksAgo = new Date(new Date()*1 - 12*7*24*60*60*1000),
+				projectRecord = me.createDummyProjectRecord(me.getContext().getProject());
+			
+			return me.loadReleasesAfterGivenDate(projectRecord, twelveWeeksAgo).then(function(releaseRecords){
+				me.ReleaseRecords = releaseRecords;
+				
+				// Set the current release to the release we're in or the closest release to the date
+				// Important! This sets the current release to an overridden value if necessary
+				me.ReleaseRecord = (me.isStandalone ? 
+					_.find(me.ReleaseRecords, function(release){ return release.data.Name === me.Overrides.ReleaseName; }) : 
+					false) || 
+					me.getScopedRelease(me.ReleaseRecords, null, null);
+			});
+		},			
+		loadConfiguration: function(){
+			var me = this;
+				return Q.all([			
+					me.configureIntelRallyApp().then(function(){
+						var scopeProject = me.getContext().getProject();
+						return me.loadProject(scopeProject.ObjectID);
+					})
+					.then(function(scopeProjectRecord){
+						me.ProjectRecord = scopeProjectRecord;
+					})/* ,
+					me.loadAppsPreference().then(function(appsPref){ 
+						me.AppsPref = appsPref; 
+					})  */
+				])
+			.then(function(){
+				return Q.all([ //parallel loads
+					me.projectInWhichScrumGroup(me.ProjectRecord) /******** load stream 1 *****/
+						.then(function(scrumGroupRootRecord){
+							if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
+								me.ScrumGroupRootRecord = scrumGroupRootRecord;
+								return me.loadScrumGroupPortfolioProject(scrumGroupRootRecord);
+							}
+							else return Q.reject('You are not scoped to a valid project.');
+						})
+						.then(function(scrumGroupPortfolioProject){
+							me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+							return me.loadAllLeafProjects(me.ScrumGroupRootRecord);
+						})
+						.then(function(scrums){
+							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
+						}),
+					Q().then(function(){ /******** load stream 2 *****/
+						var fourteenWeeks = 1000*60*60*24*7*14;
+						return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
+					})
+					.then(function(releaseRecords){
+						me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
+						var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID/* , me.AppsPref */);
+						if(currentRelease){
+							me.ReleaseRecord = currentRelease;
+							//me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
+						}
+						else return Q.reject('This project has no releases.');
+					})	
+				]);
+			});
+		},
+		
+		/******************************************************* Caching Mixin operations ********************************************************/
+		getCacheUrlSetting: function(){
+			var me = this;
+			return me.getSetting('cacheUrl');
+		},		
+		getCachePayloadFn: function(payload){
+			var me = this;
+			
+			me.ProjectRecord = payload.ProjectRecord;
+			me.ScrumGroupRootRecord = payload.ProjectRecord;
+			me.ScrumGroupPortfolioProject = payload.ScrumGroupPortfolioProject; 
+			me.LeafProjects = payload.LeafProjects;
+			me.ReleaseRecord = payload.ReleaseRecord;
+			me.ReleaseRecords = payload.ReleaseRecords;
+			me.ReleasesWithNameHash = payload.ReleasesWithNameHash; 
+			
+			me.LowestPortfolioItemsHash = payload.LowestPortfolioItemsHash;
+			me.PortfolioItemMap = payload.PortfolioItemMap;
+			me.TopPortfolioItemNames = payload.TopPortfolioItemNames;
+			me.CurrentTopPortfolioItemName = null;
+			me.AllSnapshots = payload.AllSnapshots;
+			me.TeamStores = payload.TeamStores;
+		},
+		setCachePayLoadFn: function(payload){
+			var me = this;
+			
+			payload.ProjectRecord = {data: me.ProjectRecord.data};
+			payload.ScrumGroupRootRecord = {data: me.ScrumGroupRootRecord.data};
+			payload.ScrumGroupPortfolioProject = {data: me.ScrumGroupPortfolioProject.data}; 
+			payload.LeafProjects = _.map(me.LeafProjects, function(lp){ return {data: lp.data}; });
+			payload.ReleaseRecords = _.map(me.ReleaseRecords, function(rr){ return {data: rr.data}; });
+			payload.ReleaseRecord = {data: me.ReleaseRecord.data};
+			payload.ReleasesWithNameHash = me.ReleasesWithNameHash; 
+			
+			payload.LowestPortfolioItemsHash = me.LowestPortfolioItemsHash;
+			payload.PortfolioItemMap = me.PortfolioItemMap;
+			payload.TopPortfolioItemNames = me.TopPortfolioItemNames;
+			payload.AllSnapshots = _.map(me.AllSnapshots, function(ss){ return {raw: ss.raw}; });
+			payload.TeamStores = _.reduce(me.TeamStores, function(map, sss, key){ 
+				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
+				return map;
+			}, {}); 
+		},
+		cacheKeyGenerator: function(){
+			var me = this;
+			var projectOID = me.getContext().getProject().ObjectID;
+			var releaseOID = me.ReleaseRecord.data.ObjectID;
+			//var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
+			var hasKey = typeof(releaseOID) === 'number';
+			if(hasKey){
+				return 'scrum-group-cfd-' + projectOID + '-' + releaseOID;
+			}
+			else return undefined; //no release set
+		},
+		getCacheTimeoutDate: function(){
+			return new Date(new Date()*1 + 1000*60*60*24);
+		},
+		renderCacheMessage: function() {
+			var me = this;
+			Ext.getCmp('cacheMessageContainer').add({
+				xtype: 'label',
+				width:'100%',
+				html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
+			});
+		},			
 		/******************************************************* LAUNCH ********************************************************/		
+		loadDataFromCacheOrRally: function(){
+			var me = this;
+			return me.getCache().then(function(cacheHit){
+				if(!cacheHit){
+					return me.loadConfiguration()
+						.then(function(){ return me.reloadEverything(); })
+						.then(function(){ 
+							//NOTE: not returning promise here, performs in the background!
+							Q.all([
+								//me.saveAppsPreference(me.AppsPref),
+								me.updateCache()
+							])
+							.fail(function(e){
+								alert(e);
+								console.log(e);
+							});
+						});
+				}else{
+					me.renderCacheMessage();
+				}
+			});
+		},
+		
 		launch: function(){
 			var me = this;
+			debugger;
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
-			me.configureIntelRallyApp()
-				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
-				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([ //parallel loads
-						me.projectInWhichScrumGroup(me.ProjectRecord) /******** load stream 1 *****/
-							.then(function(scrumGroupRootRecord){
-								if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-									me.ScrumGroupRootRecord = scrumGroupRootRecord;
-									return me.loadScrumGroupPortfolioProject(scrumGroupRootRecord);
-								}
-								else return Q.reject('You are not scoped to a valid project.');
-							})
-							.then(function(scrumGroupPortfolioProject){
-								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-								return me.loadAllLeafProjects(me.ScrumGroupRootRecord);
-							})
-							.then(function(scrums){
-								me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
-							}),
-							me.loadCfdProjPreference()
-							.then(function(cfdprojPref){
-								me.cfdProjReleasePref = cfdprojPref;
-							}),
-							me.loadAppsPreference() /******** load stream 2 *****/
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
-								var fourteenWeeks = 1000*60*60*24*7*14;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
-							})
-							.then(function(releaseRecords){
-								me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease) me.ReleaseRecord = currentRelease;
-								else return Q.reject('This project has no releases.');
-							})
-					]);
-				})
-				.then(function(){ return me.reloadEverything(); })
-				.fail(function(reason){
-					me.setLoading(false);
-					me.alert('ERROR', reason);
-				})
-				.done();
-		},
-		
-		/*************************************************** RENDERING NavBar **************************************************/
-		releasePickerSelected: function(combo, records){
-			var me=this;
-			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-			me.setLoading(true);
-			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			var pid = me.ProjectRecord.data.ObjectID;		
-			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			return Q.all([
-				me._resetVariableAfterReleasePickerSelected(),
-				me.saveAppsPreference(me.AppsPref),
-				me.loadCfdProjPreference()//different preference for different Release selected
-				.then(function(cfdprojPref){
-					me.cfdProjReleasePref = cfdprojPref;
-				})
-			])
-			.then(function(){ return me.reloadEverything(); })
+			return Q.all([me.loadReleases()])	
+			.then(function(){ 
+				return me.loadCfdProjPreference()
+					.then(function(cfdprojPref){
+						me.cfdProjReleasePref = cfdprojPref;});
+			})
+			.then(function(){ return me.loadDataFromCacheOrRally(); })
+			.then(function(){ return me.redrawEverything(); })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
 			})
-			.done();			
+			.done();
+		},
+		
+		/*************************************************** RENDERING NavBar **************************************************/
+		// renderDeleteCache: function(){
+			// var me=this;
+			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				// xtype:'button',
+				// text: 'Clear Cached Data',
+				// listeners: { 
+					// click: function(){
+						// me.setLoading('Clearing cache, please wait');
+						// return me.deleteCache()
+							// .then(function(){ me.setLoading(false); });
+					// }
+				// }
+			// });
+		// },
+		renderUpdateCache: function(){
+			var me=this;
+			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+				xtype:'button',
+				text: 'Get Live Data',
+				listeners: { 
+					click: function(){
+						me.setLoading('Pulling Live Data, please wait');
+						Ext.getCmp('cacheMessageContainer').removeAll();
+						return me.loadConfiguration()
+							.then(function(){ return me.reloadEverything(); })
+							.then(function(){ return me.updateCache(); })
+							.then(function(){ me.setLoading(false); });
+					}
+				}
+			});
+		},
+		releasePickerSelected: function(combo, records){
+			var me=this;
+			Ext.getCmp('cacheMessageContainer').removeAll();
+			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
+			me.setLoading(true);
+			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
+			/* var pid = me.ProjectRecord.data.ObjectID;		
+			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+			me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+			me.saveAppsPreference(me.AppsPref) */
+				//.then(function(){ return me.loadDataFromCacheOrRally(); })//TODO: dont have to load configuration when release picker is selected 
+				return me.loadDataFromCacheOrRally()
+				.then(function(){ return me.redrawEverything(); })
+				.fail(function(reason){ me.alert('ERROR', reason); })
+				.then(function(){ me.setLoading(false); })
+				.done();
 		},
 		renderReleasePicker: function(){
 			var me=this;

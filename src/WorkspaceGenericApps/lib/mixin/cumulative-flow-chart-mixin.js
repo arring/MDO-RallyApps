@@ -183,7 +183,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0) 
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 5 < 0 ? 0 : end - 5);
+				begin = (end - 7 < 0 ? 0 : end - 7);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
@@ -194,7 +194,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 10 < 0 ? 0 : end - 10);
+				begin = (end - 14 < 0 ? 0 : end - 14);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
@@ -205,7 +205,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 20 < 0 ? 0 : end - 20);
+				begin = (end - 28 < 0 ? 0 : end - 28);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;

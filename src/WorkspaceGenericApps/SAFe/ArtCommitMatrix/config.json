@@ -4,6 +4,7 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0rc3",
    "javascript": [
+      "https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.2/jquery.js",
       "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
       "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
       "../../lib/intel-rally-app.js",
@@ -11,6 +12,8 @@
       "../../lib/mixin/iframe-resize.js",
       "../../lib/mixin/pretty-alert.js",
       "../../lib/mixin/intel-workweek.js",
+      "../../lib/mixin/Caching.js",
+      "../../lib/mixin/cfd-project-preference.js",
       "../../lib/mixin/async-queue.js",
       "../../lib/mixin/parallel-loader.js",
       "../../lib/mixin/user-apps-preference.js",
