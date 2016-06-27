@@ -274,6 +274,7 @@
 					me.getScopedRelease(me.ReleaseRecords, null, null);
 			});
 		},			
+		
 		loadConfiguration: function(){
 			var me = this;
 				return Q.all([			
@@ -304,20 +305,19 @@
 						})
 						.then(function(scrums){
 							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });
-						}),
-					Q().then(function(){ /******** load stream 2 *****/
-						var fourteenWeeks = 1000*60*60*24*7*14;
-						return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
-					})
-					.then(function(releaseRecords){
-						me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
-						var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID/* , me.AppsPref */);
-						if(currentRelease){
-							me.ReleaseRecord = currentRelease;
-							//me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = {Release: me.ReleaseRecord.data.ObjectID}; //usually will be no-op
-						}
-						else return Q.reject('This project has no releases.');
-					})	
+						// }),
+					// Q().then(function(){ /******** load stream 2 *****/
+						// var fourteenWeeks = 1000*60*60*24*7*14;
+						// return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - fourteenWeeks));
+					// })
+					// .then(function(releaseRecords){
+						// me.ReleaseRecords = _.sortBy(releaseRecords, function(r){ return  new Date(r.data.ReleaseDate)*(-1); });
+						// var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID/* , me.AppsPref */);
+						// if(currentRelease){
+							// me.ReleaseRecord = currentRelease;
+						// }
+						// else return Q.reject('This project has no releases.');
+						})
 				]);
 			});
 		},
@@ -413,7 +413,6 @@
 		
 		launch: function(){
 			var me = this;
-			debugger;
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
@@ -466,9 +465,9 @@
 		},
 		releasePickerSelected: function(combo, records){
 			var me=this;
+			me.setLoading(true);
 			Ext.getCmp('cacheMessageContainer').removeAll();
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
-			me.setLoading(true);
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
 			/* var pid = me.ProjectRecord.data.ObjectID;		
 			if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
