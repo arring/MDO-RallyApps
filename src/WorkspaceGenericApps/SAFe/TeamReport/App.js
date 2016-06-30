@@ -1343,7 +1343,13 @@
 			},{
 				text: me.PortfolioItemTypes[0],
 				dataIndex:'PortfolioItemName',
-				flex:1
+				flex:1,
+				items: [{
+					xtype: 'intelgridcolumntextareafilter',
+					style: {
+						marginRight: '10px'
+					}
+				}]
 			},{
 				text: me.PortfolioItemTypes.slice(-1)[0], 
 				dataIndex:'TopPortfolioItemName',
