@@ -276,7 +276,6 @@
 				if(!cacheHit){
 					return me.loadRemainingConfiguration()
 						.then(function(){return me.loadData(); })
-						.then(function(){ return me.loadUI(); })
 						.then(function(){ 
 							if(!me.isScopedToScrum){
 								me.updateCache().fail(function(e){
@@ -361,7 +360,6 @@
 					throw "workspace is not configured for horizontals";	
 			})
 			.then(function(){ return me.loadScrumGroups(); })
-			.then(function(){ return me.loadReleases(); })
 			.then(function(){ return me.loadProjects(); })
 			.then(function(){ me.applyScopingOverrides(); });
 		},
@@ -601,7 +599,6 @@
 				_.each(me.UserStoryStore.getRange(), function(item,key){
 					var pe = item.data.PlanEstimate;
 					if(pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16){
-						console.log(me.UserStoryStore.data.Name,item.data.PlanEstimate);
 						me.UserStoryStore.removeAt(key);
 					}
 				});				
@@ -677,20 +674,6 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		// renderDeleteCache: function(){
-			// var me=this;
-			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				// xtype:'button',
-				// text: 'Clear Cached Data',
-				// listeners: { 
-					// click: function(){
-						// me.setLoading('Clearing cache, please wait');
-						// return me.deleteCache()
-							// .then(function(){ me.setLoading(false); });
-					// }
-				// }
-			// });
-		// }, 
 		renderUpdateCache: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
@@ -702,6 +685,7 @@
 						Ext.getCmp('cacheMessageContainer').removeAll();
 						return me.loadRemainingConfiguration()
 							.then(function(){return me.loadData(); })
+							.then(function(){	return me.renderVisuals();})
 							.then(function(){ 
 								//NOTE: not returning promise here, performs in the background!
 								me.updateCache().fail(function(e){
@@ -958,9 +942,7 @@
 				.then(function(){ me.setLoading(false);});
 		},
 		
-		/**
-			Loads all controls and visuals
-		*/
+		/**		Loads all controls and visuals		*/
 		loadUI: function() {
 			var me = this;
 			me.renderControlsAndEmailLink();
