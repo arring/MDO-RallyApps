@@ -377,7 +377,7 @@
 			else return undefined; //no release set
 		},
 		getCacheTimeoutDate: function(){
-			return new Date(new Date()*1 + 1000*60*60*24);
+			return new Date(new Date()*1 + 1000*60*60);
 		},
 		renderCacheMessage: function() {
 			var me = this;
