@@ -245,10 +245,10 @@
 			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
 		},
 		getCacheTimeoutDate: function(){
-			return new Date(new Date()*1 + 1000*60*60*24);
+		/******************************************************* LAUNCH ********************************************************/
+			return new Date(new Date()*1 + 1000*60*60);
 		},
 		
-		/******************************************************* LAUNCH ********************************************************/
 		loadNonConfigDataFromCacheOrRally: function(){
 			var me = this;
 			
@@ -276,6 +276,7 @@
 				if(!cacheHit){
 					return me.loadRemainingConfiguration()
 						.then(function(){return me.loadData(); })
+						.then(function(){ return me.loadUI(); })
 						.then(function(){ 
 							if(!me.isScopedToScrum){
 								me.updateCache().fail(function(e){
