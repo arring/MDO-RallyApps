@@ -25,6 +25,7 @@
       "../../lib/component/intel-release-picker.js",
       "../../lib/component/intel-textarea.js",
       "../../lib/component/intel-grid-column-filter.js",
+      "../../lib/component/intel-grid-column-textarea-filter.js",
       "../../lib/component/intel-session-storage.js",
       "../../lib/component/intel-store.js",
       "../../lib/component/intel-cell-editing.js",
