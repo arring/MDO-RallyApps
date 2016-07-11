@@ -181,7 +181,7 @@
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				userStoryFields = ['Name', 'ObjectID', 'Project', 'Iteration', 
-					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner','Description', 
+					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner',
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
 				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
@@ -685,6 +685,7 @@
 						Ext.getCmp('cacheMessageContainer').removeAll();
 						return me.loadRemainingConfiguration()
 							.then(function(){return me.loadData(); })
+							/* .then(function(){debugger; Ext.getCmp('teampicker').select()}) */
 							.then(function(){	return me.renderVisuals();})
 							.then(function(){ 
 								//NOTE: not returning promise here, performs in the background!
@@ -1447,11 +1448,11 @@
 						text:'ScheduleState',
 						dataIndex:'ScheduleState',
 						tdCls:'editor-cell'
-					},{
+					}/* ,{
 						text:'Description',
 						dataIndex:'Description',
 						tdCls:'editor-cell'
-					}]),
+					} */]),
 					side: 'Right',
 					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
@@ -1494,7 +1495,7 @@
 						if(!item.Release || item.Release.Name != releaseName) return false;
 						return !me.PortfolioUserStoryCount[item.ObjectID];
 					}
-				},{
+				}/* ,{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'User Stories with No Description',
@@ -1520,7 +1521,7 @@
 						if(!item.data.Iteration) return false;											
 						return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;						
 					}
-				}				
+				}	 */			
 				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){
