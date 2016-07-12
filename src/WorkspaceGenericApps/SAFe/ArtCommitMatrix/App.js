@@ -59,22 +59,16 @@
 			},{
 				xtype:'container',
 				flex:2,
-				layout: {
-					type:'hbox',
-					pack:'center'
-				},
+				cls:'cacheContainer',
 				items:[{
 					xtype:'container',
-					id: 'cacheMessageContainer',
-					cls: 'cachemessageContainer'
+					id: 'cacheMessageContainer'
         },{
 					xtype: 'container',
-					id:'cacheButtonsContainer',
-					cls:'test'
+					id:'cacheButtonsContainer'
         }]
 			},{
 				xtype:'container',
-				cls:'test',
 				flex:2,
 				items:[{
 					xtype: 'container',
@@ -236,9 +230,9 @@
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function() {
 			var me = this,
-					iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;  
-			//return 800;
+				iframe = Ext.get(window.frameElement);
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+			// return 800;
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 
@@ -246,8 +240,8 @@
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
-			);  
-			//return 800;
+			);   
+			// return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
