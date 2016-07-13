@@ -797,8 +797,8 @@
 					me.loadAllChildrenProjects()
 						.then(function(allProjects){ 
 							me.AllProjects = allProjects; 
-						})//,
-					//me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
+						}),
+					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 				]);
 			});
      },
