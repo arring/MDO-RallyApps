@@ -1,0 +1,15 @@
+{
+    "name": "Estimation Board",
+    "className": "EstimationBoardApp",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.1",
+    "javascript": [
+        "SizesField.js",
+        "RowSettingsField.js",
+        "Settings.js",
+        "BoardApp.js"
+    ],
+    "css": [
+        "BoardApp.less"
+    ]
+}

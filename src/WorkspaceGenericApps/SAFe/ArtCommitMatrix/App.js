@@ -25,11 +25,11 @@
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-      'Intel.lib.mixin.CfdProjectPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
 			'Intel.lib.mixin.HorizontalTeamTypes',
 			'Intel.lib.mixin.CustomAppObjectIDRegister',
-      'Intel.lib.mixin.Caching'
+			'Intel.lib.mixin.Caching'
 		],
 		//minWidth:910,
 		layout: {
@@ -56,44 +56,44 @@
 					itemId:'navboxLeftVert',
 					layout: 'vbox'
 				}]
-			},{
+			}, {
 				xtype:'container',
 				flex:2,
 				cls:'cacheContainer',
 				items:[{
 					xtype:'container',
 					id: 'cacheMessageContainer'
-        },{
+				}, {
 					xtype: 'container',
 					id:'cacheButtonsContainer'
-        }]
-			},{
+				}]
+			}, {
 				xtype:'container',
 				flex:2,
 				items:[{
 					xtype: 'container',
 					layout: {
-					type:'hbox',
-					pack:'end'
+						type:'hbox',
+						pack:'end'
 					},
 					itemId:'navboxRight'
-        }]
+				}]
 			}]
 		}],
 		minWidth:910,
 		/*--------------------------------------------APP SETTINGS----------------------------------- */
 		settingsScope: 'workspace',
 		getSettingsFields: function() {
-				return [{
-						name: 'cacheUrl', 
-						xtype: 'rallytextfield' 
-				}];
+			return [{
+				name: 'cacheUrl', 
+				xtype: 'rallytextfield' 
+			}];
 		},
 		config: {
 			defaultSettings: {
-					cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+				cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
-    },
+		},
 		userAppsPref: 'intel-SAFe-apps-preference',
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
@@ -260,10 +260,9 @@
 			var me = this,
 			stories = me.UserStoryStore.getRange();
 			for(var i in stories){
-					for(var j in me.UserStoryFetchFields){
-							if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
-					
-					}
+				for(var j in me.UserStoryFetchFields){
+					if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
+				}
 			}
 		},
 		
@@ -271,9 +270,9 @@
 			var me = this,
 			portFolioItems = me.PortfolioItemStore.getRange();
 			for(var i in portFolios){
-					for(var j in me.portfolioItemFields){
-							if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
-					}
+				for(var j in me.portfolioItemFields){
+					if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
+				}
 			}
 		},
 		clearToolTip: function(){
@@ -289,9 +288,9 @@
 		getDistanceFromBottomOfScreen: function(innerY){
 			var me = this, 
 				iframe = window.frameElement,
-				iframeOffsetY = window.parent.getScrollY() + iframe.getBoundingClientRect().top,
+				iframeOffsetY = window.parent.pageYOffset + (iframe ? iframe.getBoundingClientRect().top : 0),
 				actualY = iframeOffsetY + innerY;
-			return window.parent.getWindowHeight() - actualY;   
+			return window.parent.outerHeight - actualY;   
 		},
 			
 		getIntersectingUserStoriesData: function(portfolioItemRecord, projectName){
@@ -441,20 +440,19 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-    updateGridHeader: function(projectName) {
+		updateGridHeader: function(projectName) {
 			var me = this;
 			if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
 			var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
-					possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
-					shouldHaveItems = me.ViewMode === '% Done';
+				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
+				shouldHaveItems = me.ViewMode === '% Done';
 			if(column){
 				_.each(possibleClasses, function(cls) { column.el.removeCls(cls); });
 				while (column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
 				if (shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
 				column.el.addCls(me.getProjectHeaderCls(projectName));							
 			}
-    },
-	
+		},
 		updateTotalPercentCell: function(matrixRecord, index){
 			var me=this,
 				portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(piRecord){ 
@@ -508,7 +506,6 @@
 		},
 		clearEverything: function(){
 			var me=this;
-			
 			me.clearToolTip();
 			if(me.MatrixGrid) {
 				me.MatrixGrid.up().remove(me.MatrixGrid);
@@ -519,19 +516,18 @@
 			var me = this;
 			return me.loadPortfolioItems().then(function(){return me.loadUserStories(); });
 		},
-        
 		redrawEverything: function() {
 			var me = this;
 			me.setLoading(' Loading matrix');
 			me.clearEverything();  
 			if(!me.UpdateCacheButton) me.renderUpdateCache();
 			if(!me.ReleasePicker){
-					me.renderReleasePicker();
-					me.renderClickModePicker();
-					me.renderRefreshIntervalCombo();
-					me.renderViewModePicker();
-					me.renderClearFiltersButton();
-					me.renderMatrixLegend();  
+				me.renderReleasePicker();
+				me.renderClickModePicker();
+				me.renderRefreshIntervalCombo();
+				me.renderViewModePicker();
+				me.renderClearFiltersButton();
+				me.renderMatrixLegend();  
 			}
 			me.showGrids();
 			me.setLoading(false);            
@@ -618,7 +614,7 @@
 				Ext.getCmp('cacheMessageContainer').hide();
 				Ext.getCmp('cacheButtonsContainer').hide();
 				me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, me.AppRefresh*1000*60);
-			}else{
+			} else {
 				me.IsDataRefresh = false;
 				if(Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
 				if(Ext.getCmp('cacheMessageContainer').hidden === true){
@@ -633,27 +629,27 @@
      /*********************************************Rally Cache Mixin Operation ******************************** */
         
 		_loadModelsForCachedView: function() {
-				var me = this,
-						promises = [],
-						models = { UserStory: 'HierarchicalRequirement' };
-				models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
-				_.each(models, function(modelType, modelName) {
-						var deferred = Q.defer();
-						Rally.data.WsapiModelFactory.getModel({
-								type: modelType,
-								success: function(loadedModel) {
-										me[modelName] = loadedModel;
-										deferred.resolve();
-								}
-						});
-						promises.push(deferred.promise);
+			var me = this,
+				promises = [],
+				models = { UserStory: 'HierarchicalRequirement' };
+			models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+			_.each(models, function(modelType, modelName) {
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type: modelType,
+					success: function(loadedModel) {
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
 				});
-				return Q.all(promises);
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
 		},		
 		getCacheUrlSetting: function() {
             var me = this;
-            return me.getSetting('cacheUrl');            
-    },
+            return me.getSetting('cacheUrl');
+		},
 		getCachePayloadFn: function() {
 			var me = this;
 			me.ProjectRecord = payload.ProjectRecord;
@@ -682,11 +678,10 @@
 			portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank",
 			'_p','_ref','_refObjectUUID','_type','_objectVersion','_CreatedAt'];
 			function filterProjectData(projectData){
-					var data = _.pick(projectData,projectFields);
-					data.Parent = _.pick(data.Parent,projectFields);
-					data.children = _.pick(data.children,'[Count]');
-					return{data:data};
-					
+				var data = _.pick(projectData,projectFields);
+				data.Parent = _.pick(data.Parent,projectFields);
+				data.children = _.pick(data.children,'[Count]');
+				return{data:data};
 			}
 			
 			function filterPortfolioItemForCache(portfolioItem){
@@ -709,7 +704,7 @@
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;            
 			payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
 			payload.PortfolioItemMap = me.PortfolioItemMap;
-    },
+		},
 		cacheKeyGenerator: function() {
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
@@ -720,8 +715,7 @@
 					return 'CmtMatx-' + projectOID + '-' + releaseOID;
 			}
 			else return undefined;
-    },
-        
+		},
 		getCacheTimeoutDate: function(){
 				return new Date(new Date()*1 + 1000*60*60);
 		},
@@ -729,11 +723,11 @@
 			var me = this;
 			return me.getCache().then(function(cacheHit) {
 				if (!cacheHit) {
-						return me.loadConfiguration()
-								.then(function() { return me.reloadEverything(); });
+					return me.loadConfiguration()
+						.then(function() { return me.reloadEverything(); });
 				} else {
-						me.renderCacheMessage();
-						me.redrawEverything();
+					me.renderCacheMessage();
+					me.redrawEverything();
 				}
 			});
 		},
@@ -761,7 +755,7 @@
 			});
 		},		
 		loadConfiguration: function() {
-      var me = this;
+			var me = this;
 			//var twelveWeeks = 1000*60*60*24*7*12;
 			return  me.configureIntelRallyApp()
 			.then(function(){
@@ -801,11 +795,11 @@
 					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 				]);
 			});
-     },
+		},
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
-      me.IsDataRefresh = false;
+			me.IsDataRefresh = false;
 			me.AppRefresh = 'Off';
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
@@ -843,20 +837,20 @@
 		renderUpdateCache: function() {
 			var me = this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-					xtype: 'button',
-					text: 'Get Live Data',
-					cls: 'intel-button',
-					listeners: {
-							click: function() {
-									me.setLoading(' Getting live data, please wait');
-									Ext.getCmp('cacheMessageContainer').removeAll();
-									return me.loadConfiguration()
-										.then(function() { return me.reloadEverything();})
-										.then(function() { return me.updateCache(); });
-							}
+				xtype: 'button',
+				text: 'Get Live Data',
+				cls: 'intel-button',
+				listeners: {
+					click: function() {
+						me.setLoading(' Getting live data, please wait');
+						Ext.getCmp('cacheMessageContainer').removeAll();
+						return me.loadConfiguration()
+							.then(function() { return me.reloadEverything();})
+							.then(function() { return me.updateCache(); });
 					}
+				}
 			});
-     },
+		},
 		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			Ext.getCmp('cacheMessageContainer').removeAll();
@@ -1235,7 +1229,11 @@
 				resizable:false,
 				columns: columns,
 				disableSelection: true,
-				plugins: [ 'intelcellediting' ],
+				plugins: ['intelcellediting', {
+					ptype: 'bufferedrenderer',
+					trailingBufferZone: 80,
+					leadingBufferZone: 100
+				}],
 				viewConfig: {
 					xtype:'inteltableview',
 					preserveScrollOnRefresh:true
@@ -1346,7 +1344,7 @@
 						var view = grid.view.normalView; //lockedView and normalView		
 						
 						view.getEl().on('scroll', function(){ me.clearToolTip(); });
-						
+
 						grid.mon(view, {
 							uievent: function (type, view, cell, row, col, e){
 								var moveAndResizePanel;
