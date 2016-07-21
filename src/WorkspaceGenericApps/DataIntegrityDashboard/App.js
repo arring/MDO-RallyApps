@@ -113,7 +113,7 @@
 		},
 		config: {
 			defaultSettings: {
-				cacheUrl:''
+				cacheUrl:'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
 		},
 		
@@ -148,7 +148,7 @@
 			var me = this;
 			
 			me.ProjectRecord = payload.ProjectRecord;
-			me.isScopedToScrum = payload.isScopedToScrum ;
+			//me.isScopedToScrum = payload.isScopedToScrum ;
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			me.LeafProjects = payload.LeafProjects;
@@ -206,7 +206,7 @@
 			}
 			
 			payload.ProjectRecord = filterProjectData(me.ProjectRecord.data);
-			payload.isScopedToScrum = me.isScopedToScrum ;
+		//	payload.isScopedToScrum = me.isScopedToScrum ;
 			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(ss){ return filterProjectData(ss.data); });
 			payload.ScrumGroupPortfolioOIDs = me.ScrumGroupPortfolioOIDs;
 			payload.LeafProjects = _.map(me.LeafProjects, function(ss){ return filterProjectData(ss.data); });
@@ -238,7 +238,7 @@
 			if(me.isHorizontalView){
 				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
 				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
-				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
+				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ? _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			var releaseName = me.ReleaseRecord.data.Name;
@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = me.getSetting('Horizontal');
+			me.isHorizontalView = true;//me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -310,7 +310,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			.then(function(){ return me.registerCustomAppId(); })
+			.then(function(){ /* return me.registerCustomAppId();  */})
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = true;//(me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -685,7 +685,6 @@
 						Ext.getCmp('cacheMessageContainer').removeAll();
 						return me.loadRemainingConfiguration()
 							.then(function(){return me.loadData(); })
-							/* .then(function(){debugger; Ext.getCmp('teampicker').select()}) */
 							.then(function(){	return me.renderVisuals();})
 							.then(function(){ 
 								//NOTE: not returning promise here, performs in the background!
@@ -824,7 +823,6 @@
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
-				me.DeleteCacheButton.hide();
 				me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
