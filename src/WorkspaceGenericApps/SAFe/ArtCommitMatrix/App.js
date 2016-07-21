@@ -25,11 +25,11 @@
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-      		'Intel.lib.mixin.CfdProjectPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
 			'Intel.lib.mixin.HorizontalTeamTypes',
 			'Intel.lib.mixin.CustomAppObjectIDRegister',
-      		'Intel.lib.mixin.Caching'
+			'Intel.lib.mixin.Caching'
 		],
 		//minWidth:910,
 		layout: {
@@ -63,10 +63,10 @@
 				items:[{
 					xtype:'container',
 					id: 'cacheMessageContainer'
-        		}, {
+				}, {
 					xtype: 'container',
 					id:'cacheButtonsContainer'
-        		}]
+				}]
 			}, {
 				xtype:'container',
 				flex:2,
@@ -77,7 +77,7 @@
 						pack:'end'
 					},
 					itemId:'navboxRight'
-        		}]
+				}]
 			}]
 		}],
 		minWidth:910,
@@ -93,7 +93,7 @@
 			defaultSettings: {
 				cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
-    	},
+		},
 		userAppsPref: 'intel-SAFe-apps-preference',
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
@@ -440,7 +440,7 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-    	updateGridHeader: function(projectName) {
+		updateGridHeader: function(projectName) {
 			var me = this;
 			if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
 			var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
@@ -452,7 +452,7 @@
 				if (shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
 				column.el.addCls(me.getProjectHeaderCls(projectName));							
 			}
-    	},
+		},
 		updateTotalPercentCell: function(matrixRecord, index){
 			var me=this,
 				portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(piRecord){ 
@@ -648,8 +648,8 @@
 		},		
 		getCacheUrlSetting: function() {
             var me = this;
-            return me.getSetting('cacheUrl');            
-    	},
+            return me.getSetting('cacheUrl');
+		},
 		getCachePayloadFn: function() {
 			var me = this;
 			me.ProjectRecord = payload.ProjectRecord;
@@ -704,7 +704,7 @@
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;            
 			payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
 			payload.PortfolioItemMap = me.PortfolioItemMap;
-    	},
+		},
 		cacheKeyGenerator: function() {
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
@@ -715,8 +715,7 @@
 					return 'CmtMatx-' + projectOID + '-' + releaseOID;
 			}
 			else return undefined;
-    	},
-        
+		},
 		getCacheTimeoutDate: function(){
 				return new Date(new Date()*1 + 1000*60*60);
 		},
@@ -756,7 +755,7 @@
 			});
 		},		
 		loadConfiguration: function() {
-      		var me = this;
+			var me = this;
 			//var twelveWeeks = 1000*60*60*24*7*12;
 			return  me.configureIntelRallyApp()
 			.then(function(){
@@ -796,11 +795,11 @@
 					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 				]);
 			});
-     	},
+		},
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
-      		me.IsDataRefresh = false;
+			me.IsDataRefresh = false;
 			me.AppRefresh = 'Off';
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
@@ -851,7 +850,7 @@
 					}
 				}
 			});
-     	},
+		},
 		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			Ext.getCmp('cacheMessageContainer').removeAll();
