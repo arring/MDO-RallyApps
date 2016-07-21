@@ -1,0 +1,51 @@
+.customboard {
+  overflow-y: hidden;
+}
+.sizes .x-field-label-cell {
+  vertical-align: top;
+}
+.sizes .label-header {
+  margin-left: 60px;
+  font-family: NotoSansBold;
+  font-size: 12px;
+}
+.sizes .plan-est-header {
+  margin-left: 70px;
+  font-family: NotoSansBold;
+  font-size: 12px;
+}
+.sizes .sizes-container {
+  margin-top: 5px;
+}
+.row-btn {
+  background-color: transparent;
+  font-size: 14px;
+  height: 26px;
+  width: 28px;
+  float: left;
+  padding: 2px 0 0 0;
+}
+.row-btn .btn-button {
+  border: 0 !important;
+}
+.row-btn.minus {
+  color: #666666;
+}
+.row-btn.plus {
+  color: #00A9E0;
+}
+.row-btn.plus:hover {
+  color: #29beff;
+}
+.row-btn.plus.item-disabled,
+.row-btn.plus.item-disabled:hover {
+  cursor: default;
+}
+.row-btn.plus.item-disabled span,
+.row-btn.plus.item-disabled:hover span {
+  color: #666666;
+}
+.total-velocity {
+  font-weight: bold;
+  color: #00a9e0;
+}
