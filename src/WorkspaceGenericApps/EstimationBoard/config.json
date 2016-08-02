@@ -7,7 +7,8 @@
         "SizesField.js",
         "RowSettingsField.js",
         "Settings.js",
-        "BoardApp.js"
+        "BoardApp.js",
+        "../lib/component/intel-cardboard-column.js"
     ],
     "css": [
         "BoardApp.less"
