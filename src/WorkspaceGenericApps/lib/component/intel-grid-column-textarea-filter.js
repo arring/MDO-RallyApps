@@ -116,7 +116,7 @@
 		_updateStoreOptions: function(gridStore, valueField, displayField){
 			var colFilter = this,
 				textFilter = colFilter.down(colFilter.filterXtype);
-				textFilter.setValue("");
+				colFilter.applyFilters();//re filter if some other filters are applied
 		},
 		
 		_createGetRowClassIntercepter: function(fn){
@@ -141,6 +141,9 @@
 		
 		/****************************************PUBLIC METHODS **********************************************/
 		applyFilters: function(){
+			//this is for the select all checkbox for bulk Feature Commitment update to N/A
+			//Reset the checkbox if update in store
+			$('.x-row-checkbox').prop('checked',false);			
 			var colFilter = this,
 				column = colFilter.ownerCt,
 				grid = colFilter.up('grid'),

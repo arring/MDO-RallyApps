@@ -114,6 +114,9 @@
 			});
 		},
 		_updateStoreOptions: function(gridStore, valueField, displayField){
+			//this is for the select all checkbox for bulk Feature Commitment update to N/A
+			//Reset the checkbox if update in store
+			$('.x-row-checkbox').prop('checked',false);
 			var colFilter = this;
 			colFilter._getStoreOptions(gridStore, valueField, displayField).then(function(newComboOptions){
 				var comboFilter = colFilter.down(colFilter.filterXtype),

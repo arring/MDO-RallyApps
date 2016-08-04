@@ -1326,6 +1326,15 @@
 				width: 50,
 				sortable:true
 			},{
+				text:'<input class="x-row-checkbox" id="selectall_features" type="checkbox" />',	
+				width:30,
+				tdCls: 'intel-editor-cell',	
+				sortable:false, 
+				renderer:function(metaData, matrixRecord, row, col){
+					var id = row.data.PortfolioItemFormattedID || "";
+					return '<input class="x-row-checkbox" id="' + id +'" type="checkbox" />';
+				}
+			},{
 				text:'ID', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:60,
@@ -1445,6 +1454,62 @@
 						},
 						items:[{
 							xtype:'button',
+							text:'Bulk Update Commitment to N/A',
+							cls: 'intel-button',
+							listeners:{ 
+								click: function(){ 
+									var toUpdateTeamCommitsRecord = [];
+									_.each(me.TeamCommitsGrid.view.body.dom.innerHTML.match(/<tr id="inteltableview.*?<\/tr>/gm), function (line) {
+										//regex for filtered data
+										if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null){
+											var checkboxElement = line.match((/<input .*?x-row-checkbox.*?>/gm));
+												var idToBeChecked = "#" + $(checkboxElement[0]).attr('id');
+												if($(idToBeChecked).prop('checked')){
+													_.each(me.TeamCommitsGrid.store.getRange(), function(record){
+														if(record.data.PortfolioItemFormattedID === $(idToBeChecked).attr('id') && record.data.Commitment != "N/A"){
+																toUpdateTeamCommitsRecord.push(record);
+														}
+													});													
+												}
+										}
+									});								
+									if (toUpdateTeamCommitsRecord.length === 0) return;
+									me.TeamCommitsGrid.setLoading("Saving");
+									return Q.all(_.map(toUpdateTeamCommitsRecord, function(TeamCommitsRecord){			
+										var deferred = Q.defer();
+										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
+										me.enqueue(function(unlockFunc){
+											var tc = {
+												Commitment: "N/A", 
+												Objective: TeamCommitsRecord.data.Objective 
+											};	
+											me.loadPortfolioItemByOrdinal(TeamCommitsRecord.data.PortfolioItemObjectID, 0).then(function(realPortfolioItem){
+												if(realPortfolioItem) return me.setTeamCommit(realPortfolioItem, tc);
+											})
+											.then(function(){ deferred.resolve(); })
+											.fail(function(reason){ 
+												deferred.reject(reason); 
+											})
+											.then(function(){ 
+												unlockFunc();
+												me.isEditingTeamCommits = false;												
+											})
+											.done();
+											}, 'Queue-Main');
+										return deferred.promise;
+									}))
+									.then(function(value){
+										me.refreshDataFunc();
+									})
+									.fail(function(reason){ 
+										me.TeamCommitsGrid.setLoading(false);
+										me.alert(reason);
+									})
+									.done();									
+								} 
+							}		
+						},{
+							xtype:'button',
 							text:'Remove Filters',
 							cls: 'intel-button',
 							width:110,
@@ -1479,6 +1544,19 @@
 					}
 				},
 				listeners: {
+					headerclick: function( ct, column, e, t, eOpts ){
+						if(column.text.indexOf("selectall_features") === -1) return;
+						var selectAll = $('#selectall_features').prop('checked') ? true : false;
+						/*regex for filtered data The RegExp differs according to the way way the grid is created*/
+						_.each(me.TeamCommitsGrid.view.body.dom.innerHTML.match(/<tr id="inteltableview.*?<\/tr>/gm), function (line) {
+							if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null){
+								_.each(line.match((/<input .*?x-row-checkbox.*?>/gm)), function (checkboxElement) {
+										var idToBeChecked = "#" + $(checkboxElement).attr('id');
+										$(idToBeChecked).prop('checked', selectAll);
+									}); 
+								}
+						});	
+					},					
 					beforeedit: function(){ me.isEditingTeamCommits = true; },
 					canceledit: function(){ me.isEditingTeamCommits = false; },
 					edit: function(editor, e){
