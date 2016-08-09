@@ -300,7 +300,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = true;//me.getSetting('Horizontal');
+			me.isHorizontalView = me.getSetting('Horizontal');
 			me.initDisableResizeHandle();
 			me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -310,7 +310,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			.then(function(){ /* return me.registerCustomAppId();  */})
+			.then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -350,7 +350,7 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = true;//(me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
 			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
@@ -1243,6 +1243,7 @@
 						title: getGridTitleLink(gridConfig.data, gridConfig.model),
 						id: gridConfig.id,
 						cls:'grid-unhealthy data-integrity-grid rally-grid',
+						context:this.getContext(),
 						columnCfgs: gridConfig.columns,
 						enableBulkEdit: true,
 						emptyText: ' ',
@@ -1278,6 +1279,7 @@
 						title: getGridTitleLink(),
 						id: gridConfig.id,
 						cls:' data-integrity-grid grid-healthy',
+						context:this.getContext(),
 						showPagingToolbar: false,
 						showRowActionsColumn: false,
 						emptyText: '0 Problems!',
