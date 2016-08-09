@@ -2929,6 +2929,7 @@
 							listeners:{ 
 								click: function(){ 
 									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.SuccessorGrid), 'clearFilters'); 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumntextareafilter', me.SuccessorGrid), 'clearFilters');
 									me.SuccessorGrid.store.fireEvent('refresh', me.SuccessorGrid.store);
 								}
 							}
