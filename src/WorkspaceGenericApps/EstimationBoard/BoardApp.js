@@ -144,6 +144,7 @@ Ext.define('EstimationBoardApp', {
                 scope: this
             },
             columnConfig: {
+                xtype: 'intelcardboardcolumn',
                 columnHeaderConfig: {
                     headerTpl: '{size}'
                 }
@@ -162,7 +163,7 @@ Ext.define('EstimationBoardApp', {
                     Ext.getCmp('total-velocity-container').add({
                         xtype: 'label',
                         width: '100%',
-                        html: 'Total Velocity: <span class="total-velocity">' + me.totalVelocity + '</span>',
+                        html: 'Total Estimation: <span class="total-velocity">' + me.totalVelocity + '</span>',
                         style: 'display:inline-block; text-align:center; font-size: 20px;'
                     });
                 },
@@ -175,7 +176,7 @@ Ext.define('EstimationBoardApp', {
                     Ext.getCmp('total-velocity-container').add({
                         xtype: 'label',
                         width: '100%',
-                        html: 'Total Velocity: <span class="total-velocity">' + me.totalVelocity + '</span>',
+                        html: 'Total Estimation: <span class="total-velocity">' + me.totalVelocity + '</span>',
                         style: 'display:inline-block; text-align:center; font-size: 20px;'
                     });
                 }
