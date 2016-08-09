@@ -229,19 +229,19 @@
 	
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function() {
-			var me = this,
-				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
-			// return 800;
+			// var me = this,
+				// iframe = Ext.get(window.frameElement);
+			// return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+			return 800;
 		},
 		getGridWidth: function(columnCfgs){
-			var me = this; 
-			if(!me.MatrixGrid) return;
-			else return Math.min(
-				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
-				window.innerWidth - 20
-			);   
-			// return 800;
+			// var me = this; 
+			// if(!me.MatrixGrid) return;
+			// else return Math.min(
+				// _.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
+				// window.innerWidth - 20
+			// );   
+			return 800;
 		},	
 		changeGridSize: function(){
 			var me=this;
@@ -936,11 +936,14 @@
 		},	
 		clearFiltersButtonClicked: function(){
 			var me=this;
+			me.setLoading("removing filters");
 			if(me.MatrixGrid){
 				me.clearToolTip();
 				_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.MatrixGrid), 'clearFilters');
+				_.invoke(Ext.ComponentQuery.query('intelgridcolumntextareafilter', me.MatrixGrid), 'clearFilters');
 				me.MatrixGrid.store.fireEvent('refresh', me.MatrixGrid.store);
 			}
+			me.setLoading(false);
 		},
 		renderClearFiltersButton: function(){
 			var me=this;
@@ -1101,6 +1104,10 @@
 				width:200,
 				locked:true,
 				sortable:true,
+				items: [{
+					xtype: 'intelgridcolumntextareafilter',
+					style: {marginRight: '10px'}
+				}],					
 				renderer: function(value, metaData) {
 					metaData.tdAttr = 'title="' + value + '"';
 					return value;
@@ -1229,11 +1236,11 @@
 				resizable:false,
 				columns: columns,
 				disableSelection: true,
-				plugins: ['intelcellediting', {
+				plugins: ['intelcellediting'/* , {
 					ptype: 'bufferedrenderer',
 					trailingBufferZone: 80,
 					leadingBufferZone: 100
-				}],
+				} */],
 				viewConfig: {
 					xtype:'inteltableview',
 					preserveScrollOnRefresh:true
