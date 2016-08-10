@@ -240,6 +240,7 @@
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20), 
 				window.innerWidth - 20
+			);
 			// return 800;
 		},	
 		changeGridSize: function(){

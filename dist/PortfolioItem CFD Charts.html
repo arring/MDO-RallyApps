@@ -34,8 +34,8 @@
 		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
 	
-	//increase timeouts to 2 minutes since rally can be slow sometimes
-	var timeout = 120000;
+	//increase timeouts to 5 minutes since rally can be slow sometimes
+	var timeout = 300000;
 	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
 	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
 	
@@ -320,7 +320,7 @@
 			else {
 				var me=this,
 					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
-						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID;
 					});
 				if(foundScrumGroupConfig) return Q(projectRecord);
 				else { 
@@ -686,35 +686,59 @@
 				}
 			});
 		},
+		getPorfolioProjectFilterQuery: function(rootProjectRecord){
+			//filter out porfolio as project if train and porfolio is under same project
+			//rootProjectRecord is optional
+			var me = this,
+				deferred = Q.defer(),
+				filter = [];
+			me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === rootProjectRecord.data.ObjectID; })[0];
+			if(!rootProjectRecord || me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame) return Q();
+			if(me.ScrumGroupPortfolioProject){
+				filter =  Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+				return Q(filter);
+			}else{
+			return me.loadScrumGroupPortfolioProject(rootProjectRecord)
+				.then(function(scrumGroupPortfolioProject){
+					me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+					filter =   Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+					return Q(filter);
+				});				
+			}
+		},
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
-			var me=this,
-				leafProjects = {}, 
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: "Project",
-					fetch: me.projectFields,
-					compact: false,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project:null
-					}
+			var me = this,
+			leafProjects = {};
+			return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+				.then(function(filter){
+					var store = Ext.create('Rally.data.wsapi.Store', {
+							model: "Project",
+							fetch: me.projectFields,
+							filters: filter ? [filter] : [],
+							compact: false,
+							limit:Infinity,
+							disableMetaChangeEvent: true,
+							context:{
+								workspace: me.getContext().getWorkspace()._ref,
+								project:null
+							}
+						});	
+					return me.reloadStore(store).then(function(store){
+						if(rootProjectRecord){
+							var projTree = me._storeItemsToProjTree(store.getRange());
+							me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+							return leafProjects;
+						} else {
+							return _.reduce(_.filter(store.getRange(),
+								function(project){ return project.data.Children.Count === 0; }),
+								function(map, project){
+									map[project.data.ObjectID] = project;
+									return map;
+								}, {});
+						}
+					});					
 				});
-			return me.reloadStore(store).then(function(store){
-				if(rootProjectRecord){
-					var projTree = me._storeItemsToProjTree(store.getRange());
-					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
-					return leafProjects;
-				} else {
-					return _.reduce(_.filter(store.getRange(),
-						function(project){ return project.data.Children.Count === 0; }),
-						function(map, project){
-							map[project.data.ObjectID] = project;
-							return map;
-						}, {});
-				}
-			});
 		},
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
@@ -1674,7 +1698,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0) 
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 5 < 0 ? 0 : end - 5);
+				begin = (end - 7 < 0 ? 0 : end - 7);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
@@ -1685,7 +1709,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 10 < 0 ? 0 : end - 10);
+				begin = (end - 14 < 0 ? 0 : end - 14);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
@@ -1696,7 +1720,7 @@
 				for(i=end;i>=begin;--i) //start at the END, not at begin+1 (can go from 0 to 10 to 0. so start at last 0)
 					if(projectedTrend.data[i]!==0){
 						end = i; break; }
-				begin = (end - 20 < 0 ? 0 : end - 20);
+				begin = (end - 28 < 0 ? 0 : end - 28);
 				slope = (end===begin) ? 0 : (projectedTrend.data[end] - projectedTrend.data[begin])/(end-begin);
 				projectedTrend.data = _.map(projectedTrend.data, function(p, j){ 
 					var pt = (100*(projectedTrend.data[begin] + (j-begin)*slope)>>0)/100;
@@ -1987,7 +2011,6 @@
 			});
 			return deferred.promise;
 		},
-		
 		getCustomAppObjectID: function(appClassName){
 			var me=this;
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
@@ -1996,8 +2019,8 @@
 		},
 		setCustomAppObjectID: function(appClassName){
 			var me=this, s = {},
-				objectID = window.parent.location.hash.split("/").pop();
-			
+				//addding updater script in the url
+				objectID = window.parent.location.hash.split("?")[0].split("/").pop();
 			if(!appClassName) return Q.reject('invalid appClassName');
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
 				var deferred = Q.defer();
@@ -2345,8 +2368,8 @@
 	Ext.define('Intel.lib.chart.FastCumulativeFlowCalculator', {		
 		constructor:function(options){
 			this.scheduleStates = options.scheduleStates;
-			this.startDate = options.startDate;
-			this.endDate = options.endDate;
+			this.startDate = options.startDate ? new Date(options.startDate) : null;
+			this.endDate = options.endDate ? new Date(options.endDate) : null;
 		},
 		
 		_getDates:function(){

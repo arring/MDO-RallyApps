@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Estimation Board</title>
+
+    <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                Ext.define('SizesField', {
+    extend: 'Ext.form.field.Base',
+    alias: 'widget.sizesfield',
+    requires: [
+        'Rally.ui.Button'
+    ],
+
+    fieldSubTpl: '<div id="{id}"></div>',
+
+    cls: 'sizes',
+
+    config: {
+        /**
+         * @cfg {Object}
+         *
+         * The size settings value for this field
+         */
+        value: undefined
+    },
+
+    onDestroy: function() {
+        if (this._sizesContainer) {
+            this._sizesContainer.destroy();
+            delete this._sizesContainer;
+        }
+        this.callParent(arguments);
+    },
+
+    onRender: function() {
+        this.callParent(arguments);
+
+        this._sizesContainer = Ext.create('Ext.Container', {
+            renderTo: this.inputEl,
+            cls: 'sizes-container',
+            items: this._buildRows()
+        });
+    },
+
+    /**
+     * When a form asks for the data this field represents,
+     * give it the name of this field and the ref of the selected project (or an empty string).
+     * Used when persisting the value of this field.
+     * @return {Object}
+     */
+    getSubmitData: function() {
+        var data = {};
+        data[this.name] = Ext.JSON.encode(_.map(Ext.ComponentQuery.query('container', this._sizesContainer), function(row) {
+            var labelTextBox = Ext.ComponentQuery.query('rallytextfield', row)[0],
+                valueTextBox = Ext.ComponentQuery.query('rallynumberfield', row)[0];
+
+            return {
+                text: labelTextBox.getValue(),
+                value: valueTextBox.getValue()
+            };
+        }));
+
+        return data;
+    },
+
+    _buildRows: function() {
+        return [{
+          xtype: 'component',
+          margin: '0 0 5px 0',
+          html: '<span class="label-header">Name</span><span class="plan-est-header">Plan Est</span>'
+        }].concat(_.map(Ext.JSON.decode(this._value), function(value) {
+            return this._buildRow(value);
+        }, this));
+    },
+
+    _buildRow: function(value) {
+        return {
+            xtype: 'container',
+            layout: 'hbox',
+            items: [
+                {
+                    xtype: 'rallybutton',
+                    border: false,
+                    frame: false,
+                    cls: 'row-btn plus',
+                    disabled: false,
+                    itemId: 'plusButton',
+                    iconCls: 'icon-plus',
+                    listeners: {
+                        click: this._addRow,
+                        scope: this
+                    }
+                },
+                {
+                    xtype: 'rallybutton',
+                    border: false,
+                    cls: 'row-btn minus',
+                    frame: false,
+                    iconCls: 'icon-minus',
+                    itemId: 'minusButton',
+                    listeners: {
+                        click: this._removeRow,
+                        scope: this
+                    }
+                },
+                {
+                    xtype: 'rallytextfield',
+                    width: 100,
+                    value: value && value.text
+                },
+                {
+                    xtype: 'rallynumberfield',
+                    width: 50,
+                    margin: '0 0 0 10px',
+                    value: value && value.value
+                }
+            ]
+        };
+    },
+
+    _addRow: function(button) {
+        var container = button.up();
+        var sizesContainer = container.up();
+        var index = sizesContainer.items.indexOf(container);
+        sizesContainer.insert(index + 1, this._buildRow());
+        this._adjustSize();
+    },
+
+    _removeRow: function(button) {
+        button.up().destroy();
+        this._adjustSize();
+    },
+
+    _adjustSize: function() {
+      //little hack- force app settings resize
+      var appSettings = this.up('rallyappsettings');
+      appSettings.fireEvent('appsettingsready', appSettings);
+    },
+
+    setValue: function(value) {
+        this.callParent(arguments);
+        this._value = value;
+    }
+});
+
+                /**
+ * Allows configuring of rows for the cardboard
+ *
+ *
+ *      @example
+ *      Ext.create('Ext.Container', {
+ *          items: [{
+ *              xtype: 'rowsettingsfield',
+ *              value: {
+ *                  show: true,
+ *                  field: 'c_ClassofService'
+ *              }
+ *          }],
+ *          renderTo: Ext.getBody().dom
+ *      });
+ *
+ */
+Ext.define('RowSettingsField', {
+    alias: 'widget.rowsettingsfield',
+    extend: 'Ext.form.FieldContainer',
+    requires: [
+        'Rally.ui.CheckboxField',
+        'Rally.ui.combobox.ComboBox',
+        'Rally.ui.plugin.FieldValidationUi',
+        'Rally.data.ModelFactory',
+        'Rally.data.wsapi.ModelBuilder'
+    ],
+
+    mixins: {
+        field: 'Ext.form.field.Field'
+    },
+
+    layout: 'hbox',
+
+    cls: 'row-settings',
+
+    config: {
+        /**
+         * @cfg {Object}
+         *
+         * The row settings value for this field
+         */
+        value: undefined,
+
+        /**
+         * @cfg {Function}
+         * A function which should return true if the specified field should
+         * be included in the list of available swimlane fields
+         * @param {Rally.data.wsapi.Field} field
+         */
+        isAllowedFieldFn: Ext.emptyFn,
+
+        /**
+         * @cfg {Object[]}
+         *
+         * Array of objects with name and value keys to be used by the row combobox
+         * [{'name': 'Blocked', 'value': 'Blocked'},{'name': 'Owner', 'value': 'Owner'}]
+         */
+        explicitFields: [],
+
+        /**
+         * @cfg {String[]}
+         * Array of models for which to list fields for
+         */
+        modelNames: ['userstory', 'defect'],
+
+        /**
+         * @cfg {String[]}
+         * Array of field display names to show if found on at least 1 model, sortable and are not hidden
+         */
+        whiteListFields: []
+    },
+
+    initComponent: function() {
+        this.callParent(arguments);
+
+        this.mixins.field.initField.call(this);
+
+        this.add([
+            {
+                xtype: 'rallycheckboxfield',
+                name: 'showRows',
+                boxLabel: '',
+                margin: '0',
+                submitValue: false,
+                value: this.getValue().showRows,
+                listeners: {
+                    change: function(checkbox, checked) {
+                        this.down('rallycombobox').setDisabled(!checked);
+                    },
+                    scope: this
+                }
+            },
+            {
+                xtype: 'rallycombobox',
+                plugins: ['rallyfieldvalidationui'],
+                name: 'rowsField',
+                margin: '0 6px',
+                width: 130,
+                emptyText: 'Choose Field...',
+                displayField: 'name',
+                valueField: 'value',
+                disabled: this.getValue().showRows !== 'true',
+                editable: false,
+                submitValue: false,
+                storeType: 'Ext.data.Store',
+                storeConfig: {
+                    remoteFilter: false,
+                    fields: ['name', 'value'],
+                    data: []
+                }
+            }
+        ]);
+
+        this._loadModels();
+    },
+
+    _loadModels: function() {
+        Rally.data.ModelFactory.getModels({
+            types: this.getModelNames(),
+            context: this.context,
+            success: this._onModelsRetrieved,
+            scope: this
+        });
+    },
+
+    _onModelsRetrieved: function (models) {
+        var fields = _.uniq(Ext.Array.merge(this.explicitFields, this._getRowableFields(_.values(models))), 'name');
+        var combobox = this.down('rallycombobox');
+        combobox.getStore().loadData(_.sortBy(fields, 'name'));
+        combobox.setValue(this.getValue().rowsField);
+        this.fireEvent('ready', this);
+    },
+
+    _getRowableFields: function (models) {
+        var artifactModel = Rally.data.wsapi.ModelBuilder.buildCompositeArtifact(models, this.context),
+            allFields = artifactModel.getFields(),
+            rowableFields = _.filter(allFields, function (field) {
+                var attr = field.attributeDefinition;
+                return attr && !attr.Hidden && attr.Sortable &&
+                    ((artifactModel.getModelsForField(field).length === models.length &&
+                    this.isAllowedFieldFn(field)) || _.contains(this.whiteListFields, field.displayName));
+            }, this);
+
+        return _.map(rowableFields, function(field) {
+            return {
+                name: field.displayName,
+                value: field.name
+            };
+        });
+    },
+
+    /**
+     * When a form asks for the data this field represents,
+     * give it the name of this field and the ref of the selected project (or an empty string).
+     * Used when persisting the value of this field.
+     * @return {Object}
+     */
+    getSubmitData: function() {
+        var data = {},
+            showField = this.down('rallycheckboxfield'),
+            rowsField = this.down('rallycombobox'),
+            showRows = showField.getValue() && !_.isEmpty(rowsField.getValue());
+        data[showField.name] = showRows;
+        if (showRows) {
+            data[rowsField.name] = rowsField.getValue();
+        }
+        return data;
+    },
+
+    refreshWithNewModelType: function(type) {
+        this.setModelNames([type]);
+        this._loadModels();
+    }
+});
+
+                Ext.define('Settings', {
+    singleton: true,
+    requires: [
+        'Rally.ui.combobox.FieldComboBox',
+        'Rally.ui.combobox.ComboBox',
+        'Rally.ui.TextField',
+        'Rally.ui.NumberField',
+        'RowSettingsField',
+        'Rally.data.wsapi.Filter',
+        'SizesField'
+    ],
+
+    getFields: function (context) {
+        return [
+            {
+                name: 'sizes',
+                xtype: 'sizesfield',
+                fieldLabel: 'Columns'
+            },
+            {
+                name: 'groupHorizontallyByField',
+                xtype: 'rowsettingsfield',
+                fieldLabel: 'Swimlanes',
+                mapsToMultiplePreferenceKeys: ['showRows', 'rowsField'],
+                readyEvent: 'ready',
+                isAllowedFieldFn: function(field) {
+                    var attr = field.attributeDefinition;
+                    return (attr.Custom && (attr.Constrained || attr.AttributeType.toLowerCase() !== 'string') ||
+                        attr.Constrained || _.contains(['quantity', 'boolean'], attr.AttributeType.toLowerCase()) ||
+                        (!attr.Constrained && attr.AttributeType.toLowerCase() === 'object')) &&
+                        !_.contains(['web_link', 'text', 'date'], attr.AttributeType.toLowerCase()) &&
+                        !_.contains(['PortfolioItemType', 'LastResult'], attr.ElementName);
+                },
+                handlesEvents: {
+                    typeselected: function(type, context) {
+                        this.refreshWithNewModelType(type, context);
+                    }
+                }
+            },
+            {
+                type: 'query'
+            }
+        ];
+    }
+});
+
+                Ext.define('EstimationBoardApp', {
+    extend: 'Rally.app.App',
+    alias: 'widget.boardapp',
+
+    requires: [
+        'Rally.ui.cardboard.plugin.FixedHeader',
+        'Rally.ui.gridboard.GridBoard',
+        'Rally.ui.gridboard.plugin.GridBoardAddNew',
+        'Rally.ui.gridboard.plugin.GridBoardCustomFilterControl',
+        'Rally.ui.gridboard.plugin.GridBoardFieldPicker',
+        'Rally.data.util.Sorter',
+        'Settings',
+        'Rally.clientmetrics.ClientMetricsRecordable'
+    ],
+    mixins: [
+        'Rally.clientmetrics.ClientMetricsRecordable'
+    ],
+    layout: {
+        type: 'vbox',
+        align: 'stretch',
+        pack: 'start'
+    },
+    items: [{
+        xtype: 'container',
+        cls: 'velocity-container',
+        height: 50,
+        items: [{
+            xtype: 'container',
+            id: 'total-velocity-container',
+            margin: '10 0 0 0'
+        }]
+    }],
+    totalVelocity: 0,
+    cls: 'customboard',
+    autoScroll: false,
+    config: {
+        defaultSettings: {
+            types: [
+                'HierarchicalRequirement',
+                'Defect'
+            ],
+            showRows: false,
+            sizes: [
+                {text: 'No Estimate', value: null},
+                {text: 'XS', value: 1},
+                {text: 'S', value: 2},
+                {text: 'M', value: 4},
+                {text: 'L', value: 8},
+                {text: 'XL', value: 16},
+                {text: 'Rock Crush!', value: 100}
+            ]
+        }
+    },
+    launch: function() {
+        Rally.data.ModelFactory.getModels({
+            types: this.getSetting('types'),
+            context: this.getContext().getDataContext()
+        }).then({
+            success: function (models) {
+                this.models = models;
+                this.add(this._getGridBoardConfig());
+            },
+            scope: this
+        });
+    },
+
+    _getGridBoardConfig: function() {
+        var context = this.getContext();
+        var modelNames = this.getSetting('types');
+        var config = {
+            xtype: 'rallygridboard',
+            stateful: false,
+            toggleState: 'board',
+            cardBoardConfig: this._getBoardConfig(),
+            plugins: [{
+                ptype:'rallygridboardaddnew',
+                addNewControlConfig: {
+                    stateful: true,
+                    stateId: context.getScopedStateId('board-add-new')
+                }
+            }, {
+                ptype: 'rallygridboardcustomfiltercontrol',
+                filterChildren: false,
+                filterControlConfig: {
+                    margin: '3 9 3 30',
+                    modelNames: modelNames,
+                    stateful: true,
+                    stateId: context.getScopedStateId('board-custom-filter-button')
+                },
+                showOwnerFilter: true,
+                ownerFilterControlConfig: {
+                    stateful: true,
+                    stateId: context.getScopedStateId('board-owner-filter')
+                }
+            }, {
+                ptype: 'rallygridboardfieldpicker',
+                headerPosition: 'left',
+                boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
+                modelNames: modelNames,
+                boardFieldDefaults: ['PlanEstimate']
+            }],
+            context: context,
+            modelNames: modelNames,
+            storeConfig: {
+                filters: this._getFilters()
+            },
+            listeners: {
+                load: this._onLoad,
+                scope: this
+            }
+        };
+        if(this.getEl()) {
+            config.height = this.getHeight();
+        }
+        return config;
+    },
+
+    _onLoad: function(grid) {
+        this.recordComponentReady({
+            miscData: {
+                type: this.getSetting('type'),
+                columns: this.getSetting('groupByField'),
+                rows: (this.getSetting('showRows') && this.getSetting('rowsField')) || ''
+            }
+        });
+    },
+
+    _getBoardConfig: function() {
+        var me = this;
+        var boardConfig = {
+            scope: this,
+            margin: '10px 0 0 0',
+            attribute: 'PlanEstimate',
+            context: this.getContext(),
+            cardConfig: {
+                editable: true,
+                showIconMenus: true
+            },
+            loadMask: true,
+            plugins: [{ptype:'rallyfixedheadercardboard'}],
+            storeConfig: {
+                sorters: Rally.data.util.Sorter.sorters(this.getSetting('order')),
+                pageSize: 25,
+                scope: this
+            },
+            columnConfig: {
+                xtype: 'intelcardboardcolumn',
+                columnHeaderConfig: {
+                    headerTpl: '{size}'
+                }
+            },
+            listeners: {
+                load: function(grid) {
+                    // Here we have access to the card board
+                    var cols = _.drop(grid.getColumns());
+                    me.totalVelocity = 0;
+                    var sizes = _.drop(me.getSetting('sizes'));
+                    
+                    _.each(cols, function(col, i) {
+                        me.totalVelocity = me.totalVelocity + (col.store.totalCount * sizes[i].value);
+                    });
+                    Ext.getCmp('total-velocity-container').removeAll();
+                    Ext.getCmp('total-velocity-container').add({
+                        xtype: 'label',
+                        width: '100%',
+                        html: 'Total Estimation: <span class="total-velocity">' + me.totalVelocity + '</span>',
+                        style: 'display:inline-block; text-align:center; font-size: 20px;'
+                    });
+                },
+                beforecarddroppedsave: function(scope, card, type, sourceColumn, eOpts) {
+                    me.totalVelocity = me.totalVelocity - sourceColumn.value;
+                }, 
+                aftercarddroppedsave: function(scope, card, type, sourceColumn, eOpts) {
+                    me.totalVelocity = me.totalVelocity + scope.value;
+                    Ext.getCmp('total-velocity-container').removeAll();
+                    Ext.getCmp('total-velocity-container').add({
+                        xtype: 'label',
+                        width: '100%',
+                        html: 'Total Estimation: <span class="total-velocity">' + me.totalVelocity + '</span>',
+                        style: 'display:inline-block; text-align:center; font-size: 20px;'
+                    });
+                }
+            },
+            columns: _.map(this.getSetting('sizes'), function(size) {
+                return {
+                    value: size.value,
+                    columnHeaderConfig: {
+                        headerData: {size: size.text}
+                    }
+                };
+            })
+        };
+        if (this.getSetting('showRows')) {
+            Ext.merge(boardConfig, {
+                rowConfig: {
+                    field: this.getSetting('rowsField'),
+                    sortDirection: 'ASC'
+                }
+            });
+        }
+        if (this._shouldDisableRanking()) {
+            boardConfig.enableRanking = false;
+            boardConfig.enableCrossColumnRanking = false;
+            boardConfig.cardConfig.showRankMenuItems = false;
+        }
+        return boardConfig;
+    },
+
+    getSettingsFields: function() {
+        return Settings.getFields(this.getContext());
+    },
+
+    _shouldDisableRanking: function() {
+        return (!this.getSetting('showRows') || this.getSetting('showRows') &&
+            this.getSetting('rowsField').toLowerCase() !== 'workproduct');
+    },
+
+    _addBoard: function() {
+        var gridBoard = this.down('rallygridboard');
+        if(gridBoard) {
+            gridBoard.destroy();
+        }
+        this.add(this._getGridBoardConfig());
+    },
+
+    onTimeboxScopeChange: function(timeboxScope) {
+        this.callParent(arguments);
+        this._addBoard();
+    },
+
+    _getFilters: function() {
+        var queries = [],
+            timeboxScope = this.getContext().getTimeboxScope();
+        if (this.getSetting('query')) {
+            queries.push(Rally.data.QueryFilter.fromQueryString(this.getSetting('query')));
+        }
+        if (timeboxScope && _.all(this.models, function(model) {
+                return model.hasField(Ext.String.capitalize(timeboxScope.getType()));
+            })) {
+            queries.push(timeboxScope.getQueryFilter());
+        }
+        return queries;
+    }
+});
+
+                (function() {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define('Intel.lib.component.CardboardColumn', {
+        extend: 'Rally.ui.cardboard.Column',
+        alias: ['widget.intelcardboardcolumn'],
+
+        isMatchingRecord: function(record) {
+            var recordValue = record.get(this.attribute),
+                field = record.getField(this.attribute),
+                typePath = record.self.typePath,
+                models = this.store.models || Ext.Array.from(this.store.model),
+                supportedTypes = _.pluck(models, 'typePath');
+            
+            
+
+            if (!field || !_.contains(supportedTypes, typePath)) {
+                return false;
+            }
+
+            var columnValue = this.getValue();
+
+            // Field values can be converted from null. So we need to convert the column
+            // value in case it is null
+            if (Ext.isFunction(field.convert)) {
+                columnValue = field.convert(columnValue, record);
+            }
+
+            // See if value is a power of 2
+            var isPowerOfTwo = Math.log2(recordValue) % 1 === 0;
+
+            return ((columnValue === recordValue || !isPowerOfTwo) || 
+                (Rally.util.Ref.isRefUri(columnValue) &&
+                    Rally.util.Ref.getRelativeUri(recordValue) === Rally.util.Ref.getRelativeUri(columnValue)));
+        },
+        
+        _getModelScopedFilters: function(models) {
+            if(!this.requiresModelSpecificFilters) {
+                return [this.getStoreFilter()];
+            } else {
+                var filters = _.map(models, function (model) {
+                    // filter by typeDefOid so we only get back the models we asked for
+                    var filter = Ext.create('Rally.data.wsapi.Filter', {
+                        property: 'TypeDefOid',
+                        value: model.typeDefOid,
+                        operator: '='
+                    });
+
+                    // AND all model specific filters together with typeDefOid filter to scope by model type
+                    var modelFilters = this.getStoreFilter(model);
+
+                    if (!Ext.isEmpty(modelFilters)) {
+                        filter = _.reduce(Ext.Array.from(modelFilters), function (result, modelFilter) {
+                            // If no estimate column, add not filter
+                            // This generates a special filter for the null column to also
+                            // grab values that do not fit into any other bucket. If the bucket
+                            // sizes change you need to change this and the method above to match 
+                            // your bucket scheme. 
+                            if (modelFilter.value === null) {
+                                var notFilter = Ext.create('Rally.data.wsapi.Filter', {
+                                    property: modelFilter.property,
+                                    operator: '!=',
+                                    value: 100
+                                });
+                                for(var i = 0; i < 5; i++) {
+                                    notFilter = notFilter.and({
+                                        property: modelFilter.property,
+                                        operator: '!=',
+                                        value: Math.pow(2, i)
+                                    });
+                                }
+                                return result.and(notFilter.or(modelFilter));
+                            } // end not filter
+                            return result.and(modelFilter);
+                        }, filter);
+                    }
+
+                    return filter;
+                }, this);
+
+                // OR model filters together so we get back all models we asked for
+                return _.reduce(filters, function (result, filter) {
+                    return Ext.isEmpty(result) ? filter : result.or(filter);
+                }, null, this);
+            }
+        }
+    });
+}());
+
+
+            Rally.launchApp('EstimationBoardApp', {
+                name:"Estimation Board",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+
+    <style type="text/css">
+        .customboard {
+  overflow-y: hidden;
+}
+.sizes .x-field-label-cell {
+  vertical-align: top;
+}
+.sizes .label-header {
+  margin-left: 60px;
+  font-family: NotoSansBold;
+  font-size: 12px;
+}
+.sizes .plan-est-header {
+  margin-left: 70px;
+  font-family: NotoSansBold;
+  font-size: 12px;
+}
+.sizes .sizes-container {
+  margin-top: 5px;
+}
+.row-btn {
+  background-color: transparent;
+  font-size: 14px;
+  height: 26px;
+  width: 28px;
+  float: left;
+  padding: 2px 0 0 0;
+}
+.row-btn .btn-button {
+  border: 0 !important;
+}
+.row-btn.minus {
+  color: #666666;
+}
+.row-btn.plus {
+  color: #00A9E0;
+}
+.row-btn.plus:hover {
+  color: #29beff;
+}
+.row-btn.plus.item-disabled,
+.row-btn.plus.item-disabled:hover {
+  cursor: default;
+}
+.row-btn.plus.item-disabled span,
+.row-btn.plus.item-disabled:hover span {
+  color: #666666;
+}
+.total-velocity {
+  font-weight: bold;
+  color: #00a9e0;
+}
+
+    </style>
+</head>
+<body>
+</body>
+</html>

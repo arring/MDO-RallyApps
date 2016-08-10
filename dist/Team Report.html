@@ -34,8 +34,8 @@
 		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
 		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
 	
-	//increase timeouts to 2 minutes since rally can be slow sometimes
-	var timeout = 120000;
+	//increase timeouts to 5 minutes since rally can be slow sometimes
+	var timeout = 300000;
 	Ext.override(Ext.data.proxy.Ajax, { timeout: timeout });
 	Ext.override(Ext.data.proxy.JsonP, { timeout: timeout });
 	
@@ -320,7 +320,7 @@
 			else {
 				var me=this,
 					foundScrumGroupConfig = _.find(me.ScrumGroupConfig, function(scrumGroupConfig){ 
-						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID; 
+						return scrumGroupConfig.ScrumGroupRootProjectOID == projectRecord.data.ObjectID;
 					});
 				if(foundScrumGroupConfig) return Q(projectRecord);
 				else { 
@@ -686,35 +686,59 @@
 				}
 			});
 		},
+		getPorfolioProjectFilterQuery: function(rootProjectRecord){
+			//filter out porfolio as project if train and porfolio is under same project
+			//rootProjectRecord is optional
+			var me = this,
+				deferred = Q.defer(),
+				filter = [];
+			me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === rootProjectRecord.data.ObjectID; })[0];
+			if(!rootProjectRecord || me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame) return Q();
+			if(me.ScrumGroupPortfolioProject){
+				filter =  Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+				return Q(filter);
+			}else{
+			return me.loadScrumGroupPortfolioProject(rootProjectRecord)
+				.then(function(scrumGroupPortfolioProject){
+					me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+					filter =   Ext.create('Rally.data.wsapi.Filter', { property: 'Parent.ObjectID',operator: '!= ', value: me.ScrumGroupPortfolioProject.data.ObjectID });
+					return Q(filter);
+				});				
+			}
+		},
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
-			var me=this,
-				leafProjects = {}, 
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: "Project",
-					fetch: me.projectFields,
-					compact: false,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					context:{
-						workspace: me.getContext().getWorkspace()._ref,
-						project:null
-					}
+			var me = this,
+			leafProjects = {};
+			return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+				.then(function(filter){
+					var store = Ext.create('Rally.data.wsapi.Store', {
+							model: "Project",
+							fetch: me.projectFields,
+							filters: filter ? [filter] : [],
+							compact: false,
+							limit:Infinity,
+							disableMetaChangeEvent: true,
+							context:{
+								workspace: me.getContext().getWorkspace()._ref,
+								project:null
+							}
+						});	
+					return me.reloadStore(store).then(function(store){
+						if(rootProjectRecord){
+							var projTree = me._storeItemsToProjTree(store.getRange());
+							me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+							return leafProjects;
+						} else {
+							return _.reduce(_.filter(store.getRange(),
+								function(project){ return project.data.Children.Count === 0; }),
+								function(map, project){
+									map[project.data.ObjectID] = project;
+									return map;
+								}, {});
+						}
+					});					
 				});
-			return me.reloadStore(store).then(function(store){
-				if(rootProjectRecord){
-					var projTree = me._storeItemsToProjTree(store.getRange());
-					me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
-					return leafProjects;
-				} else {
-					return _.reduce(_.filter(store.getRange(),
-						function(project){ return project.data.Children.Count === 0; }),
-						function(map, project){
-							map[project.data.ObjectID] = project;
-							return map;
-						}, {});
-				}
-			});
 		},
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
@@ -1772,7 +1796,6 @@
 			});
 			return deferred.promise;
 		},
-		
 		getCustomAppObjectID: function(appClassName){
 			var me=this;
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
@@ -1781,8 +1804,8 @@
 		},
 		setCustomAppObjectID: function(appClassName){
 			var me=this, s = {},
-				objectID = window.parent.location.hash.split("/").pop();
-			
+				//addding updater script in the url
+				objectID = window.parent.location.hash.split("?")[0].split("/").pop();
 			if(!appClassName) return Q.reject('invalid appClassName');
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
 				var deferred = Q.defer();
@@ -2644,6 +2667,9 @@
 			});
 		},
 		_updateStoreOptions: function(gridStore, valueField, displayField){
+			//this is for the select all checkbox for bulk Feature Commitment update to N/A
+			//Reset the checkbox if update in store
+			$('.x-row-checkbox').prop('checked',false);
 			var colFilter = this;
 			colFilter._getStoreOptions(gridStore, valueField, displayField).then(function(newComboOptions){
 				var comboFilter = colFilter.down(colFilter.filterXtype),
@@ -2713,6 +2739,186 @@
 				recordCount = grid.store.getCount();
 				
 			comboFilter.setValue();
+			colFilter.filterValues = [];
+			while(recordCount--) colFilter._applyToGridView(grid, 'removeRowCls', [recordCount, colFilter.hideClass]); 
+		}
+	});
+}());
+	
+                /** 
+	SUMMARY:
+		This is used in grid column configs in the items: [] field for the column. It is a fancy grid column filter component written in reference to intel-grid-column-filter.
+		
+	DEPENDENCIES:
+		Intel.lib.component.inteltextarea
+		Intel.lib.mixin.PrettyAlert
+		
+		Q
+		lodash
+	*/
+(function(){
+	var Ext = window.Ext4 || window.Ext;	
+	
+	Ext.define('Intel.lib.component.GridColumnTextAreaFilter', {
+		extend:'Ext.container.Container',
+		cls: 'intel-grid-column-filter',
+		alias: ['widget.intelgridcolumntextareafilter'],
+		mixins: [
+			'Intel.lib.mixin.PrettyAlert'
+		],
+		
+		layout: 'hbox',
+		border:0,
+		flex:1,
+		
+		/**************************************** caller CAN override these **********************************************/
+		filterXtype: 'inteltextarea',
+		enableKeyEvents: true,
+		valueField: null,
+		displayField: null,
+		convertDisplayFn: function(value, field, record){ return value; },			//can return promise
+		convertValueFn: function(value, field, record){ return value; },				//can return promise
+		sortFn: function(valueFieldValue, displayFieldValue, record){ return valueFieldValue; },
+		filterFn: function(filterValue, recordValue, valueField, record){ 
+			return recordValue.toLowerCase().indexOf(filterValue.toLowerCase()) != -1; 
+		},
+		
+		/**************************************** INITIALIZE/PRIVATE METHODS **********************************************/
+		initComponent: function(){
+			var colFilter = this;
+			colFilter.filterValues = [];
+			colFilter.hideClass = 'grid-column-filter-hide-' + (Math.random()*1000000>>0);
+			Ext.DomHelper.append(Ext.getBody(), '<style>.' + colFilter.hideClass + ' { display: none; }</style>');
+			Ext.DomHelper.append(Ext.getBody(), '<style>.intel-grid-column-filter > * { border: none !important; }</style>');
+			colFilter.on('added', function(){ colFilter._initColFilter(); });
+			colFilter.callParent();
+		},
+		_initColFilter: function(){
+			var colFilter = this, 
+				column = colFilter.ownerCt,
+				valueField = colFilter.valueField || column.dataIndex,
+				displayField = colFilter.displayField || valueField;
+			setTimeout(function waitForGrid(){
+				var grid = column.up('grid');
+				if(grid){ 
+					var gridStore = grid.getStore();
+				
+					grid.view.getRowClass = colFilter._createGetRowClassIntercepter(grid.view.getRowClass);
+					colFilter._addItems(gridStore, valueField, displayField);
+				 
+					gridStore.on('datachanged', function(){colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					gridStore.on('refresh', function(){colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					grid.on('edit', function(){colFilter._updateStoreOptions(gridStore, valueField, displayField); });
+					grid.on('sortchange', function(){colFilter.applyFilters(); }); 
+				}
+				else setTimeout(waitForGrid, 20);
+			}, 20);
+		},
+		_addItems: function(gridStore, valueField, displayField){
+			var colFilter = this;
+
+			colFilter._getStoreOptions(gridStore, valueField, displayField).then(function(storeOptions){
+				colFilter.add([{
+					xtype: colFilter.filterXtype,
+					flex:1,
+					emptyText: 'Type to Filter',
+					store: Ext.create('Ext.data.Store', {
+						fields:[
+							{name:'Display', type:'auto'}, 
+							{name:'Value', type:'auto'}
+						],
+						data: ""
+					}),
+					displayField: 'Display',
+					valueField: 'Value',
+					listeners:{
+						change: function(combo, newValue){
+							colFilter.setFilterValue(newValue);
+						}
+					}
+				}, {xtype:'container', width:5}]);
+				colFilter.doLayout();
+			})
+			.fail(function(reason){ colFilter.alert('ERROR', reason); })
+			.done();
+		},	
+		_getStoreOptions: function(gridStore, valueField, displayField){
+			var grid = this;
+			return Q.all(_.map(gridStore.getRange(), function(record){
+				return Q.all([
+					Q(grid.convertDisplayFn(record.get(displayField), displayField, record)),
+					Q(grid.convertValueFn(record.get(valueField), valueField, record)),
+					Q(record)
+				]);
+			}))
+			.then(function(options){	
+				var array = [{Display:'Clear', Value: null}].concat(_.sortBy(_.unique(_.map(_.filter(options, 
+					function(option){ return option[0] !== undefined && option[1] !== undefined; }),
+					function(option){ return {Display: option[0], Value: option[1], Record: option[2]}; }),
+					function(option){ return option.Value; }),
+					function(option){ return grid.sortFn(option.Value, option.Display, option.Record); })); 
+					return array[1];
+			});
+		},
+		_updateStoreOptions: function(gridStore, valueField, displayField){
+			var colFilter = this,
+				textFilter = colFilter.down(colFilter.filterXtype);
+				colFilter.applyFilters();//re filter if some other filters are applied
+		},
+		
+		_createGetRowClassIntercepter: function(fn){
+			var colFilter = this, column = colFilter.ownerCt;
+			
+			return function(record){
+				var originalCls = (fn || function(){}).apply(null, arguments) || '',
+					valueField = colFilter.valueField || column.dataIndex,
+					isVisible = !colFilter.filterValues.length || _.any(colFilter.filterValues, function(filterValue){ 
+						return colFilter.filterFn(filterValue, record.get(valueField), valueField, record);
+					}); 
+				if(!isVisible) return originalCls + ' ' + colFilter.hideClass;
+				else return originalCls;
+			};
+		},
+		
+		_applyToGridView: function(grid, fn, args){
+			var view = grid.getView(), lockingPartner = view.lockingPartner;
+			view[fn].apply(view, args);
+			if(lockingPartner) lockingPartner[fn].apply(lockingPartner, args);
+		},
+		
+		/****************************************PUBLIC METHODS **********************************************/
+		applyFilters: function(){
+			//this is for the select all checkbox for bulk Feature Commitment update to N/A
+			//Reset the checkbox if update in store
+			$('.x-row-checkbox').prop('checked',false);			
+			var colFilter = this,
+				column = colFilter.ownerCt,
+				grid = colFilter.up('grid'),
+				valueField = colFilter.valueField || column.dataIndex;
+			_.each(grid.store.getRange(), function(record, index){
+					var isVisible = !colFilter.filterValues.length || 
+						colFilter.filterFn(colFilter.filterValues, record.get(valueField), valueField, record);
+				if(isVisible) colFilter._applyToGridView(grid, 'removeRowCls', [index, colFilter.hideClass]); 
+				else colFilter._applyToGridView(grid, 'addRowCls', [index, colFilter.hideClass]); 
+			});
+		},
+		getFilterValues: function(){
+			return this.filterValues;
+		},
+		setFilterValue: function(value){
+			var colFilter = this,
+				textFilter = colFilter.down(colFilter.filterXtype);
+			textFilter.setValue(value);
+			colFilter.filterValues = value;
+			colFilter.applyFilters();
+		},
+		clearFilters: function(){
+			var colFilter = this,
+				grid = colFilter.up('grid'),
+				textFilter = colFilter.down(colFilter.filterXtype),
+				recordCount = grid.store.getCount();
+				
+			textFilter.setValue();
 			colFilter.filterValues = [];
 			while(recordCount--) colFilter._applyToGridView(grid, 'removeRowCls', [recordCount, colFilter.hideClass]); 
 		}
@@ -3455,7 +3661,7 @@
 			var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
 			if(dependencyString === '') dependencies = { Predecessors:{}, Successors:{} };
 			else {
-				try{ dependencies = JSON.parse(atob(dependencyString)); }
+				try {dependencies = JSON.parse(atob(dependencyString));}
 				catch(e) { dependencies = { Predecessors:{}, Successors:{} }; }
 			}		
 			if(!dependencies.Predecessors || dependencies.Predecessors.constructor.name != 'Object') dependencies.Predecessors = {};
@@ -5009,7 +5215,7 @@
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				})
-			},{
+			},/* {
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
 					if((item.data.Release || {}).Name !== releaseName) return false;
@@ -5017,7 +5223,7 @@
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
-			},{
+			}, */{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
 					if((item.data.Release || {}).Name !== releaseName) return false;
@@ -6021,6 +6227,15 @@
 				width: 50,
 				sortable:true
 			},{
+				text:'<input class="x-row-checkbox" id="selectall_features" type="checkbox" />',	
+				width:30,
+				tdCls: 'intel-editor-cell',	
+				sortable:false, 
+				renderer:function(metaData, matrixRecord, row, col){
+					var id = row.data.PortfolioItemFormattedID || "";
+					return '<input class="x-row-checkbox" id="' + id +'" type="checkbox" />';
+				}
+			},{
 				text:'ID', 
 				dataIndex:'PortfolioItemFormattedID',
 				width:60,
@@ -6038,7 +6253,13 @@
 			},{
 				text: me.PortfolioItemTypes[0],
 				dataIndex:'PortfolioItemName',
-				flex:1
+				flex:1,
+				items: [{
+					xtype: 'intelgridcolumntextareafilter',
+					style: {
+						marginRight: '10px'
+					}
+				}]
 			},{
 				text: me.PortfolioItemTypes.slice(-1)[0], 
 				dataIndex:'TopPortfolioItemName',
@@ -6134,6 +6355,62 @@
 						},
 						items:[{
 							xtype:'button',
+							text:'Bulk Update Commitment to N/A',
+							cls: 'intel-button',
+							listeners:{ 
+								click: function(){ 
+									var toUpdateTeamCommitsRecord = [];
+									_.each(me.TeamCommitsGrid.view.body.dom.innerHTML.match(/<tr id="inteltableview.*?<\/tr>/gm), function (line) {
+										//regex for filtered data
+										if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null){
+											var checkboxElement = line.match((/<input .*?x-row-checkbox.*?>/gm));
+												var idToBeChecked = "#" + $(checkboxElement[0]).attr('id');
+												if($(idToBeChecked).prop('checked')){
+													_.each(me.TeamCommitsGrid.store.getRange(), function(record){
+														if(record.data.PortfolioItemFormattedID === $(idToBeChecked).attr('id') && record.data.Commitment != "N/A"){
+																toUpdateTeamCommitsRecord.push(record);
+														}
+													});													
+												}
+										}
+									});								
+									if (toUpdateTeamCommitsRecord.length === 0) return;
+									me.TeamCommitsGrid.setLoading("Saving");
+									return Q.all(_.map(toUpdateTeamCommitsRecord, function(TeamCommitsRecord){			
+										var deferred = Q.defer();
+										/** this is about as fine grained as I want to get with 1 queue. otherwise we might end up with deadlock */
+										me.enqueue(function(unlockFunc){
+											var tc = {
+												Commitment: "N/A", 
+												Objective: TeamCommitsRecord.data.Objective 
+											};	
+											me.loadPortfolioItemByOrdinal(TeamCommitsRecord.data.PortfolioItemObjectID, 0).then(function(realPortfolioItem){
+												if(realPortfolioItem) return me.setTeamCommit(realPortfolioItem, tc);
+											})
+											.then(function(){ deferred.resolve(); })
+											.fail(function(reason){ 
+												deferred.reject(reason); 
+											})
+											.then(function(){ 
+												unlockFunc();
+												me.isEditingTeamCommits = false;												
+											})
+											.done();
+											}, 'Queue-Main');
+										return deferred.promise;
+									}))
+									.then(function(value){
+										me.refreshDataFunc();
+									})
+									.fail(function(reason){ 
+										me.TeamCommitsGrid.setLoading(false);
+										me.alert(reason);
+									})
+									.done();									
+								} 
+							}		
+						},{
+							xtype:'button',
 							text:'Remove Filters',
 							cls: 'intel-button',
 							width:110,
@@ -6168,6 +6445,19 @@
 					}
 				},
 				listeners: {
+					headerclick: function( ct, column, e, t, eOpts ){
+						if(column.text.indexOf("selectall_features") === -1) return;
+						var selectAll = $('#selectall_features').prop('checked') ? true : false;
+						/*regex for filtered data The RegExp differs according to the way way the grid is created*/
+						_.each(me.TeamCommitsGrid.view.body.dom.innerHTML.match(/<tr id="inteltableview.*?<\/tr>/gm), function (line) {
+							if(line.match(/<tr .*?grid-column-filter-hide-.*?>.*?<\/tr>/gm) === null){
+								_.each(line.match((/<input .*?x-row-checkbox.*?>/gm)), function (checkboxElement) {
+										var idToBeChecked = "#" + $(checkboxElement).attr('id');
+										$(idToBeChecked).prop('checked', selectAll);
+									}); 
+								}
+						});	
+					},					
 					beforeedit: function(){ me.isEditingTeamCommits = true; },
 					canceledit: function(){ me.isEditingTeamCommits = false; },
 					edit: function(editor, e){
@@ -7540,6 +7830,7 @@
 							listeners:{ 
 								click: function(){ 
 									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.SuccessorGrid), 'clearFilters'); 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumntextareafilter', me.SuccessorGrid), 'clearFilters');
 									me.SuccessorGrid.store.fireEvent('refresh', me.SuccessorGrid.store);
 								}
 							}
