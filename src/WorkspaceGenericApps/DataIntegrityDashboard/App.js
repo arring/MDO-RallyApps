@@ -113,7 +113,7 @@
 		},
 		config: {
 			defaultSettings: {
-				cacheUrl:''
+				cacheUrl:'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
 		},
 		
@@ -148,7 +148,7 @@
 			var me = this;
 			
 			me.ProjectRecord = payload.ProjectRecord;
-			me.isScopedToScrum = payload.isScopedToScrum ;
+			//me.isScopedToScrum = payload.isScopedToScrum ;
 			me.ScrumGroupRootRecords = payload.ScrumGroupRootRecords;
 			me.ScrumGroupPortfolioOIDs = payload.ScrumGroupPortfolioOIDs;
 			me.LeafProjects = payload.LeafProjects;
@@ -181,7 +181,7 @@
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				userStoryFields = ['Name', 'ObjectID', 'Project', 'Iteration', 
-					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner', 
+					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner',
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
 				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
@@ -206,7 +206,7 @@
 			}
 			
 			payload.ProjectRecord = filterProjectData(me.ProjectRecord.data);
-			payload.isScopedToScrum = me.isScopedToScrum ;
+		//	payload.isScopedToScrum = me.isScopedToScrum ;
 			payload.ScrumGroupRootRecords = _.map(me.ScrumGroupRootRecords, function(ss){ return filterProjectData(ss.data); });
 			payload.ScrumGroupPortfolioOIDs = me.ScrumGroupPortfolioOIDs;
 			payload.LeafProjects = _.map(me.LeafProjects, function(ss){ return filterProjectData(ss.data); });
@@ -238,17 +238,17 @@
 			if(me.isHorizontalView){
 				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
 				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
-				horizontalName = horizontalName ? horizontalName : _.keys(me.HorizontalGroupingConfig.groups).sort()[0];				
+				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ? _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			var releaseName = me.ReleaseRecord.data.Name;
 			return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
 		},
 		getCacheTimeoutDate: function(){
-			return new Date(new Date()*1 + 1000*60*60*24);
+		/******************************************************* LAUNCH ********************************************************/
+			return new Date(new Date()*1 + 1000*60*60);
 		},
 		
-		/******************************************************* LAUNCH ********************************************************/
 		loadNonConfigDataFromCacheOrRally: function(){
 			var me = this;
 			
@@ -310,7 +310,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			.then(function(){ return me.registerCustomAppId(); })
+			.then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -360,7 +360,6 @@
 					throw "workspace is not configured for horizontals";	
 			})
 			.then(function(){ return me.loadScrumGroups(); })
-			.then(function(){ return me.loadReleases(); })
 			.then(function(){ return me.loadProjects(); })
 			.then(function(){ me.applyScopingOverrides(); });
 		},
@@ -600,7 +599,6 @@
 				_.each(me.UserStoryStore.getRange(), function(item,key){
 					var pe = item.data.PlanEstimate;
 					if(pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16){
-						console.log(me.UserStoryStore.data.Name,item.data.PlanEstimate);
 						me.UserStoryStore.removeAt(key);
 					}
 				});				
@@ -676,20 +674,6 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		// renderDeleteCache: function(){
-			// var me=this;
-			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-				// xtype:'button',
-				// text: 'Clear Cached Data',
-				// listeners: { 
-					// click: function(){
-						// me.setLoading('Clearing cache, please wait');
-						// return me.deleteCache()
-							// .then(function(){ me.setLoading(false); });
-					// }
-				// }
-			// });
-		// }, 
 		renderUpdateCache: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
@@ -701,6 +685,7 @@
 						Ext.getCmp('cacheMessageContainer').removeAll();
 						return me.loadRemainingConfiguration()
 							.then(function(){return me.loadData(); })
+							.then(function(){	return me.renderVisuals();})
 							.then(function(){ 
 								//NOTE: not returning promise here, performs in the background!
 								me.updateCache().fail(function(e){
@@ -838,7 +823,6 @@
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
-				me.DeleteCacheButton.hide();
 				me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
@@ -957,9 +941,7 @@
 				.then(function(){ me.setLoading(false);});
 		},
 		
-		/**
-			Loads all controls and visuals
-		*/
+		/**		Loads all controls and visuals		*/
 		loadUI: function() {
 			var me = this;
 			me.renderControlsAndEmailLink();
@@ -1261,6 +1243,7 @@
 						title: getGridTitleLink(gridConfig.data, gridConfig.model),
 						id: gridConfig.id,
 						cls:'grid-unhealthy data-integrity-grid rally-grid',
+						context:this.getContext(),
 						columnCfgs: gridConfig.columns,
 						enableBulkEdit: true,
 						emptyText: ' ',
@@ -1296,6 +1279,7 @@
 						title: getGridTitleLink(),
 						id: gridConfig.id,
 						cls:' data-integrity-grid grid-healthy',
+						context:this.getContext(),
 						showPagingToolbar: false,
 						showRowActionsColumn: false,
 						emptyText: '0 Problems!',
@@ -1464,11 +1448,11 @@
 						text:'ScheduleState',
 						dataIndex:'ScheduleState',
 						tdCls:'editor-cell'
-					},{
+					}/* ,{
 						text:'Description',
 						dataIndex:'Description',
 						tdCls:'editor-cell'
-					}]),
+					} */]),
 					side: 'Right',
 					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
@@ -1511,7 +1495,7 @@
 						if(!item.Release || item.Release.Name != releaseName) return false;
 						return !me.PortfolioUserStoryCount[item.ObjectID];
 					}
-				},{
+				}/* ,{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'User Stories with No Description',
@@ -1537,7 +1521,7 @@
 						if(!item.data.Iteration) return false;											
 						return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;						
 					}
-				}				
+				}	 */			
 				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){

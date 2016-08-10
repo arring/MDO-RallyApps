@@ -29,7 +29,6 @@
 			});
 			return deferred.promise;
 		},
-		
 		getCustomAppObjectID: function(appClassName){
 			var me=this;
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
@@ -38,8 +37,8 @@
 		},
 		setCustomAppObjectID: function(appClassName){
 			var me=this, s = {},
-				objectID = window.parent.location.hash.split("/").pop();
-			
+				//addding updater script in the url
+				objectID = window.parent.location.hash.split("?")[0].split("/").pop();
 			if(!appClassName) return Q.reject('invalid appClassName');
 			return me._loadCustomAppObjectIDSettings().then(function(customAppOIDSettings){
 				var deferred = Q.defer();

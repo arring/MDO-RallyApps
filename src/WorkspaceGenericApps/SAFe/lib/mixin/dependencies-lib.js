@@ -16,7 +16,7 @@
 			var dependencies, dependencyString = userStoryRecord.data.c_Dependencies;
 			if(dependencyString === '') dependencies = { Predecessors:{}, Successors:{} };
 			else {
-				try{ dependencies = JSON.parse(atob(dependencyString)); }
+				try {dependencies = JSON.parse(atob(dependencyString));}
 				catch(e) { dependencies = { Predecessors:{}, Successors:{} }; }
 			}		
 			if(!dependencies.Predecessors || dependencies.Predecessors.constructor.name != 'Object') dependencies.Predecessors = {};

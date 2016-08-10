@@ -138,13 +138,15 @@
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				dependencies = me.getDependencies(userStoryRecord), 
 				inputPredecessors = dependencies.Predecessors, 
+				inputSuccessors = dependencies.Successors,
 				outputPredecessors = [], 
+				outputSuccessors = [],
 				UserStoryObjectID = userStoryRecord.data.ObjectID,
 				UserStoryFormattedID = userStoryRecord.data.FormattedID,
 				UserStoryName = userStoryRecord.data.Name,
 				TopPortfolioItemName = me.PortfolioItemMap[(userStoryRecord.data[lowestPortfolioItem] || {}).ObjectID] || '',
 				ProjectObjectID = (userStoryRecord.data.Project || {}).ObjectID || 0;
-				
+
 			if(me.isUserStoryInRelease(userStoryRecord, me.ReleaseRecord)){
 				_.each(inputPredecessors, function(predecessorDependency, dependencyID){
 					outputPredecessors.push({
@@ -163,18 +165,53 @@
 					});
 				});
 			}
-			return {Predecessors:outputPredecessors, Successors:[]};
+
+			_.each(inputSuccessors, function(successorDependency, dependencyID) {
+				if(!successorDependency.Assigned) {
+					UserStoryObjectID = UserStoryName = '';
+				}
+
+				outputSuccessors.push({
+					DependencyID: dependencyID,
+					TeamDependsOn: userStoryRecord.data.Project.Name,
+					SuccessorUserStoryObjectID: successorDependency.SuccessorUserStoryObjectID,
+					SuccessorProjectObjectID: successorDependency.SuccessorProjectObjectID,
+					UserStoryObjectID: UserStoryObjectID,
+					UserStoryFormattedID: UserStoryFormattedID,
+					UserStoryName: UserStoryName,
+					Description: successorDependency.Description,
+					NeededBy: successorDependency.NeededBy,
+					Supported: successorDependency.Supported,
+					Assigned: successorDependency.Assigned,
+					Edited: false
+				});
+			});
+			
+			return {Predecessors:outputPredecessors, Successors:outputSuccessors};
 		},
 		parseDependenciesData: function(userStories){	
 			var me=this, 
 				predecessors = [], 
-				successors = [];			
-
+				successors = [],	
+				predecessorProjIDs = {},
+				predecessorUserStoryIDs = {};		
+			
 			_.each(userStories, function(userStoryRecord){
 				var dependenciesData = me.parseDependenciesFromUserStory(userStoryRecord);
 				predecessors = predecessors.concat(dependenciesData.Predecessors);
 				successors = successors.concat(dependenciesData.Successors);
 			});
+			predecessorProjIDs = _.indexBy(predecessors, function(item) {
+				return item.ProjectObjectID;
+			});
+			predecessorUserStoryIDs = _.indexBy(predecessors, function(item) {
+				return item.UserStoryObjectID;
+			});
+			successors = _.filter(successors, function(item) {
+				return predecessorProjIDs[item.SuccessorProjectObjectID] === undefined && 
+						predecessorUserStoryIDs[item.SuccessorUserStoryObjectID] === undefined;
+			});
+
 			return {Predecessors:predecessors, Successors:successors};
 		},		
 		getRealDependencyData: function(oldUserStoryRecord, dependencyID, type){ 
@@ -188,11 +225,15 @@
 			var me=this, 
 				storyOIDsToHydrate = [],
 				dependenciesHydratedUserStories = {};
-			
+
 			_.each(dependenciesParsedData.Predecessors, function(predecessor){
 				_.each(predecessor.PredecessorItems, function(predecessorItem){
 					storyOIDsToHydrate.push(predecessorItem.PredecessorUserStoryObjectID);
 				});
+			});
+
+			_.each(dependenciesParsedData.Successors, function(successor) {
+				storyOIDsToHydrate.push(successor.SuccessorUserStoryObjectID);
 			});
 			
 			return Q.all(_.map(storyOIDsToHydrate, function(storyOID){
@@ -252,10 +293,13 @@
 			var me=this,
 				deferred = Q.defer(),
 				duplicatePredecessors = _.filter(_.groupBy(me.DependenciesParsedData.Predecessors,
-					function(dependency){ return dependency.DependencyID; }),
-					function(list, dependencyID){ return list.length > 1; });
-			if(duplicatePredecessors.length){
-				me.renderResolveDuplicatesModal(duplicatePredecessors)
+					function(dependency) { return dependency.DependencyID; }),
+					function(list, dependencyID) { return list.length > 1; });
+				duplicateSuccessors = _.filter(_.groupBy(me.DependenciesParsedData.Successors,
+					function(dependency) { return dependency.DependencyID; }),
+					function(list, dependencyID) { return list.length > 1; });
+			if(duplicatePredecessors.length || duplicateSuccessors.length){
+				me.renderResolveDuplicatesModal(duplicatePredecessors, duplicateSuccessors)
 					.then(function(){ 
 						me.clearEverything();
 						me.setLoading('Loading Data');
@@ -277,6 +321,7 @@
 				isEditingDeps = me.isEditing(me.CustomPredecessorStore);
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.syncRisks(me.Risks);
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
+
 				me.UserStoriesInRelease = _.filter(me.UserStoryStore.getRange(), function(userStoryRecord){ 
 					return me.isUserStoryInRelease(userStoryRecord, me.ReleaseRecord); 
 				});
@@ -285,6 +330,7 @@
 					me.DependenciesHydratedUserStories = dependenciesHydratedUserStories;
 					me.updateUserStoryColumnStores();
 					if(me.PredecessorGrid && me.PredecessorGrid.store) me.PredecessorGrid.store.intelUpdate();
+					if(me.SuccessorGrid && me.SuccessorGrid.store) me.SuccessorGrid.store.intelUpdate();
 				}));
 			}
 			return Q.all(promises);
@@ -307,6 +353,7 @@
 			me.PortfolioItemStore = undefined;
 			
 			me.PredecessorGrid = undefined;
+			me.SuccessorGrid = undefined;
 			me.RisksGrid = undefined;
 
 			var toRemove = me.down('#navbox').next(), tmp;
@@ -328,7 +375,7 @@
 			me.enqueue(function(unlockFunc){	
 				me.reloadStores()
 					.then(function(){ return me.updateGrids(); })
-					.then(function(){ return me.checkForDuplicates(); })
+					//.then(function(){ return me.checkForDuplicates(); })
 					.then(function(){ return me.showGrids(); })
 					.fail(function(reason){	me.alert('ERROR', reason); })
 					.then(function(){
@@ -342,15 +389,17 @@
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
 		setLoadingMasks: function(){
 			var me=this, message = 'Refreshing Data',
-				isEditingDeps = me.isEditing(me.PredecessorGrid);			
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);			
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(message);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(message);
+			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(message);
 		},	
 		removeLoadingMasks: function(){
 			var me=this,
-				isEditingDeps = me.isEditing(me.PredecessorGrid);		
+				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);		
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(false);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(false);
+			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(false);
 		},	
 		refreshDataFunc: function(){
 			var me=this;
@@ -358,7 +407,7 @@
 			me.enqueue(function(unlockFunc){
 				me.reloadStores()
 					.then(function(){ return me.updateGrids(); })
-					.then(function(){ return me.checkForDuplicates(); })
+					//.then(function(){ return me.checkForDuplicates(); })
 					.then(function(){ return me.showGrids(); })
 					.fail(function(reason){ me.alert('ERROR', reason); })
 					.then(function(){ 
@@ -472,7 +521,7 @@
 		},
 		
 		/**___________________________________ RENDER RESOLVE DUPLICATES ___________________________________*/	
-		renderResolveDuplicatesModal: function(duplicatePredecessors){
+		renderResolveDuplicatesModal: function(duplicatePredecessors, duplicateSuccessors){
 			var me=this,
 				deferred = Q.defer(),	
 				modal = Ext.create('Ext.window.Window', {
@@ -624,14 +673,88 @@
 								store:Ext.create('Rally.data.custom.Store', { data: predecessorsOfOneID })
 							};
 						})
-					) : []).concat([{
+					) : []).concat(duplicateSuccessors.length ? [{
+						xtype: 'container',
+						html: '<h2 class="grid-group-header">Duplicate Successors</h2>'
+					}].concat(_.map(duplicateSuccessors, function(successorsOfOneID) {
+						return {
+							xtype: 'grid',
+							cls: 'risksdeps-grid duplicate-successors rally-grid',
+							columns: [{
+								text: 'Requested By',
+								dataIndex: 'SuccessorProjectObjectID',
+								width: 160,
+								sortable: true,
+								renderer: function(projectOID){ return me.ProjectsWithTeamMembers[projectOID].data.Name; }
+							}, {
+								text: 'Req #',
+								dataIndex: 'SuccessorUserStoryObjectID',
+								width: 90,
+								sortable: true,
+								renderer: function(userStoryObjectID) {
+									var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+									if(userStory) return userStory.data.FormattedID;
+									else return '?';
+								}
+							}, {
+								text: 'Req UserStory',
+								dataIndex: 'SuccessorUserStoryObjectID',
+								flex: 1,
+								sortable: true,
+								renderer: function(userStoryObjectID) {
+									var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+									if(userStory) return userStory.data.Name;
+									else return '?';
+								}
+							}, {
+								text: 'Dependency Description',
+								dataIndex: 'Description',
+								flex: 1
+							}, {
+								text:'Needed By',
+								dataIndex:'NeededBy',
+								width:80,
+								sortable:true,
+								renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');}	
+							}, {
+								text:'Supported',					
+								dataIndex:'Supported',
+								width:90,
+								renderer: function(val, meta){
+									if(val == 'No') meta.tdCls = 'successor-not-supported-cell';
+									else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
+									return val;
+								}
+							}, {
+								text:'Sup #', 
+								dataIndex:'UserStoryFormattedID',
+								width:90,
+								sortable:true
+							}, {
+								text:'Sup UserStory', 
+								dataIndex:'UserStoryName',
+								flex:1,
+								sortable: true
+							}],
+							selModel: Ext.create('Ext.selection.CheckboxModel', {
+								mode:'SINGLE',
+								allowDeselect:false
+							}),
+							listeners:{ viewready: function(){ this.getSelectionModel().select(0); }},
+							manageHeight:false,
+							sortableColumns:false,
+							enableEditing:false,
+							store:Ext.create('Rally.data.custom.Store', { data: successorsOfOneID })
+						};
+					})
+				) : []).concat([{
 						xtype:'button',
 						cls:'done-button',
 						text:'Done',
 						handler:function(){
 							var grids = Ext.ComponentQuery.query('grid', modal),
 								predecessorGrids = _.filter(grids, function(grid){ return grid.hasCls('duplicate-predecessors-grid'); });
-
+								successorGrids = _.filter(grids, function(grid) { return grid.hasCls('duplicate-successors-grid'); });
 							modal.setLoading('Removing Duplicates');
 							Q.all([
 								Q.all(_.map(predecessorGrids, function(grid){ 
@@ -643,8 +766,7 @@
 										me.enqueue(function(unlockFunc){
 											me.getOldAndNewUserStoryRecords(predecessorRecord.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
-													realPredecessorData = me.getRealDependencyData(
-														oldUserStoryRecord, predecessorRecord.data.DependencyID, 'Predecessors');
+													realPredecessorData = me.getRealDependencyData(oldUserStoryRecord, predecessorRecord.data.DependencyID, 'Predecessors');
 												if(!realPredecessorData) return;
 												return me.getRemovedPredecessorItemCallbacks(
 														realPredecessorData.PredecessorItems,  
@@ -675,8 +797,7 @@
 										me.enqueue(function(unlockFunc){
 											me.getOldAndNewUserStoryRecords(predecessorToKeep.data, me.UserStoriesInRelease).then(function(records){
 												var oldUserStoryRecord = records[0],
-													realPredecessorData = me.getRealDependencyData(
-														oldUserStoryRecord, predecessorToKeep.data.DependencyID, 'Predecessors');
+													realPredecessorData = me.getRealDependencyData(oldUserStoryRecord, predecessorToKeep.data.DependencyID, 'Predecessors');
 												if(!realPredecessorData) return;
 												return me.getAddedPredecessorItemCallbacks(
 														realPredecessorData.PredecessorItems, 
@@ -688,8 +809,7 @@
 													var promise = Q();
 													_.each(addedCallbacks, function(callback){ promise = promise.then(callback); });			
 													return promise.then(function(){
-														return me.addPredecessor(
-															oldUserStoryRecord, realPredecessorData, null, me.DependenciesParsedData);
+														return me.addPredecessor(oldUserStoryRecord, realPredecessorData, null, me.DependenciesParsedData);
 													});
 												});											
 											})
@@ -700,6 +820,26 @@
 										}, 'Queue-Dependencies'); 
 										return deferred.promise;
 									});
+								})),
+								Q.all(_.map(successorGrids, function(grid) {
+									var successorToKeep = grid.getSelectionModel().getSelection()[0],
+										successorsToDelete = _.filter(grid.store.getRange(), function(item) { return item.id != successorToKeep.id; });
+									return Q.all(_.map(successorsToDelete, function(successorRecord) {
+										var deffered = Q.defer();
+										me.enqueue(function(unlockFunc) {
+											me.getOldAndNewUserStoryRecords(successorRecord.data, me.UserStoriesInRelease).then(function(records) {
+												var oldUserStoryRecord = records[0],
+													realSuccessorData = me.getRealDependencyData(oldUserStoryRecord, successorRecord.data.DependencyID, 'Successors');
+												if(!realSuccessorData) return;
+												return me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
+											})
+											.then(function(){ deferred.resolve(); })
+											.fail(function(reason){ deferred.reject(reason); })
+											.then(function(){ unlockFunc(); })
+											.done();
+										}, 'Queue-Dependencies');
+										return deferred.promise;
+									}));
 								}))
 							]).then(function(){
 								modal.destroy();
@@ -1058,7 +1198,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:400,
-						text: me.getScrumGroupName(me.ScrumGroupRootRecord) + " DEPENDENCIES"
+						text: me.getScrumGroupName(me.ScrumGroupRootRecord) + " INTERNAL DEPENDENCIES"
 					},{
 						xtype:'container',
 						flex:1000,
@@ -1127,6 +1267,376 @@
 				disableSelection: true,
 				enableEditing:false,
 				store: predecessorStore
+			});	
+
+		/**************************************************** SUCCESSORS STUFF *******************************************************************/
+
+			var successorStore = Ext.create('Intel.lib.component.Store', {
+				data: Ext.clone(me.DependenciesParsedData.Successors),
+				autoSync: true,
+				model: 'IntelSuccessorDependency',
+				proxy: {
+					type: 'intelsessionstorage',
+					id: 'IntelSuccessorProxy' + Math.random()
+				},
+				limit: Infinity,
+				disableMetaChangeEvent: true,
+				sorters: [dependencySorter],
+				intelUpdate: function() {
+					var realSuccessorsData = me.DependenciesParsedData.Successors.slice(),
+						remoteChanged = false;
+					successorStore.suspendEvents(true);
+					_.each(successorStore.getRange(), function(successorRecord) {
+						var realSuccessorData = me.spliceDependencyFromList(successorRecord.data.DependencyID, realSuccessorsData),
+							dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
+						if(dirtyType === 'Edited'){} // dont remove pending changes
+						else if(dirtyType === 'Deleted' || dirtyType === 'New') successorStore.remove(successorRecord);
+						else {
+							_.each(realSuccessorData, function(value, field) {
+								if(!_.isEqual(successorRecord.data[field], value)) remoteChanged = true;
+							});
+							if(remoteChanged) {
+								successorRecord.beginEdit();
+								_.each(realSuccessorData, function(value, field) { successorRecord.set(field, value); });
+								successorRecord.endEdit();
+							}
+						}
+					});
+					_.each(realSuccessorsData, function(realSuccessorData) {
+						successorStore.add(Ext.create('IntelSuccessorDependency', Ext.clone(realSuccessorData)));
+					});
+					successorStore.resumeEvents();
+				}
+			});
+
+			var successorColumns = [{
+				text:'Requested By',
+				dataIndex:'SuccessorProjectObjectID',
+				width:160,
+				sortable:true,
+				renderer: function(projectOID){ return me.ProjectsWithTeamMembers[projectOID].data.Name; },
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){return me.ProjectsWithTeamMembers[oid].data.Name; }
+				}]
+			},{
+				text:'Req #',
+				dataIndex:'SuccessorUserStoryObjectID',
+				width:90,
+				sortable:true,
+				renderer: function(userStoryObjectID){
+					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+					if(userStory){
+						return '<a href="' + me.BaseUrl + '/#/' + userStory.data.Project.ObjectID + 'ud/detail/userstory/' + 
+							userStory.data.ObjectID + '" target="_blank">' + userStory.data.FormattedID + '</a>';
+					} else return '?';
+				},
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){
+						var userStory = me.DependenciesHydratedUserStories[oid];
+						return userStory ? userStory.data.FormattedID : undefined;
+					}
+				}]
+			},{
+				text:'Req UserStory',
+				dataIndex:'SuccessorUserStoryObjectID',
+				flex:1,
+				sortable:true,
+				renderer: function(userStoryObjectID){
+					var userStory = me.DependenciesHydratedUserStories[userStoryObjectID];
+					if(userStory) return userStory.data.Name;
+					else return '?';
+				},
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(oid){
+						var userStory = me.DependenciesHydratedUserStories[oid];
+						return userStory ? userStory.data.Name : undefined;
+					}
+				}]
+			},{
+				text:'Dependency Description', 
+				dataIndex:'Description',
+				flex:1
+			},{
+				text:'Needed By',
+				dataIndex:'NeededBy',
+				width:80,
+				sortable:true,
+				renderer: function(date){ return (date ? 'ww' + me.getWorkweek(date) : '-');},
+				items:[{ 
+					xtype:'intelgridcolumnfilter', 
+					convertDisplayFn: function(dateVal){ return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined; }
+				}]
+			},{
+				text:'Supported',					
+				dataIndex:'Supported',
+				width:90,
+				sortable:true,
+				tdCls: 'intel-editor-cell',
+				editor:{
+					xtype:'intelfixedcombo',
+					width:80,
+					store: Ext.create('Ext.data.Store', {
+						fields: ['Sup'],
+						data: [
+							{Sup:'Undefined'},
+							{Sup:'Yes'},
+							{Sup:'No'}
+						]
+					}),
+					displayField: 'Sup'
+				},
+				renderer: function(val, meta){
+					if(val == 'No') meta.tdCls = 'successor-not-supported-cell';
+					else if(val == 'Yes') meta.tdCls = 'successor-supported-cell';
+					return val;
+				},
+				items:[{ xtype:'intelgridcolumnfilter' }]
+			},{
+				text:'Sup #', 
+				dataIndex:'UserStoryFormattedID',
+				width:90,
+				editor:{
+					xtype:'intelcombobox',
+					width:120,
+					store: me.UserStoryFIDStore,
+					displayField: 'FormattedID'
+				},
+				sortable:true,
+				renderer:function(val, meta, record){ 
+					if(record.data.Supported == 'Yes') meta.tdCls += ' intel-editor-cell';
+					return val || '-'; 
+				},	
+				items:[{ xtype:'intelgridcolumnfilter' }]
+			},{
+				text:'Sup UserStory', 
+				dataIndex:'UserStoryName',
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					store: me.UserStoryNameStore,
+					displayField: 'Name'
+				},
+				sortable: true,
+				renderer:function(val, meta, record){ 
+					if(record.data.Supported == 'Yes') meta.tdCls += ' intel-editor-cell';
+					return val || '-'; 
+				},	
+				items:[{ xtype:'intelgridcolumnfilter' }]
+			},{
+				dataIndex:'Edited',
+				width:24,
+				renderer: function(value, meta, successorRecord){		
+					var id = Ext.id();
+					if(!successorRecord.data.UserStoryFormattedID) return '';
+					meta.tdAttr = 'title="Remove User Story"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							successorRecord.beginEdit(true);
+							successorRecord.set('Edited', true);
+							successorRecord.set('Assigned', false);
+							successorRecord.set('UserStoryFormattedID', '');
+							successorRecord.set('UserStoryName', '');
+							successorRecord.endEdit();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-minus"></i></div>';
+				}
+			},{
+				dataIndex:'Edited',
+				width:24,
+				renderer: function(value, meta, successorRecord){	
+					var id = Ext.id(), 
+						dependencyID = successorRecord.data.DependencyID,
+						realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
+						dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
+					if(dirtyType !== 'Edited') return;
+					meta.tdAttr = 'title="Undo"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							var realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice());	
+							successorRecord.beginEdit(true);
+							_.each(realSuccessorData, function(value, field){ successorRecord.set(field, value); });
+							successorRecord.endEdit();
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-undo"></i></div>';
+				}
+			},{
+				dataIndex:'Edited',
+				width:24,
+				renderer: function(value, meta, successorRecord){
+					var id = Ext.id(), 
+						dependencyID = successorRecord.data.DependencyID,
+						realSuccessorData = me.spliceDependencyFromList(dependencyID, me.DependenciesParsedData.Successors.slice()),
+						dirtyType = me.getDirtyType(successorRecord, realSuccessorData);
+					if(dirtyType != 'Edited') return;
+					meta.tdAttr = 'title="Save Dependency"';
+					setTimeout(function whenRendered(){
+						var el = Ext.get(id);
+						if(el) el.on('click', function(){
+							if(!successorRecord.data.Supported){
+								me.alert('ERROR', 'You must set the Supported field.'); return; }
+							me.SuccessorGrid.setLoading("Saving Dependency");						
+							me.enqueue(function(unlockFunc){
+								var successorData = successorRecord.data, 
+									oldUserStoryRecord, 
+									newUserStoryRecord,
+									realSuccessorData;
+								me.getOldAndNewUserStoryRecords(successorData, me.UserStoryStore.getRange()).then(function(records){
+									oldUserStoryRecord = records[0];
+									newUserStoryRecord = records[1];
+									
+									realSuccessorData = me.getRealDependencyData(oldUserStoryRecord, successorData.DependencyID, 'Successors');
+									if(!realSuccessorData) return Q.reject({SuccessorDeletedDependency:true, message:'Successor removed this dependency'});
+									
+									successorData.UserStoryObjectID = newUserStoryRecord.data.ObjectID;	
+									successorData.SuccessorUserStoryObjectID = realSuccessorData.SuccessorUserStoryObjectID;
+									
+									return me.updateSuccessor(
+											newUserStoryRecord, 
+											successorData, 
+											me.ProjectRecord,
+											me.ProjectsWithTeamMembers, 
+											me.ProjectRecord, 
+											me.DependenciesParsedData)
+									.then(function(){							
+										if(oldUserStoryRecord.data.ObjectID !== newUserStoryRecord.data.ObjectID)
+											return me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData);
+									})
+									.then(function(){ return me.addSuccessor(newUserStoryRecord, successorData, me.ProjectRecord, me.DependenciesParsedData); })
+									.then(function(){ successorRecord.set('Edited', false); });
+								})
+								.fail(function(reason){
+									if(reason.SuccessorDeletedDependency){
+										me.alert('ERROR', reason.message + '. Deleting this dependency now');
+										if(realSuccessorData){
+											me.removeSuccessor(oldUserStoryRecord, realSuccessorData, me.ProjectRecord, me.DependenciesParsedData)
+												.then(function(){ successorStore.remove(successorRecord); })
+												.fail(function(reason){ me.alert('ERROR', reason); })
+												.done();
+										}
+										else successorStore.remove(successorRecord);
+									}
+									else me.alert('ERROR', reason);
+								})
+								.then(function(){
+									unlockFunc();
+									me.SuccessorGrid.setLoading(false);
+								})
+								.done();
+							}, 'Queue-Main');
+						});
+						else setTimeout(whenRendered, 10);
+					}, 20);
+					return '<div id="' + id + '" class="intel-editor-cell"><i class="fa fa-md fa-floppy-o"></i></div>';
+				}
+			}];
+			me.SuccessorGrid = me.add({
+				xtype: 'grid',
+				cls: 'team-report-grid successor-grid rally-grid',
+				header: {
+					layout: 'hbox',
+					items: [{
+						xtype:'text',
+						cls:'risksdeps-grid-header-text',
+						width:400,
+						text:"OFF TRAIN DEPENDENCIES FOR " + me.getScrumGroupName(me.ScrumGroupRootRecord)
+					},{
+						xtype:'container',
+						flex:1000,
+						layout:{
+							type:'hbox',
+							pack:'end'
+						},
+						items:[{
+							xtype:'button',
+							text:'Remove Filters',
+							cls:'intel-button',
+							width:110,
+							listeners:{ 
+								click: function(){ 
+									_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.SuccessorGrid), 'clearFilters'); 
+									me.SuccessorGrid.store.fireEvent('refresh', me.SuccessorGrid.store);
+								}
+							}
+						}]
+					}]
+				},
+				height:400,
+				scroll:'vertical',
+				columns: {
+					defaults: COLUMN_DEFAULTS,
+					items:successorColumns
+				},
+				plugins: [ 'intelcellediting' ],
+				viewConfig:{
+					xtype:'inteltableview',
+					preserveScrollOnRefresh:true
+				},
+				listeners: {
+					beforeedit: function(editor, e){
+						var successorRecord = e.record;
+						if(successorRecord.data.Supported != 'Yes' && e.field != 'Supported') 
+							return false; //don't edit user story stuff if not supported
+					},
+					edit: function(editor, e){					
+						var grid = e.grid,
+							successorRecord = e.record,
+							field = e.field,
+							value = e.value,
+							originalValue = e.originalValue;	
+							
+						if(value == originalValue) return;
+						else if(!value) { successorRecord.set(field, originalValue); return; }
+						var previousEdit = successorRecord.data.Edited;
+						successorRecord.set('Edited', true);
+						
+						if((field === 'UserStoryName' || field == 'UserStoryFormattedID') && successorRecord.data.Supported != 'Yes'){
+							successorRecord.set(field, originalValue); 
+							return; 
+						}
+						
+						var userStoryRecord;
+						if(field === 'UserStoryName'){
+							userStoryRecord = _.find(me.UserStoriesInRelease, function(us){ return us.data.Name === value; });
+							if(!userStoryRecord){
+								successorRecord.set('UserStoryName', originalValue);
+								successorRecord.set('Edited', previousEdit); 
+							} else {
+								successorRecord.set('UserStoryFormattedID', userStoryRecord.data.FormattedID);	
+								successorRecord.set('Assigned', true);
+							}
+						} else if(field === 'UserStoryFormattedID'){
+							userStoryRecord = _.find(me.UserStoriesInRelease, function(us){ return us.data.FormattedID === value; });
+							if(!userStoryRecord) {
+								successorRecord.set('UserStoryFormattedID', originalValue);
+								successorRecord.set('Edited', previousEdit); 
+							} else {
+								successorRecord.set('UserStoryName', userStoryRecord.data.Name);	
+								successorRecord.set('Assigned', true);
+							}
+						}
+						else if(field === 'Supported'){ //cant be non-supported with a user story!
+							if(value != 'Yes'){
+								successorRecord.set('Assigned', false);
+								successorRecord.set('UserStoryFormattedID', '');
+								successorRecord.set('UserStoryName', '');
+							}
+						}
+					}
+				},
+				disableSelection: true,
+				showRowActionsColumn:false,
+				showPagingToolbar:false,
+				enableEditing:false,
+				store: successorStore
 			});	
 		}	
 	});

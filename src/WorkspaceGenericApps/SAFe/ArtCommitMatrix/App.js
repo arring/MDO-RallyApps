@@ -25,11 +25,11 @@
 			'Intel.lib.mixin.AsyncQueue',
 			'Intel.lib.mixin.ParallelLoader',
 			'Intel.lib.mixin.UserAppsPreference',
-            'Intel.lib.mixin.CfdProjectPreference',
+			'Intel.lib.mixin.CfdProjectPreference',
 			'Intel.lib.mixin.RallyReleaseColor',
 			'Intel.lib.mixin.HorizontalTeamTypes',
 			'Intel.lib.mixin.CustomAppObjectIDRegister',
-            'Intel.lib.mixin.Caching'
+			'Intel.lib.mixin.Caching'
 		],
 		//minWidth:910,
 		layout: {
@@ -37,15 +37,6 @@
 			align:'stretch',
 			pack:'start'
 		},
-		items:[{
-            xtype: 'container',
-            id:'cacheButtonsContainer'
-        },{
-            xtype:'container',
-            id: 'cacheMessageContainer',
-            cls: 'cachemessageContainer'
-        },{
-       
 		items:[{
 			xtype:'container',
 			itemId:'navbox',
@@ -56,7 +47,7 @@
 			},
 			items:[{
 				xtype:'container',
-				flex:3,
+				flex:1,
 				itemId:'navboxLeft',
 				layout: 'hbox',
 				items:[{
@@ -65,36 +56,44 @@
 					itemId:'navboxLeftVert',
 					layout: 'vbox'
 				}]
-			},{
+			}, {
 				xtype:'container',
 				flex:2,
-				itemId:'navboxRight',
-				layout: {
-					type:'hbox',
-					pack:'end'
-				}
+				cls:'cacheContainer',
+				items:[{
+					xtype:'container',
+					id: 'cacheMessageContainer'
+				}, {
+					xtype: 'container',
+					id:'cacheButtonsContainer'
+				}]
+			}, {
+				xtype:'container',
+				flex:2,
+				items:[{
+					xtype: 'container',
+					layout: {
+						type:'hbox',
+						pack:'end'
+					},
+					itemId:'navboxRight'
+				}]
 			}]
-		}]
-        }],
+		}],
 		minWidth:910,
 		/*--------------------------------------------APP SETTINGS----------------------------------- */
 		settingsScope: 'workspace',
 		getSettingsFields: function() {
-				return [{
-						name: 'cacheUrl', 
-						xtype: 'rallytextfield' 
-				},{
-						name: 'dataRefresh',
-						xtype: 'rallycheckboxfield'
-						
-					}];
+			return [{
+				name: 'cacheUrl', 
+				xtype: 'rallytextfield' 
+			}];
 		},
 		config: {
 			defaultSettings: {
-					cacheUrl: '',
-					dataRefresh: 'false'
+				cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
-    },
+		},
 		userAppsPref: 'intel-SAFe-apps-preference',
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
 		loadPortfolioItems: function(){ 
@@ -116,7 +115,7 @@
 						portfolioItemStores.shift();
 						while(portfolioItemStores.length) portfolioItemStores.shift().destroyStore();
 					})
-					.then(function(){ done(); deferred.resolve(); })
+					.then(function(){done(); deferred.resolve(); })
 					.fail(function(reason){ done(); deferred.reject(reason); })
 					.done();
 				}, 'PortfolioItemQueue');
@@ -231,9 +230,9 @@
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function() {
 			var me = this,
-					iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20; 
-			// return 800;
+				iframe = Ext.get(window.frameElement);
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;   
+			//return 800;
 		},
 		getGridWidth: function(columnCfgs){
 			var me = this; 
@@ -260,10 +259,9 @@
 			var me = this,
 			stories = me.UserStoryStore.getRange();
 			for(var i in stories){
-					for(var j in me.UserStoryFetchFields){
-							if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
-					
-					}
+				for(var j in me.UserStoryFetchFields){
+					if(!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]]=0;
+				}
 			}
 		},
 		
@@ -271,9 +269,9 @@
 			var me = this,
 			portFolioItems = me.PortfolioItemStore.getRange();
 			for(var i in portFolios){
-					for(var j in me.portfolioItemFields){
-							if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
-					}
+				for(var j in me.portfolioItemFields){
+					if(!portFolioItems[i].raw[me.portfolioItemFields[j]]) portFolios[i].raw[me.portfolioItemFields[j]]=0;
+				}
 			}
 		},
 		clearToolTip: function(){
@@ -289,9 +287,9 @@
 		getDistanceFromBottomOfScreen: function(innerY){
 			var me = this, 
 				iframe = window.frameElement,
-				iframeOffsetY = window.parent.getScrollY() + iframe.getBoundingClientRect().top,
+				iframeOffsetY = window.parent.pageYOffset + (iframe ? iframe.getBoundingClientRect().top : 0),
 				actualY = iframeOffsetY + innerY;
-			return window.parent.getWindowHeight() - actualY;   
+			return window.parent.outerHeight - actualY;   
 		},
 			
 		getIntersectingUserStoriesData: function(portfolioItemRecord, projectName){
@@ -441,18 +439,19 @@
 				innerHTML = me.getCellInnerHTML(config);
 			return '<div class="project-percentage-complete" ' + style + '>' + innerHTML + '</div>';
 		},
-    updateGridHeader: function(projectName) {
-            var me = this;
-            if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
-            var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
-                possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
-                shouldHaveItems = me.ViewMode === '% Done';
-            _.each(possibleClasses, function(cls) { column.el.removeCls(cls); });
-            while (column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
-            if (shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
-            column.el.addCls(me.getProjectHeaderCls(projectName));
-        },
-	
+		updateGridHeader: function(projectName) {
+			var me = this;
+			if (!me.MatrixGrid) return;//renderMatrixGrid();//TODO: verify if this is correct
+			var column = _.find(me.MatrixGrid.view.getGridColumns(), function(column) { return column.text == projectName; }),
+				possibleClasses = ['not-dispositioned-project', 'dispositioned-project'],
+				shouldHaveItems = me.ViewMode === '% Done';
+			if(column){
+				_.each(possibleClasses, function(cls) { column.el.removeCls(cls); });
+				while (column.el.dom.childNodes.length > 1) column.el.last().remove(); //remove % done before re-adding it.
+				if (shouldHaveItems) Ext.DomHelper.append(column.el, me.columnHeaderItem(projectName));
+				column.el.addCls(me.getProjectHeaderCls(projectName));							
+			}
+		},
 		updateTotalPercentCell: function(matrixRecord, index){
 			var me=this,
 				portfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function(piRecord){ 
@@ -506,7 +505,6 @@
 		},
 		clearEverything: function(){
 			var me=this;
-			
 			me.clearToolTip();
 			if(me.MatrixGrid) {
 				me.MatrixGrid.up().remove(me.MatrixGrid);
@@ -515,21 +513,20 @@
 		},
 		reloadStores: function(){
 			var me = this;
-			return me.loadPortfolioItems().then(function(){ return me.loadUserStories(); });
+			return me.loadPortfolioItems().then(function(){return me.loadUserStories(); });
 		},
-        
 		redrawEverything: function() {
 			var me = this;
 			me.setLoading(' Loading matrix');
 			me.clearEverything();  
-			//if(me.DeleteCacheButton) me.renderDeleteCache();
 			if(!me.UpdateCacheButton) me.renderUpdateCache();
 			if(!me.ReleasePicker){
-					me.renderReleasePicker();
-					me.renderClickModePicker();
-					me.renderViewModePicker();
-					me.renderClearFiltersButton();
-					me.renderMatrixLegend();  
+				me.renderReleasePicker();
+				me.renderClickModePicker();
+				me.renderRefreshIntervalCombo();
+				me.renderViewModePicker();
+				me.renderClearFiltersButton();
+				me.renderMatrixLegend();  
 			}
 			me.showGrids();
 			me.setLoading(false);            
@@ -537,54 +534,59 @@
 
 		reloadEverything: function(){
 			var me=this;
-
-			me.setLoading('Loading Data');
+			me.setLoading('Loading  Data');
 			me.enqueue(function(done){
 			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
-						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
+						if(!me.UpdateCacheButton) me.renderUpdateCache();
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
 							me.renderClickModePicker();
 							me.renderViewModePicker();
+							me.renderRefreshIntervalCombo();
+							//me.renderManualRefreshButton();
 							me.renderClearFiltersButton();
 							me.renderMatrixLegend();
 						}				
 					})
-					.then(function(){ me.updateGrids(); })
-					.then(function(){ me.showGrids(); })
+					.then(function(){me.updateGrids(); })
+					.then(function(){me.showGrids(); })
+					.then(function(){if(me.IsDataRefresh === false) me.updateCache();})
 					.fail(function(reason){ me.alert('ERROR', reason); })
-					.then(function(){ me.setLoading(false); done(); })
+					.then(function(){me.setLoading(false); done(); })
 					.done();
 			}, 'ReloadAndRefreshQueue'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
 		},
-		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
-		//REVISIT
-		releasePickerSelected_reloadEverything: function(){
-			var me=this;
-			me.setLoading('Loading Data');
-			me.enqueue(function(done){
-			return me.reloadStores()
-					.then(function(){
-						me.clearEverything();
-						if(!me.UpdateCacheButton) me.renderUpdateCache();                        
-						if(!me.ReleasePicker){
-							me.renderReleasePicker();
-							me.renderClickModePicker();
-							me.renderViewModePicker();
-							me.renderClearFiltersButton();
-							me.renderMatrixLegend();
-						}				
-					})
-					.then(function(){ me.updateGrids(); })
-					.then(function(){ me.showGrids(); })
-					.fail(function(reason){ me.alert('ERROR', reason); })
-					.then(function(){ me.setLoading(false); done(); })
-					.done();
-			}, 'releaseSelectedRefresh'); //eliminate race conditions between manual _reloadEverything and interval _refreshDataFunc
-		},		
 		/**___________________________________ REFRESHING DATA ___________________________________*/	
+		refreshComboSelected: function(combo, records){
+			var me=this, rate = records[0].data.Rate;
+			if(me.AppRefresh === rate) return;
+			me.AppRefresh = rate;
+			me.setRefreshInterval();
+		},	
+		renderRefreshIntervalCombo: function(){
+			var me=this;
+			me.down('#navboxRight').add({
+				xtype:'intelfixedcombo',
+				store: Ext.create('Ext.data.Store', {
+					fields: ['Rate'],
+					data: [
+						{Rate: 'Off'},
+						{Rate: '1'},
+						{Rate: '2'},
+						{Rate: '5'}
+					]
+				}),
+				displayField: 'Rate',
+				fieldLabel: 'Auto-Refresh Rate (minute):',
+				value:me.AppRefresh,
+				listeners: {
+					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
+					select: me.refreshComboSelected.bind(me)
+				}
+			});
+		},
 		refreshDataFunc: function(){
 			var me=this;
 			me.enqueue(function(done){
@@ -604,35 +606,49 @@
 			}	
 		},
 		setRefreshInterval: function() {
-            var me = this;
-            me.clearRefreshInterval();
-            if (me.IsDataRefresh)
-                me.RefreshInterval = setInterval(function() { me.refreshDataFunc(); }, 25000);
-        },
-        /*********************************************Rally Cache Mixin Operation ******************************** */
+			var me = this;
+			me.clearRefreshInterval();
+			if(me.AppRefresh && me.AppRefresh!=='Off'){
+				me.IsDataRefresh = true;
+				Ext.getCmp('cacheMessageContainer').hide();
+				Ext.getCmp('cacheButtonsContainer').hide();
+				me.RefreshInterval = setInterval(function(){ me.refreshDataFunc(); }, me.AppRefresh*1000*60);
+			} else {
+				me.IsDataRefresh = false;
+				if(Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
+				if(Ext.getCmp('cacheMessageContainer').hidden === true){
+					me.setLoading("Loading Data");
+					return me.loadDataCacheorRally()
+					.then(function(){
+						me.setLoading(false);
+					});
+				} 
+			}
+		},
+     /*********************************************Rally Cache Mixin Operation ******************************** */
         
 		_loadModelsForCachedView: function() {
-				var me = this,
-						promises = [],
-						models = { UserStory: 'HierarchicalRequirement' };
-				models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
-				_.each(models, function(modelType, modelName) {
-						var deferred = Q.defer();
-						Rally.data.WsapiModelFactory.getModel({
-								type: modelType,
-								success: function(loadedModel) {
-										me[modelName] = loadedModel;
-										deferred.resolve();
-								}
-						});
-						promises.push(deferred.promise);
+			var me = this,
+				promises = [],
+				models = { UserStory: 'HierarchicalRequirement' };
+			models['PortfolioItem/' + me.PortfolioItemTypes[0]] = 'PortfolioItem/' + me.PortfolioItemTypes[0];
+			_.each(models, function(modelType, modelName) {
+				var deferred = Q.defer();
+				Rally.data.WsapiModelFactory.getModel({
+					type: modelType,
+					success: function(loadedModel) {
+						me[modelName] = loadedModel;
+						deferred.resolve();
+					}
 				});
-				return Q.all(promises);
+				promises.push(deferred.promise);
+			});
+			return Q.all(promises);
 		},		
 		getCacheUrlSetting: function() {
             var me = this;
-            return me.getSetting('cacheUrl');            
-    },
+            return me.getSetting('cacheUrl');
+		},
 		getCachePayloadFn: function() {
 			var me = this;
 			me.ProjectRecord = payload.ProjectRecord;
@@ -661,11 +677,10 @@
 			portfolioItemFields =["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate","DragAndDropRank","Rank",
 			'_p','_ref','_refObjectUUID','_type','_objectVersion','_CreatedAt'];
 			function filterProjectData(projectData){
-					var data = _.pick(projectData,projectFields);
-					data.Parent = _.pick(data.Parent,projectFields);
-					data.children = _.pick(data.children,'[Count]');
-					return{data:data};
-					
+				var data = _.pick(projectData,projectFields);
+				data.Parent = _.pick(data.Parent,projectFields);
+				data.children = _.pick(data.children,'[Count]');
+				return{data:data};
 			}
 			
 			function filterPortfolioItemForCache(portfolioItem){
@@ -688,7 +703,7 @@
 			payload.PortfolioItemTypes = me.PortfolioItemTypes;            
 			payload.PortfolioItemStoreData = _.map(me.PortfolioItemStore.getRange(), function (ps) {return filterPortfolioItemForCache(ps.data);});           
 			payload.PortfolioItemMap = me.PortfolioItemMap;
-    },
+		},
 		cacheKeyGenerator: function() {
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
@@ -699,63 +714,20 @@
 					return 'CmtMatx-' + projectOID + '-' + releaseOID;
 			}
 			else return undefined;
-    },
-        
+		},
 		getCacheTimeoutDate: function(){
-				return new Date(new Date()*1 + 1000*60*60*24);
+				return new Date(new Date()*1 + 1000*60*60);
 		},
 		loadDataCacheorRally: function() {
 			var me = this;
 			return me.getCache().then(function(cacheHit) {
-					if (!cacheHit) {
-							return me.loadConfiguration()
-									.then(function() { return me.reloadEverything(); })
-									.then(function() {
-										if(me.IsDataRefresh === false){
-											me.enqueue(function(done) {
-													Q.all([
-															//me.saveAppsPreference(me.AppsPref),
-															me.updateCache()
-													])
-													.fail(function(e) {
-															alert(e);
-															console.log(e);
-													});                           
-											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()											
-										}
-									});
-					} else {
-							me.renderCacheMessage();
-							me.redrawEverything();
-					}
-			});
-		},
-		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
-		//REVISIT
-		releasePickerSelected_loadDataCacheorRally: function() {
-			var me = this;
-			return me.getCache().then(function(cacheHit) {
-					if (!cacheHit) {
-							return me.releasePickerSelected_loadConfiguration()
-									.then(function() { return me.releasePickerSelected_reloadEverything(); })
-									.then(function() {
-										if(me.IsDataRefresh === false){
-											me.enqueue(function(done) {
-													Q.all([
-															//me.saveAppsPreference(me.AppsPref),
-															me.updateCache()
-													])
-													.fail(function(e) {
-															alert(e);
-															console.log(e);
-													});                           
-											}, 'ReloadAndRefreshQueue'); //check the queue in Reloadeverything()											
-										}
-									});
-					} else {
-							me.renderCacheMessage();
-							me.redrawEverything();
-					}
+				if (!cacheHit) {
+					return me.loadConfiguration()
+						.then(function() { return me.reloadEverything(); });
+				} else {
+					me.renderCacheMessage();
+					me.redrawEverything();
+				}
 			});
 		},
 		/**************************************** Loading Config Items ***********************************/		
@@ -782,8 +754,8 @@
 			});
 		},		
 		loadConfiguration: function() {
-      var me = this;
-			var twelveWeeks = 1000*60*60*24*7*12;
+			var me = this;
+			//var twelveWeeks = 1000*60*60*24*7*12;
 			return  me.configureIntelRallyApp()
 			.then(function(){
 				var scopeProject = me.getContext().getProject();
@@ -805,22 +777,6 @@
 							} 
 							else return Q.reject('You are not scoped to a valid project');
 						}),
-					// me.loadAppsPreference()
-						// .then(function(appsPref){
-							// me.AppsPref = appsPref;
-							// var twelveWeeks = 1000*60*60*24*7*12;
-							// return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-						// })
-						me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks))
-						.then(function(releaseRecords){
-							me.ReleaseRecords = releaseRecords;
-							var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID/* , me.AppsPref */);
-							if(currentRelease) {
-								me.ReleaseRecord = currentRelease;                                   
-							//	me.AppsPref.projs[me.ProjectRecord.data.ObjectID] = { Release: me.ReleaseRecord.data.ObjectID }; //usually will be no-op
-							}
-							else return Q.reject('This project has no releases.');
-						}),
 					me.loadProjectsWithTeamMembers(me.ProjectRecord)
 						.then(function(projectsWithTeamMembers){ 
 							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
@@ -838,55 +794,12 @@
 					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
 				]);
 			});
-     },
-		//doing this hack because the ReloadAndRefreshQueue didnt work after release picker changed
-		//REVISIT
-		releasePickerSelected_loadConfiguration: function() {
-			var me = this;
-			var twelveWeeks = 1000*60*60*24*7*12;
-			return  me.configureIntelRallyApp()
-			.then(function(){
-				var scopeProject = me.getContext().getProject();
-				return me.loadProject(scopeProject.ObjectID);
-			})
-			.then(function(scopeProjectRecord){
-				me.ProjectRecord = scopeProjectRecord;
-				return Q.all([
-					me.projectInWhichScrumGroup(me.ProjectRecord)
-						.then(function(scrumGroupRootRecord){
-							if(scrumGroupRootRecord && me.ProjectRecord.data.ObjectID == scrumGroupRootRecord.data.ObjectID){
-								me.ScrumGroupRootRecord = scrumGroupRootRecord;
-								return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-									.then(function(scrumGroupPortfolioProject){
-										if(!scrumGroupPortfolioProject) return Q.reject('Invalid portfolio location');
-										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-										me.ScrumGroupAndPortfolioConfig =  _.filter(me.ScrumGroupConfig,function(train){return train.ScrumGroupRootProjectOID === me.ProjectRecord.data.ObjectID ;})[0];
-									});
-							} 
-							else return Q.reject('You are not scoped to a valid project');
-						}),
-					me.loadProjectsWithTeamMembers(me.ProjectRecord)
-						.then(function(projectsWithTeamMembers){ 
-							me.ProjectsWithTeamMembers = projectsWithTeamMembers; 
-							//ignore portfolio as project if train and portfolio is in the same location
-								_.each(me.ProjectsWithTeamMembers, function(f) {
-								var parentObjectID = f.data.Parent ? f.data.Parent.ObjectID : 0; 
-								if ((f.data.ObjectID === me.ScrumGroupPortfolioProject.data.ObjectID || parentObjectID === me.ScrumGroupPortfolioProject.data.ObjectID ) && me.ScrumGroupAndPortfolioConfig.ScrumGroupAndPortfolioLocationTheSame === false	|| (f.data.ObjectID === me.ProjectRecord.data.ObjectID))
-									delete me.ProjectsWithTeamMembers [f.data.ObjectID || f.data.Parent.ObjectID];
-							});							
-						}),
-					me.loadAllChildrenProjects()
-						.then(function(allProjects){ 
-							me.AllProjects = allProjects; 
-						}),
-					me.setCustomAppObjectID('Intel.SAFe.ArtCommitMatrix')
-				]);
-			});
-    },		 
+		},
 		/**___________________________________ LAUNCH ___________________________________*/	
 		launch: function(){
 			var me = this;
-      me.IsDataRefresh = me.getSetting('dataRefresh');
+			me.IsDataRefresh = false;
+			me.AppRefresh = 'Off';
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
@@ -911,55 +824,39 @@
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/
 		renderCacheMessage: function(){
 			var me = this;
+			Ext.getCmp('cacheMessageContainer').removeAll();
+			if(Ext.getCmp('cacheMessageContainer').hidden === true) Ext.getCmp('cacheMessageContainer').show();
+			if(Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
 			Ext.getCmp('cacheMessageContainer').add({
 					xtype: 'label',
 					width:'100%',
-					html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
+					html: 'You are looking at the cached version of the data, updated last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
 		},
-		// renderDeleteCache: function() {
-			// var me = this;
-			// me.DeleteCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-					// xtype: 'button',
-					// text: 'clear cache data',
-					// listeners: {
-							// click: function() {
-									// me.setLoading('Clearing cache, please wait');
-									// return me.deleteCache()
-											// .then(function() { me.setLoading(false); });
-							// }
-					// }
-			// });
-		// },
 		renderUpdateCache: function() {
 			var me = this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
-					xtype: 'button',
-					text: 'Get Live Data',
-					listeners: {
-							click: function() {
-									me.setLoading(' Getting live data, please wait');
-									Ext.getCmp('cacheMessageContainer').removeAll();
-									return me.loadConfiguration()
-										.then(function() { return me.reloadEverything();})
-										.then(function() { return me.updateCache(); })
-										.then(function() { me.setLoading(false); });
-							}
+				xtype: 'button',
+				text: 'Get Live Data',
+				cls: 'intel-button',
+				listeners: {
+					click: function() {
+						me.setLoading(' Getting live data, please wait');
+						Ext.getCmp('cacheMessageContainer').removeAll();
+						return me.loadConfiguration()
+							.then(function() { return me.reloadEverything();})
+							.then(function() { return me.updateCache(); });
 					}
+				}
 			});
-     },
+		},
 		releasePickerSelected: function(combo, records){
 			var me=this, pid = me.ProjectRecord.data.ObjectID;
 			Ext.getCmp('cacheMessageContainer').removeAll();
 			if(me.ReleaseRecord.data.Name === records[0].data.Name) return;
 			me.setLoading("Loading data");
 			me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr){ return rr.data.Name == records[0].data.Name; });
-			return me.releasePickerSelected_loadDataCacheorRally();
-			//if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
-			// me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
-			// me.saveAppsPreference(me.AppsPref)
-				// .then( function() { return me.loadDataCacheorRally_2(); })    
-				// .done();
+			return me.loadDataCacheorRally();
 		},				
 		renderReleasePicker: function(){
 			var me=this;
@@ -1038,11 +935,14 @@
 		},	
 		clearFiltersButtonClicked: function(){
 			var me=this;
+			me.setLoading("removing filters");
 			if(me.MatrixGrid){
 				me.clearToolTip();
 				_.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.MatrixGrid), 'clearFilters');
+				_.invoke(Ext.ComponentQuery.query('intelgridcolumntextareafilter', me.MatrixGrid), 'clearFilters');
 				me.MatrixGrid.store.fireEvent('refresh', me.MatrixGrid.store);
 			}
+			me.setLoading(false);
 		},
 		renderClearFiltersButton: function(){
 			var me=this;
@@ -1203,6 +1103,10 @@
 				width:200,
 				locked:true,
 				sortable:true,
+				items: [{
+					xtype: 'intelgridcolumntextareafilter',
+					style: {marginRight: '10px'}
+				}],					
 				renderer: function(value, metaData) {
 					metaData.tdAttr = 'title="' + value + '"';
 					return value;
@@ -1331,7 +1235,11 @@
 				resizable:false,
 				columns: columns,
 				disableSelection: true,
-				plugins: [ 'intelcellediting' ],
+				plugins: ['intelcellediting'/* , {
+					ptype: 'bufferedrenderer',
+					trailingBufferZone: 80,
+					leadingBufferZone: 100
+				} */],
 				viewConfig: {
 					xtype:'inteltableview',
 					preserveScrollOnRefresh:true
@@ -1442,7 +1350,7 @@
 						var view = grid.view.normalView; //lockedView and normalView		
 						
 						view.getEl().on('scroll', function(){ me.clearToolTip(); });
-						
+
 						grid.mon(view, {
 							uievent: function (type, view, cell, row, col, e){
 								var moveAndResizePanel;

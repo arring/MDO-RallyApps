@@ -1,33 +1,33 @@
 {
-    "name": "Data Integrity Dashboard",
-    "className": "Intel.DataIntegrityDashboard",
-    "server": "https://rally1.rallydev.com",
-    "sdk": "2.0rc3",
-    "javascript": [
-        "https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.2/jquery.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
-        "https://code.highcharts.com/highcharts.src.js",
-        "https://code.highcharts.com/modules/heatmap.src.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.3/sprintf.js",
-        "../lib/intel-rally-app.js",
-        "../lib/mixin/window-listener.js",
-        "../lib/mixin/iframe-resize.js",
-        "../lib/mixin/pretty-alert.js",
-        "../lib/mixin/intel-workweek.js",
-        "../lib/mixin/user-apps-preference.js",
-        "../lib/mixin/parallel-loader.js",
-        "../lib/mixin/custom-app-objectid-register.js",
-        "../lib/mixin/horizontal-team-types.js",
-        "../lib/component/intel-combobox.js",
-        "../lib/component/intel-fixed-combobox.js",
-        "../lib/component/intel-release-picker.js",
-        "../lib/mixin/caching.js",
-        "App.js"
-    ],
-    "css": [
-        "../lib/css/base.css",
-        "../lib/css/tooltip.css",
-        "app.css"
-    ]
+   "name": "Data Integrity Dashboard",
+   "className": "Intel.DataIntegrityDashboard",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc3",
+   "javascript": [
+      "https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.2/jquery.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
+      "https://code.highcharts.com/highcharts.src.js",
+      "https://code.highcharts.com/modules/heatmap.src.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.0.3/sprintf.js",
+      "../lib/intel-rally-app.js",
+      "../lib/mixin/window-listener.js",
+      "../lib/mixin/iframe-resize.js",
+      "../lib/mixin/pretty-alert.js",
+      "../lib/mixin/intel-workweek.js",
+      "../lib/mixin/user-apps-preference.js",
+      "../lib/mixin/parallel-loader.js",
+      "../lib/mixin/custom-app-objectid-register.js",
+      "../lib/mixin/horizontal-team-types.js",
+      "../lib/component/intel-combobox.js",
+      "../lib/component/intel-fixed-combobox.js",
+      "../lib/component/intel-release-picker.js",
+      "../lib/mixin/caching.js",
+      "App.js"
+   ],
+   "css": [
+      "../lib/css/base.css",
+      "../lib/css/tooltip.css",
+      "app.css"
+   ]
 }
