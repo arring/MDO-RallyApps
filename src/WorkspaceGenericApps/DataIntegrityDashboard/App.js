@@ -237,8 +237,8 @@
 			var horizontalName = "";
 			if(me.isHorizontalView){
 				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
-				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
-				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ? _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
+				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : me.HorizontalTeamTypeInfo.horizontal;
+				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ?  _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			var releaseName = me.ReleaseRecord.data.Name;
@@ -253,18 +253,25 @@
 			var me = this;
 			
 			Ext.getCmp('cacheMessageContainer').removeAll();
+			Ext.getCmp('cacheButtonsContainer').removeAll();
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadData().then(function(){ 
 						if(!me.isScopedToScrum){
-							me.updateCache().fail(function(e){
-								alert(e);
-								console.log(e);
-							});								
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script						
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || (me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){
+								me.updateCache().fail(function(e){
+									alert(e);
+									console.log(e);
+								});
+							}							
 						}
 					});
 				}else{
 					me.renderCacheMessage();
+					me.renderGetLiveDataButton();
 				}
 			});
 		},
@@ -272,21 +279,26 @@
 			var me = this;
 			
 			Ext.getCmp('cacheMessageContainer').removeAll();
+			Ext.getCmp('cacheButtonsContainer').removeAll();
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadRemainingConfiguration()
 						.then(function(){return me.loadData(); })
 						.then(function(){ 
-							if(!me.isScopedToScrum){
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script							
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || (me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){
 								me.updateCache().fail(function(e){
 									alert(e);
-									console.log(e);
+									console.log(e); 
 								});								
 							}
 						});
 				}else{
-					me.applyScopingOverrides();
+					me.isHorizontalView ? me.applyProjectFilters() : me.applyScopingOverrides();
 					me.renderCacheMessage();
+					me.renderGetLiveDataButton();
 				}
 			});
 		},
@@ -295,7 +307,14 @@
 			return Q.all([
 				me.isHorizontalView ? me._loadHorizontalGroupingConfig() : Q(),
 				me.loadReleases()
-			]);
+			])
+			.then(function(){
+				if(me.isHorizontalView && !me.isStandalone){
+					me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
+					me.HorizontalTeamTypeInfo =  me.getHorizontalTeamTypeInfoFromProjectName(me.ProjectRecord.data.Name);
+					me.applyScopingOverrides();
+				}
+			});
 		},
 		launch: function() {
 			var me = this;
@@ -310,7 +329,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			.then(function(){ return me.registerCustomAppId();  })
+			// .then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -350,8 +369,8 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
-			
+			//for horizontal view you want to make sure that projects from all the trains are loaded not just that project
+			me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
@@ -432,10 +451,10 @@
 			
 			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
 			if(!me.isScopedToScrum){
-				me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+				me.ScopedTeamType = me.Overrides.TeamName || (me.isHorizontalView && !me.isStandalone ? me.HorizontalTeamTypeInfo.teamType : '' ); //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
 				if(me.isHorizontalView){
 					if(me.ScopedTeamType){
-						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not configured as horizontal teamType';
 						me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
 					}
 					else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
@@ -674,7 +693,7 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		renderUpdateCache: function(){
+		renderGetLiveDataButton: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
 				xtype:'button',
@@ -683,18 +702,26 @@
 					click: function(){
 						me.setLoading('Pulling Live Data, please wait');
 						Ext.getCmp('cacheMessageContainer').removeAll();
-						return me.loadRemainingConfiguration()
-							.then(function(){return me.loadData(); })
-							.then(function(){	return me.renderVisuals();})
-							.then(function(){ 
-								//NOTE: not returning promise here, performs in the background!
+						return Q.all([
+							me.isHorizontalView ? Q() : me.loadRemainingConfiguration()
+						])
+						.then(function(){ return me.loadData() ; }) 
+						.then(function(){	return me.renderVisuals();})
+						.then(function(){ 
+							//NOTE: not returning promise here, performs in the background!
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script
+							Ext.getCmp('cacheButtonsContainer').removeAll();							
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || ( me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){								
 								me.updateCache().fail(function(e){
 									alert(e);
 									console.log(e);
 								});
-							})
-							.then(function(){ me.setLoading(false); });			
-					}
+							}
+						})
+						.then(function(){ me.setLoading(false); });			
+				}
 				}
 			});
 		},		
@@ -747,7 +774,7 @@
 					data: me.getTeamPickerValues()
 				}),
 				displayField:'Type',
-				value:'All',
+				value: me.isHorizontalView ? me.ScopedTeamType : 'All',
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					select: me.teamPickerSelected.bind(me)
@@ -817,13 +844,13 @@
 			
 			// Conditionally loads controls
 			//if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
-			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
+			//if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderGetLiveDataButton();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
-				me.UpdateCacheButton.hide();
+				if(me.UpdateCacheButton) me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
 			}
