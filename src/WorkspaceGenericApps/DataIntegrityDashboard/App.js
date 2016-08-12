@@ -296,7 +296,8 @@
 							}
 						});
 				}else{
-					me.isHorizontalView ? me.applyProjectFilters() : me.applyScopingOverrides();
+					if(me.isHorizontalView) me.applyProjectFilters();
+					else me.applyScopingOverrides();
 					me.renderCacheMessage();
 					me.renderGetLiveDataButton();
 				}
