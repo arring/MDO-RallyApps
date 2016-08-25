@@ -326,7 +326,7 @@
 				};
 			me.add({
 				xtype: 'container',
-				id:'grid_scrumgroupportfolioconfig_wrapper',
+				id:'grid_scrumgroupportfolioconfig_wrapper'
 			});
 		},
 		renderScrumGroupPortfolioGrid: function(){
@@ -493,7 +493,7 @@
 				}			
 		},
 		renderScrumHorizontalGroupingKeywords: function(){
-			var me=this
+			var me = this;
 			me.add({
 				xtype:'container',
 				id:'horizontalGroupingContainer',
