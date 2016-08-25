@@ -60,7 +60,7 @@
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
 		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
-		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
+		BASE_URL =  Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
 		
 		MAX_TEXT_LENGTH = 65536,
 		MAX_STRING_LENGTH = 256,

@@ -20,7 +20,8 @@
 (function(){
 	var Ext = window.Ext4 || window.Ext,
 		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
-		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config',//preference to store map of keywords in project names to horizontal
+		TrainTypeGroupConfigPrefName = 'intel-traintype-grouping-config';
 	
 	//increase timeouts to 5 minutes since rally can be slow sometimes
 	var timeout = 300000;
@@ -193,6 +194,27 @@
 			});
 			return deferred.promise;
 		},
+		_loadTrainTypeGroupingConfig: function(){
+			/** TrainTypeGroupingConfig is this:
+			{
+				traintypes: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[TrainTypeGroupConfigPrefName], trainTypeGroupingConfig;
+					try{ trainTypeGroupingConfig = JSON.parse(configString); }
+					catch(e){ trainTypeGroupingConfig = {traintypes:{}}; }
+					me.TrainTypeGroupingConfig = trainTypeGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
@@ -217,6 +239,18 @@
 			});
 			return deferred.promise;
 		},
+		saveTrainTypeGroupingConfig: function(traintypeGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[TrainTypeGroupConfigPrefName] = JSON.stringify(traintypeGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
@@ -230,6 +264,7 @@
 				}),
 				me._loadScrumGroupConfig(),
 				me._loadHorizontalGroupingConfig(),
+				me._loadTrainTypeGroupingConfig(),
 				me._loadScheduleStates()
 			]);
 		},

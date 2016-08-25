@@ -1,2 +1,8 @@
 .section-header-text {
-	font-size:1.3rem; }
+	font-size:1.3rem; 
+	}
+
+.trainconfig-keyword{
+	padding-left:20px;
+	padding-top:17px;
+}

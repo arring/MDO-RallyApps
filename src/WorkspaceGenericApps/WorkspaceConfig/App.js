@@ -21,7 +21,9 @@
 					ScrumGroupName: scrumGroupConfig.ScrumGroupName || '',
 					ScrumGroupAndPortfolioLocationTheSame: scrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame ? true : false,
 					PortfolioProjectOID: scrumGroupConfig.PortfolioProjectOID || 0,
-					IsTrain: scrumGroupConfig.IsTrain ? true : false
+					IsTrain: scrumGroupConfig.IsTrain ? true : false,
+					TrainType: scrumGroupConfig.TrainType
+					
 				};
 			});
 		},
@@ -31,7 +33,14 @@
 				return str.length ? str + '\n' + newStr : newStr;
 			}, '');
 		},
-		horizontalGroupingStringToObj: function(str){
+		trainTypeGroupingObjToString: function(obj){
+			if (_.isEmpty(obj.traintypes)) return "";
+			return _.reduce(obj, function(str, keywords, horizontal){
+				var newStr = keywords.join(',') + ';';
+				return str.length ? str + '\n' + newStr : newStr;
+			}, '');
+		},		
+		groupingStringToObj: function(str){
 			return _.reduce(str.split('\n'), function(obj, str){
 				if(!str.length) return obj;
 				var split = str.split(':');
@@ -58,6 +67,9 @@
 					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
 						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
 						function(item){ return item.Name; });
+					me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
+						function(traintype){ return { TrainType: traintype}; }),
+						function(item){ return item.TrainType; });
 				})
 				.then(function(){
 					return KeyValueDb.getDatabaseProjectOID()
@@ -67,6 +79,8 @@
 				.then(function(){
 					me.setLoading(false);
 					me.renderChooseDatabaseProject();
+					me.renderTrainTypeConfig();
+					me.getScrumGroupPortfolioGridConfig();
 					me.renderScrumGroupPortfolioGrid();
 					me.renderScrumHorizontalGroupingKeywords();
 				})
@@ -112,20 +126,212 @@
 				}
 			});
 		},
-		renderScrumGroupPortfolioGrid: function(){
+		renderTrainTypeConfig: function(){
 			var me = this;
-			
+
+			me.add(
+							{
+								xtype:'container',
+								id:'container_right',	
+								items:[{
+										xtype:'container',
+										layout:'hbox',
+										items:[{
+											xtype:'container',
+											cls:'section-header-text',
+											html:[
+												
+												'<div>',
+													'<p>Train Types Grouping Config</p>',
+													
+												'</div>'
+											].join('\n')
+										},{
+										xtype:'container',
+										cls:'trainconfig-keyword',
+										html:['<div>',
+											'<p>(Syntax is: keyword1,keyword2;)</p>',
+												'</div>'
+											].join('\n')
+										}]
+										
+									},{
+										xtype:'container',
+										id:'trainconfig_wrapper',
+										layout:'hbox',
+										items:[{
+										xtype:'textarea',
+										id: 'TrainTypesGroupingTextarea',
+										width:800, 
+										value: me.trainTypeGroupingObjToString(me.TrainTypeGroupingConfig),
+										listeners: { change: me.setIndicatorHTML }
+									},{
+										xtype:'container',
+										id: 'trainTypeGroupingSyntaxNotifier',
+										listeners:{ added: function(){ setTimeout(me.setIndicatorHTML, 100); } }
+									},{
+										xtype:'button',
+										text:'Save Train Type Grouping Config',
+										id:'btn_savetraintype',
+										listeners:{ 
+											click: function(){
+												var textareaEl = Ext.get('TrainTypesGroupingTextarea').down('textarea');
+												//traintypes is an object use to store the train type config
+												var trainType = "traintypes: " + textareaEl.getValue();
+												if(!trainType.match(VALID_HORIZONTAL_GROUPING_SYNTAX)){
+													me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
+													return;
+												}
+												me.TrainTypeGroupingConfig = me.groupingStringToObj(trainType);
+												//gettting rid of empty space if any;
+												_.each(me.TrainTypeGroupingConfig, function(value, key){
+													_.each(value, function (v,k){
+														me.TrainTypeGroupingConfig[key][k] = v.trim();});
+												});
+												me.setLoading('Saving Preference');
+												me.saveTrainTypeGroupingConfig(me.TrainTypeGroupingConfig)
+												.fail(function(reason){ me.alert('ERROR', reason); })
+												.then(function(){ 
+												//adding it to the team store for the grid 
+													me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
+														function(traintype){ return { TrainType: traintype}; }),
+														function(item){ return item.TrainType; });
+													me.setLoading(false); 
+													me.renderScrumGroupPortfolioGrid();
+												})
+												.done();
+											}
+										}
+									}]
+								}							
+								]							
+							});
+		},
+		getScrumGroupPortfolioGridConfig: function(){
+			var me = this;
 			me.ScrumGroupPortfolioConfigStore = Ext.create('Ext.data.Store', { 
 				fields: [
 					{name:'ScrumGroupRootProjectOID', type:'number'}, 
 					{name:'ScrumGroupName', type:'string'}, 
 					{name:'ScrumGroupAndPortfolioLocationTheSame', type:'boolean'}, 
 					{name:'PortfolioProjectOID', type:'number'}, 
-					{name:'IsTrain', type:'boolean'}
+					{name:'IsTrain', type:'boolean'},
+					{name:'TrainType', type:'string'}
 				],
 				data: me.getScrumGroupPortfolioStoreData()
 			});
-
+			me.portfolioGridHeader = {
+					layout: 'hbox',
+					items: [{
+						xtype:'text',
+						cls:'section-header-text',
+						width:500,
+						text:"Scrum Group Portfolio Config"
+					},{
+						xtype:'container',
+						flex:1000,
+						layout:{
+							type:'hbox',
+							pack:'end'
+						},
+						items:[{
+							xtype:'button',
+							text:'+ Add Scrum Group',
+							width:150,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									var model = Ext.create(me.ScrumGroupPortfolioConfigStore.getProxy().getModel(), {
+										ScrumGroupRootProjectOID: 0,
+										ScrumGroupName: '',
+										ScrumGroupAndPortfolioLocationTheSame: true,
+										PortfolioProjectOID: 0,
+										IsTrain: true,
+										TrainType: ''
+									});
+									me.ScrumGroupPortfolioConfigStore.insert(0, [model]);
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Undo changes',
+							width:110,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									me.ScrumGroupPortfolioConfigStore.removeAll();
+									me.ScrumGroupPortfolioConfigStore.add(me.getScrumGroupPortfolioStoreData());
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Save Config',
+							width:100,
+							listeners:{ 
+								click: function(){
+									var scrumGroupRecords = me.ScrumGroupPortfolioConfigStore.getRange(),
+										scrumGroupData = _.map(scrumGroupRecords, function(scrumGroupRecord){
+											return {
+												ScrumGroupRootProjectOID: scrumGroupRecord.data.ScrumGroupRootProjectOID,
+												ScrumGroupName: scrumGroupRecord.data.ScrumGroupName,
+												ScrumGroupAndPortfolioLocationTheSame: scrumGroupRecord.data.ScrumGroupAndPortfolioLocationTheSame,
+												PortfolioProjectOID: scrumGroupRecord.data.PortfolioProjectOID,
+												IsTrain: scrumGroupRecord.data.IsTrain,
+												TrainType:scrumGroupRecord.data.TrainType
+											};
+										}),
+										badScrumGroupRootOID = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupRootProjectOID) return true;
+										}),
+										badPortfolioOID = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame && !scrumGroupConfig.PortfolioProjectOID) return true;
+										}),
+										badScrumGroupName = _.find(scrumGroupData, function(scrumGroupConfig){
+											if(!scrumGroupConfig.ScrumGroupName) return true;
+										}),
+										conflictingScrumGroupProject = _.find(scrumGroupData, function(scrumGroup1, idx1){
+											return _.some(scrumGroupData, function(scrumGroup2, idx2){
+												return idx1 !== idx2 && scrumGroup1.ScrumGroupRootProjectOID && 
+													(scrumGroup1.ScrumGroupRootProjectOID == scrumGroup2.ScrumGroupRootProjectOID);
+											});
+										}),
+										conflictingScrumGroupName = _.find(scrumGroupData, function(scrumGroup1, idx1){
+											return _.some(scrumGroupData, function(scrumGroup2, idx2){
+												return idx1 !== idx2 && scrumGroup1.ScrumGroupName === scrumGroup2.ScrumGroupName;
+											});
+										});
+										
+									/***************** run data integrity checks before saving *************************/
+									if(badScrumGroupRootOID) 
+										me.alert('ERROR', 'You must select a valid Scrum Group Root Project!');
+									else if(badPortfolioOID) 
+										me.alert('ERROR', 'You must select a valid Portfolio Project!');
+									else if(badScrumGroupName) 
+										me.alert('ERROR', 'Found an invalid Scrum Group Name!');
+									else if(conflictingScrumGroupProject) 
+										me.alert('ERROR', 'A project is used for more than 1 Scrum Group!');
+									else if(conflictingScrumGroupName) 
+										me.alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
+									else {
+										me.ScrumGroupPortfolioConfigGrid.setLoading('Saving Config');
+										me.saveScrumGroupConfig(scrumGroupData)
+											.fail(function(reason){ me.alert(reason); })
+											.then(function(){ me.ScrumGroupPortfolioConfigGrid.setLoading(false); })
+											.done();
+									}
+								}
+							}
+						}]
+					}]
+				};
+			me.add({
+				xtype: 'container',
+				id:'grid_scrumgroupportfolioconfig_wrapper',
+			});
+		},
+		renderScrumGroupPortfolioGrid: function(){
+			var me = this;
+			Ext.getCmp('grid_scrumgroupportfolioconfig_wrapper').removeAll();
 			var columns = [{
 				text:'Scrum Group Root Project',
 				dataIndex:'ScrumGroupRootProjectOID',
@@ -199,6 +405,30 @@
 				draggable:false,
 				sortable:true
 			},{
+				text:'Train Type',
+				dataIndex:'TrainType',
+				flex:1,
+				editor:{
+					xtype:'intelcombobox',
+					width:'100%',
+					allowBlank:true,
+					store: Ext.create('Ext.data.Store', {
+						fields: ['TrainType'],
+						data: me.TrainTypeStore
+					}),
+					displayField: 'TrainType',
+					valueField: 'TrainType'
+				},			
+				resizable:false,
+				draggable:false,
+				sortable:true,
+				renderer:function(tid, meta, record){
+					if(!record.data.TrainType) meta.tdCls += ' intel-editor-cell';
+					if(me.TrainTypeGroupingConfig.traintypes.indexOf(record.data.TrainType) === -1) return "-";
+					else return record.data.TrainType;
+					
+				}
+			},{
 				text:'',
 				width:160,
 				xtype:'intelcomponentcolumn',
@@ -213,113 +443,13 @@
 						handler: function(){ me.ScrumGroupPortfolioConfigStore.remove(record); }
 					};
 				}
-			}];
-
-			me.ScrumGroupPortfolioConfigGrid = me.add({
+			}];			
+			
+			me.ScrumGroupPortfolioConfigGrid = Ext.getCmp('grid_scrumgroupportfolioconfig_wrapper').add({
 				xtype: 'grid',
+				id:'grid_scrumgroupportfolioconfig',
 				emptyText: ' ',
-				header: {
-					layout: 'hbox',
-					items: [{
-						xtype:'text',
-						cls:'section-header-text',
-						width:500,
-						text:"Scrum Group Portfolio Config"
-					},{
-						xtype:'container',
-						flex:1000,
-						layout:{
-							type:'hbox',
-							pack:'end'
-						},
-						items:[{
-							xtype:'button',
-							text:'+ Add Scrum Group',
-							width:150,
-							margin:'0 10px 0 0',
-							listeners:{
-								click: function(){
-									var model = Ext.create(me.ScrumGroupPortfolioConfigStore.getProxy().getModel(), {
-										ScrumGroupRootProjectOID: 0,
-										ScrumGroupName: '',
-										ScrumGroupAndPortfolioLocationTheSame: true,
-										PortfolioProjectOID: 0,
-										IsTrain: true
-									});
-									me.ScrumGroupPortfolioConfigStore.insert(0, [model]);
-								}
-							}
-						},{
-							xtype:'button',
-							text:'Undo changes',
-							width:110,
-							margin:'0 10px 0 0',
-							listeners:{
-								click: function(){
-									me.ScrumGroupPortfolioConfigStore.removeAll();
-									me.ScrumGroupPortfolioConfigStore.add(me.getScrumGroupPortfolioStoreData());
-								}
-							}
-						},{
-							xtype:'button',
-							text:'Save Config',
-							width:100,
-							listeners:{ 
-								click: function(){
-									var scrumGroupRecords = me.ScrumGroupPortfolioConfigStore.getRange(),
-										scrumGroupData = _.map(scrumGroupRecords, function(scrumGroupRecord){
-											return {
-												ScrumGroupRootProjectOID: scrumGroupRecord.data.ScrumGroupRootProjectOID,
-												ScrumGroupName: scrumGroupRecord.data.ScrumGroupName,
-												ScrumGroupAndPortfolioLocationTheSame: scrumGroupRecord.data.ScrumGroupAndPortfolioLocationTheSame,
-												PortfolioProjectOID: scrumGroupRecord.data.PortfolioProjectOID,
-												IsTrain: scrumGroupRecord.data.IsTrain
-											};
-										}),
-										badScrumGroupRootOID = _.find(scrumGroupData, function(scrumGroupConfig){
-											if(!scrumGroupConfig.ScrumGroupRootProjectOID) return true;
-										}),
-										badPortfolioOID = _.find(scrumGroupData, function(scrumGroupConfig){
-											if(!scrumGroupConfig.ScrumGroupAndPortfolioLocationTheSame && !scrumGroupConfig.PortfolioProjectOID) return true;
-										}),
-										badScrumGroupName = _.find(scrumGroupData, function(scrumGroupConfig){
-											if(!scrumGroupConfig.ScrumGroupName) return true;
-										}),
-										conflictingScrumGroupProject = _.find(scrumGroupData, function(scrumGroup1, idx1){
-											return _.some(scrumGroupData, function(scrumGroup2, idx2){
-												return idx1 !== idx2 && scrumGroup1.ScrumGroupRootProjectOID && 
-													(scrumGroup1.ScrumGroupRootProjectOID == scrumGroup2.ScrumGroupRootProjectOID);
-											});
-										}),
-										conflictingScrumGroupName = _.find(scrumGroupData, function(scrumGroup1, idx1){
-											return _.some(scrumGroupData, function(scrumGroup2, idx2){
-												return idx1 !== idx2 && scrumGroup1.ScrumGroupName === scrumGroup2.ScrumGroupName;
-											});
-										});
-										
-									/***************** run data integrity checks before saving *************************/
-									if(badScrumGroupRootOID) 
-										me.alert('ERROR', 'You must select a valid Scrum Group Root Project!');
-									else if(badPortfolioOID) 
-										me.alert('ERROR', 'You must select a valid Portfolio Project!');
-									else if(badScrumGroupName) 
-										me.alert('ERROR', 'Found an invalid Scrum Group Name!');
-									else if(conflictingScrumGroupProject) 
-										me.alert('ERROR', 'A project is used for more than 1 Scrum Group!');
-									else if(conflictingScrumGroupName) 
-										me.alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
-									else {
-										me.ScrumGroupPortfolioConfigGrid.setLoading('Saving Config');
-										me.saveScrumGroupConfig(scrumGroupData)
-											.fail(function(reason){ me.alert(reason); })
-											.then(function(){ me.ScrumGroupPortfolioConfigGrid.setLoading(false); })
-											.done();
-									}
-								}
-							}
-						}]
-					}]
-				},
+				header: me.portfolioGridHeader,
 				margin:'0 0 20px 0',
 				width:'95%',
 				height:400,
@@ -351,21 +481,19 @@
 				store: me.ScrumGroupPortfolioConfigStore
 			});	
 		},
-		renderScrumHorizontalGroupingKeywords: function(){
-			var me=this,
-				goodHTMLIndicator = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
+		setIndicatorHTML: function(){
+			var goodHTMLIndicator = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
 				badHTMLIndicator = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
-				
-			function setIndicatorHTML(){
 				var indicatorEl = Ext.get('horizontalGroupingSyntaxNotifier'),
 					textareaParentEl = Ext.get('horizontalGroupingTextarea');
 				if(textareaParentEl && indicatorEl){
 					if(textareaParentEl.down('textarea').getValue().match(VALID_HORIZONTAL_GROUPING_SYNTAX)) 
 						indicatorEl.setHTML(goodHTMLIndicator);
 					else indicatorEl.setHTML(badHTMLIndicator);
-				}
-			}
-			
+				}			
+		},
+		renderScrumHorizontalGroupingKeywords: function(){
+			var me=this
 			me.add({
 				xtype:'container',
 				id:'horizontalGroupingContainer',
@@ -418,11 +546,11 @@
 						width:800, 
 						height:250,
 						value: me.horizontalGroupingObjToString(me.HorizontalGroupingConfig.groups),
-						listeners: { change: setIndicatorHTML }
+						listeners: { change: me.setIndicatorHTML }
 					},{
 						xtype:'container',
 						id: 'horizontalGroupingSyntaxNotifier',
-						listeners:{ added: function(){ setTimeout(setIndicatorHTML, 100); } }
+						listeners:{ added: function(){ setTimeout(me.setIndicatorHTML, 100); } }
 					},{
 						xtype:'button',
 						text:'Save Horizontal Grouping Config',
