@@ -307,13 +307,14 @@
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
-			return [{
+	
+			me.miniDataIntegrityRecord =  [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
 					if((item.data.Release || {}).Name !== releaseName) return false;
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
-				})
+				}).length || 0
 			},/* {
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
@@ -328,7 +329,7 @@
 					if((item.data.Release || {}).Name !== releaseName) return false;
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return !item.data.Iteration; 
-				})
+				}).length || 0
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
@@ -336,7 +337,7 @@
 					if(!item.data.Iteration) return false;
 					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
-				})
+				}).length || 0
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
@@ -346,8 +347,9 @@
 						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 					if(item.data.ScheduleState == 'Accepted') return false;
 					return new Date(item.data[lowestPortfolioItem].PlannedEndDate) < new Date(item.data.Iteration.StartDate);
-				})
+				}).length || 0
 			}];
+			return me.miniDataIntegrityRecord;
 		},
 
 		/**___________________________________ RISKS STUFF ___________________________________**/	
@@ -556,8 +558,13 @@
 				promises = [],
 				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.syncRisks(me.Risks);
-			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore)
+			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore){
 				if(me.VelocityGrid && me.VelocityGrid.store) me.VelocityGrid.store.intelUpdate();
+				if(me.DataIntegrityGrid && me.DataIntegrityGrid.store) {
+					 me.DataIntegrityGrid.store.intelUpdate();
+				}
+			}
+				
 			if(!me.isEditingTeamCommits && me.PortfolioItemStore && me.UserStoryStore)
 				if(me.TeamCommitsGrid && me.TeamCommitsGrid.store) me.TeamCommitsGrid.store.intelUpdate();
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
@@ -651,6 +658,7 @@
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(message);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(message);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(message);
+			if(me.DataIntegrityGrid) me.DataIntegrityGrid.setLoading(message);
 		},	
 		removeLoadingMasks: function(){
 			var me=this,
@@ -660,12 +668,14 @@
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(false);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(false);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(false);
+			if(me.DataIntegrityGrid) me.DataIntegrityGrid.setLoading(false);
 		},	
 		refreshDataFunc: function(){
 			var me=this;
 			me.setLoadingMasks();
 			me.enqueue(function(unlockFunc){
 				me.reloadStores()
+					.then(function(){	me.getMiniDataIntegrityStoreData();	})
 					.then(function(){ return me.updateGrids(); })
 					.then(function(){ return me.checkForDuplicates(); })
 					.then(function(){ return me.showGrids(); })
@@ -1625,7 +1635,7 @@
 						}, 0)
 					};
 				});
-			
+	
 			var velocityStore = Ext.create('Intel.lib.component.Store', {
 				data: iterationGroupTotals,
 				model:'IntelVelocity',
@@ -1857,10 +1867,34 @@
 						meta.tdCls += 'mini-data-integrity-num-cell';
 						if(val.length === 0) meta.tdCls += ' mini-data-integrity-green-cell';
 						else meta.tdCls += ' mini-data-integrity-red-cell';
-						return val.length; 
+						return val; 
 					}
 				}];
 			
+			var miniDataIntegrityStoreData = me.getMiniDataIntegrityStoreData();
+
+			var dataIntegrityStore = Ext.create('Intel.lib.component.Store', {
+					data: miniDataIntegrityStoreData,					
+					model:'IntelTeamReportMiniDI',
+					autoSync:true,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					proxy: {
+						type:'intelsessionstorage',
+						id:'MiniDIProxy' + Math.random()
+					},					
+					intelUpdate: function(){
+						dataIntegrityStore.suspendEvents(true);
+						_.each(dataIntegrityStore.getRange(), function(dataIntegrityRecord){
+							var newVal = _.find(me.miniDataIntegrityRecord, { 'title': dataIntegrityRecord.data.title }).userStories || 0;
+							if(newVal != dataIntegrityRecord.data.userStories){
+							dataIntegrityRecord.set('userStories', newVal || 0);
+						}							
+							
+							});
+						dataIntegrityStore.resumeEvents();
+					}
+				});				
 			me.DataIntegrityGrid = me.down('#tcVelBoxRight').add({
 				xtype: 'grid',
 				cls: 'team-report-grid mini-data-integrity-grid rally-grid',
@@ -1889,13 +1923,7 @@
 					},
 					items: columns
 				},
-				store: Ext.create('Ext.data.Store', {
-					fields:[
-						{name: 'title', type: 'string'},
-						{name: 'userStories', type: 'auto'}
-					],
-					data: me.getMiniDataIntegrityStoreData()
-				}),
+				store: dataIntegrityStore,
 				enableEditing:false,
 				showPagingToolbar: false,
 				showRowActionsColumn:false,
@@ -1968,7 +1996,7 @@
 			/****************************** PREDECESSORS STUFF ***********************************************/				
 			me.PrececessorItemStores = {};
 			me.PredecessorItemGrids = {};
-			
+
 			var predecessorStore = Ext.create('Intel.lib.component.Store', {
 				data: Ext.clone(me.DependenciesParsedData.Predecessors),
 				autoSync:true,

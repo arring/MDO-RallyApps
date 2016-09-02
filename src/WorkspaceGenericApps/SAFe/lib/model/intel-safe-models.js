@@ -12,6 +12,13 @@
 			{name: 'RealVelocity', type:'number'}
 		]
 	});
+	Ext.define('IntelTeamReportMiniDI', {
+		extend: 'Ext.data.Model',
+		fields: [
+				{name: 'title', type: 'string'},
+				{name: 'userStories', type: 'number'}
+		]
+	});	
 	Ext.define('IntelTeamCommits', {
 		extend: 'Ext.data.Model',
 		fields: [
