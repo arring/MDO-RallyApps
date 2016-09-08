@@ -804,8 +804,8 @@
 			me.setLoading('Loading configuration');
 			me.ClickMode = 'Details';
 			me.ViewMode = Ext.Object.fromQueryString(window.parent.location.href.split('?')[1] || '').viewmode === 'percent_done' ? '% Done' : 'Normal';
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			me.initGridResize();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
@@ -1104,6 +1104,7 @@
 				width:200,
 				locked:true,
 				sortable:true,
+				resizable:true,
 				items: [{
 					xtype: 'intelgridcolumntextareafilter',
 					style: {marginRight: '10px'}
