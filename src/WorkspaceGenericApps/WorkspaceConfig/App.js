@@ -561,7 +561,7 @@
 									me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
 									return;
 								}
-								me.HorizontalGroupingConfig.groups = me.horizontalGroupingStringToObj(textareaEl.getValue());
+								me.HorizontalGroupingConfig.groups = me.groupingStringToObj(textareaEl.getValue());
 								me.setLoading('Saving Preference');
 								me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
 								.fail(function(reason){ me.alert('ERROR', reason); })
