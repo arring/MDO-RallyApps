@@ -13,6 +13,14 @@
 		],
 
 		/************************************************** UTIL FUNCS **********************************************/
+		getConfigEditPermissionListStoreData: function(){
+			var me = this;
+			return _.map(me.ConfigEditPermissionList.username, function(email){
+				return {
+					username: email || ''
+				};
+			});				
+		},
 		getScrumGroupPortfolioStoreData: function(){
 			var me=this;
 			return _.map(me.ScrumGroupConfig, function(scrumGroupConfig){
@@ -48,19 +56,25 @@
 				return obj;
 			}, {});
 		},
-		
 		/******************************************************* LAUNCH ********************************************************/	
 		launch: function(){
 			var me = this;
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+		/* 	me.initDisableResizeHandle();
+			me.initFixRallyDashboard(); */
 			me.setLoading('Loading Configuration');
+			me.currentUser = me.getContext().getUser().UserName;
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
 				return;
 			} 
 			me.configureIntelRallyApp()
+				.then(function(){ 
+					return me._loadConfigEditPermissionList();
+				})
+				.then(function(){
+					me.canEdit = me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1 ? true: false;
+				})
 				.then(function(){ return me.loadAllProjects(); })
 				.then(function(allProjects){
 					me.AllProjects = allProjects;
@@ -83,6 +97,9 @@
 					me.getScrumGroupPortfolioGridConfig();
 					me.renderScrumGroupPortfolioGrid();
 					me.renderScrumHorizontalGroupingKeywords();
+					if (me.canEdit) me.renderPermissionListGrid();
+					if (me.canEdit) me.getAndRenderModifiedByListGrid();
+					
 				})
 				.fail(function(reason){
 					me.setLoading(false);
@@ -92,6 +109,18 @@
 		},
 
 		/************************************************************* RENDER *******************************************/
+		getAndRenderModifiedByListGrid: function(){
+			var me = this;
+			Ext.getCmp('grid_modified_scrum_wrapper').removeAll();
+			return me._loadLastModifiedWorkspaceAppByPref()
+			.then(function(){
+				Ext.getCmp('grid_modified_scrum_wrapper').setLoading("Loading");
+				me.renderModifiedByListGrid();
+			})
+			.then(function(){
+				Ext.getCmp('grid_modified_scrum_wrapper').setLoading(false);
+			});
+		},
 		renderChooseDatabaseProject: function(){
 			var me = this;
 			me.add({
@@ -103,6 +132,7 @@
 				xtype: 'intelcombobox',
 				width: 400,
 				fieldLabel: 'Key-Value Database Project',
+				disabled:!me.canEdit,
 				labelWidth: 200,
 				margin:'5px 0 20px 0',
 				store: Ext.create('Ext.data.Store', {
@@ -117,8 +147,11 @@
 						var newProjectOID = records[0].data.ObjectID;
 						if(me.DatabaseProjectObjectID === newProjectOID) return;
 						me.setLoading('Saving');
+						me.LastModifiedWorkspaceAppBy.KeyValueDatabase.push({username: me.currentUser,date: new Date()});
 						KeyValueDb.setDatabaseProjectOID(newProjectOID)
 							.then(function(){ me.DatabaseProjectObjectID = newProjectOID; })
+							.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
+							.then(function(){me.getAndRenderModifiedByListGrid();})
 							.fail(function(reason){ me.alert(reason); })
 							.then(function(){ me.setLoading(false); })
 							.done();
@@ -129,83 +162,87 @@
 		renderTrainTypeConfig: function(){
 			var me = this;
 
-			me.add(
-							{
-								xtype:'container',
-								id:'container_right',	
-								items:[{
-										xtype:'container',
-										layout:'hbox',
-										items:[{
-											xtype:'container',
-											cls:'section-header-text',
-											html:[
-												
-												'<div>',
-													'<p>Train Types Grouping Config</p>',
-													
-												'</div>'
-											].join('\n')
-										},{
-										xtype:'container',
-										cls:'trainconfig-keyword',
-										html:['<div>',
-											'<p>(Syntax is: keyword1,keyword2;)</p>',
-												'</div>'
-											].join('\n')
-										}]
-										
-									},{
-										xtype:'container',
-										id:'trainconfig_wrapper',
-										layout:'hbox',
-										items:[{
-										xtype:'textarea',
-										id: 'TrainTypesGroupingTextarea',
-										width:800, 
-										value: me.trainTypeGroupingObjToString(me.TrainTypeGroupingConfig),
-										listeners: { change: me.setIndicatorHTML }
-									},{
-										xtype:'container',
-										id: 'trainTypeGroupingSyntaxNotifier',
-										listeners:{ added: function(){ setTimeout(me.setIndicatorHTML, 100); } }
-									},{
-										xtype:'button',
-										text:'Save Train Type Grouping Config',
-										id:'btn_savetraintype',
-										listeners:{ 
-											click: function(){
-												var textareaEl = Ext.get('TrainTypesGroupingTextarea').down('textarea');
-												//traintypes is an object use to store the train type config
-												var trainType = "traintypes: " + textareaEl.getValue();
-												if(!trainType.match(VALID_HORIZONTAL_GROUPING_SYNTAX)){
-													me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
-													return;
-												}
-												me.TrainTypeGroupingConfig = me.groupingStringToObj(trainType);
-												//gettting rid of empty space if any;
-												_.each(me.TrainTypeGroupingConfig, function(value, key){
-													_.each(value, function (v,k){
-														me.TrainTypeGroupingConfig[key][k] = v.trim();});
-												});
-												me.setLoading('Saving Preference');
-												me.saveTrainTypeGroupingConfig(me.TrainTypeGroupingConfig)
-												.fail(function(reason){ me.alert('ERROR', reason); })
-												.then(function(){ 
-												//adding it to the team store for the grid 
-													me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
-														function(traintype){ return { TrainType: traintype}; }),
-														function(item){ return item.TrainType; });
-													me.setLoading(false); 
-													me.renderScrumGroupPortfolioGrid();
-												})
-												.done();
-											}
-										}
-									}]
-								}							
-								]							
-							});
+			me.add({
+				xtype:'container',
+				id:'container_right',	
+				items:[{
+						xtype:'container',
+						layout:'hbox',
+						items:[{
+							xtype:'container',
+							cls:'section-header-text',
+							html:[
+								
+								'<div>',
+									'<p>Train Types Grouping Config</p>',
+									
+								'</div>'
+							].join('\n')
+						},{
+						xtype:'container',
+						cls:'trainconfig-keyword',
+						html:['<div>',
+							'<p>(Syntax is: keyword1,keyword2;)</p>',
+								'</div>'
+							].join('\n')
+						}]
+						
+					},{
+						xtype:'container',
+						id:'trainconfig_wrapper',
+						layout:'hbox',
+						items:[{
+						xtype:'textarea',
+						id: 'TrainTypesGroupingTextarea',
+						width:800, 
+						value: me.trainTypeGroupingObjToString(me.TrainTypeGroupingConfig),
+						listeners: { change: me.setIndicatorHTML }
+					},{
+						xtype:'container',
+						id: 'trainTypeGroupingSyntaxNotifier',
+						listeners:{ added: function(){ setTimeout(me.setIndicatorHTML, 100); } }
+					},{
+						xtype:'button',
+						text:'Save Train Type Grouping Config',
+						id:'btn_savetraintype',
+						disabled: !me.canEdit,
+						listeners:{ 
+							click: function(){
+								var textareaEl = Ext.get('TrainTypesGroupingTextarea').down('textarea');
+								//traintypes is an object use to store the train type config
+								var trainType = "traintypes: " + textareaEl.getValue();
+								if(!trainType.match(VALID_HORIZONTAL_GROUPING_SYNTAX)){
+									me.alert('ERROR', 'Cannot Save. Invalid grouping syntax.');
+									return;
+								}
+								me.TrainTypeGroupingConfig = me.groupingStringToObj(trainType);
+								//gettting rid of empty space if any;
+								_.each(me.TrainTypeGroupingConfig, function(value, key){
+									_.each(value, function (v,k){
+										me.TrainTypeGroupingConfig[key][k] = v.trim();});
+								});
+								me.setLoading('Saving Preference');
+								me.LastModifiedWorkspaceAppBy.TrainTypeConfig.push({username: me.currentUser,date: new Date()});
+								me.saveTrainTypeGroupingConfig(me.TrainTypeGroupingConfig)
+								.fail(function(reason){ me.alert('ERROR', reason); })
+								.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
+								.then(function(){ 
+								//adding it to the team store for the grid 
+									me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
+										function(traintype){ return { TrainType: traintype}; }),
+										function(item){ return item.TrainType; });
+									me.setLoading(false); 
+									me.renderScrumGroupPortfolioGrid();
+									
+								})
+								.then(function(){ me.getAndRenderModifiedByListGrid();})
+								.done();
+							}
+						}
+					}]
+				}							
+				]							
+			});
 		},
 		getScrumGroupPortfolioGridConfig: function(){
 			var me = this;
@@ -223,10 +260,10 @@
 			me.portfolioGridHeader = {
 					layout: 'hbox',
 					items: [{
-						xtype:'text',
+						xtype:'container',
 						cls:'section-header-text',
-						width:500,
-						text:"Scrum Group Portfolio Config"
+						width:'50%',
+						html:'Scrum Group Portfolio Config'
 					},{
 						xtype:'container',
 						flex:1000,
@@ -237,6 +274,7 @@
 						items:[{
 							xtype:'button',
 							text:'+ Add Scrum Group',
+							disabled: !me.canEdit,
 							width:150,
 							margin:'0 10px 0 0',
 							listeners:{
@@ -255,6 +293,7 @@
 						},{
 							xtype:'button',
 							text:'Undo changes',
+							disabled: !me.canEdit,
 							width:110,
 							margin:'0 10px 0 0',
 							listeners:{
@@ -266,6 +305,7 @@
 						},{
 							xtype:'button',
 							text:'Save Config',
+							disabled: !me.canEdit,
 							width:100,
 							listeners:{ 
 								click: function(){
@@ -314,9 +354,12 @@
 										me.alert('ERROR', 'A Name is used by more than 1 Scrum Group!');
 									else {
 										me.ScrumGroupPortfolioConfigGrid.setLoading('Saving Config');
+										me.LastModifiedWorkspaceAppBy.ScrumGroupAndPortfolioConfig.push({username: me.currentUser,date: new Date()});
 										me.saveScrumGroupConfig(scrumGroupData)
 											.fail(function(reason){ me.alert(reason); })
+											.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
 											.then(function(){ me.ScrumGroupPortfolioConfigGrid.setLoading(false); })
+											.then(function(){ me.getAndRenderModifiedByListGrid();})
 											.done();
 									}
 								}
@@ -368,6 +411,7 @@
 			},{
 				text:'Scrum Group And Portfolio Location The Same?', 
 				xtype:'checkcolumn',
+				disabled: !me.canEdit,
 				dataIndex:'ScrumGroupAndPortfolioLocationTheSame',
 				flex:1,
 				resizable:false,
@@ -401,6 +445,7 @@
 				xtype:'checkcolumn',
 				dataIndex:'IsTrain',
 				width: 100,
+				disabled: !me.canEdit,
 				resizable:false,
 				draggable:false,
 				sortable:true
@@ -414,7 +459,7 @@
 					allowBlank:true,
 					store: Ext.create('Ext.data.Store', {
 						fields: ['TrainType'],
-						data: me.TrainTypeStore
+						data: me.TrainTypeStore || []
 					}),
 					displayField: 'TrainType',
 					valueField: 'TrainType'
@@ -424,7 +469,7 @@
 				sortable:true,
 				renderer:function(tid, meta, record){
 					if(!record.data.TrainType) meta.tdCls += ' intel-editor-cell';
-					if(me.TrainTypeGroupingConfig.traintypes.indexOf(record.data.TrainType) === -1) return "-";
+					if(_.isEmpty(me.TrainTypeGroupingConfig.traintypes) || me.TrainTypeGroupingConfig.traintypes.indexOf(record.data.TrainType) === -1) return "-";
 					else return record.data.TrainType;
 					
 				}
@@ -439,6 +484,7 @@
 					return {
 						xtype:'button',
 						text:'Remove Scrum Group',
+						disabled: !me.canEdit,
 						width:'100%',
 						handler: function(){ me.ScrumGroupPortfolioConfigStore.remove(record); }
 					};
@@ -481,6 +527,273 @@
 				store: me.ScrumGroupPortfolioConfigStore
 			});	
 		},
+		renderPermissionListGrid: function(){
+			var me = this;
+
+			me.ConfigEditPermissionListStore = Ext.create('Ext.data.Store', { 
+				fields: [
+					{name:'username', type:'string'}
+				],
+				data:me.getConfigEditPermissionListStoreData()
+			});
+			me.add({
+				xtype: 'container',
+					layout: {
+					type: 'hbox'
+				},
+				items:[{
+					xtype: 'container',
+					id:'grid_permissionlist_wrapper',
+					width:'50%',
+					cls:'hello'
+			},{
+					xtype: 'container',
+					id:'grid_modified_scrum_wrapper',
+					cls:'grey',
+					layout: {
+						type: 'vbox'
+					},
+					width:'40%',
+					height:400,
+					overflowY : 'auto'				
+				}]
+				});	
+			var permissionListGridHeader = {
+					layout: 'hbox',
+					items: [{
+						xtype:'text',
+						cls:'section-header-text',
+						width:400,
+						text:"Workspace App Permission List"
+					},{
+						xtype:'container',
+						flex:1000,
+						layout:{
+							type:'hbox',
+							pack:'end'
+						},
+						items:[{
+							xtype:'button',
+							text:'+ Add User for editing',
+							disabled: !me.canEdit,
+							width:200,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									var model = Ext.create(me.ConfigEditPermissionListStore.getProxy().getModel(), {
+										username:"" 
+									});
+									me.ConfigEditPermissionListStore.insert(0, [model]);
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Undo changes',
+							disabled: !me.canEdit,
+							width:110,
+							margin:'0 10px 0 0',
+							listeners:{
+								click: function(){
+									me.ConfigEditPermissionListStore.removeAll();
+									me.ConfigEditPermissionListStore.add(me.getConfigEditPermissionListStoreData());
+								}
+							}
+						},{
+							xtype:'button',
+							text:'Save Changes',
+							disabled: !me.canEdit,
+							width:100,
+							listeners:{ 
+								click: function(){
+									var errorMessage = [];
+									var userListRecords = me.ConfigEditPermissionListStore.getRange(),
+										userListRecords = _.filter(userListRecords,function(user){ return user.data.username;}),
+										userListData = _.map(userListRecords, function(email){
+											return {
+												username: email.data.username
+											};
+										}),
+										userListArray = _.map(userListRecords, function(email){
+											return email.data.username;
+											
+										});
+									_.each(userListArray, function(value,key){
+											if (Ext.form.VTypes.email(value) === false){
+												errorMessage.push(value);
+												}							
+									});
+									if(errorMessage.length>0){
+										me.alert('Cannot Save', 'Not a valid email: ' + errorMessage);													
+									}else{
+										me.ConfigEditPermissionList = {"username":userListArray};
+										me.ConfigEditPermissionListGrid.setLoading('Saving Config');	
+										me.LastModifiedWorkspaceAppBy.WorkspaceAppPermissionConfig.push({username: me.currentUser,date: new Date()});
+										me.saveConfigEditPermissionList(me.ConfigEditPermissionList)
+										.fail(function(reason){ me.alert(reason); })
+										.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
+										.then(function(){ 
+											me.ConfigEditPermissionListStore.removeAll();
+											me.ConfigEditPermissionListStore.add(me.getConfigEditPermissionListStoreData());
+											me.ConfigEditPermissionListGrid.setLoading(false); 
+											me.getAndRenderModifiedByListGrid();
+										})
+										.done();															
+									} 
+								}
+							}
+						}]
+					}]
+				};
+			var columns = [{
+				text:'List of Email With Editing Permission',
+				dataIndex:'username',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'textfield',
+				resizable:false,
+				draggable:false,
+				sortable:true
+			},{
+				text:'',
+				width:160,
+				xtype:'intelcomponentcolumn',
+				tdCls: 'iconCell',
+				resizable:false,
+				draggable:false,
+				renderer: function(value, meta, record){
+					return {
+						xtype:'button',
+						text:'Remove User',
+						width:'100%',
+						disabled: !me.canEdit,
+						handler: function(){ me.ConfigEditPermissionListStore.remove(record); }
+					};
+				}
+			}];			
+
+			me.ConfigEditPermissionListGrid = Ext.getCmp('grid_permissionlist_wrapper').add({
+				xtype: 'grid',
+				id:'grid_userlist',
+				emptyText: ' ',
+				header: permissionListGridHeader,
+				margin:'0 0 20px 0',
+				width:'100%',
+				height:400,
+				scroll:'vertical',
+				columns: columns,
+				disableSelection: true,
+				plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 1 })],
+				viewConfig:{
+					stripeRows:true,
+					preserveScrollOnRefresh:true
+				},
+				listeners: {
+					beforeedit: function(editor, e){
+						
+					},
+					edit: function(editor, e){
+						
+					}
+				},
+				showRowActionsColumn:false,
+				showPagingToolbar:false,
+				enableEditing:false,
+				store: me.ConfigEditPermissionListStore
+			});		
+		},
+		renderModifiedByListGrid: function(){
+			var me = this;
+			var keyValueDatabase_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.KeyValueDatabase
+			}),
+			trainTypeConfig_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.TrainTypeConfig
+			}),
+			scrumGroupAndPortfolioConfig_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.ScrumGroupAndPortfolioConfig
+			}),
+			workspaceAppPermissionConfig_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.WorkspaceAppPermissionConfig
+			}),
+			enableHorizontal_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.EnableHorizontal
+			}),
+			horizontalGroupingConfig_modified_store= Ext.create('Ext.data.Store', { 
+				fields: ['username','date'],
+				data: me.LastModifiedWorkspaceAppBy.HorizontalGroupingConfig
+			});
+			var columns = [{
+				text:'Modified By',
+				dataIndex:'username',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'textfield',
+				resizable:false,
+				draggable:false,
+				sortable:true
+			},{
+				text:'Modified On',
+				dataIndex:'date',
+				tdCls: 'intel-editor-cell',	
+				flex:1,
+				editor: 'textfield',
+				resizable:false,
+				draggable:false,
+				sortable:true
+			}];			
+			var gridConfigs = [{
+				xtype: 'grid',
+				id:'grid_modified_keyValueDatabase',
+				header: { text:"KeyValueDatabase Revision"},
+				store: keyValueDatabase_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_trainTypeConfig',
+				header: {	text:"TrainTypeConfig Revision"	},
+				store: trainTypeConfig_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_scrumGroupAndPortfolioConfig',
+				header: {	text:"ScrumGroupAndPortfolioConfig Revision"},				
+				store: scrumGroupAndPortfolioConfig_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_workspaceAppPermissionConfig',
+				header: {	text:"WorkspaceAppPermissionConfig Revision"},					
+				store: workspaceAppPermissionConfig_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_enableHorizontal',
+				header: { text:"EnableHorizontal Revision"},				
+				store: enableHorizontal_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_horizontalGroupingConfig',
+				header: { text:"HorizontalGroupingConfig Revision"},				
+				store: horizontalGroupingConfig_modified_store
+			}];
+			
+			return Q.all(_.map(gridConfigs, function(gridConfig){
+				gridConfig.emptyText = '';
+				gridConfig.height = 185;
+				gridConfig.width = '90%';
+				gridConfig.header.cls = 'revision-header-text';
+				gridConfig.header.xtype = 'text';
+				gridConfig.scroll = 'vertical';
+				gridConfig.disableSelection =  true;
+				gridConfig.showRowActionsColumn = false;
+				gridConfig.showPagingToolbar = false;
+				gridConfig.enableEditing = false;
+				gridConfig.columns = columns;
+				return Ext.getCmp('grid_modified_scrum_wrapper').add(gridConfig);		
+			}));
+			
+		},		
 		setIndicatorHTML: function(){
 			var goodHTMLIndicator = '<div style="color:green"><i class="fa fa-check"></i> Syntax Valid</div>',
 				badHTMLIndicator = '<div style="color:red"><i class="fa fa-times"></i> Syntax Invalid</div>';
@@ -499,21 +812,25 @@
 				id:'horizontalGroupingContainer',
 				margin:'0 0 50px 0',
 				items:[{
-					xtype:'text',
+					xtype:'container',
 					cls:'section-header-text',
-					text:"Horizontal Scrum Grouping Config"
+					html:"Horizontal Scrum Grouping Config"
 				},{
 					xtype:'checkbox',
 					id: 'enableHorizontalGroupingCheckbox',
 					fieldLabel: 'Enable Horizontal Scrum Groupings',
 					labelWidth: 200,
+					disabled: !me.canEdit,
 					value: me.HorizontalGroupingConfig.enabled,
 					listeners: {
 						change: function(combo, newValue){
 							me.HorizontalGroupingConfig.enabled = newValue;
 							me.setLoading('Saving Preference');
+							me.LastModifiedWorkspaceAppBy.EnableHorizontal.push({username: me.currentUser,date: new Date()});
 							me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
 								.then(function(){ Ext.get('toggledHorizontalGroupingItems')[newValue ? 'show' : 'hide'](); })
+								.then(function(){	me.getAndRenderModifiedByListGrid();})
 								.fail(function(reason){ me.alert('ERROR', reason); })
 								.then(function(){ me.setLoading(false); })
 								.done();
@@ -554,6 +871,7 @@
 					},{
 						xtype:'button',
 						text:'Save Horizontal Grouping Config',
+						disabled: !me.canEdit,
 						listeners:{ 
 							click: function(){
 								var textareaEl = Ext.get('horizontalGroupingTextarea').down('textarea');
@@ -563,7 +881,10 @@
 								}
 								me.HorizontalGroupingConfig.groups = me.groupingStringToObj(textareaEl.getValue());
 								me.setLoading('Saving Preference');
+								me.LastModifiedWorkspaceAppBy.HorizontalGroupingConfig.push({username: me.currentUser,date: new Date()});
 								me.saveHorizontalGroupingConfig(me.HorizontalGroupingConfig)
+								.then(function(){ return me.saveLastModifiedWorkspaceAppBy(me.LastModifiedWorkspaceAppBy); })
+								.then(function(){ me.getAndRenderModifiedByListGrid();})
 								.fail(function(reason){ me.alert('ERROR', reason); })
 								.then(function(){ me.setLoading(false); })
 								.done();

@@ -1,8 +1,17 @@
 .section-header-text {
 	font-size:1.3rem; 
 	}
-
+.revision-header-text{
+	font-size:1.3rem; 		
+}
 .trainconfig-keyword{
 	padding-left:20px;
 	padding-top:17px;
+}
+.modified-by{
+	color:green;
+	font-size:12px;
+}
+.grey{
+	border:solid #d6d6d6 1px;
 }
