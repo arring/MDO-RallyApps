@@ -321,8 +321,8 @@
 			var me = this;
 
 			me.isHorizontalView = me.getSetting('Horizontal');
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
 			me.processURLOverrides();
 			

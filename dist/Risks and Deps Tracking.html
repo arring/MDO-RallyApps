@@ -5227,8 +5227,8 @@
 		launch: function(){
 			var me=this;
 			me.setLoading('Loading Configuration');
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
