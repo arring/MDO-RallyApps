@@ -259,8 +259,8 @@
 			me.ShowAgreements = false;
 			me.ShowCheckpoints = true;
 			Q.onerror = function(reason){ me.alert('ERROR', reason); };
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())){
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');

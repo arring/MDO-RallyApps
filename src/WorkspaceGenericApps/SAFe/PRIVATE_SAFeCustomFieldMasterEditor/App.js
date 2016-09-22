@@ -231,8 +231,8 @@
 		launch: function(){
 			var me = this;
 			me.setLoading('Loading Configuration');
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			me.configureIntelRallyApp()
 				.then(function(){
 					var scopeProject = me.getContext().getProject();

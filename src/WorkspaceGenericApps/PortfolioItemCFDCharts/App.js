@@ -58,8 +58,8 @@
 		/**************************************** Launch ******************************************/
 		launch: function() {
 			var me = this;
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
 			me.configureIntelRallyApp()
 				.then(me.loadCfdProjPreference()/******** load stream 2 *****/

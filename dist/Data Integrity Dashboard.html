@@ -34,8 +34,11 @@
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
-		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+		ScrumGroupConfigPrefName = 'intel-config-portfolio-locations', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-config-horizontal-grouping',//preference to store map of keywords in project names to horizontal
+		TrainTypeGroupConfigPrefName = 'intel-traintype-grouping-config',//preference to store map of train type
+		EditPermissionListPrefName = 'intel-workspaceapp-permission-list',//preference to store list of people who can save changes
+		LastModifiedWorkspaceAppByPrefName = 'intel-workspaceapp-modifiedby-list';//preference to save people who last modified the preferences
 	
 	//increase timeouts to 5 minutes since rally can be slow sometimes
 	var timeout = 300000;
@@ -208,6 +211,113 @@
 			});
 			return deferred.promise;
 		},
+		_loadTrainTypeGroupingConfig: function(){
+			/** TrainTypeGroupingConfig is this:
+			{
+				traintypes: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[TrainTypeGroupConfigPrefName], trainTypeGroupingConfig;
+					try{ trainTypeGroupingConfig = JSON.parse(configString); }
+					catch(e){ trainTypeGroupingConfig = {traintypes:{}}; }
+					me.TrainTypeGroupingConfig = trainTypeGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
+		_loadConfigEditPermissionList: function(){
+			/** ConfigEditPermissionList is this:
+			{
+				username: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				success: function(prefs) {
+					var permissionListString = prefs[EditPermissionListPrefName], ConfigEditPermissionList;
+					try{ configEditPermissionList = JSON.parse(permissionListString); }
+					catch(e){ configEditPermissionList = {username:{}}; }
+					me.ConfigEditPermissionList = configEditPermissionList;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_loadLastModifiedWorkspaceAppByPref: function(){
+			/**  */
+			/** me.LastModifiedWorkspaceAppBy is an array of these objects: 
+				{
+					KeyValueDatabase: {username:"",date:""},
+					TrainTypeConfig: {username:"",date:""},
+					ScrumGroupAndPortfolioConfig:{username:"",date:""},
+					WorkspaceAppPermissionConfig:{username:"",date:""},
+					EnableHorizontal: {username:"",date:""},
+					HorizontalGroupingConfig:{username:"",date:""}
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				success: function(prefs) {
+					var configString = prefs[LastModifiedWorkspaceAppByPrefName], lastModifiedWorkspaceAppBy;
+					try{ 
+						lastModifiedWorkspaceAppBy = JSON.parse(configString); 
+						if(_.isEmpty(lastModifiedWorkspaceAppBy))
+							lastModifiedWorkspaceAppBy = {
+								KeyValueDatabase: [],
+								TrainTypeConfig: [],
+								ScrumGroupAndPortfolioConfig:[],
+								WorkspaceAppPermissionConfig:[],
+								EnableHorizontal: [],
+								HorizontalGroupingConfig:[]
+							};								
+						}
+					catch(e){ 
+						lastModifiedWorkspaceAppBy = {
+							KeyValueDatabase: [],
+							TrainTypeConfig: [],
+							ScrumGroupAndPortfolioConfig:[],
+							WorkspaceAppPermissionConfig:[],
+							EnableHorizontal: [],
+							HorizontalGroupingConfig:[]
+						}; 
+					}
+					me.LastModifiedWorkspaceAppBy = lastModifiedWorkspaceAppBy;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveLastModifiedWorkspaceAppBy: function(lastModifiedByObj){
+			var me=this, s = {}, deferred = Q.defer();
+			_.each(lastModifiedByObj,function(value,key){
+				if(lastModifiedByObj[key].length > 10){
+					lastModifiedByObj[key] = _.sortBy(lastModifiedByObj[key],	function(o) { return new Date(o.date); });
+					lastModifiedByObj[key].splice(0, lastModifiedByObj[key].length-10);	//need to keep only 10 recent records			
+				}
+			});
+			s[LastModifiedWorkspaceAppByPrefName] = JSON.stringify(lastModifiedByObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
@@ -220,6 +330,18 @@
 			});
 			return deferred.promise;
 		},
+		saveConfigEditPermissionList: function(userListObj){
+			var me=this, s = {}, deferred = Q.defer();
+			s[EditPermissionListPrefName] = JSON.stringify(userListObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
@@ -232,6 +354,18 @@
 			});
 			return deferred.promise;
 		},
+		saveTrainTypeGroupingConfig: function(traintypeGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[TrainTypeGroupConfigPrefName] = JSON.stringify(traintypeGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
@@ -245,6 +379,7 @@
 				}),
 				me._loadScrumGroupConfig(),
 				me._loadHorizontalGroupingConfig(),
+				me._loadTrainTypeGroupingConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -2159,8 +2294,8 @@
 			var horizontalName = "";
 			if(me.isHorizontalView){
 				var horizontalInUrl = !me.isScopedToScrum && me.isHorizontalView && !me.ScopedTeamType;
-				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : _.keys(me.HorizontalGroupingConfig.groups).sort()[0]; 
-				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ? _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
+				horizontalName = horizontalInUrl ? me.Overrides.ScopedHorizontal : me.HorizontalTeamTypeInfo.horizontal;
+				horizontalName = horizontalName ? horizontalName :(!me.ScopedHorizontalPicker ?  _.keys(me.HorizontalGroupingConfig.groups).sort()[0] : me.ScopedHorizontalPicker.value) ;				
 			}
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
 			var releaseName = me.ReleaseRecord.data.Name;
@@ -2175,18 +2310,25 @@
 			var me = this;
 			
 			Ext.getCmp('cacheMessageContainer').removeAll();
+			Ext.getCmp('cacheButtonsContainer').removeAll();
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadData().then(function(){ 
 						if(!me.isScopedToScrum){
-							me.updateCache().fail(function(e){
-								alert(e);
-								console.log(e);
-							});								
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script						
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || (me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){
+								me.updateCache().fail(function(e){
+									alert(e);
+									console.log(e);
+								});
+							}							
 						}
 					});
 				}else{
 					me.renderCacheMessage();
+					me.renderGetLiveDataButton();
 				}
 			});
 		},
@@ -2194,21 +2336,27 @@
 			var me = this;
 			
 			Ext.getCmp('cacheMessageContainer').removeAll();
+			Ext.getCmp('cacheButtonsContainer').removeAll();
 			return me.getCache().then(function(cacheHit){
 				if(!cacheHit){
 					return me.loadRemainingConfiguration()
 						.then(function(){return me.loadData(); })
 						.then(function(){ 
-							if(!me.isScopedToScrum){
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script							
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || (me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){
 								me.updateCache().fail(function(e){
 									alert(e);
-									console.log(e);
+									console.log(e); 
 								});								
 							}
 						});
 				}else{
-					me.applyScopingOverrides();
+					if(me.isHorizontalView) me.applyProjectFilters();
+					else me.applyScopingOverrides();
 					me.renderCacheMessage();
+					me.renderGetLiveDataButton();
 				}
 			});
 		},
@@ -2217,7 +2365,14 @@
 			return Q.all([
 				me.isHorizontalView ? me._loadHorizontalGroupingConfig() : Q(),
 				me.loadReleases()
-			]);
+			])
+			.then(function(){
+				if(me.isHorizontalView && !me.isStandalone){
+					me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
+					me.HorizontalTeamTypeInfo =  me.getHorizontalTeamTypeInfoFromProjectName(me.ProjectRecord.data.Name);
+					me.applyScopingOverrides();
+				}
+			});
 		},
 		launch: function() {
 			var me = this;
@@ -2232,7 +2387,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			.then(function(){ return me.registerCustomAppId();  })
+			// .then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -2272,8 +2427,8 @@
 		loadRemainingConfiguration: function(){
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
-			me.isScopedToScrum = (me.ProjectRecord.data.Children.Count === 0);			
-			
+			//for horizontal view you want to make sure that projects from all the trains are loaded not just that project
+			me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
@@ -2354,10 +2509,10 @@
 			
 			//the following code validates URL overrides and sets defaults for viewing projects/horizontals/scrumGroups
 			if(!me.isScopedToScrum){
-				me.ScopedTeamType = me.Overrides.TeamName || ''; //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
+				me.ScopedTeamType = me.Overrides.TeamName || (me.isHorizontalView && !me.isStandalone ? me.HorizontalTeamTypeInfo.teamType : '' ); //could be a teamTypeComponent (for horizontal mode) or scrumName (for vertical mode)
 				if(me.isHorizontalView){
 					if(me.ScopedTeamType){
-						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not a valid teamType';
+						if(!_.contains(me.getAllHorizontalTeamTypeComponents(), me.ScopedTeamType)) throw me.ScopedTeamType + ' is not configured as horizontal teamType';
 						me.ScopedHorizontal = me.teamTypeComponentInWhichHorizontal(me.ScopedTeamType);
 					}
 					else me.ScopedHorizontal = me.Overrides.ScopedHorizontal || _.keys(me.HorizontalGroupingConfig.groups).sort()[0];
@@ -2596,7 +2751,7 @@
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
-		renderUpdateCache: function(){
+		renderGetLiveDataButton: function(){
 			var me=this;
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
 				xtype:'button',
@@ -2605,18 +2760,26 @@
 					click: function(){
 						me.setLoading('Pulling Live Data, please wait');
 						Ext.getCmp('cacheMessageContainer').removeAll();
-						return me.loadRemainingConfiguration()
-							.then(function(){return me.loadData(); })
-							.then(function(){	return me.renderVisuals();})
-							.then(function(){ 
-								//NOTE: not returning promise here, performs in the background!
+						return Q.all([
+							me.isHorizontalView ? Q() : me.loadRemainingConfiguration()
+						])
+						.then(function(){ return me.loadData() ; }) 
+						.then(function(){	return me.renderVisuals();})
+						.then(function(){ 
+							//NOTE: not returning promise here, performs in the background!
+							//dont want to cache in the horizontal view if only a team is selected
+							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script
+							Ext.getCmp('cacheButtonsContainer').removeAll();							
+							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || ( me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
+							if(doCaching){								
 								me.updateCache().fail(function(e){
 									alert(e);
 									console.log(e);
 								});
-							})
-							.then(function(){ me.setLoading(false); });			
-					}
+							}
+						})
+						.then(function(){ me.setLoading(false); });			
+				}
 				}
 			});
 		},		
@@ -2669,7 +2832,7 @@
 					data: me.getTeamPickerValues()
 				}),
 				displayField:'Type',
-				value:'All',
+				value: me.isHorizontalView ? me.ScopedTeamType : 'All',
 				listeners: {
 					change:function(combo, newval, oldval){ if(newval.length===0) combo.setValue(oldval); },
 					select: me.teamPickerSelected.bind(me)
@@ -2739,13 +2902,13 @@
 			
 			// Conditionally loads controls
 			//if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
-			if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderUpdateCache();
+			//if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderGetLiveDataButton();
 			if(!me.ReleasePicker) me.renderReleasePicker();
 			if(!me.ScopedHorizontalPicker && !me.isScopedToScrum && me.isHorizontalView) me.renderHorizontalGroupPicker();
 			if(!me.TeamPicker && !me.isScopedToScrum) me.renderTeamPicker();
 			if(me.isStandalone){
 				me.ReleasePicker.hide();
-				me.UpdateCacheButton.hide();
+				if(me.UpdateCacheButton) me.UpdateCacheButton.hide();
 				if(me.ScopedHorizontalPicker) me.ScopedHorizontalPicker.hide();
 				if(me.TeamPicker) me.TeamPicker.hide();
 			}

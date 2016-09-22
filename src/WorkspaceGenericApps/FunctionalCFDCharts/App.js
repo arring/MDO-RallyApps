@@ -334,8 +334,8 @@
         /******************************************************* LAUNCH ********************************************************/
         launch: function() {
             var me = this;
-            me.initDisableResizeHandle();
-            me.initFixRallyDashboard();
+            // me.initDisableResizeHandle();
+            // me.initFixRallyDashboard();
             me.setLoading('Loading Configuration');
 
             return Q.all([me.loadCfdAllTrainPreference(),

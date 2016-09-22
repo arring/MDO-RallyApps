@@ -32,8 +32,11 @@
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
-		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+		ScrumGroupConfigPrefName = 'intel-config-portfolio-locations', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-config-horizontal-grouping',//preference to store map of keywords in project names to horizontal
+		TrainTypeGroupConfigPrefName = 'intel-traintype-grouping-config',//preference to store map of train type
+		EditPermissionListPrefName = 'intel-workspaceapp-permission-list',//preference to store list of people who can save changes
+		LastModifiedWorkspaceAppByPrefName = 'intel-workspaceapp-modifiedby-list';//preference to save people who last modified the preferences
 	
 	//increase timeouts to 5 minutes since rally can be slow sometimes
 	var timeout = 300000;
@@ -206,6 +209,113 @@
 			});
 			return deferred.promise;
 		},
+		_loadTrainTypeGroupingConfig: function(){
+			/** TrainTypeGroupingConfig is this:
+			{
+				traintypes: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[TrainTypeGroupConfigPrefName], trainTypeGroupingConfig;
+					try{ trainTypeGroupingConfig = JSON.parse(configString); }
+					catch(e){ trainTypeGroupingConfig = {traintypes:{}}; }
+					me.TrainTypeGroupingConfig = trainTypeGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
+		_loadConfigEditPermissionList: function(){
+			/** ConfigEditPermissionList is this:
+			{
+				username: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				success: function(prefs) {
+					var permissionListString = prefs[EditPermissionListPrefName], ConfigEditPermissionList;
+					try{ configEditPermissionList = JSON.parse(permissionListString); }
+					catch(e){ configEditPermissionList = {username:{}}; }
+					me.ConfigEditPermissionList = configEditPermissionList;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_loadLastModifiedWorkspaceAppByPref: function(){
+			/**  */
+			/** me.LastModifiedWorkspaceAppBy is an array of these objects: 
+				{
+					KeyValueDatabase: {username:"",date:""},
+					TrainTypeConfig: {username:"",date:""},
+					ScrumGroupAndPortfolioConfig:{username:"",date:""},
+					WorkspaceAppPermissionConfig:{username:"",date:""},
+					EnableHorizontal: {username:"",date:""},
+					HorizontalGroupingConfig:{username:"",date:""}
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				success: function(prefs) {
+					var configString = prefs[LastModifiedWorkspaceAppByPrefName], lastModifiedWorkspaceAppBy;
+					try{ 
+						lastModifiedWorkspaceAppBy = JSON.parse(configString); 
+						if(_.isEmpty(lastModifiedWorkspaceAppBy))
+							lastModifiedWorkspaceAppBy = {
+								KeyValueDatabase: [],
+								TrainTypeConfig: [],
+								ScrumGroupAndPortfolioConfig:[],
+								WorkspaceAppPermissionConfig:[],
+								EnableHorizontal: [],
+								HorizontalGroupingConfig:[]
+							};								
+						}
+					catch(e){ 
+						lastModifiedWorkspaceAppBy = {
+							KeyValueDatabase: [],
+							TrainTypeConfig: [],
+							ScrumGroupAndPortfolioConfig:[],
+							WorkspaceAppPermissionConfig:[],
+							EnableHorizontal: [],
+							HorizontalGroupingConfig:[]
+						}; 
+					}
+					me.LastModifiedWorkspaceAppBy = lastModifiedWorkspaceAppBy;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveLastModifiedWorkspaceAppBy: function(lastModifiedByObj){
+			var me=this, s = {}, deferred = Q.defer();
+			_.each(lastModifiedByObj,function(value,key){
+				if(lastModifiedByObj[key].length > 10){
+					lastModifiedByObj[key] = _.sortBy(lastModifiedByObj[key],	function(o) { return new Date(o.date); });
+					lastModifiedByObj[key].splice(0, lastModifiedByObj[key].length-10);	//need to keep only 10 recent records			
+				}
+			});
+			s[LastModifiedWorkspaceAppByPrefName] = JSON.stringify(lastModifiedByObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
@@ -218,6 +328,18 @@
 			});
 			return deferred.promise;
 		},
+		saveConfigEditPermissionList: function(userListObj){
+			var me=this, s = {}, deferred = Q.defer();
+			s[EditPermissionListPrefName] = JSON.stringify(userListObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
@@ -230,6 +352,18 @@
 			});
 			return deferred.promise;
 		},
+		saveTrainTypeGroupingConfig: function(traintypeGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[TrainTypeGroupConfigPrefName] = JSON.stringify(traintypeGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
@@ -243,6 +377,7 @@
 				}),
 				me._loadScrumGroupConfig(),
 				me._loadHorizontalGroupingConfig(),
+				me._loadTrainTypeGroupingConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -2792,8 +2927,8 @@
 		
 		launch: function(){
 			var me = this;
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			me.setLoading('Loading Configuration');
 			return Q.all([me.loadReleases()])	
 			.then(function(){ 

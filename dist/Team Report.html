@@ -31,8 +31,11 @@
 	*/
 (function(){
 	var Ext = window.Ext4 || window.Ext,
-		ScrumGroupConfigPrefName = 'intel-portfolio-locations-config', //preference to store portfolio locations config for workspace
-		HorizontalGroupingConfigPrefName = 'intel-horizontal-grouping-config'; //preference to store map of keywords in project names to horizontal
+		ScrumGroupConfigPrefName = 'intel-config-portfolio-locations', //preference to store portfolio locations config for workspace
+		HorizontalGroupingConfigPrefName = 'intel-config-horizontal-grouping',//preference to store map of keywords in project names to horizontal
+		TrainTypeGroupConfigPrefName = 'intel-traintype-grouping-config',//preference to store map of train type
+		EditPermissionListPrefName = 'intel-workspaceapp-permission-list',//preference to store list of people who can save changes
+		LastModifiedWorkspaceAppByPrefName = 'intel-workspaceapp-modifiedby-list';//preference to save people who last modified the preferences
 	
 	//increase timeouts to 5 minutes since rally can be slow sometimes
 	var timeout = 300000;
@@ -205,6 +208,113 @@
 			});
 			return deferred.promise;
 		},
+		_loadTrainTypeGroupingConfig: function(){
+			/** TrainTypeGroupingConfig is this:
+			{
+				traintypes: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				success: function(prefs) {
+					var configString = prefs[TrainTypeGroupConfigPrefName], trainTypeGroupingConfig;
+					try{ trainTypeGroupingConfig = JSON.parse(configString); }
+					catch(e){ trainTypeGroupingConfig = {traintypes:{}}; }
+					me.TrainTypeGroupingConfig = trainTypeGroupingConfig;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
+		_loadConfigEditPermissionList: function(){
+			/** ConfigEditPermissionList is this:
+			{
+				username: {['keyword1', 'keyword2']}
+			}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				success: function(prefs) {
+					var permissionListString = prefs[EditPermissionListPrefName], ConfigEditPermissionList;
+					try{ configEditPermissionList = JSON.parse(permissionListString); }
+					catch(e){ configEditPermissionList = {username:{}}; }
+					me.ConfigEditPermissionList = configEditPermissionList;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		_loadLastModifiedWorkspaceAppByPref: function(){
+			/**  */
+			/** me.LastModifiedWorkspaceAppBy is an array of these objects: 
+				{
+					KeyValueDatabase: {username:"",date:""},
+					TrainTypeConfig: {username:"",date:""},
+					ScrumGroupAndPortfolioConfig:{username:"",date:""},
+					WorkspaceAppPermissionConfig:{username:"",date:""},
+					EnableHorizontal: {username:"",date:""},
+					HorizontalGroupingConfig:{username:"",date:""}
+				}
+			*/
+			var me=this, deferred = Q.defer();
+			Rally.data.PreferenceManager.load({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				success: function(prefs) {
+					var configString = prefs[LastModifiedWorkspaceAppByPrefName], lastModifiedWorkspaceAppBy;
+					try{ 
+						lastModifiedWorkspaceAppBy = JSON.parse(configString); 
+						if(_.isEmpty(lastModifiedWorkspaceAppBy))
+							lastModifiedWorkspaceAppBy = {
+								KeyValueDatabase: [],
+								TrainTypeConfig: [],
+								ScrumGroupAndPortfolioConfig:[],
+								WorkspaceAppPermissionConfig:[],
+								EnableHorizontal: [],
+								HorizontalGroupingConfig:[]
+							};								
+						}
+					catch(e){ 
+						lastModifiedWorkspaceAppBy = {
+							KeyValueDatabase: [],
+							TrainTypeConfig: [],
+							ScrumGroupAndPortfolioConfig:[],
+							WorkspaceAppPermissionConfig:[],
+							EnableHorizontal: [],
+							HorizontalGroupingConfig:[]
+						}; 
+					}
+					me.LastModifiedWorkspaceAppBy = lastModifiedWorkspaceAppBy;
+					deferred.resolve();
+				},
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},
+		saveLastModifiedWorkspaceAppBy: function(lastModifiedByObj){
+			var me=this, s = {}, deferred = Q.defer();
+			_.each(lastModifiedByObj,function(value,key){
+				if(lastModifiedByObj[key].length > 10){
+					lastModifiedByObj[key] = _.sortBy(lastModifiedByObj[key],	function(o) { return new Date(o.date); });
+					lastModifiedByObj[key].splice(0, lastModifiedByObj[key].length-10);	//need to keep only 10 recent records			
+				}
+			});
+			s[LastModifiedWorkspaceAppByPrefName] = JSON.stringify(lastModifiedByObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: LastModifiedWorkspaceAppByPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveScrumGroupConfig: function(scrumGroupConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[ScrumGroupConfigPrefName] = JSON.stringify(scrumGroupConfig); 
@@ -217,6 +327,18 @@
 			});
 			return deferred.promise;
 		},
+		saveConfigEditPermissionList: function(userListObj){
+			var me=this, s = {}, deferred = Q.defer();
+			s[EditPermissionListPrefName] = JSON.stringify(userListObj); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: EditPermissionListPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		saveHorizontalGroupingConfig: function(horizontalGroupingConfig){
 			var me=this, s = {}, deferred = Q.defer();
 			s[HorizontalGroupingConfigPrefName] = JSON.stringify(horizontalGroupingConfig); 
@@ -229,6 +351,18 @@
 			});
 			return deferred.promise;
 		},
+		saveTrainTypeGroupingConfig: function(traintypeGroupingConfig){
+			var me=this, s = {}, deferred = Q.defer();
+			s[TrainTypeGroupConfigPrefName] = JSON.stringify(traintypeGroupingConfig); 
+			Rally.data.PreferenceManager.update({
+				workspace: me.getContext().getWorkspace()._ref,
+				filterByName: TrainTypeGroupConfigPrefName,
+				settings: s,
+				success: deferred.resolve,
+				failure: deferred.reject
+			});
+			return deferred.promise;
+		},		
 		configureIntelRallyApp: function(){
 			var me=this;
 			me.BaseUrl = Rally.environment.getServer().getBaseUrl(); //is "" when in custom app iframe
@@ -242,6 +376,7 @@
 				}),
 				me._loadScrumGroupConfig(),
 				me._loadHorizontalGroupingConfig(),
+				me._loadTrainTypeGroupingConfig(),
 				me._loadScheduleStates()
 			]);
 		},
@@ -1036,7 +1171,7 @@
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
 		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
-		BASE_URL = Rally.environment.getServer().getBaseUrl() + '/slm/webservice/v2.0',
+		BASE_URL =  Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
 		
 		MAX_TEXT_LENGTH = 65536,
 		MAX_STRING_LENGTH = 256,
@@ -3327,6 +3462,13 @@
 			{name: 'RealVelocity', type:'number'}
 		]
 	});
+	Ext.define('IntelTeamReportMiniDI', {
+		extend: 'Ext.data.Model',
+		fields: [
+				{name: 'title', type: 'string'},
+				{name: 'userStories', type: 'number'}
+		]
+	});	
 	Ext.define('IntelTeamCommits', {
 		extend: 'Ext.data.Model',
 		fields: [
@@ -5208,13 +5350,14 @@
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
-			return [{
+	
+			me.miniDataIntegrityRecord =  [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
 					if((item.data.Release || {}).Name !== releaseName) return false;
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
-				})
+				}).length || 0
 			},/* {
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
@@ -5229,7 +5372,7 @@
 					if((item.data.Release || {}).Name !== releaseName) return false;
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return !item.data.Iteration; 
-				})
+				}).length || 0
 			},{
 				title: 'Stories in Iteration not attached to Release',
 				userStories: _.filter(totalUserStories,function(item){ 
@@ -5237,7 +5380,7 @@
 					if(!item.data.Iteration) return false;
 					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
-				})
+				}).length || 0
 			},{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
@@ -5247,8 +5390,9 @@
 						!item.data[lowestPortfolioItem].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 					if(item.data.ScheduleState == 'Accepted') return false;
 					return new Date(item.data[lowestPortfolioItem].PlannedEndDate) < new Date(item.data.Iteration.StartDate);
-				})
+				}).length || 0
 			}];
+			return me.miniDataIntegrityRecord;
 		},
 
 		/**___________________________________ RISKS STUFF ___________________________________**/	
@@ -5457,8 +5601,13 @@
 				promises = [],
 				isEditingDeps = me.isEditing(me.PredecessorGrid) || me.isEditing(me.SuccessorGrid);
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.syncRisks(me.Risks);
-			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore)
+			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore){
 				if(me.VelocityGrid && me.VelocityGrid.store) me.VelocityGrid.store.intelUpdate();
+				if(me.DataIntegrityGrid && me.DataIntegrityGrid.store) {
+					 me.DataIntegrityGrid.store.intelUpdate();
+				}
+			}
+				
 			if(!me.isEditingTeamCommits && me.PortfolioItemStore && me.UserStoryStore)
 				if(me.TeamCommitsGrid && me.TeamCommitsGrid.store) me.TeamCommitsGrid.store.intelUpdate();
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
@@ -5552,6 +5701,7 @@
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(message);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(message);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(message);
+			if(me.DataIntegrityGrid) me.DataIntegrityGrid.setLoading(message);
 		},	
 		removeLoadingMasks: function(){
 			var me=this,
@@ -5561,12 +5711,14 @@
 			if(me.RisksGrid && !me.RisksGrid.hasPendingEdits()) me.RisksGrid.setLoading(false);
 			if(me.PredecessorGrid && !isEditingDeps) me.PredecessorGrid.setLoading(false);
 			if(me.SuccessorGrid && !isEditingDeps) me.SuccessorGrid.setLoading(false);
+			if(me.DataIntegrityGrid) me.DataIntegrityGrid.setLoading(false);
 		},	
 		refreshDataFunc: function(){
 			var me=this;
 			me.setLoadingMasks();
 			me.enqueue(function(unlockFunc){
 				me.reloadStores()
+					.then(function(){	me.getMiniDataIntegrityStoreData();	})
 					.then(function(){ return me.updateGrids(); })
 					.then(function(){ return me.checkForDuplicates(); })
 					.then(function(){ return me.showGrids(); })
@@ -5596,8 +5748,8 @@
 		launch: function(){
 			var me=this;
 			me.setLoading('Loading Configuration');
-			me.initDisableResizeHandle();
-			me.initFixRallyDashboard();
+			// me.initDisableResizeHandle();
+			// me.initFixRallyDashboard();
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
@@ -6526,7 +6678,7 @@
 						}, 0)
 					};
 				});
-			
+	
 			var velocityStore = Ext.create('Intel.lib.component.Store', {
 				data: iterationGroupTotals,
 				model:'IntelVelocity',
@@ -6758,10 +6910,34 @@
 						meta.tdCls += 'mini-data-integrity-num-cell';
 						if(val.length === 0) meta.tdCls += ' mini-data-integrity-green-cell';
 						else meta.tdCls += ' mini-data-integrity-red-cell';
-						return val.length; 
+						return val; 
 					}
 				}];
 			
+			var miniDataIntegrityStoreData = me.getMiniDataIntegrityStoreData();
+
+			var dataIntegrityStore = Ext.create('Intel.lib.component.Store', {
+					data: miniDataIntegrityStoreData,					
+					model:'IntelTeamReportMiniDI',
+					autoSync:true,
+					limit:Infinity,
+					disableMetaChangeEvent: true,
+					proxy: {
+						type:'intelsessionstorage',
+						id:'MiniDIProxy' + Math.random()
+					},					
+					intelUpdate: function(){
+						dataIntegrityStore.suspendEvents(true);
+						_.each(dataIntegrityStore.getRange(), function(dataIntegrityRecord){
+							var newVal = _.find(me.miniDataIntegrityRecord, { 'title': dataIntegrityRecord.data.title }).userStories || 0;
+							if(newVal != dataIntegrityRecord.data.userStories){
+							dataIntegrityRecord.set('userStories', newVal || 0);
+						}							
+							
+							});
+						dataIntegrityStore.resumeEvents();
+					}
+				});				
 			me.DataIntegrityGrid = me.down('#tcVelBoxRight').add({
 				xtype: 'grid',
 				cls: 'team-report-grid mini-data-integrity-grid rally-grid',
@@ -6790,13 +6966,7 @@
 					},
 					items: columns
 				},
-				store: Ext.create('Ext.data.Store', {
-					fields:[
-						{name: 'title', type: 'string'},
-						{name: 'userStories', type: 'auto'}
-					],
-					data: me.getMiniDataIntegrityStoreData()
-				}),
+				store: dataIntegrityStore,
 				enableEditing:false,
 				showPagingToolbar: false,
 				showRowActionsColumn:false,
@@ -6869,7 +7039,7 @@
 			/****************************** PREDECESSORS STUFF ***********************************************/				
 			me.PrececessorItemStores = {};
 			me.PredecessorItemGrids = {};
-			
+
 			var predecessorStore = Ext.create('Intel.lib.component.Store', {
 				data: Ext.clone(me.DependenciesParsedData.Predecessors),
 				autoSync:true,
