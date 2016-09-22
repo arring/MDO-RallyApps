@@ -266,7 +266,7 @@
 								WorkspaceAppPermissionConfig:[],
 								EnableHorizontal: [],
 								HorizontalGroupingConfig:[]
-							} 						
+							};								
 						}
 					catch(e){ 
 						lastModifiedWorkspaceAppBy = {
@@ -276,7 +276,7 @@
 							WorkspaceAppPermissionConfig:[],
 							EnableHorizontal: [],
 							HorizontalGroupingConfig:[]
-						} 
+						}; 
 					}
 					me.LastModifiedWorkspaceAppBy = lastModifiedWorkspaceAppBy;
 					deferred.resolve();
@@ -292,7 +292,7 @@
 					lastModifiedByObj[key] = _.sortBy(lastModifiedByObj[key],	function(o) { return new Date(o.date); });
 					lastModifiedByObj[key].splice(0, lastModifiedByObj[key].length-10);	//need to keep only 10 recent records			
 				}
-			})
+			});
 			s[LastModifiedWorkspaceAppByPrefName] = JSON.stringify(lastModifiedByObj); 
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
@@ -318,7 +318,6 @@
 		saveConfigEditPermissionList: function(userListObj){
 			var me=this, s = {}, deferred = Q.defer();
 			s[EditPermissionListPrefName] = JSON.stringify(userListObj); 
-			debugger;
 			Rally.data.PreferenceManager.update({
 				workspace: me.getContext().getWorkspace()._ref,
 				filterByName: EditPermissionListPrefName,

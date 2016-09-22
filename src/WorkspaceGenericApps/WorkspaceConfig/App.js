@@ -73,7 +73,11 @@
 					return me._loadConfigEditPermissionList();
 				})
 				.then(function(){
-					me.canEdit = me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1 ? true: false;
+					if(_.isEmpty(me.ConfigEditPermissionList.username)){
+						me.canEdit = false;
+					}else{
+						me.canEdit = (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+					}
 				})
 				.then(function(){ return me.loadAllProjects(); })
 				.then(function(allProjects){
@@ -606,8 +610,8 @@
 							listeners:{ 
 								click: function(){
 									var errorMessage = [];
-									var userListRecords = me.ConfigEditPermissionListStore.getRange(),
-										userListRecords = _.filter(userListRecords,function(user){ return user.data.username;}),
+									var userListRecordsObj = me.ConfigEditPermissionListStore.getRange(),
+										userListRecords = _.filter(userListRecordsObj,function(user){ return user.data.username;}),
 										userListData = _.map(userListRecords, function(email){
 											return {
 												username: email.data.username
@@ -748,16 +752,6 @@
 			}];			
 			var gridConfigs = [{
 				xtype: 'grid',
-				id:'grid_modified_keyValueDatabase',
-				header: { text:"KeyValueDatabase Revision"},
-				store: keyValueDatabase_modified_store
-				},{
-				xtype: 'grid',
-				id:'grid_modified_trainTypeConfig',
-				header: {	text:"TrainTypeConfig Revision"	},
-				store: trainTypeConfig_modified_store
-				},{
-				xtype: 'grid',
 				id:'grid_modified_scrumGroupAndPortfolioConfig',
 				header: {	text:"ScrumGroupAndPortfolioConfig Revision"},				
 				store: scrumGroupAndPortfolioConfig_modified_store
@@ -768,15 +762,25 @@
 				store: workspaceAppPermissionConfig_modified_store
 				},{
 				xtype: 'grid',
-				id:'grid_modified_enableHorizontal',
-				header: { text:"EnableHorizontal Revision"},				
-				store: enableHorizontal_modified_store
-				},{
-				xtype: 'grid',
 				id:'grid_modified_horizontalGroupingConfig',
 				header: { text:"HorizontalGroupingConfig Revision"},				
 				store: horizontalGroupingConfig_modified_store
-			}];
+				},{
+				xtype: 'grid',
+				id:'grid_modified_keyValueDatabase',
+				header: { text:"KeyValueDatabase Revision"},
+				store: keyValueDatabase_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_trainTypeConfig',
+				header: {	text:"TrainTypeConfig Revision"	},
+				store: trainTypeConfig_modified_store
+				},{
+				xtype: 'grid',
+				id:'grid_modified_enableHorizontal',
+				header: { text:"EnableHorizontal Revision"},				
+				store: enableHorizontal_modified_store
+				}];
 			
 			return Q.all(_.map(gridConfigs, function(gridConfig){
 				gridConfig.emptyText = '';
