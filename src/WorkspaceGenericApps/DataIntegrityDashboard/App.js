@@ -320,7 +320,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = true;// me.getSetting('Horizontal');
+			me.isHorizontalView = me.getSetting('Horizontal');
 			// me.initDisableResizeHandle();
 			// me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -498,7 +498,6 @@
 					else filteredProjects = me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID] || [];
 				}
 			}
-			debugger;
 			me.FilteredLeafProjects = filteredProjects;
 			return Q();
 		},

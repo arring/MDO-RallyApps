@@ -2387,7 +2387,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			// .then(function(){ return me.registerCustomAppId();  })
+			.then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
