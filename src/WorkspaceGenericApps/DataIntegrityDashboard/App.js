@@ -320,7 +320,7 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = me.getSetting('Horizontal');
+			me.isHorizontalView = true;// me.getSetting('Horizontal');
 			// me.initDisableResizeHandle();
 			// me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
@@ -330,7 +330,7 @@
 			me.loadCacheIndependentConfig()
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
 			.then(function(){ return me.loadUI(); })
-			// .then(function(){ return me.registerCustomAppId();  })
+			.then(function(){ return me.registerCustomAppId();  })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -498,6 +498,7 @@
 					else filteredProjects = me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID] || [];
 				}
 			}
+			debugger;
 			me.FilteredLeafProjects = filteredProjects;
 			return Q();
 		},
