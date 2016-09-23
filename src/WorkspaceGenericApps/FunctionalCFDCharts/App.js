@@ -337,7 +337,6 @@
             // me.initDisableResizeHandle();
             // me.initFixRallyDashboard();
             me.setLoading('Loading Configuration');
-
             return Q.all([me.loadCfdAllTrainPreference(),
                 me.loadAppsPreference().then(function(appsPref) {
                     me.AppsPref = appsPref; //cant cache. per user basis
@@ -348,8 +347,6 @@
                 .then(function() { me.setLoading(false); })
                 .done();
         },
-
-
         /**************************************************** RENDERING Navbar ******************************************/
         renderDeleteCache: function() {
             var me = this;
