@@ -59,8 +59,6 @@
 		/******************************************************* LAUNCH ********************************************************/	
 		launch: function(){
 			var me = this;
-		/* 	me.initDisableResizeHandle();
-			me.initFixRallyDashboard(); */
 			me.setLoading('Loading Configuration');
 			me.currentUser = me.getContext().getUser().UserName;
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
@@ -73,10 +71,9 @@
 					return me._loadConfigEditPermissionList();
 				})
 				.then(function(){
-					if(_.isEmpty(me.ConfigEditPermissionList.username)){
-						me.canEdit = false;
-					}else{
-						me.canEdit = (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+					me.canEdit = !_.isEmpty(me.ConfigEditPermissionList.username) && (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+					if (me.canEdit === false){
+						me.hideGearButtonAndCustomAppPanel();
 					}
 				})
 				.then(function(){ return me.loadAllProjects(); })

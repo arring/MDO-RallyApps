@@ -1494,9 +1494,18 @@
 			makes app as large as screen, without the padding/margin. 
 			Makes it look more like a built-in rally app instead of a custom app.
 			NOTE: as rally changes their interface overtime, this mixin will have to change as well to compensate for it.
+			This changed once and all the classes names got changes. Thats why its commented out. 
 		*/
+		hideGearButtonAndCustomAppPanel: function(){
+			var me = this;
+			//hide the gear button for the first panel that has the App name
+			Ext.get(window.frameElement).up('#content').down('.smb-Header').dom.querySelectorAll('.smb-HeaderGroupContainer--right')[0].style.display = 'none';
+			//hides the whole custom html panel 
+			Ext.get(window.frameElement).up('#content').down('.smb-Grid').down('.smb-Header').dom.style.display ='none';			
+		
+		},
 		_fixRallyDashboard: function(){ 
-			if(window && window.frameElement){
+		/*	if(window && window.frameElement){
 				var me=this,
 					bottomEl = Ext.get(window.frameElement),
 					portlet = bottomEl.up('.x-portlet'), 
@@ -1535,35 +1544,35 @@
 				dashboard.dom.style.padding = "0 2px 0 2px";
 				titleBar.dom.style.padding = "2px";
 				titleBar.dom.style.margin = "0";
-			}
+			} */
 		},		
 		initFixRallyDashboard: function(){ 
-			var me=this;
+/*		var me=this;
 			if(me.addWindowEventListener){
 				me.addWindowEventListener('resize', function(){ me._fixRallyDashboard(); });
 			}
-			me._fixRallyDashboard();
+			me._fixRallyDashboard(); */
 		},
 
 		/** 
 			hides the draggable resize handle from under the app 
 		*/
 		_disableResizeHandle: function(){ 
-			var me=this, handle;
+/*		var me=this, handle;
 			if(window && window.frameElement){
 				handle = Ext.get(window.frameElement).up('.x-portlet').down('.x-resizable-handle');
 				if(handle) {
 					handle.hide();
 					handle.dom.onshow = function(){ if(handle) handle.hide(); };
 				}
-			}
+			} */
 		},	
 		initDisableResizeHandle: function(){
-			var me=this;
+/*		var me=this;
 			if(me.addWindowEventListener){
 				me.addWindowEventListener('resize', function(){ me._disableResizeHandle(); });
 			}
-			me._disableResizeHandle();
+			me._disableResizeHandle(); */
 		}
 	});
 }());
@@ -2331,8 +2340,6 @@
 		/******************************************************* LAUNCH ********************************************************/	
 		launch: function(){
 			var me = this;
-		/* 	me.initDisableResizeHandle();
-			me.initFixRallyDashboard(); */
 			me.setLoading('Loading Configuration');
 			me.currentUser = me.getContext().getUser().UserName;
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
@@ -2345,10 +2352,9 @@
 					return me._loadConfigEditPermissionList();
 				})
 				.then(function(){
-					if(_.isEmpty(me.ConfigEditPermissionList.username)){
-						me.canEdit = false;
-					}else{
-						me.canEdit = (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+					me.canEdit = !_.isEmpty(me.ConfigEditPermissionList.username) && (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+					if (me.canEdit === false){
+						me.hideGearButtonAndCustomAppPanel();
 					}
 				})
 				.then(function(){ return me.loadAllProjects(); })
