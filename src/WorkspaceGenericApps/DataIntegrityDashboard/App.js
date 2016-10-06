@@ -1412,26 +1412,24 @@
 						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
-				},
-					/*US436545
-				{
-				 showIfLeafProject:true,
-				 howIfHorizontalMode:true,
-				 title: 'Improperly Sized Stories',
-				 id: 'grid-improperly-sized-stories',
-				 model: 'UserStory',
-				 columns: defaultUserStoryColumns.concat([{
-				 text:'PlanEstimate',
-				 dataIndex:'PlanEstimate',
-				 tdCls:'editor-cell'
-				 }]),
-				 side: 'Left',
-				 filterFn:function(item){
-				 	if((item.data.Release || {}).Name !== releaseName) return false;
-				 		var pe = item.data.PlanEstimate;
-				 		return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
-				 	}
-				 },*/
+				},/*US436545{
+                    showIfLeafProject:true,
+                    showIfHorizontalMode:true,
+                    title: 'Improperly Sized Stories',
+                    id: 'grid-improperly-sized-stories',
+                    model: 'UserStory',
+                    columns: defaultUserStoryColumns.concat([{
+                        text:'PlanEstimate',
+                        dataIndex:'PlanEstimate',
+                        tdCls:'editor-cell'
+                    }]),
+                    side: 'Left',
+                    filterFn:function(item){
+                        if((item.data.Release || {}).Name !== releaseName) return false;
+                        var pe = item.data.PlanEstimate;
+                        return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
+                    }
+                },*/
 				{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
