@@ -298,8 +298,19 @@
 				currentRelease: me.ReleaseRecord,
 				listeners: { select: me.releasePickerSelected.bind(me) }
 			});
-		},	
-		
+		},
+
+		/***test***/
+
+		getGridWidth: function(columns){
+			var me = this;
+
+			return Math.min(
+				_.reduce(columns, function(sum, column){ return sum + column.width; }, 2),
+				window.innerWidth - 2
+			);
+		},
+
 		/************************************************************* RENDER ********************************************************************/
 	
 		renderGrid: function(){
@@ -484,6 +495,8 @@
 			//finally build the grid
 			me.down('#gridContainer').add({
 				xtype: 'grid',
+				scroll:'both',
+				resizable:false,
 				header: {
 					items: [{
 						xtype:'container',
@@ -494,7 +507,8 @@
 					stripeRows: false,
 					preserveScrollOnRefresh:true
 				},
-				width: _.reduce(columns, function(sum, column){ return sum + column.width; }, 2),
+				width:me.getGridWidth(columns),
+
 				columns: {
 					defaults: {
 						text:'',

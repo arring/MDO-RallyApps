@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="get-project-oids/" kind="src" path="scripts"/>
+	<classpathentry kind="src" path="scripts/get-project-oids"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/AgingStandard"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/DataIntegrityDashboard"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/EstimationBoard"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/FunctionalCFDCharts"/>
+	<classpathentry excluding="component/swimlane/|mixin/|component/|vendor/|misc/|chart/|resource/" kind="src" path="src/WorkspaceGenericApps/lib"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/chart"/>
+	<classpathentry excluding="swimlane/" kind="src" path="src/WorkspaceGenericApps/lib/component"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/component/swimlane"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/misc"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/mixin"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/resource"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/lib/vendor"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/PortfolioItemCFDCharts"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/PortfolioNavigator/ChartAndGrid"/>
+	<classpathentry excluding="lib/" kind="src" path="src/WorkspaceGenericApps/PortfolioNavigator/PortfolioHierarchy"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/PortfolioNavigator/PortfolioHierarchy/lib"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/ArtCommitMatrix"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/lib/component/grid"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/lib/mixin"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/lib/model"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/lib/resource"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/PRIVATE_RiskMasterEditor"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/PRIVATE_SAFeCustomFieldMasterEditor"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/RisksAndDepsTracking"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/RiskSwimlanes"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/SAFe/TeamReport"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/ScrumGroupCFDCharts"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/STDNAndCI"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/TrainPerformanceDashboard"/>
+	<classpathentry kind="src" path="src/WorkspaceGenericApps/WorkspaceConfig"/>
+	<classpathentry kind="src" path="test/test-key-value-db"/>
+	<classpathentry kind="src" path="test/test-risk-db"/>
+	<classpathentry kind="con" path="org.eclipse.wst.jsdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="output" path=""/>
+</classpath>

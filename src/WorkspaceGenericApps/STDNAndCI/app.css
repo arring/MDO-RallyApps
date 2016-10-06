@@ -71,7 +71,7 @@
 
 .grid-container > span > div {
 	display:flex !important;
-	justify-content:center; 
+	justify-content:center;
 }
 a:visited {
     color: #337ec6;

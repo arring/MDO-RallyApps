@@ -187,7 +187,7 @@
 				
 			comboFilter.setValue();
 			colFilter.filterValues = [];
-			while(recordCount--) colFilter._applyToGridView(grid, 'removeRowCls', [recordCount, colFilter.hideClass]); 
+			while(recordCount--) colFilter._applyToGridView(grid, 'removeRowCls', [recordCount, colFilter.hideClass]);
 		}
 	});
 }());
