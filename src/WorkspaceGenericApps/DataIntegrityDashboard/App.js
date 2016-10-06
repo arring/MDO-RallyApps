@@ -371,7 +371,7 @@
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
 			//for horizontal view you want to make sure that projects from all the trains are loaded not just that project
-			me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);			
+			me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);
 			return me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
@@ -615,13 +615,17 @@
 					pageSize: 200,
 					data: [].concat.apply([], _.invoke(stores, 'getRange'))
 				});
-					/* US436545: Remove this to get back improperly sized user stories */
+
+				/* US436545: Remove this to get back improperly sized user stories */
 				_.each(me.UserStoryStore.getRange(), function(item,key){
-					var pe = item.data.PlanEstimate;
-					if(pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16){
-						me.UserStoryStore.removeAt(key);
+					if(key < me.UserStoryStore.count()  && me.UserStoryStore.getAt(key).data) {
+						var pe = me.UserStoryStore.getAt(key).data.PlanEstimate;
+						if (pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16) {
+							me.UserStoryStore.removeAt(key);
+						}
 					}
-				});				
+				});
+
 				me.fixRawUserStoryAttributes();
 			});
 		},
@@ -1404,28 +1408,29 @@
 						tdCls:'editor-cell'
 					}]),
 					side: 'Left',
-					filterFn:function(item){ 
+					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
-				},/* US436545{
-					showIfLeafProject:true,
-					showIfHorizontalMode:true,
-					title: 'Improperly Sized Stories',
-					id: 'grid-improperly-sized-stories',
-					model: 'UserStory',
-					columns: defaultUserStoryColumns.concat([{
-						text:'PlanEstimate',
-						dataIndex:'PlanEstimate',
-						tdCls:'editor-cell'
-					}]),
-					side: 'Left',
-					filterFn:function(item){
-						if((item.data.Release || {}).Name !== releaseName) return false;
-						var pe = item.data.PlanEstimate;
-						return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
-					}
-				}, */{
+				},/*US436545{
+                    showIfLeafProject:true,
+                    showIfHorizontalMode:true,
+                    title: 'Improperly Sized Stories',
+                    id: 'grid-improperly-sized-stories',
+                    model: 'UserStory',
+                    columns: defaultUserStoryColumns.concat([{
+                        text:'PlanEstimate',
+                        dataIndex:'PlanEstimate',
+                        tdCls:'editor-cell'
+                    }]),
+                    side: 'Left',
+                    filterFn:function(item){
+                        if((item.data.Release || {}).Name !== releaseName) return false;
+                        var pe = item.data.PlanEstimate;
+                        return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
+                    }
+                },*/
+				{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Stories in Release without Iteration',
