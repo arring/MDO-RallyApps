@@ -561,7 +561,7 @@
 			if(!me.isEditingVelocity && me.IterationStore && me.UserStoryStore){
 				if(me.VelocityGrid && me.VelocityGrid.store) me.VelocityGrid.store.intelUpdate();
 				if(me.DataIntegrityGrid && me.DataIntegrityGrid.store) {
-					 me.DataIntegrityGrid.store.intelUpdate();
+					me.DataIntegrityGrid.store.intelUpdate();
 				}
 			}
 				
@@ -705,87 +705,96 @@
 		launch: function(){
 			var me=this;
 			me.setLoading('Loading Configuration');
-			// me.initDisableResizeHandle();
-			// me.initFixRallyDashboard();
+			me.currentUser = me.getContext().getUser().UserName;
 			if(!me.getContext().getPermissions().isProjectEditor(me.getContext().getProject())) { //permission check
+				me.hideGearButtonAndCustomAppPanel();
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this project');
 				return;
 			} 
-			me.configureIntelRallyApp()
-				.then(function(){
-					var scopeProject = me.getContext().getProject();
-					return me.loadProject(scopeProject.ObjectID);
-				})
-				.then(function(scopeProjectRecord){
-					me.ProjectRecord = scopeProjectRecord;
-					return Q.all([
-						me.loadProjectsWithTeamMembers().then(function(projectsWithTeamMembers){
-							me.ProjectsWithTeamMembers = projectsWithTeamMembers;
-							me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
-							if(!me.ProjectsWithTeamMembers[me.ProjectRecord.data.ObjectID])
-								return Q.reject('Please scope to a project that has team members!');
-						}),
-						me.projectInWhichScrumGroup(me.ProjectRecord).then(function(scrumGroupRootRecord){
-							if(scrumGroupRootRecord){
-								me.ScrumGroupRootRecord = scrumGroupRootRecord;
-								return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
-									.then(function(scrumGroupPortfolioProject){
-										me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
-									});
-							} 
-							else me.ProjectNotInScrumGroup = true;
-						}),
-						me.loadAllScrumGroups().then(function(scrumGroupRootRecords){
-							me.AllScrumGroupRootRecords = scrumGroupRootRecords;
-							me.ScrumGroupNames = _.sortBy(_.map(scrumGroupRootRecords, 
-								function(sgr){ return {Name: me.getScrumGroupName(sgr)}; }),
-								function(sgn){ return sgn.Name; });
-						}),
-						me.loadAppsPreference()
-							.then(function(appsPref){
-								me.AppsPref = appsPref;
-								me.AppsPref.refresh = me.AppsPref.refresh || 60;
-								var twelveWeeks = 1000*60*60*24*7*12;
-								return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
-							})
-							.then(function(releaseRecords){
-								me.ReleaseRecords = releaseRecords;
-								var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
-								if(currentRelease){
-									me.ReleaseRecord = currentRelease;
-									me.WorkweekData = me.getWorkweeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
-								}
-								else return Q.reject('This project has no releases.');
-							}),
-						me.getCustomAppObjectID('Intel.DataIntegrityDashboard.Vertical').then(function(objectID){
-							me.VerticalDataIntegrityDashboardObjectID = objectID;
-						}),
-						RiskDb.initialize()
-					]);
-				})
-				.then(function(){
-					if(me.ProjectNotInScrumGroup){
-						var projectOID = me.ProjectRecord.data.ObjectID;
-						if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
-							me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ 
-								return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; 
-							});
-							if(!me.ScrumGroupRootRecord) me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
+			Q.all([
+				me._loadConfigEditPermissionList()
+					.then(function(test){
+						me.canEdit = !_.isEmpty(me.ConfigEditPermissionList.username) && (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+						if (me.canEdit === false){
+							me.hideGearButtonAndCustomAppPanel();
+						}
+					}),
+				me.configureIntelRallyApp()
+			])	
+			.then(function(){
+				var scopeProject = me.getContext().getProject();
+				return me.loadProject(scopeProject.ObjectID);
+			})
+			.then(function(scopeProjectRecord){
+				me.ProjectRecord = scopeProjectRecord;
+				return Q.all([
+					me.loadProjectsWithTeamMembers().then(function(projectsWithTeamMembers){
+						me.ProjectsWithTeamMembers = projectsWithTeamMembers;
+						me.ProjectNames = _.map(projectsWithTeamMembers, function(project){ return {Name: project.data.Name}; });
+						if(!me.ProjectsWithTeamMembers[me.ProjectRecord.data.ObjectID])
+							return Q.reject('Please scope to a project that has team members!');
+					}),
+					me.projectInWhichScrumGroup(me.ProjectRecord).then(function(scrumGroupRootRecord){
+						if(scrumGroupRootRecord){
+							me.ScrumGroupRootRecord = scrumGroupRootRecord;
+							return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
+								.then(function(scrumGroupPortfolioProject){
+									me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+								});
 						} 
-						else me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
-						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
-							me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+						else me.ProjectNotInScrumGroup = true;
+					}),
+					me.loadAllScrumGroups().then(function(scrumGroupRootRecords){
+						me.AllScrumGroupRootRecords = scrumGroupRootRecords;
+						me.ScrumGroupNames = _.sortBy(_.map(scrumGroupRootRecords, 
+							function(sgr){ return {Name: me.getScrumGroupName(sgr)}; }),
+							function(sgn){ return sgn.Name; });
+					}),
+					me.loadAppsPreference()
+						.then(function(appsPref){
+							me.AppsPref = appsPref;
+							me.AppsPref.refresh = me.AppsPref.refresh || 60;
+							var twelveWeeks = 1000*60*60*24*7*12;
+							return me.loadReleasesAfterGivenDate(me.ProjectRecord, (new Date()*1 - twelveWeeks));
+						})
+						.then(function(releaseRecords){
+							me.ReleaseRecords = releaseRecords;
+							var currentRelease = me.getScopedRelease(releaseRecords, me.ProjectRecord.data.ObjectID, me.AppsPref);
+							if(currentRelease){
+								me.ReleaseRecord = currentRelease;
+								me.WorkweekData = me.getWorkweeksForDropdown(currentRelease.data.ReleaseStartDate, currentRelease.data.ReleaseDate);
+							}
+							else return Q.reject('This project has no releases.');
+						}),
+					me.getCustomAppObjectID('Intel.DataIntegrityDashboard.Vertical').then(function(objectID){
+						me.VerticalDataIntegrityDashboardObjectID = objectID;
+					}),
+					RiskDb.initialize()
+				]);
+			})
+			.then(function(){
+				if(me.ProjectNotInScrumGroup){
+					var projectOID = me.ProjectRecord.data.ObjectID;
+					if(me.AppsPref.projs[projectOID] && me.AppsPref.projs[projectOID].ScrumGroup){
+						me.ScrumGroupRootRecord = _.find(me.AllScrumGroupRootRecords, function(p){ 
+							return p.data.ObjectID == me.AppsPref.projs[projectOID].ScrumGroup; 
 						});
-					}
-				})
-				.then(function(){ 
-					me.setLoading(false);
-					me.setRefreshInterval(); 
-					return me.reloadEverything();
-				})
-				.fail(function(reason){ me.alert('ERROR', reason); })
-				.done();
+						if(!me.ScrumGroupRootRecord) me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
+					} 
+					else me.ScrumGroupRootRecord = me.AllScrumGroupRootRecords[0];
+					return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord).then(function(scrumGroupPortfolioProject){
+						me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
+					});
+				}
+			})
+			.then(function(){ 
+				me.setLoading(false);
+				me.setRefreshInterval(); 
+				return me.reloadEverything();
+			})
+			.fail(function(reason){ me.alert('ERROR', reason); })
+			.done();
 		},
 		
 		/**___________________________________ NAVIGATION AND STATE ___________________________________*/

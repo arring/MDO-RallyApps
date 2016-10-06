@@ -62,51 +62,52 @@
 			me.setLoading('Loading Configuration');
 			me.currentUser = me.getContext().getUser().UserName;
 			if(!me.getContext().getPermissions().isWorkspaceOrSubscriptionAdmin(me.getContext().getWorkspace())) { //permission check
+				me.hideGearButtonAndCustomAppPanel();
 				me.setLoading(false);
 				me.alert('ERROR', 'You do not have permissions to edit this workspace\'s settings!');
 				return;
 			} 
-			me.configureIntelRallyApp()
-				.then(function(){ 
-					return me._loadConfigEditPermissionList();
-				})
-				.then(function(){
-					me.canEdit = !_.isEmpty(me.ConfigEditPermissionList.username) && (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
-					if (me.canEdit === false){
-						me.hideGearButtonAndCustomAppPanel();
-					}
-				})
-				.then(function(){ return me.loadAllProjects(); })
-				.then(function(allProjects){
-					me.AllProjects = allProjects;
-					me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
-						function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
-						function(item){ return item.Name; });
-					me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
-						function(traintype){ return { TrainType: traintype}; }),
-						function(item){ return item.TrainType; });
-				})
-				.then(function(){
-					return KeyValueDb.getDatabaseProjectOID()
-						.then(function(projectOID){ me.DatabaseProjectObjectID = projectOID; })
-						.fail(function(){ me.DatabaseProjectObjectID = undefined; });
-				})
-				.then(function(){
-					me.setLoading(false);
-					me.renderChooseDatabaseProject();
-					me.renderTrainTypeConfig();
-					me.getScrumGroupPortfolioGridConfig();
-					me.renderScrumGroupPortfolioGrid();
-					me.renderScrumHorizontalGroupingKeywords();
-					if (me.canEdit) me.renderPermissionListGrid();
-					if (me.canEdit) me.getAndRenderModifiedByListGrid();
-					
-				})
-				.fail(function(reason){
-					me.setLoading(false);
-					me.alert('ERROR', reason);
-				})
-				.done();
+			Q.all([
+				me._loadConfigEditPermissionList()
+					.then(function(test){
+						me.canEdit = !_.isEmpty(me.ConfigEditPermissionList.username) && (me.ConfigEditPermissionList.username.indexOf(me.currentUser) > -1) ? true: false;
+						if (me.canEdit === false){
+							me.hideGearButtonAndCustomAppPanel();
+						}
+					}),
+				me.configureIntelRallyApp()
+			])
+			.then(function(){ return me.loadAllProjects(); })
+			.then(function(allProjects){
+				me.AllProjects = allProjects;
+				me.ProjectDataForStore = _.sortBy(_.map(me.AllProjects, 
+					function(project){ return { Name: project.data.Name, ObjectID: project.data.ObjectID}; }),
+					function(item){ return item.Name; });
+				me.TrainTypeStore = _.sortBy(_.map(me.TrainTypeGroupingConfig.traintypes, 
+					function(traintype){ return { TrainType: traintype}; }),
+					function(item){ return item.TrainType; });
+			})
+			.then(function(){
+				return KeyValueDb.getDatabaseProjectOID()
+					.then(function(projectOID){ me.DatabaseProjectObjectID = projectOID; })
+					.fail(function(){ me.DatabaseProjectObjectID = undefined; });
+			})
+			.then(function(){
+				me.setLoading(false);
+				me.renderChooseDatabaseProject();
+				me.renderTrainTypeConfig();
+				me.getScrumGroupPortfolioGridConfig();
+				me.renderScrumGroupPortfolioGrid();
+				me.renderScrumHorizontalGroupingKeywords();
+				if (me.canEdit) me.renderPermissionListGrid();
+				if (me.canEdit) me.getAndRenderModifiedByListGrid();
+				
+			})
+			.fail(function(reason){
+				me.setLoading(false);
+				me.alert('ERROR', reason);
+			})
+			.done();
 		},
 
 		/************************************************************* RENDER *******************************************/
