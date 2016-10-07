@@ -1,21 +1,21 @@
 {
-   "name": "Portfolio Hierarchy",
-   "className": "Intel.PortfolioNavigator.PortfolioHierarchy",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc3",
-   "javascript": [
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-      "../../lib/intel-rally-app.js",
-      "../../lib/mixin/pretty-alert.js",
-      "../../lib/mixin/async-queue.js",
-      "../../lib/mixin/user-apps-preference.js",
-      "../../lib/component/intel-combobox.js",
-      "../../lib/component/intel-fixed-combobox.js",
-      "lib/FittedUserStoryTreeItem.js",
-      "lib/FittedPortfolioItemTreeItem.js",
-      "App.js"
-   ],
-   "css": [
-      "app.css"
-   ]
+    "name": "Portfolio Hierarchy",
+    "className": "Intel.PortfolioNavigator.PortfolioHierarchy",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0rc3",
+    "javascript": [
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+        "../../lib/intel-rally-app.js",
+        "../../lib/mixin/pretty-alert.js",
+        "../../lib/mixin/async-queue.js",
+        "../../lib/mixin/user-apps-preference.js",
+        "../../lib/component/intel-combobox.js",
+        "../../lib/component/intel-fixed-combobox.js",
+        "lib/FittedUserStoryTreeItem.js",
+        "lib/FittedPortfolioItemTreeItem.js",
+        "App.js"
+    ],
+    "css": [
+        "app.css"
+    ]
 }

@@ -1,30 +1,30 @@
 {
-   "name": "STDN And CI",
-   "className": "Intel.STDNAndCI",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0",
-   "javascript": [
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
-      "../lib/intel-rally-app.js",
-      "../lib/mixin/window-listener.js",
-      "../lib/mixin/iframe-resize.js",
-      "../lib/mixin/pretty-alert.js",
-      "../lib/mixin/parallel-loader.js",
-      "../lib/mixin/user-apps-preference.js",
-      "../lib/mixin/horizontal-team-types.js",
-      "../lib/vendor/component-column.js",
-      "../lib/component/intel-combobox.js",
-      "../lib/component/intel-fixed-combobox.js",
-      "../lib/component/intel-release-picker.js",
-      "../lib/component/intel-session-storage.js",
-      "../lib/component/intel-store.js",
-      "../lib/component/intel-table-view.js",
-      "../lib/component/intel-component-column.js",
-      "App.js"
-   ],
-   "css": [
-      "../lib/css/base.css",
-      "app.css"
-   ]
+    "name": "STDN And CI",
+    "className": "Intel.STDNAndCI",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0",
+    "javascript": [
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
+        "../lib/intel-rally-app.js",
+        "../lib/mixin/window-listener.js",
+        "../lib/mixin/iframe-resize.js",
+        "../lib/mixin/pretty-alert.js",
+        "../lib/mixin/parallel-loader.js",
+        "../lib/mixin/user-apps-preference.js",
+        "../lib/mixin/horizontal-team-types.js",
+        "../lib/vendor/component-column.js",
+        "../lib/component/intel-combobox.js",
+        "../lib/component/intel-fixed-combobox.js",
+        "../lib/component/intel-release-picker.js",
+        "../lib/component/intel-session-storage.js",
+        "../lib/component/intel-store.js",
+        "../lib/component/intel-table-view.js",
+        "../lib/component/intel-component-column.js",
+        "App.js"
+    ],
+    "css": [
+        "../lib/css/base.css",
+        "app.css"
+    ]
 }

@@ -1,34 +1,34 @@
 {
-   "name": "SAFe Custom Field Editor",
-   "className": "Intel.SAFe.CustomFieldEditor",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc3",
-   "javascript": [
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-      "../../lib/intel-rally-app.js",
-      "../../lib/mixin/window-listener.js",
-      "../../lib/mixin/iframe-resize.js",
-      "../../lib/mixin/pretty-alert.js",
-      "../../lib/mixin/intel-workweek.js",
-      "../../lib/mixin/async-queue.js",
-      "../../lib/mixin/parallel-loader.js",
-      "../../lib/mixin/user-apps-preference.js",
-      "../../lib/vendor/component-column.js",
-      "../../lib/component/intel-combobox.js",
-      "../../lib/component/intel-fixed-combobox.js",
-      "../../lib/component/intel-release-picker.js",
-      "../../lib/component/intel-textarea.js",
-      "../../lib/component/intel-session-storage.js",
-      "../../lib/component/intel-component-column.js",
-      "../../lib/component/intel-store.js",
-      "../../lib/component/intel-cell-editing.js",
-      "../../lib/component/intel-table-view.js",
-      "../lib/model/intel-safe-models.js",
-      "App.js"
-   ],
-   "css": [
-      "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
-      "../../lib/css/base.css",
-      "app.css"
-   ]
+    "name": "SAFe Custom Field Editor",
+    "className": "Intel.SAFe.CustomFieldEditor",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0rc3",
+    "javascript": [
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+        "../../lib/intel-rally-app.js",
+        "../../lib/mixin/window-listener.js",
+        "../../lib/mixin/iframe-resize.js",
+        "../../lib/mixin/pretty-alert.js",
+        "../../lib/mixin/intel-workweek.js",
+        "../../lib/mixin/async-queue.js",
+        "../../lib/mixin/parallel-loader.js",
+        "../../lib/mixin/user-apps-preference.js",
+        "../../lib/vendor/component-column.js",
+        "../../lib/component/intel-combobox.js",
+        "../../lib/component/intel-fixed-combobox.js",
+        "../../lib/component/intel-release-picker.js",
+        "../../lib/component/intel-textarea.js",
+        "../../lib/component/intel-session-storage.js",
+        "../../lib/component/intel-component-column.js",
+        "../../lib/component/intel-store.js",
+        "../../lib/component/intel-cell-editing.js",
+        "../../lib/component/intel-table-view.js",
+        "../lib/model/intel-safe-models.js",
+        "App.js"
+    ],
+    "css": [
+        "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
+        "../../lib/css/base.css",
+        "app.css"
+    ]
 }

@@ -1,22 +1,22 @@
 {
-   "name": "Risk Master Editor",
-   "className": "Intel.SAFe.RiskMasterEditor",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc3",
-   "javascript": [
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-      "https://code.jquery.com/jquery-2.1.4.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
-      "../../lib/intel-rally-app.js",
-      "../../lib/resource/key-value-db.js",
-      "../../lib/mixin/pretty-alert.js",
-      "../lib/model/risk.js",
-      "../lib/resource/risk-db.js",
-      "App.js"
-   ],
-   "css": [
-      "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
-      "../../lib/css/base.css",
-      "app.css"
-   ]
+    "name": "Risk Master Editor",
+    "className": "Intel.SAFe.RiskMasterEditor",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0rc3",
+    "javascript": [
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+        "https://code.jquery.com/jquery-2.1.4.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.js",
+        "../../lib/intel-rally-app.js",
+        "../../lib/resource/key-value-db.js",
+        "../../lib/mixin/pretty-alert.js",
+        "../lib/model/risk.js",
+        "../lib/resource/risk-db.js",
+        "App.js"
+    ],
+    "css": [
+        "https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css",
+        "../../lib/css/base.css",
+        "app.css"
+    ]
 }

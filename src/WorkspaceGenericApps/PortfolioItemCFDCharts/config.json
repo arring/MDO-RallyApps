@@ -1,34 +1,34 @@
 {
-   "name": "PortfolioItem CFD Charts",
-   "className": "Intel.PortfolioItemCFDCharts",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0rc3",
-   "javascript": [
-      "https://code.jquery.com/jquery-2.1.1.js",
-      "https://code.highcharts.com/highcharts.src.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
-      "../lib/intel-rally-app.js",
-      "../lib/mixin/window-listener.js",
-      "../lib/mixin/iframe-resize.js",
-      "../lib/mixin/pretty-alert.js",
-      "../lib/mixin/intel-workweek.js",
-      "../lib/mixin/cfd-project-preference.js",
-      "../lib/mixin/user-apps-preference.js",
-      "../lib/mixin/parallel-loader.js",
-      "../lib/mixin/rally-release-color.js",
-      "../lib/mixin/cumulative-flow-chart-mixin.js",
-      "../lib/mixin/custom-app-objectid-register.js",
-      "../lib/component/intel-combobox.js",
-      "../lib/component/intel-fixed-combobox.js",
-      "../lib/component/intel-release-picker.js",
-      "../lib/component/intel-popup.js",
-      "../lib/component/intel-release-date-change-picker.js",
-      "../lib/chart/fast-cumulative-flow-calculator.js",
-      "App.js"
-   ],
-   "css": [
-      "../lib/css/base.css",
-      "app.css",
-      "../lib/css/intel-release-date-change-picker.css"
-   ]
+    "name": "PortfolioItem CFD Charts",
+    "className": "Intel.PortfolioItemCFDCharts",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0rc3",
+    "javascript": [
+        "https://code.jquery.com/jquery-2.1.1.js",
+        "https://code.highcharts.com/highcharts.src.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+        "../lib/intel-rally-app.js",
+        "../lib/mixin/window-listener.js",
+        "../lib/mixin/iframe-resize.js",
+        "../lib/mixin/pretty-alert.js",
+        "../lib/mixin/intel-workweek.js",
+        "../lib/mixin/cfd-project-preference.js",
+        "../lib/mixin/user-apps-preference.js",
+        "../lib/mixin/parallel-loader.js",
+        "../lib/mixin/rally-release-color.js",
+        "../lib/mixin/cumulative-flow-chart-mixin.js",
+        "../lib/mixin/custom-app-objectid-register.js",
+        "../lib/component/intel-combobox.js",
+        "../lib/component/intel-fixed-combobox.js",
+        "../lib/component/intel-release-picker.js",
+        "../lib/component/intel-popup.js",
+        "../lib/component/intel-release-date-change-picker.js",
+        "../lib/chart/fast-cumulative-flow-calculator.js",
+        "App.js"
+    ],
+    "css": [
+        "../lib/css/base.css",
+        "app.css",
+        "../lib/css/intel-release-date-change-picker.css"
+    ]
 }

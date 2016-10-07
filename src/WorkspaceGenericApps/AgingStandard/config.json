@@ -1,28 +1,28 @@
 {
-   "name": "Aging Standard",
-   "className": "Intel.AgingStandard",
-   "server": "https://rally1.rallydev.com",
-   "sdk": "2.0",
-   "javascript": [
-      "https://code.jquery.com/jquery-2.1.4.js",
-      "https://code.highcharts.com/highcharts.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
-      "../lib/intel-rally-app.js",
-      "../lib/mixin/window-listener.js",
-      "../lib/mixin/iframe-resize.js",
-      "../lib/mixin/pretty-alert.js",
-      "../lib/mixin/intel-workweek.js",
-      "../lib/mixin/cumulative-flow-chart-mixin.js",
-      "../lib/component/intel-fixed-combobox.js",
-      "../lib/component/intel-grid-column-filter.js",
-      "../lib/mixin/user-apps-preference.js",
-      "../lib/mixin/parallel-loader.js",
-      "../lib/mixin/custom-app-objectid-register.js",
-      "App.js"
-   ],
-   "css": [
-      "app.css",
-      "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css",
-      "https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css"
-   ]
+    "name": "Aging Standard",
+    "className": "Intel.AgingStandard",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.0",
+    "javascript": [
+        "https://code.jquery.com/jquery-2.1.4.js",
+        "https://code.highcharts.com/highcharts.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q.js",
+        "../lib/intel-rally-app.js",
+        "../lib/mixin/window-listener.js",
+        "../lib/mixin/iframe-resize.js",
+        "../lib/mixin/pretty-alert.js",
+        "../lib/mixin/intel-workweek.js",
+        "../lib/mixin/cumulative-flow-chart-mixin.js",
+        "../lib/component/intel-fixed-combobox.js",
+        "../lib/component/intel-grid-column-filter.js",
+        "../lib/mixin/user-apps-preference.js",
+        "../lib/mixin/parallel-loader.js",
+        "../lib/mixin/custom-app-objectid-register.js",
+        "App.js"
+    ],
+    "css": [
+        "app.css",
+        "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css",
+        "https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css"
+    ]
 }
