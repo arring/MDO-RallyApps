@@ -6757,8 +6757,9 @@
 				tooltipType:'title',
 				renderer:function(realVel, meta, record){
 					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.8) ? ' velocity-grid-warning-cell ' : '');
-					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*0.9) ? ' velocity-grid-error-cell ' : '');
-					return realVel;
+					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*0.9) ? ' velocity-grid-error-cell ' : '');					
+                    var perct = record.data.PlannedVelocity >0? (record.data.RealVelocity/record.data.PlannedVelocity)*100:0;                   
+                 return '<span title="' + perct + ' %">' + realVel + '</span>';
 				}
 			}];		
 			var velocityTotalColumns = [{	
@@ -6783,7 +6784,9 @@
 						}, 0);
 					meta.tdCls += ((real < planned*0.8) ? ' velocity-grid-warning-cell ' : '');
 					meta.tdCls += ((real === 0 || real > planned*0.9) ? ' velocity-grid-error-cell ' : '');
-					return real;
+                    var perct=real >0? (real/planned)*100:0;
+                      return '<span title="' + perct + ' %">' + real + '</span>';
+					//return real;
 				}
 			}];
 			
