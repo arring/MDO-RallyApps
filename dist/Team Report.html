@@ -1171,7 +1171,7 @@
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
 		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
-		BASE_URL =  Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
+		BASE_URL =  'https://rally1.rallydev.com/slm/webservice/v2.0',//Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
 		
 		MAX_TEXT_LENGTH = 65536,
 		MAX_STRING_LENGTH = 256,
@@ -5208,6 +5208,52 @@
 				)
 			);
 		},
+  	getDefectFilter: function(){
+			var me=this,
+				lowestPortfolioItem = me.PortfolioItemTypes[0],
+				twoWeeks = 1000*60*60*24*7*2,
+				releaseStartPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1 + twoWeeks).toISOString(),
+				releaseEndPadding = new Date(new Date(me.ReleaseRecord.data.ReleaseDate)*1 - twoWeeks).toISOString();
+			return Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseStartDate',
+				operator: '<',
+				value: releaseStartPadding
+			}).and(Ext.create('Rally.data.wsapi.Filter', {
+				property:'Release.ReleaseDate',
+				operator: '>',
+				value: releaseEndPadding
+			})).or(
+				Ext.create('Rally.data.wsapi.Filter', {
+					property:'Release.ObjectID',
+					value: null
+				})
+			);
+		},
+  
+        
+        loadDefects: function(){
+            var me = this,            
+            startDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
+			endDate =	Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate),
+            lowestPortfolioItem = me.PortfolioItem[0],
+            config = {
+                model: 'Defect', 
+                filters: [me.getDefectFilter()],  
+                fetch: ['Iteration', 'PlanEstimate', 'Release'],
+           //     query: '((Release.StartDate < endDate) and (Release.ReleaseDate >= startDate))',
+                context: {
+                    project: me.ProjectRecord.data._ref,
+                    projectScopeDown:false,
+                    projectScopeUp:false
+                }
+            };
+            return me.parallelLoadWsapiStore(config).then(function(store) {                  
+                me.DefectsStore=store;
+                return  me.DefectsStore;
+                
+            });
+            
+        },
 		loadUserStories: function(){	
 			var me=this, 
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
@@ -5616,8 +5662,7 @@
 				if(me.DataIntegrityGrid && me.DataIntegrityGrid.store) {
 					me.DataIntegrityGrid.store.intelUpdate();
 				}
-			}
-				
+			}			
 			if(!me.isEditingTeamCommits && me.PortfolioItemStore && me.UserStoryStore)
 				if(me.TeamCommitsGrid && me.TeamCommitsGrid.store) me.TeamCommitsGrid.store.intelUpdate();
 			if(!isEditingDeps && me.UserStoryStore && me.PortfolioItemStore){		
@@ -5641,13 +5686,21 @@
 				promises = [];
 			promises.push(me.loadExtraDataIntegrityStories());
 			promises.push(me.loadRisks());
-			if(!me.isEditingVelocity)  promises.push(me.loadIterations());
+			if(!me.isEditingVelocity) {
+                 promises.push(me.loadIterations());
+          
+            }
+            
 			if(!me.isEditingTeamCommits) promises.push(me.loadPortfolioItems());
-			if(!me.isEditingVelocity && !me.isEditingTeamCommits && !isEditingDeps) promises.push(me.loadUserStories());
+			if(!me.isEditingVelocity && !me.isEditingTeamCommits && !isEditingDeps) {
+                promises.push(me.loadUserStories());
+                promises.push(me.loadDefects());
+            }
 			return Q.all(promises).then(function(){
 				return me.loadSTDNCIData(); //after portfolio items AND user stories are loaded
 			});
 		},
+      
 		clearEverything: function(){
 			var me=this;
 			
@@ -5657,6 +5710,8 @@
 			me.PortfolioItemMap = {};
 			
 			me.UserStoryStore = undefined;
+            me.DefectsStore = undefined;
+            me.UserDefectStore = undefined;
 			me.PortfolioItemStore = undefined;
 			me.IterationStore = undefined;
 			me.ExtraDataIntegrityUserStoriesStore = undefined;
@@ -6672,7 +6727,9 @@
 				store: teamCommitsStore
 			});	
 		},		
+        
 		renderVelocityGrid: function() {
+            
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				iterationGroups = _.groupBy(me.UserStoryStore.getRecords(), function(us) { 
@@ -6686,15 +6743,22 @@
 				}),
 				function(iteration) {
 					var iName = iteration.data.Name;
+                    var defectVelocity = iteration.data.PlannedVelocity;
+                              var totalDefectPlanEstimate=0;                            
+                            _.each(me.DefectsStore.getRange(), function(defectRecord){
+                        
+                              if(defectRecord.data.Iteration !== null)
+                              if( defectRecord.data.Iteration._refObjectName===iName)   
+                                    totalDefectPlanEstimate= totalDefectPlanEstimate+ defectRecord.data.PlanEstimate;
+                           
+                    });  
 					return {    
 						Name: iName, 
 						PlannedVelocity: iteration.data.PlannedVelocity || 0,
-						RealVelocity: _.reduce((iterationGroups[iName] || []), function(sum, us) { 
-							return sum + 
-								(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
-									us.data.PlanEstimate : 
-									0);
-						}, 0)
+						RealVelocity: totalDefectPlanEstimate+ _.reduce((iterationGroups[iName] || []), function(sum, us) {                                                        
+                          return sum + us.data.PlanEstimate;
+                     }, 0)
+
 					};
 				});
 	
@@ -6736,7 +6800,7 @@
 					else return iterationName;
 				}
 			},{
-				text: 'Target Capacity',
+				text: 'Target Velocity',
 				dataIndex: 'PlannedVelocity',
 				width:80,
 				tdCls: 'intel-editor-cell',
@@ -6759,7 +6823,7 @@
 					meta.tdCls += ((realVel*1 < record.data.PlannedVelocity*0.8) ? ' velocity-grid-warning-cell ' : '');
 					meta.tdCls += ((realVel*1 === 0 || realVel*1 > record.data.PlannedVelocity*0.9) ? ' velocity-grid-error-cell ' : '');					
                     var perct = record.data.PlannedVelocity >0? (record.data.RealVelocity/record.data.PlannedVelocity)*100:0;                   
-                 return '<span title="' + perct + ' %">' + realVel + '</span>';
+                 return '<span title="' + Math.round(perct) + ' %">' + realVel + '</span>';
 				}
 			}];		
 			var velocityTotalColumns = [{	
@@ -6773,9 +6837,17 @@
 			},{
 				width:80,
 				renderer:function(value, meta){
+                      var totalDefectPlanEstimate=0;
 					var planned = _.reduce(me.IterationStore.getRecords(), function(sum, i){ return sum + (i.data.PlannedVelocity || 0); }, 0),
 						real = _.reduce(me.IterationStore.getRecords(), function(bigSum, iteration){
-							return bigSum + _.reduce((iterationGroups[iteration.data.Name] || []), function(sum, us) {
+                              totalDefectPlanEstimate=0;                  
+                            _.each(me.DefectsStore.getRange(), function(defectRecord){                                                        
+                              if(defectRecord.data.Iteration !== null)
+                              if( defectRecord.data.Iteration._refObjectName===iteration.data.Name)   
+                                    totalDefectPlanEstimate= totalDefectPlanEstimate + defectRecord.data.PlanEstimate;
+                           
+                            });                                                         
+							return  totalDefectPlanEstimate+bigSum + _.reduce((iterationGroups[iteration.data.Name] || []), function(sum, us) {
 								return sum + 
 									(((us.data.Release || (us.data[lowestPortfolioItem] || {}).Release || {}).Name == me.ReleaseRecord.data.Name) ? 
 										us.data.PlanEstimate : 
@@ -6784,9 +6856,8 @@
 						}, 0);
 					meta.tdCls += ((real < planned*0.8) ? ' velocity-grid-warning-cell ' : '');
 					meta.tdCls += ((real === 0 || real > planned*0.9) ? ' velocity-grid-error-cell ' : '');
-                    var perct=real >0? (real/planned)*100:0;
-                      return '<span title="' + perct + ' %">' + real + '</span>';
-					//return real;
+                    var perct=real > 0? (real/planned)*100:0;
+                      return '<span title="' + Math.round(perct) + ' %">' + real + '</span>';
 				}
 			}];
 			
