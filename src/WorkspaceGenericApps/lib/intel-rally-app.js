@@ -622,10 +622,10 @@
 		/**************************************** PortfolioItem Funcs ************************************************/
 		loadPortfolioItemsOfType: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
+			var me = this;
 			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
 			if(type == 'Business Objective')
 			{
-				var me=this,
 				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
 					limit: Infinity,
@@ -640,7 +640,6 @@
 				});
 			}
 			else{
-				var me=this,
 					store = Ext.create('Rally.data.wsapi.Store', {
 						model: 'PortfolioItem/' + type,
 						limit: Infinity,
@@ -658,10 +657,10 @@
 		},		
 		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
 			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
+			var me = this;
 			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
 			if(type == 'Business Objective')
 			{
-				var me = this,
 					store = Ext.create('Rally.data.wsapi.Store', {
 						model: 'PortfolioItem/' + type,
 						limit: Infinity,
@@ -677,7 +676,6 @@
 					});
 			}
 			else{
-				var me = this,
 					store = Ext.create('Rally.data.wsapi.Store', {
 						model: 'PortfolioItem/' + type,
 						limit: Infinity,
