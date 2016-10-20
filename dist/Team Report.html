@@ -634,37 +634,74 @@
 		/**************************************** PortfolioItem Funcs ************************************************/
 		loadPortfolioItemsOfType: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
+			var me = this;
+			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
+			if(type == 'Business Objective')
+			{
+				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
-					limit:Infinity,
+					limit: Infinity,
 					disableMetaChangeEvent: true,
-					remoteSort:false,
+					remoteSort: false,
 					fetch: me.portfolioItemFields,
-					context:{
+					context: {
 						project: portfolioProject.data._ref,
 						projectScopeDown: true,
-						projectScopeUp:false
+						projectScopeUp: true
 					}
 				});
+			}
+			else{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: false
+						}
+					});
+			}
 			return me.reloadStore(store);
 		},		
 		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
 			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					remoteSort:false,
-					fetch: me.portfolioItemFields,
-					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
+			var me = this;
+			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
+			if(type == 'Business Objective')
+			{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						filters: [{property: 'Release.Name', value: releaseRecord.data.Name}],
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: true
+						}
+					});
+			}
+			else{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						filters: [{property: 'Release.Name', value: releaseRecord.data.Name}],
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: false
+						}
+					});
+			}
 			return me.reloadStore(store);
 		},
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
@@ -1171,7 +1208,7 @@
 		KEY_NAME = 'c_usDbKey',
 		VALUE_NAME = 'c_usDbValue',
 		SECURITY_KEY = Rally.env.IoProvider.getSecurityToken(),
-		BASE_URL =  'https://rally1.rallydev.com/slm/webservice/v2.0',//Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
+		BASE_URL =  Rally.environment.getServer().getBaseUrl() +  '/slm/webservice/v2.0',
 		
 		MAX_TEXT_LENGTH = 65536,
 		MAX_STRING_LENGTH = 256,

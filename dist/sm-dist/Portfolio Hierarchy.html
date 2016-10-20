@@ -5,7 +5,7 @@
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy953815";
+	var smAppID = "Portfolio_Hierarchy854894";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy953815";	
+					var smAppID = "Portfolio_Hierarchy854894";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2047,37 +2047,74 @@
 		/**************************************** PortfolioItem Funcs ************************************************/
 		loadPortfolioItemsOfType: function(portfolioProject, type){
 			if(!portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfType');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store',{
+			var me = this;
+			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
+			if(type == 'Business Objective')
+			{
+				store = Ext.create('Rally.data.wsapi.Store', {
 					model: 'PortfolioItem/' + type,
-					limit:Infinity,
+					limit: Infinity,
 					disableMetaChangeEvent: true,
-					remoteSort:false,
+					remoteSort: false,
 					fetch: me.portfolioItemFields,
-					context:{
+					context: {
 						project: portfolioProject.data._ref,
 						projectScopeDown: true,
-						projectScopeUp:false
+						projectScopeUp: true
 					}
 				});
+			}
+			else{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: false
+						}
+					});
+			}
 			return me.reloadStore(store);
 		},		
 		loadPortfolioItemsOfTypeInRelease: function(releaseRecord, portfolioProject, type){
 			if(!releaseRecord || !portfolioProject || !type) return Q.reject('Invalid arguments: loadPortfolioItemsOfTypeInRelease');
-			var me=this,
-				store = Ext.create('Rally.data.wsapi.Store', {
-					model: 'PortfolioItem/' + type,
-					limit:Infinity,
-					disableMetaChangeEvent: true,
-					remoteSort:false,
-					fetch: me.portfolioItemFields,
-					filters:[{ property:'Release.Name', value:releaseRecord.data.Name}],
-					context:{
-						project: portfolioProject.data._ref,
-						projectScopeDown: true,
-						projectScopeUp:false
-					}
-				});
+			var me = this;
+			//US573673 Added the check to be able to scope up to the Parent level Business Objective for MVS ARTs, should work for every other Train as well
+			if(type == 'Business Objective')
+			{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						filters: [{property: 'Release.Name', value: releaseRecord.data.Name}],
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: true
+						}
+					});
+			}
+			else{
+					store = Ext.create('Rally.data.wsapi.Store', {
+						model: 'PortfolioItem/' + type,
+						limit: Infinity,
+						disableMetaChangeEvent: true,
+						remoteSort: false,
+						fetch: me.portfolioItemFields,
+						filters: [{property: 'Release.Name', value: releaseRecord.data.Name}],
+						context: {
+							project: portfolioProject.data._ref,
+							projectScopeDown: true,
+							projectScopeUp: false
+						}
+					});
+			}
 			return me.reloadStore(store);
 		},
 		loadPortfolioItemsOfOrdinal: function(portfolioProject, ordinal){
@@ -2529,7 +2566,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/**  
 	DESCRIPTION:
@@ -2607,7 +2644,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	given named queues, only allows one function at a time in each queue to execute. 
@@ -2661,7 +2698,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY: 
@@ -2717,7 +2754,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2766,7 +2803,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2801,7 +2838,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2853,7 +2890,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2920,7 +2957,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy953815";			
+						var smAppID = "Portfolio_Hierarchy854894";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
@@ -3049,7 +3086,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy953815").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy854894").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -3388,11 +3425,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy953815";			
+				var smAppID = "Portfolio_Hierarchy854894";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("Intel.PortfolioNavigator.IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy953815"
+						smAppID: "Portfolio_Hierarchy854894"
 					});
 				}
 			}());
