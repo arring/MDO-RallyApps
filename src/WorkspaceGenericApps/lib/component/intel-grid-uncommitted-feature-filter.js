@@ -57,7 +57,6 @@
 					gridStore.on('datachanged', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
 					gridStore.on('refresh', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
 					grid.on('edit', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
-					grid.on('sortchange', function(){ colFilter.applyFilters(); });
 				}
 				else setTimeout(waitForGrid, 20);
 			}, 20);
