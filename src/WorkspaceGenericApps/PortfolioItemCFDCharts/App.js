@@ -4,7 +4,7 @@
  */
 (function() {
 	var Ext = window.Ext4 || window.Ext;
-	
+
 	Ext.define('Intel.PortfolioItemCFDCharts', {
 		extend: 'Intel.lib.IntelRallyApp',
 		requires:[
@@ -54,7 +54,7 @@
 			width:'100%'
 		}],
 		userAppsPref: 'intel-PortfolioItem-CFD',
-		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',		
+		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
 		/**************************************** Launch ******************************************/
 		launch: function() {
 			var me = this;
@@ -63,9 +63,9 @@
 			me.setLoading('Loading Configuration');
 			me.configureIntelRallyApp()
 				.then(me.loadCfdProjPreference()/******** load stream 2 *****/
-						.then(function(cfdprojPref){
-							me.cfdProjReleasePref = cfdprojPref;
-						}))
+					.then(function(cfdprojPref){
+						me.cfdProjReleasePref = cfdprojPref;
+					}))
 				.then(me._getCommitMatrixObjectID.bind(me))
 				.then(me._loadScrumGroupPortfolioProject.bind(me))
 				.then(me._getReleaseRecords.bind(me))
@@ -78,7 +78,7 @@
 				})
 				.done();
 		},
-		
+
 		/**************************************** Get ObjectID of CommitMatrix *********************************/
 		_getCommitMatrixObjectID: function(){
 			var me = this;
@@ -86,36 +86,38 @@
 				me.CommitMatrixCustomAppObjectID = customAppObjectID;
 			});
 		},
-				
+
 		/**************************************** Scrum Group Loading *********************************/
 		_loadScrumGroupPortfolioProject: function(){
 			var me = this;
 			return me.loadProject(me.getContext().getProject().ObjectID).then(function(projectRecord){
 				me.ProjectRecord = projectRecord;
 				return me.projectInWhichScrumGroup(projectRecord).then(function(scrumGroupRootRecord){
-					if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
+					//if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
+					//US580666 [SW] Allow Product Cumulative Flow scoping to team level
+					if(scrumGroupRootRecord && projectRecord.data.ObjectID){
 						me.ScrumGroupRootRecord = scrumGroupRootRecord;
 						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 							.then(function(scrumGroupPortfolioProject){
 								me.ScrumGroupPortfolioProject = scrumGroupPortfolioProject;
 							});
-					} 
+					}
 					else throw "must scope to valid project";
 				});
 			});
 		},
-		
+
 		/**************************************** Release Loading *********************************/
 		_getReleaseRecords: function() {
 			var me = this,
 				twelveWeeks = 12*7*24*60*60*1000;
-				
+
 			// Load releases after twelve weeks ago
 			return me.loadReleasesAfterGivenDate(me.ScrumGroupPortfolioProject, new Date().getTime() - twelveWeeks).then(function(releaseRecords) {
 				me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
 					hash[rr.data.ObjectID] = true;
 					return hash;
-				}, {});		
+				}, {});
 				me.ReleaseRecords = releaseRecords;
 				var releaseParam = window.parent.location.href.match(/release=[A-Za-z\d%]+/);
 				// If a release parameter is supplied
@@ -125,11 +127,11 @@
 					if(!me.ReleaseRecord) throw 'No release record found for: ' + releaseName;
 				}
 				else me.ReleaseRecord = me.getScopedRelease(me.ReleaseRecords);
-				return me.ReleaseRecord;				
+				return me.ReleaseRecord;
 			});
 		},
-		loadAllChildReleases: function(){ 
-			var me = this, releaseName = me.ReleaseRecord.data.Name;			
+		loadAllChildReleases: function(){
+			var me = this, releaseName = me.ReleaseRecord.data.Name;
 			return me.loadReleasesByNameUnderProject(releaseName, me.ScrumGroupRootRecord)
 				.then(function(releaseRecords){
 					me.ReleasesWithNameHash = _.reduce(releaseRecords, function(hash, rr){
@@ -137,19 +139,19 @@
 						return hash;
 					}, {});
 				});
-		},		
+		},
 		/**************************************** PortfolioItems Loading *********************************/
-		_loadPortfolioItems: function(){ 
+		_loadPortfolioItems: function(){
 			var me = this,
 				highestPortfolioItemType = me.PortfolioItemTypes.slice(-1)[0].toLowerCase(),
 				portfolioItemParam = window.parent.location.href.match(new RegExp(highestPortfolioItemType + '=\\d+'));
-				
+
 			return Q.all(_.map(me.PortfolioItemTypes, function(type, ordinal){
 				return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
-						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) : 
+						me.loadPortfolioItemsOfType(me.ScrumGroupPortfolioProject, type) :
 						me.loadPortfolioItemsOfTypeInRelease(me.ReleaseRecord, me.ScrumGroupPortfolioProject, type)
-					);
-				}))
+				);
+			}))
 				.then(function(portfolioItemStores){
 					me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
 					me.LowestPortfolioItemRecords = portfolioItemStores[0].getRange();
@@ -164,7 +166,7 @@
 					else me.TopPortfolioItemRecord = me.TopPortfolioItemRecords[0];
 				});
 		},
-		
+
 		/**************************************** Reload *******************************************/
 		_reload: function() {
 			var me = this;
@@ -176,8 +178,8 @@
 					return Q.all([
 						me._getStories(),
 						me._buildCharts()
-				]);
-			});
+					]);
+				});
 		},
 
 		_setFilteredLowestPortfolioItemRecords: function(){
@@ -187,7 +189,7 @@
 			});
 			return Q();
 		},
-		
+
 		/**************************************** Story Loading ***********************************/
 		/*
 		 *	Creates a filter for the stories under a lowestPortfolioItem
@@ -219,7 +221,7 @@
 				});
 			return lowestPortfolioItemFilter.and((childrenFilter).and(releaseFilter.or(noReleaseFilter)));
 		},
-		
+
 		/*
 		 *	Loads user stories according to their related lowestPortfolioItem
 		 */
@@ -244,7 +246,7 @@
 				});
 			}));
 		},
-		
+
 		/**************************************** Snapshot Loading ********************************/
 		/*
 		 *	Loads the snapshots for all stories under the lowestPortfolioItems in the current release
@@ -253,7 +255,7 @@
 			var me = this;
 			me.SnapshotsByLowestPortfolioItem = {};
 			me.AllSnapshots = [];
-			
+
 			// Load snapshots under each lowestPortfolioItemRecord
 			return Q.all(_.map(me.FilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				var config = {
@@ -290,7 +292,7 @@
 								// TODO: Verify
 								// TODO: filter out closed projects
 								/* return (!storySnapshot.data.Release && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo)|| storySnapshot.data.Release.Name.indexOf(me.ReleaseRecord.data.Name) > -1); */
-								return me.ReleasesWithNameHash[storySnapshot.data.Release] && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo);								
+								return me.ReleasesWithNameHash[storySnapshot.data.Release] && (storySnapshot.data._ValidFrom != storySnapshot.data._ValidTo);
 							}),
 							lowestPortfolioItemOID = lowestPortfolioItemRecord.data.ObjectID;
 						if (!me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID]) me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemOID] = [];
@@ -301,7 +303,7 @@
 				});
 			}));
 		},
-		
+
 		/**************************************** UI Component Building ***************************/
 		/*
 		 *	Builds all controls for the page
@@ -310,11 +312,11 @@
 			var me = this;
 			me.down('#nav').removeAll();
 			me.down('#navBarProductFilter').removeAll();
-			
+
 			me._buildReleasePicker();
 			me._buildTopPortfolioItemPicker();
 		},
-		
+
 		/*
 		 *	Creates the release picker
 		 */
@@ -356,7 +358,7 @@
 				}
 			});
 		},
-		
+
 		/*
 		 *	Creates the CFD charts
 		 */
@@ -367,11 +369,11 @@
 					endDate: me.ReleaseRecord.data.ReleaseDate,
 					scheduleStates: me.ScheduleStates
 				});
-				
+
 			// Remove everything
 			$('#top-pi-chart-innerCt').empty();
 			$('#lowest-pi-charts-innerCt').empty();
-			
+
 			// Load charts
 			me.setLoading('Loading Charts');
 			me._buildTopPortfolioItemChart(calc);
@@ -380,7 +382,7 @@
 			me.setLoading(false);
 			me.doLayout();
 		},
-		
+
 		/*
 		 *	Creates the overall topPortfolioItem CFD chart
 		 */
@@ -388,10 +390,22 @@
 			var me = this,
 				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
 				releaseEnd = me.ReleaseRecord.data.ReleaseDate;
-			var	_6days = 1000 * 60 *60 *24*6;	
-			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
+			var	_6days = 1000 * 60 *60 *24*6;
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+			//US580666 [SW] Allow Product Cumulative Flow scoping to team level
+			var teamSnapshots =[];
+			if(me.ScrumGroupRootRecord.data.ObjectID != me.ProjectRecord.data.ObjectID){
+				for(var i = 0; i<me.AllSnapshots.length; i++){
+					if(me.AllSnapshots[i].data.Project == me.ProjectRecord.data.ObjectID){
+						teamSnapshots.push(me.AllSnapshots[i]);
+					}
+				}
+			}
+			else{
+				teamSnapshots = me.AllSnapshots;
+			}
 			var updateOptions = {trendType:'Last2Sprints',date: me.changedReleaseStartDate},
-				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),				
+				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(teamSnapshots), updateOptions),
 				topPortfolioItemChartContainer = $('#top-pi-chart-innerCt').highcharts(
 					Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: {
@@ -422,7 +436,7 @@
 				)[0];
 			me.setCumulativeFlowChartDatemap(topPortfolioItemChartContainer.childNodes[0].id, topPortfolioItemChartData.datemap);
 		},
-		
+
 		/*
 		 *	Creates a CFD chart for each lowestPortfolioItem
 		 */
@@ -436,15 +450,16 @@
 				}),
 				lowestPortfolioItemChartTicks = me.getCumulativeFlowChartTicks(releaseStart, releaseEnd, me.getWidth()*0.32),
 				lowestPortfolioItemCharts = $('#lowest-pi-charts-innerCt');
-				
-			var	_6days = 1000 * 60 *60 *24*6;	
-			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
-			
-			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate};			
+
+			var	_6days = 1000 * 60 *60 *24*6;
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+
+			var updateOptions = {trendType:'Last2Sprints',date:me.changedReleaseStartDate};
 
 			_.each(sortedFilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				if(me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID]) {
 					var snapshots = me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID],
+
 						lowestPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(snapshots), updateOptions),
 						lowestPortfolioItemChartID = 'lowest-pi-chart-no-' + (lowestPortfolioItemCharts.children().length + 1);
 					lowestPortfolioItemCharts.append('<div class="lowest-pi-chart" id="' + lowestPortfolioItemChartID + '"></div>');
@@ -467,16 +482,16 @@
 							subtitle: {
 								useHTML: true,
 								text: [
-									'<a href="https://rally1.rallydev.com/#/' + me.ScrumGroupPortfolioProject.data.ObjectID + 
+									'<a href="https://rally1.rallydev.com/#/' + me.ScrumGroupPortfolioProject.data.ObjectID +
 									'd/detail/portfolioitem/' + lowestPortfolioItemType + '/' + lowestPortfolioItemRecord.data.ObjectID + '" target="_blank">',
-										lowestPortfolioItemRecord.data.FormattedID + ': ' + lowestPortfolioItemRecord.data.Name,
+									lowestPortfolioItemRecord.data.FormattedID + ': ' + lowestPortfolioItemRecord.data.Name,
 									'</a>',
-									'<br>' + (lowestPortfolioItemRecord.data.PercentDoneByStoryPlanEstimate*100).toFixed(2) + '% Done' + 
+									'<br>' + (lowestPortfolioItemRecord.data.PercentDoneByStoryPlanEstimate*100).toFixed(2) + '% Done' +
 									'<br><span style="color:red;">',
-										'Planned End: ' + ((lowestPortfolioItemRecord.data.PlannedEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
+									'Planned End: ' + ((lowestPortfolioItemRecord.data.PlannedEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
 									'</span>',
 									'<br><span style="color:blue;">',
-										'Actual End: ' + ((lowestPortfolioItemRecord.data.ActualEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
+									'Actual End: ' + ((lowestPortfolioItemRecord.data.ActualEndDate || '').toString().match(/[A-Za-z]+\s\d{2}\s\d{4}/) || 'N/A'),
 									'</span>'
 								].join('\n')
 							},
@@ -497,7 +512,7 @@
 								}]
 							},
 							series: lowestPortfolioItemChartData.series,
-							lowestPortfolioItemOID: lowestPortfolioItemRecord.data.ObjectID 
+							lowestPortfolioItemOID: lowestPortfolioItemRecord.data.ObjectID
 							// This above line magically makes the lowestPortfolioItem immediately available to us in the event handler
 						},me.getInitialAndfinalCommitPlotLines(lowestPortfolioItemChartData,me.changedReleaseStartDate))
 					)[0];
@@ -505,9 +520,9 @@
 				}
 			});
 		},
-		
-		_hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
+
+		_hideHighchartsLinks: function(){
+			$('.highcharts-container > svg > text:last-child').hide();
 		},
 		/*Start: CFD Release Start Date Selection Option Component*/
 		_setchangedReleaseStartDate: function(){
@@ -516,13 +531,13 @@
 			me.releaseStartDateChanged = _.isEmpty(me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name]) ? false : true;
 			if(me.releaseStartDateChanged){
 				me.changedReleaseStartDate = me.cfdProjReleasePref.releases[me.ReleaseRecord.data.Name].ReleaseStartDate;
-			}					
-		},		
+			}
+		},
 		_resetVariableAfterReleasePickerSelected: function(){
-				var me = this;
-				me.changedReleaseStartDate = undefined;
-		},	
-		/*End: CFD Release Start Date Selection Option Component*/		
+			var me = this;
+			me.changedReleaseStartDate = undefined;
+		},
+		/*End: CFD Release Start Date Selection Option Component*/
 		/**************************************** Event Handling **********************************/
 		_releasePickerSelected: function(combo, records) {
 			var me = this;
@@ -537,9 +552,9 @@
 				.then(me._resetVariableAfterReleasePickerSelected())
 				.fail(function(reason){ me.alert('ERROR', reason); })
 				.then(function(){ me.setLoading(false); })
-				.done();			
+				.done();
 		},
-		
+
 		/*
 		 *	Fires when a topPortfolioItem is selected from the topPortfolioItem picker
 		 */
@@ -552,7 +567,7 @@
 			});
 			me._reload();
 		},
-		
+
 		/*
 		 *	Fires when the topPortfolioItem chart is clicked
 		 */
@@ -571,12 +586,12 @@
 
 			if(!me.Popup){
 				me.Popup = me.add({
-					xtype: 'intelpopup', 
-					width: 0.75*me.getWidth(), 
+					xtype: 'intelpopup',
+					width: 0.75*me.getWidth(),
 					height: 0.75*me.getHeight()
 				});
 			}
-			
+
 			me.Popup.setContent({
 				xtype: 'tabpanel',
 				activeTab: 0,
@@ -600,8 +615,8 @@
 								renderer: function(value, meta, lowestPortfolioItemRecord) {
 									var percentDone = lowestPortfolioItemRecord.data.PercentDoneByStoryPlanEstimate,
 										startDate = lowestPortfolioItemRecord.data.ActualStartDate || lowestPortfolioItemRecord.data.PlannedStartDate;
-									return (percentDone - 1 > -0.001 ? 
-										(lowestPortfolioItemRecord.data.ActualEndDate || lowestPortfolioItemRecord.data.PlannedEndDate).toISOString().slice(0,10) : 
+									return (percentDone - 1 > -0.001 ?
+										(lowestPortfolioItemRecord.data.ActualEndDate || lowestPortfolioItemRecord.data.PlannedEndDate).toISOString().slice(0,10) :
 										(percentDone > 0.001 ? ((new Date(startDate.getTime() + (new Date() - startDate)/percentDone)).toISOString().slice(0,10)) : ''));
 								}
 							},
@@ -611,13 +626,13 @@
 								renderer: function(percentDone, meta, lowestPortfolioItemRecord) {
 									var percentageAsString = ((percentDone*100) >> 0) + '%';
 									return [
-										'<div class="progress-bar-container field-PercentDoneByStoryPlanEstimate clickable ' + 
-										lowestPortfolioItemRecord.data.FormattedID + '-PercentDoneByStoryPlanEstimate" style="width: 100%"; ' + 
+										'<div class="progress-bar-container field-PercentDoneByStoryPlanEstimate clickable ' +
+										lowestPortfolioItemRecord.data.FormattedID + '-PercentDoneByStoryPlanEstimate" style="width: 100%"; ' +
 										'height: 15px; line-height: 15px">',
-											'<div class="progress-bar" style="background-color: ' + getProgressBarColor(percentDone) + 
-											'; width: ' + percentageAsString + '; height: 15px">',
-											'</div>',
-											'<div class="progress-bar-label">' + percentageAsString + '</div>',
+										'<div class="progress-bar" style="background-color: ' + getProgressBarColor(percentDone) +
+										'; width: ' + percentageAsString + '; height: 15px">',
+										'</div>',
+										'<div class="progress-bar-label">' + percentageAsString + '</div>',
 										'</div>'
 									].join('\n');
 								}
@@ -635,7 +650,7 @@
 					listeners: {
 						afterrender: function(ct){
 							if(me.CommitMatrixCustomAppObjectID){
-								var link = 'https://rally1.rallydev.com/#/' + me.ScrumGroupRootRecord.data.ObjectID + 'd/custom/' + 
+								var link = 'https://rally1.rallydev.com/#/' + me.ScrumGroupRootRecord.data.ObjectID + 'd/custom/' +
 									me.CommitMatrixCustomAppObjectID + '?viewmode=percent_done';
 								ct.update('<h2><a href="' + link + '" target="_blank">View commit matrix</a></h2>');
 							}
@@ -672,18 +687,18 @@
 										planned,
 										actual,
 										release;
-										
+
 									// Create planned dates divs
 									var beforePlanned = '<div style="float:left;height:15px;width:' + ((((plannedStart - minDate)/totalTime)*100) >> 0) + '%"></div>',
-										duringPlanned = '<div style="background-color:pink;border-radius:5px;border-width:1px;float:left;height:15px;width:' + 
+										duringPlanned = '<div style="background-color:pink;border-radius:5px;border-width:1px;float:left;height:15px;width:' +
 											((((plannedEnd - plannedStart)/totalTime)*100) >> 0) + '%"></div>',
 										afterPlanned = '<div style="float:left;height:15px;width:' + ((((maxDate - plannedEnd)/totalTime)*100) >> 0) + '%"></div>';
 									planned = '<div style="width:100%;height:15px;line-height:15px;">' + beforePlanned + duringPlanned + afterPlanned + '</div>';
-										
+
 									// Create actual dates divs if there is an actual end date
 									if (actualEnd) {
 										var beforeActual = '<div style="float:left;height:15px;width:' + ((((actualStart - minDate)/totalTime)*100) >> 0) + '%"></div>',
-											duringActual = '<div style="background-color:purple;border-radius:5px;border-width:1px;float:left;height:15px;width:' + 
+											duringActual = '<div style="background-color:purple;border-radius:5px;border-width:1px;float:left;height:15px;width:' +
 												((((actualEnd - actualStart)/totalTime)*100) >> 0) + '%"></div>',
 											afterActual = '<div style="float:left;height:15px;width:' + ((((maxDate - actualEnd)/totalTime)*100) >> 0) + '%"></div>';
 										actual = '<div style="width:100%;height:15px;line-height:15px;">' + beforeActual + duringActual + afterActual + '</div>';
@@ -691,14 +706,14 @@
 									else {
 										actual = '<div style="width:100%;height:15px;line-height:15px;text-align:center">N/A</div>';
 									}
-									
+
 									// Create release date divs
 									var beforeRelease = '<div style="float:left;height:15px;width:' + ((((releaseStart - minDate)/totalTime)*100) >> 0) + '%"></div>',
-										duringRelease = '<div style="background-color:blue;border-radius:5px;border-width:1px;float:left;height:15px;width:' + 
+										duringRelease = '<div style="background-color:blue;border-radius:5px;border-width:1px;float:left;height:15px;width:' +
 											((((releaseDate - releaseStart)/totalTime)*100) >> 0) + '%"></div>',
 										afterRelease = '<div style="float:left;height:15px;width:' + ((((maxDate - releaseDate)/totalTime)*100) >> 0) + '%"></div>';
 									release = '<div style="width:100%;height:15px;line-height:15px;">' + beforeRelease + duringRelease + afterRelease + '</div>';
-									
+
 									return '<div style="width:100%;height:15px;line-height:15px;">' + planned + actual + release + '</div>';
 								}
 							}
@@ -709,7 +724,7 @@
 			me.Popup.show();
 			$('.x-tab-inner').css('width', '130px');
 		},
-		
+
 		/*
 		 *	Fires when a lowestPortfolioItem chart is clicked
 		 */
@@ -723,11 +738,11 @@
 					model: me.UserStory,
 					data: me.StoriesByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID]
 				});
-				
+
 			if(!me.Popup){
 				me.Popup = me.add({
-					xtype: 'intelpopup', 
-					width: 0.75*me.getWidth(), 
+					xtype: 'intelpopup',
+					width: 0.75*me.getWidth(),
 					height: 0.75*me.getHeight()
 				});
 			}
@@ -739,11 +754,11 @@
 					items: [{
 						xtype: 'rallygrid',
 						model: me.UserStory,
-						title: lowestPortfolioItemRecord.data.FormattedID + ': ' + lowestPortfolioItemRecord.data.Name + 
-							' (' + me.StoriesByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID].length + ' stories in release, ' + 
-							_.reduce(me.StoriesByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID], function(pointTotal, story) {
-								return pointTotal + story.data.PlanEstimate;
-							}, 0) + ' points)',
+						title: lowestPortfolioItemRecord.data.FormattedID + ': ' + lowestPortfolioItemRecord.data.Name +
+						' (' + me.StoriesByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID].length + ' stories in release, ' +
+						_.reduce(me.StoriesByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID], function(pointTotal, story) {
+							return pointTotal + story.data.PlanEstimate;
+						}, 0) + ' points)',
 						columnCfgs: ['FormattedID', 'Name', 'Project', 'Iteration', 'PlanEstimate', 'ScheduleState'],
 						store: storyStore
 					}]
