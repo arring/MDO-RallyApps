@@ -93,7 +93,9 @@
 			return me.loadProject(me.getContext().getProject().ObjectID).then(function(projectRecord){
 				me.ProjectRecord = projectRecord;
 				return me.projectInWhichScrumGroup(projectRecord).then(function(scrumGroupRootRecord){
-					if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
+					//if(scrumGroupRootRecord && projectRecord.data.ObjectID === scrumGroupRootRecord.data.ObjectID){
+					//US580666 [SW] Allow Product Cumulative Flow scoping to team level
+					if(scrumGroupRootRecord && projectRecord.data.ObjectID){
 						me.ScrumGroupRootRecord = scrumGroupRootRecord;
 						return me.loadScrumGroupPortfolioProject(me.ScrumGroupRootRecord)
 							.then(function(scrumGroupPortfolioProject){
@@ -389,9 +391,21 @@
 				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
 				releaseEnd = me.ReleaseRecord.data.ReleaseDate;
 			var	_6days = 1000 * 60 *60 *24*6;	
-			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;				
+			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
+			//US580666 [SW] Allow Product Cumulative Flow scoping to team level
+			var teamSnapshots =[];
+			if(me.ScrumGroupRootRecord.data.ObjectID != me.ProjectRecord.data.ObjectID){
+				for(var i = 0; i<me.AllSnapshots.length; i++){
+					if(me.AllSnapshots[i].data.Project == me.ProjectRecord.data.ObjectID){
+						teamSnapshots.push(me.AllSnapshots[i]);
+					}
+				}
+			}
+			else{
+				teamSnapshots = me.AllSnapshots;
+			}
 			var updateOptions = {trendType:'Last2Sprints',date: me.changedReleaseStartDate},
-				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(me.AllSnapshots), updateOptions),				
+				topPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(teamSnapshots), updateOptions),
 				topPortfolioItemChartContainer = $('#top-pi-chart-innerCt').highcharts(
 					Ext.Object.merge({}, me.getDefaultCFCConfig(), me.getCumulativeFlowChartColors(), {
 						chart: {
@@ -445,6 +459,7 @@
 			_.each(sortedFilteredLowestPortfolioItemRecords, function(lowestPortfolioItemRecord) {
 				if(me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID]) {
 					var snapshots = me.SnapshotsByLowestPortfolioItem[lowestPortfolioItemRecord.data.ObjectID],
+
 						lowestPortfolioItemChartData = me.updateCumulativeFlowChartData(calc.runCalculation(snapshots), updateOptions),
 						lowestPortfolioItemChartID = 'lowest-pi-chart-no-' + (lowestPortfolioItemCharts.children().length + 1);
 					lowestPortfolioItemCharts.append('<div class="lowest-pi-chart" id="' + lowestPortfolioItemChartID + '"></div>');
