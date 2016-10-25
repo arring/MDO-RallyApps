@@ -55,21 +55,17 @@
             }
 
             this.gridboard = this.add({
-                xtype: 'rallytimeboxgridboard', //rallytimeboxgridboard
+                xtype: 'rallytimeboxgridboard',
                 context: context,
                 modelNames: this.modelNames,
-                timeboxType: 'Iteration', //R416_ .....
+                timeboxType: 'Iteration',
                 plugins: plugins,
-                numColumns: 5,
+                numColumns: 6,
                 cardBoardConfig: {
                     cardConfig: {
                         fields:  this.getCardFieldNames()
                     },
                     columnConfig: {
-                        //defaults to:
-                        // xtype: 'rallycardboardcolumn',
-                        // displayField: 'Name',
-                        // valueField: '_ref'
                         additionalFetchFields: ['PortfolioItem']
                     },
                     listeners: {
