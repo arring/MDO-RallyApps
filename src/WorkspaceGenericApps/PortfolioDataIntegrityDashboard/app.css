@@ -1,0 +1,134 @@
+.app {
+    margin: 0;
+    padding: 0;
+    width:100%;
+    overflow-x:hidden !important; }
+
+.ribbon {
+    margin:10px 0 0 0;
+    padding:0;
+    width: 98%;
+    height:390px;
+    border: 1px solid #AAA; }
+
+/*********************************** GRIDS  ****************************/
+.grids-container {
+    margin:10px 0 0 0;
+    padding:0;
+    position:relative !important;
+    width: 98%; }
+
+.grids-container .grids-left{
+    margin-right:5px;
+    position:absolute !important;
+    left:0;}
+
+.grids-container .grids-right {
+    margin-left:5px;
+    position:absolute !important;
+    right:0;}
+
+.data-integrity-grid {
+    border:2px solid #AAA;
+    padding: 0;
+    margin:0 0 5px 0;}
+
+.grid-healthy.data-integrity-grid .x-panel-header,
+.grid-healthy.data-integrity-grid .x4-panel-header {
+    font-weight:bold;
+    background-color:rgba(0, 255, 0, 0.4) !important; }
+
+.grid-unhealthy.data-integrity-grid .x-panel-header,
+.grid-unhealthy.data-integrity-grid .x4-panel-header {
+    font-weight:bold;
+    background-color:rgba(255, 0, 0, 0.4) !important; }
+
+.data-integrity-grid .grid-pager {
+    margin:3px !important; }
+
+.data-integrity-grid .editor-cell,
+.data-integrity-grid .editor-cell *{
+    cursor:pointer !important; }
+
+.data-integrity-grid.rally-grid .x-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover,
+.data-integrity-grid.rally-grid .x4-grid-row-over .editable.rally-edit-cell:not(.editor-cell):hover {
+    background-image:none; }
+
+.data-integrity-grid-header-left {
+    float: left;
+    font-size:1rem; }
+
+.data-integrity-grid-header-stats {
+    font-size: 12px; }
+
+.data-integrity-grid-header-top-link {
+    float:right;
+    cursor:pointer;
+    font-weight:bold;
+    font-size:0.8rem; }
+
+.data-integrity-grid .x-grid-cell-inner,
+.data-integrity-grid .x4-grid-cell-inner  {
+    white-space:normal; }
+
+/*********************************** HEATMAP  ****************************/
+.highcharts-container { overflow: visible !important; }
+
+.my-heatmap-tooltip {
+    z-index:10000;
+    border-radius:2px;
+    padding:5px;
+    border:1px solid gray;
+    background:lightgray; }
+
+.heatmap-xlabel {
+    white-space:nowrap;
+    z-index:100; }
+.heatmap-xlabel:hover {
+    color:blue; }
+
+.heatmap-xlabel .curscrum {
+    font-weight:bolder;
+    font-size:1.1em; }
+
+.heatmap-xlabel-text {
+    display:block;
+    overflow:hidden; }
+
+#heatmap .highcharts-yaxis-labels > span {
+    width:134px !important; }
+.heatmap-ylabel {
+    white-space:normal;
+    width:134px;
+    height:35px;
+    text-align:center;
+    display:flex;
+    border-bottom-left-radius:5px;
+    border-top-left-radius:5px;
+    justify-content:center;
+    align-items:center;
+    font-size:0.65rem;
+    cursor:pointer;
+    padding:0 2px 0 2px;
+    margin:0; }
+
+/*********************************** integrity indicator ****************/
+.integrity-inticator-title{
+    font-size:1.1rem;
+    padding-right:5px;
+    text-decoration:underline;}
+
+.integrity-indicator-value {
+    font-size:1rem; }
+
+
+/*********************************** TOOLTIP ****************************/
+#heatmap-tooltip-goto-button {
+    margin-top:5px; }
+
+.x-btn-default-small{
+    margin-right: 5px;
+}
+.modified-date{
+    color: green;
+}
