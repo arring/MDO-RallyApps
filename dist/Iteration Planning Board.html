@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iteration Planning Board</title>
+
+    <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function () {
+                /*
+ Taken from https://github.com/RallyApps/app-catalog/tree/master/src/apps/iterationplanningboard
+ */
+
+(function() {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define('Rally.apps.iterationplanningboard.IterationPlanningBoardApp', {
+        extend: 'Rally.app.App',
+        requires: [
+            'Rally.ui.gridboard.planning.TimeboxGridBoard',
+            'Rally.ui.gridboard.plugin.GridBoardAddNew',
+            'Rally.ui.gridboard.plugin.GridBoardManageIterations',
+            'Rally.ui.gridboard.plugin.GridBoardCustomFilterControl'
+        ],
+        mixins: ['Rally.app.CardFieldSelectable'],
+        modelNames: ['User Story', 'Defect'],
+        helpId: 272,
+        config: {
+            defaultSettings: {
+                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate'
+            }
+        },
+
+        launch: function() {
+            var context = this.getContext(),
+                plugins = [
+                    {
+                        ptype: 'rallygridboardaddnew',
+                        rankScope: 'BACKLOG',
+                        addNewControlConfig: {
+                            stateful: true,
+                            stateId: context.getScopedStateId('iteration-planning-add-new')
+                        }
+                    },
+                    {
+                        ptype: 'rallygridboardcustomfiltercontrol',
+                        filterControlConfig: {
+                            margin: '3 9 3 30',
+                            blackListFields: ['Iteration', 'PortfolioItem'],
+                            modelNames: this.modelNames,
+                            stateful: true,
+                            stateId: context.getScopedStateId('iteration-planning-custom-filter-button')
+                        },
+                        showOwnerFilter: true,
+                        ownerFilterControlConfig: {
+                            stateful: true,
+                            stateId: context.getScopedStateId('iteration-planning-owner-filter')
+                        }
+                    }
+                ];
+
+            if (context.getSubscription().isHsEdition() || context.getSubscription().isExpressEdition()) {
+                plugins.push('rallygridboardmanageiterations');
+            }
+
+            this.gridboard = this.add({
+                xtype: 'rallytimeboxgridboard',
+                context: context,
+                modelNames: this.modelNames,
+                timeboxType: 'Iteration',
+                plugins: plugins,
+                numColumns: 6,
+                cardBoardConfig: {
+                    cardConfig: {
+                        fields:  this.getCardFieldNames()
+                    },
+                    columnConfig: {
+                        additionalFetchFields: ['PortfolioItem']
+                    },
+                    listeners: {
+                        filter: this._onBoardFilter,
+                        filtercomplete: this._onBoardFilterComplete,
+                        scope: this
+                    }
+                },
+                listeners: {
+                    load: this._onLoad,
+                    toggle: this._publishContentUpdated,
+                    recordupdate: this._publishContentUpdatedNoDashboardLayout,
+                    recordcreate: this._publishContentUpdatedNoDashboardLayout,
+                    preferencesaved: this._publishPreferenceSaved,
+                    scope: this
+                }
+            });
+        },
+
+        getSettingsFields: function () {
+            var fields = this.callParent(arguments);
+            this.appendCardFieldPickerSetting(fields);
+            return fields;
+        },
+
+        _onLoad: function() {
+            this._publishContentUpdated();
+            if (Rally.BrowserTest) {
+                Rally.BrowserTest.publishComponentReady(this);
+            }
+        },
+
+        _onBoardFilter: function() {
+            this.setLoading(true);
+        },
+
+        _onBoardFilterComplete: function() {
+            this.setLoading(false);
+        },
+
+        _publishContentUpdated: function() {
+            this.fireEvent('contentupdated');
+        },
+
+        _publishContentUpdatedNoDashboardLayout: function() {
+            this.fireEvent('contentupdated', {dashboardLayout: false});
+        },
+
+        _publishPreferenceSaved: function(record) {
+            this.fireEvent('preferencesaved', record);
+        }
+    });
+})();
+
+            Rally.launchApp('Rally.apps.iterationplanningboard.IterationPlanningBoardApp', {
+                name:"Iteration Planning Board",
+	            parentRepos:""
+            });
+
+        });
+    </script>
+
+
+
+    <style type="text/css">
+        /*
+Taken from https://github.com/RallyApps/app-catalog/tree/master/src/apps/iterationplanningboard
+*/
+.planning-board .header {
+  padding: 5px 5px 5px 10px;
+}
+.planning-board .header .add-new {
+  float: left;
+}
+.planning-board .show-label {
+  float: right;
+  margin-top: 3px;
+}
+.planning-board .type-checkbox {
+  float: right;
+  margin: 5px;
+}
+.planning-board .manage-iterations {
+  float: right;
+  margin: 3px 10px 0 0;
+}
+.planning-board .artifact-type-chooser {
+  margin-top: 4px;
+}
+.planning-board .add-new label {
+  padding-top: 0;
+}
+.planning-board .add-new .new {
+  margin-left: 0;
+}
+.planning-column.backlog .search-button {
+  background: transparent url('search-button.gif');
+}
+
+    </style>
+</head>
+<body>
+</body>
+</html>
