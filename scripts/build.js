@@ -21,7 +21,9 @@ var util = require('util'),
 	
 	srcDir = path.resolve('src'),
 	rabDeployDir = path.resolve('dist'),
-	smDeployDir = path.resolve('dist/sm-dist');
+	smDeployDir = path.resolve('dist/sm-dist'),
+
+	buildTag = getBuildTag();
 	
 function getFiles(targetFileName){
 	return find(srcDir)
@@ -38,6 +40,7 @@ function buildEachProject(configFiles, buildCommand, srcFile, deployDir){
 		cd(appDir);
 		exec(buildCommand);
 		cp(srcFile, deployFile);
+		ShellString(buildTag).toEnd(deployFile);
 		echo('\n');
 	});
 }
@@ -46,6 +49,12 @@ function buildEachRabProject(){
 }
 function buildEachSmProject(){
 	buildEachProject(getFiles('sm-config.json'), 'sm-rab', 'sm-deploy/sm-app.html', smDeployDir);
+}
+function getBuildTag() {
+	var branch = exec("git symbolic-ref --short -q HEAD").stdout.slice(0,-1);
+	var commit = exec("git rev-parse HEAD").stdout.slice(0,-1);
+	var date = new Date().toISOString();
+	return "<!-- Build: " + branch + ":" + commit + ":" + date " -->";
 }
 
 rm('-fr', rabDeployDir);
