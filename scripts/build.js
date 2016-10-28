@@ -21,7 +21,7 @@ var util = require('util'),
 	
 	srcDir = path.resolve('src'),
 	rabDeployDir = path.resolve('dist'),
-	smDeployDir = path.resolve('dist/sm-dist')
+	smDeployDir = path.resolve('dist/sm-dist'),
 
 	buildTag = getBuildTag();
 	
