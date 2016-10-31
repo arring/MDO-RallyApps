@@ -54,7 +54,7 @@ function getBuildTag() {
 	var branch = exec("git symbolic-ref --short -q HEAD").stdout.slice(0,-1);
 	var commit = exec("git rev-parse HEAD").stdout.slice(0,-1);
 	var date = new Date().toISOString();
-	return "<!-- Build: " + branch + ":" + commit + ":" + date " -->";
+	return "<!-- Build: " + branch + ":" + commit + ":" + date + " -->";
 }
 
 rm('-fr', rabDeployDir);
