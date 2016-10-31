@@ -1198,7 +1198,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:400,
-						text: "DEPENDENCIES OTHER TEAMS HAVE ON US"
+						text: "DEPENDENCIES WE HAVE ON OTHER TEAMS"
 					},{
 						xtype:'container',
 						flex:1000,
