@@ -1198,7 +1198,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:400,
-						text: me.getScrumGroupName(me.ScrumGroupRootRecord) + " INTERNAL DEPENDENCIES"
+						text: "DEPENDENCIES OTHER TEAMS HAVE ON US"
 					},{
 						xtype:'container',
 						flex:1000,
@@ -1547,7 +1547,7 @@
 						xtype:'text',
 						cls:'risksdeps-grid-header-text',
 						width:400,
-						text:"OFF TRAIN DEPENDENCIES FOR " + me.getScrumGroupName(me.ScrumGroupRootRecord)
+						text: "DEPENDENCIES OTHER TEAMS HAVE ON US"
 					},{
 						xtype:'container',
 						flex:1000,
