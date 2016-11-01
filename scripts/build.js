@@ -39,8 +39,8 @@ function buildEachProject(configFiles, buildCommand, srcFile, deployDir){
 		echo('Building ' + appName);
 		cd(appDir);
 		exec(buildCommand);
-		cp(srcFile, deployFile);
-		ShellString(buildTag).toEnd(deployFile);
+		ShellString(buildTag).to(deployFile);
+		cat(srcFile).toEnd(deployFile)
 		echo('\n');
 	});
 }
