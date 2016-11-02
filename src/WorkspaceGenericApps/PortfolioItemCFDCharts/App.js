@@ -390,7 +390,15 @@
 			var me = this,
 				releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
 				releaseEnd = me.ReleaseRecord.data.ReleaseDate;
+<<<<<<< Updated upstream
 			var	_6days = 1000 * 60 *60 *24*6;	
+=======
+<<<<<<< HEAD
+			var	_6days = 1000 * 60 *60 *24*6;
+=======
+			var	_6days = 1000 * 60 *60 *24*6;	
+>>>>>>> dev-shailu-rallyapps
+>>>>>>> Stashed changes
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
 			//US580666 [SW] Allow Product Cumulative Flow scoping to team level
 			var teamSnapshots =[];

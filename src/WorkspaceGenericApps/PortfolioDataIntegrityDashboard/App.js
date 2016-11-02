@@ -259,16 +259,10 @@
         },
         loadDataFromCacheOrRally: function(){
             var me = this;
-
-
-                    return me.loadRemainingConfiguration()
-                        .then(function(){return me.loadData(); })
-
-
             if(me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
-
-
+            return me.loadRemainingConfiguration()
+                        .then(function(){return me.loadData(); });
         },
         loadCacheIndependentConfig: function(){
             var me = this;
@@ -1525,6 +1519,31 @@
                         filterFn:function(item){
                             if(!item.data.Parent)
                                 return item.data.Name;
+                        }
+                    },{
+                        showIfLeafProject:false,
+                        showIfHorizontalMode:false,
+                        title: 'Features with No Start Date or End Date',
+                        id: 'grid-features-with-no-start-or-end-date',
+                        model: 'PortfolioItem/' + lowestPortfolioItemType,
+                        columns: defaultLowestPortfolioItemColumns,
+                        side: 'Right',
+                        filterFn:function(item){
+                            if (item.data.ActualStartDate && item.data.ActualEndDate) return false;
+                            return item.data.Name;
+                        }
+                    },{
+                        showIfLeafProject:false,
+                        showIfHorizontalMode:false,
+                        title: 'Features with No Stories',
+                        id: 'grid-features-with-no-stories',
+                        model: 'PortfolioItem/' + lowestPortfolioItemType,
+                        columns: defaultLowestPortfolioItemColumns,
+                        side: 'Right',
+                        filterFn:function(item){
+                            item = item.data || item;//having issue due to caching so hacking it
+                            if(!item.Release || item.Release.Name != releaseName) return false;
+                            return !me.PortfolioUserStoryCount[item.ObjectID];
                         }
                     }/* ,{
                      showIfLeafProject:true,
