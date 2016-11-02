@@ -97,7 +97,7 @@
 			'#39CCCC', //TEAL
 			'#01FF70', //LIME
 			'#FFDC00', //YELLOW
-			'#0074D9' //BLUE
+			'#ADFFE7' //LIGHT BLUE
 		],
 		
 		/**************************************** Settings ***************************************/
@@ -1412,7 +1412,7 @@
 						if((item.data.Release || {}).Name !== releaseName) return false;
 						return item.data.PlanEstimate === null; 
 					}
-				},/*US436545{
+				},{
                     showIfLeafProject:true,
                     showIfHorizontalMode:true,
                     title: 'Improperly Sized Stories',
@@ -1429,7 +1429,7 @@
                         var pe = item.data.PlanEstimate;
                         return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
                     }
-                },*/
+                },
 				{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
@@ -1528,7 +1528,7 @@
 						if(!item.Release || item.Release.Name != releaseName) return false;
 						return !me.PortfolioUserStoryCount[item.ObjectID];
 					}
-				}/* ,{
+				} ,{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'User Stories with No Description',
@@ -1554,7 +1554,7 @@
 						if(!item.data.Iteration) return false;											
 						return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;						
 					}
-				}	 */			
+				}	 		
 				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){

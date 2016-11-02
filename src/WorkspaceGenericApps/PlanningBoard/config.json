@@ -1,0 +1,12 @@
+{
+    "name": "Iteration Planning Board",
+    "className": "Rally.apps.iterationplanningboard.IterationPlanningBoardApp",
+    "server": "https://rally1.rallydev.com",
+    "sdk": "2.1",
+    "javascript": [
+        "IterationPlanningBoardApp.js"
+    ],
+    "css": [
+        "IterationPlanningBoardApp.css"
+    ]
+}

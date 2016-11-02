@@ -2844,6 +2844,10 @@
             me.AllSnapshots = [];
             return Q.all(_.map(me.ReleasesWithName, function(releaseRecords) {
                 return Q.all(_.map(releaseRecords, function(releaseRecord) {
+
+                    console.log(">> releaseRecord = ", releaseRecord);
+                    console.log(">> releaseRecord.data = ", releaseRecord.data);
+
                     var parallelLoaderConfig = {
                         context: {
                             workspace: me.getContext().getWorkspace()._ref,
@@ -2872,6 +2876,8 @@
             }));
         },
         loadAllProjectReleases: function() {
+            console.log(">> me.ReleaseRecord = ", me.ReleaseRecord);
+            console.log(">> me.ReleaseRecord.data = ", me.ReleaseRecord.data);
             var me = this,
                 releaseName = me.ReleaseRecord.data.Name.split(' ')[0]; //we must split this so we get Light/Rave on the same page!
             me.ReleasesWithName = []; //NOTE: this is a list of lists
@@ -2881,11 +2887,18 @@
             }));
         },
         loadIterations: function() {
+            console.log(">> me.ReleaseRecord = ", me.ReleaseRecord);
+            console.log(">> me.ReleaseRecord.data = ", me.ReleaseRecord.data);
+
             var me = this,
                 startDate = Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseStartDate),
                 endDate = Rally.util.DateTime.toIsoString(me.ReleaseRecord.data.ReleaseDate);
             me.ScrumTargetVelocitySum = {};
             return Q.all(_.map(me.ProjectsOfFunction, function(projectRecord) {
+
+                console.log(">> projectRecord = ", projectRecord);
+                console.log(">> projectRecord.data = ", projectRecord.data);
+
                 var config = {
                     model: 'Iteration',
                     filters: [{
@@ -2927,6 +2940,7 @@
 
         },
         redrawEverything: function() {
+            console.log(">> redrawEverything");
             var me = this;
             me.setLoading('Loading Charts');
             //return me.filterUserStoriesByTopPortfolioItem()				
@@ -2940,6 +2954,7 @@
 
         },
         reloadEverything: function() {
+            console.log(">> reloadEverything");
             var me = this;
             me.setLoading('Loading Data');
             return me.loadAllProjectReleases()
@@ -3039,6 +3054,7 @@
 
         },
         loadDataFromCacheorRally: function() {
+            console.log(">> loadDataFromCacheorRally");
             var me = this;
             return me.getCache().then(function(cacheHit) {
                 if (!cacheHit) {
@@ -3060,6 +3076,7 @@
             });
         },
         loadConfiguration: function() {
+            console.log(">> loadConfiguration");
             var me = this;
 
             return me.configureIntelRallyApp()
@@ -3072,6 +3089,7 @@
                     return Q.all([ //parallel loads
                         me.loadAllLeafProjects() /******** load stream 1 *****/
                             .then(function(leafProjects) {
+                                console.log(">> me.ProjectRecord = ", me.ProjectRecord);
                                 me.LeafProjects = leafProjects;
                                 if (!me.LeafProjects[me.ProjectRecord.data.ObjectID])
                                     return Q.reject('You are not Scoped to a valid Project');
@@ -3102,6 +3120,7 @@
             var me = this;
             // me.initDisableResizeHandle();
             // me.initFixRallyDashboard();
+            console.log(">> loading");
             me.setLoading('Loading Configuration');
             return Q.all([me.loadCfdAllTrainPreference(),
                 me.loadAppsPreference().then(function(appsPref) {
@@ -3148,6 +3167,13 @@
 
         releasePickerSelected: function(combo, records) {
             var me = this;
+
+            console.log(">> me.ReleaseRecord = ", me.ReleaseRecord);
+            console.log(">> me.ReleaseRecord.data = ", me.ReleaseRecord.data);
+
+            console.log(">> me.ProjectRecord = ", me.ProjectRecord);
+            console.log(">> me.ProjectRecord.data = ", me.ProjectRecord.data);
+
             if (me.ReleaseRecord.data.Name === records[0].data.Name) return;
             me.setLoading(true);
             me.ReleaseRecord = _.find(me.ReleaseRecords, function(rr) { return rr.data.Name == records[0].data.Name; });
@@ -3182,6 +3208,10 @@
         /*End: CFD Release Start Date Selection Option Component*/
         /**************************************************** RENDERING CHARTS ******************************************/
         renderCharts: function() {
+
+            console.log(">> me.ReleaseRecord = ", me.ReleaseRecord);
+            console.log(">> me.ReleaseRecord.data = ", me.ReleaseRecord.data);
+
             var me = this,
                 releaseStart = me.ReleaseRecord.data.ReleaseStartDate,
                 releaseEnd = me.ReleaseRecord.data.ReleaseDate,
@@ -3198,6 +3228,7 @@
 
             /************************************** Aggregate panel STUFF *********************************************/
             var _6days = 1000 * 60 * 60 * 24 * 6;
+
             me.changedReleaseStartDate = (typeof (me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate) * 1 + _6days) : me.changedReleaseStartDate;
             //this is to just render the legend to share among the horizontals
             //var targetVelocity =[];
@@ -3433,3 +3464,4 @@ hr {
 <body>
 </body>
 </html>
+<!-- Build: dev-rallyapps:68b0aeb31c5d34c813847be7f657b8ed181c5e07:2016-10-31T19:21:18.593Z -->

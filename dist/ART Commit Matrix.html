@@ -2714,7 +2714,6 @@
 					gridStore.on('datachanged', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
 					gridStore.on('refresh', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
 					grid.on('edit', function(){ colFilter._updateStoreOptions(gridStore, valueField, displayField); });
-					grid.on('sortchange', function(){ colFilter.applyFilters(); });
 				}
 				else setTimeout(waitForGrid, 20);
 			}, 20);
@@ -5315,3 +5314,4 @@
 <body>
 </body>
 </html>
+<!-- Build: dev-rallyapps:68b0aeb31c5d34c813847be7f657b8ed181c5e07:2016-10-31T19:21:18.593Z -->

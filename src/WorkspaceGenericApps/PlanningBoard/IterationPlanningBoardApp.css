@@ -1,0 +1,42 @@
+/*
+Taken from https://github.com/RallyApps/app-catalog/tree/master/src/apps/iterationplanningboard
+*/
+
+.planning-board .header {
+    padding: 5px 5px 5px 10px;
+}
+
+.planning-board .header .add-new {
+    float: left;
+}
+
+.planning-board .show-label {
+    float: right;
+    margin-top: 3px;
+}
+
+.planning-board .type-checkbox {
+    float: right;
+    margin: 5px;
+}
+
+.planning-board .manage-iterations {
+    float: right;
+    margin: 3px 10px 0 0;
+}
+
+.planning-board .artifact-type-chooser {
+    margin-top: 4px;
+}
+
+.planning-board .add-new label {
+    padding-top: 0;
+}
+
+.planning-board .add-new .new {
+    margin-left: 0;
+}
+
+.planning-column.backlog .search-button {
+    background: transparent url('search-button.gif');
+}
