@@ -251,31 +251,16 @@
 
         loadNonConfigDataFromCacheOrRally: function(){
             var me = this;
-
-
                     return me.loadData().then(function(){
-
             });
         },
         loadDataFromCacheOrRally: function(){
             var me = this;
-<<<<<<< HEAD
+
             if(me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
             return me.loadRemainingConfiguration()
                         .then(function(){return me.loadData(); });
-=======
-
-
-                    return me.loadRemainingConfiguration()
-                        .then(function(){return me.loadData(); })
-
-
-            if(me.isHorizontalView) me.applyProjectFilters();
-            else me.applyScopingOverrides();
-
-
->>>>>>> dev-rallyapps
         },
         loadCacheIndependentConfig: function(){
             var me = this;
@@ -1533,7 +1518,6 @@
                             if(!item.data.Parent)
                                 return item.data.Name;
                         }
-<<<<<<< HEAD
                     },{
                         showIfLeafProject:false,
                         showIfHorizontalMode:false,
@@ -1559,8 +1543,7 @@
                             if(!item.Release || item.Release.Name != releaseName) return false;
                             return !me.PortfolioUserStoryCount[item.ObjectID];
                         }
-=======
->>>>>>> dev-rallyapps
+
                     }/* ,{
                      showIfLeafProject:true,
                      showIfHorizontalMode:true,

@@ -70,13 +70,15 @@
 			}, {
 				xtype:'container',
 				flex:2,
+				itemId:'navboxRight',
+				layout:'hbox',
 				items:[{
 					xtype: 'container',
+					itemId:'navboxRightVert',
 					layout: {
-						type:'hbox',
+						type:'vbox',
 						pack:'end'
-					},
-					itemId:'navboxRight'
+					}
 				}]
 			}]
 		}],
@@ -241,7 +243,7 @@
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20),
 				window.innerWidth - 20
 			);
-			// return 800;
+			//return 800;
 		},
 		changeGridSize: function(){
 			var me=this;
@@ -520,7 +522,7 @@
 			var me = this;
 			me.setLoading(' Loading matrix');
 			me.clearEverything();
-			if(!me.UpdateCacheButton) me.renderUpdateCache();
+			//if(!me.UpdateCacheButton) me.renderUpdateCache();
 			if(!me.ReleasePicker){
 				me.renderReleasePicker();
 				me.renderClickModePicker();
@@ -540,7 +542,7 @@
 			return me.reloadStores()
 					.then(function(){
 						me.clearEverything();
-						if(!me.UpdateCacheButton) me.renderUpdateCache();
+						//if(!me.UpdateCacheButton) me.renderUpdateCache();
 						if(!me.ReleasePicker){
 							me.renderReleasePicker();
 							me.renderClickModePicker();
@@ -548,6 +550,7 @@
 							me.renderRefreshIntervalCombo();
 							//me.renderManualRefreshButton();
 							me.renderClearFiltersButton();
+							if(!me.UpdateCacheButton) me.renderUpdateCache();
 							me.renderMatrixLegend();
 						}
 					})
@@ -568,7 +571,7 @@
 		},
 		renderRefreshIntervalCombo: function(){
 			var me=this;
-			me.down('#navboxRight').add({
+			me.down('#navboxRightVert').add({
 				xtype:'intelfixedcombo',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Rate'],
@@ -726,7 +729,7 @@
 					return me.loadConfiguration()
 						.then(function() { return me.reloadEverything(); });
 				} else {
-					me.renderCacheMessage();
+					//me.renderCacheMessage();
 					me.redrawEverything();
 				}
 			});
@@ -836,10 +839,11 @@
 		},
 		renderUpdateCache: function() {
 			var me = this;
-			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
+			me.UpdateCacheButton = me.down('#navboxRightVert').add({//Ext.getCmp('cacheButtonsContainer').add({
 				xtype: 'button',
 				text: 'Get Live Data',
 				cls: 'intel-button',
+				width: '110',
 				listeners: {
 					click: function() {
 						me.setLoading(' Getting live data, please wait');
