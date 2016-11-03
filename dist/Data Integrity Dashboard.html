@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- Build: dev-rallyapps:fc3097f80a7759f0af82bc8c28cd8c3668c12c1b:2016-11-03T15:53:37.808Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Data Integrity Dashboard</title>
@@ -2355,24 +2355,16 @@
 
         loadNonConfigDataFromCacheOrRally: function(){
             var me = this;
-
-
                     return me.loadData().then(function(){
-
             });
         },
         loadDataFromCacheOrRally: function(){
             var me = this;
 
-
-                    return me.loadRemainingConfiguration()
-                        .then(function(){return me.loadData(); })
-
-
             if(me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
-
-
+            return me.loadRemainingConfiguration()
+                        .then(function(){return me.loadData(); });
         },
         loadCacheIndependentConfig: function(){
             var me = this;
@@ -3630,6 +3622,32 @@
                             if(!item.data.Parent)
                                 return item.data.Name;
                         }
+                    },{
+                        showIfLeafProject:false,
+                        showIfHorizontalMode:false,
+                        title: 'Features with No Start Date or End Date',
+                        id: 'grid-features-with-no-start-or-end-date',
+                        model: 'PortfolioItem/' + lowestPortfolioItemType,
+                        columns: defaultLowestPortfolioItemColumns,
+                        side: 'Right',
+                        filterFn:function(item){
+                            if (item.data.ActualStartDate && item.data.ActualEndDate) return false;
+                            return item.data.Name;
+                        }
+                    },{
+                        showIfLeafProject:false,
+                        showIfHorizontalMode:false,
+                        title: 'Features with No Stories',
+                        id: 'grid-features-with-no-stories',
+                        model: 'PortfolioItem/' + lowestPortfolioItemType,
+                        columns: defaultLowestPortfolioItemColumns,
+                        side: 'Right',
+                        filterFn:function(item){
+                            item = item.data || item;//having issue due to caching so hacking it
+                            if(!item.Release || item.Release.Name != releaseName) return false;
+                            return !me.PortfolioUserStoryCount[item.ObjectID];
+                        }
+
                     }/* ,{
                      showIfLeafProject:true,
                      showIfHorizontalMode:true,
@@ -4173,4 +4191,3 @@
 <body>
 </body>
 </html>
-<!-- Build: dev-rallyapps:68b0aeb31c5d34c813847be7f657b8ed181c5e07:2016-10-31T19:21:18.593Z -->
