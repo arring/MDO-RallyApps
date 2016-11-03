@@ -839,7 +839,7 @@
 		},
 		renderUpdateCache: function() {
 			var me = this;
-			me.UpdateCacheButton = me.down('#navboxRightVert').add({//Ext.getCmp('cacheButtonsContainer').add({
+			me.UpdateCacheButton = me.down('#navboxRightVert').add({
 				xtype: 'button',
 				text: 'Get Live Data',
 				cls: 'intel-button',
