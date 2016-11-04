@@ -1,5 +1,5 @@
 {
-    "name": "Data Integrity Dashboard",
+    "name": "Portfolio Data Integrity Dashboard",
     "className": "Intel.PortfolioDataIntegrityDashboard",
     "server": "https://rally1.rallydev.com",
     "sdk": "2.0rc3",
