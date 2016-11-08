@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:9c6c15d030e176946405ae1cffb966af6de9b7b0:2016-11-03T16:12:52.959Z --><!DOCTYPE html>
+<!-- Build: dev-rallyapps:9b2a84403201b610e695c16589ce1191e2ef082a:2016-11-08T19:10:13.281Z --><!DOCTYPE html>
 <html>
 <head>
     <title>ART Commit Matrix</title>
@@ -3525,19 +3525,19 @@
 
 		/**___________________________________ EVENT HANDLING ___________________________________*/
 		getGridHeight: function() {
-			var me = this,
+			/*var me = this,
 				iframe = Ext.get(window.frameElement);
-			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
-			//return 800;
+			return iframe.getHeight() - me.down('#navbox').getHeight() - 20;*/
+			return 800;
 		},
 		getGridWidth: function(columnCfgs){
-			var me = this;
+			/*var me = this;
 			if(!me.MatrixGrid) return;
 			else return Math.min(
 				_.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20),
 				window.innerWidth - 20
-			);
-			//return 800;
+			);*/
+			return 800;
 		},
 		changeGridSize: function(){
 			var me=this;
@@ -3823,6 +3823,7 @@
 				me.renderRefreshIntervalCombo();
 				me.renderViewModePicker();
 				me.renderClearFiltersButton();
+				if(!me.UpdateCacheButton) me.renderUpdateCache();
 				me.renderMatrixLegend();
 			}
 			me.showGrids();
@@ -4023,7 +4024,7 @@
 					return me.loadConfiguration()
 						.then(function() { return me.reloadEverything(); });
 				} else {
-					//me.renderCacheMessage();
+					me.renderCacheMessage();
 					me.redrawEverything();
 				}
 			});

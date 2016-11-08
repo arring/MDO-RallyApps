@@ -522,13 +522,14 @@
 			var me = this;
 			me.setLoading(' Loading matrix');
 			me.clearEverything();
-			if(!me.UpdateCacheButton) me.renderUpdateCache();
+			//if(!me.UpdateCacheButton) me.renderUpdateCache();
 			if(!me.ReleasePicker){
 				me.renderReleasePicker();
 				me.renderClickModePicker();
 				me.renderRefreshIntervalCombo();
 				me.renderViewModePicker();
 				me.renderClearFiltersButton();
+				if(!me.UpdateCacheButton) me.renderUpdateCache();
 				me.renderMatrixLegend();
 			}
 			me.showGrids();
