@@ -617,7 +617,7 @@
 				});
 
 				/* US436545: Remove this to get back improperly sized user stories */
-				_.each(me.UserStoryStore.getRange(), function(item,key){
+				/*_.each(me.UserStoryStore.getRange(), function(item,key){
 					if(key < me.UserStoryStore.count()  && me.UserStoryStore.getAt(key).data) {
 						var pe = me.UserStoryStore.getAt(key).data.PlanEstimate;
 						if (pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16) {
@@ -625,11 +625,11 @@
 						}
 					}
 				});
-
+				*/
 				me.fixRawUserStoryAttributes();
 			});
 		},
-		
+
 		/**
 			Counts the number of stories associated with each portfolio item.
 			This is only used for 1 of the portfolioItem integrity grids
@@ -644,7 +644,7 @@
 				});
 			}
 		},
-		
+
 		/**
 			Control function for loading projects, portfolio items, and stories
 		*/
@@ -659,7 +659,7 @@
 				return me.countPortfolioItemStories();
 			});
 		},
-		
+
 		/**************************************** UI Component Loading/Removing ****************************/
 		/**
 			Removes the chart, heat map, and all grids
@@ -673,7 +673,7 @@
 			var indicator = Ext.getCmp('integrityIndicator');
 			if(indicator) indicator.destroy();
 		},
-		
+
 		/**
 			the team picker acts as a horizontal TeamType picker in horizontal view mode, and a leaf project picker
 			in vertical view mode while scoped to a scrumGroupRootRecord
@@ -682,19 +682,19 @@
 			var me = this;
 			if(me.isHorizontalView){
 				return [{Type:'All'}].concat(
-					_.sortBy(_.map(me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] || [], 
+					_.sortBy(_.map(me.HorizontalGroupingConfig.groups[me.ScopedHorizontal] || [],
 						function(type){return {Type:type}; }),
 						function(type){return type.Type; })
 				);
 			}
 			else {
-				return [{Type: 'All'}].concat(_.sortBy(_.map(me.FilteredLeafProjects, 
+				return [{Type: 'All'}].concat(_.sortBy(_.map(me.FilteredLeafProjects,
 					function(project){ return {Type: project.data.Name}; }),
 					function(type){ return type.Type; })
 				);
 			}
 		},
-		
+
 		/**
 			Adds comboboxes in the nav section to filter data on the page
 		*/
@@ -703,33 +703,33 @@
 			me.UpdateCacheButton = Ext.getCmp('cacheButtonsContainer').add({
 				xtype:'button',
 				text: 'Get Live Data',
-				listeners: { 
+				listeners: {
 					click: function(){
 						me.setLoading('Pulling Live Data, please wait');
 						Ext.getCmp('cacheMessageContainer').removeAll();
 						return Q.all([
 							me.isHorizontalView ? Q() : me.loadRemainingConfiguration()
 						])
-						.then(function(){ return me.loadData() ; }) 
+						.then(function(){ return me.loadData() ; })
 						.then(function(){	return me.renderVisuals();})
-						.then(function(){ 
+						.then(function(){
 							//NOTE: not returning promise here, performs in the background!
 							//dont want to cache in the horizontal view if only a team is selected
 							//we want to only cache for All in a horizontal view, me.isStandalone checks if its the caching script
-							Ext.getCmp('cacheButtonsContainer').removeAll();							
+							Ext.getCmp('cacheButtonsContainer').removeAll();
 							var doCaching = me.isHorizontalView ? (me.ScopedTeamType === 'All' || ( me.TeamPicker ? me.TeamPicker.value === 'All' : "") || me.isStandalone ) : !me.isScopedToScrum;
-							if(doCaching){								
+							if(doCaching){
 								me.updateCache().fail(function(e){
 									alert(e);
 									console.log(e);
 								});
 							}
 						})
-						.then(function(){ me.setLoading(false); });			
+						.then(function(){ me.setLoading(false); });
 				}
 				}
 			});
-		},		
+		},
 		renderReleasePicker: function(){
 			var me = this;
 			me.ReleasePicker = Ext.getCmp('controlsContainer').add({
@@ -753,7 +753,7 @@
 				fieldLabel: 'Horizontal:',
 				store: Ext.create('Ext.data.Store', {
 					fields: ['Horizontal', 'TeamTypes'],
-					data: [{Horizontal:'All', TeamTypes: []}].concat(_.sortBy(_.map(me.HorizontalGroupingConfig.groups, 
+					data: [{Horizontal:'All', TeamTypes: []}].concat(_.sortBy(_.map(me.HorizontalGroupingConfig.groups,
 						function(teamTypes, horizontal){ return {Horizontal: horizontal, TeamTypes: teamTypes}; }),
 						function(item){ return item.Horizontal; })
 					)
@@ -786,7 +786,7 @@
 				}
 			});
 		},
-		
+
 		/**
 			MailTo link generating and rendering functions.
 		*/
@@ -796,11 +796,11 @@
 				subject = '&subject=Data%20Integrity%20Dashboard%20View',
 				urlSegments = me.Overrides.decodedUrl.split('?'),
 				options = [];
-				
+
 			// Push options that will always be present
 			options.push('isStandalone=true');
 			options.push('release=' + me.ReleaseRecord.data.Name);
-			
+
 			// Push variable options
 			if (me.isHorizontalView) {
 				if(me.ScopedTeamType !== '') options.push('team=' + me.ScopedTeamType);
@@ -809,11 +809,11 @@
 			else if (!me.isScopedToScrum) {
 				if(me.ScopedTeamType !== '') options.push('team=' + me.ScopedTeamType);
 			}
-			
+
 			// Create the correctly encoded app url
 			var appUrl = urlSegments[0] + '%3F' + options.join('%26');
 			appUrl = appUrl.replace(/\s/g, '%2520');
-			
+
 			// Create the full mailto url
 			var body = '&body=' + appUrl,
 				url = base + subject + body;
@@ -840,13 +840,13 @@
 				width:'100%',
 				html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
-		},		
+		},
 		/**
 			Loads all nav controls
 		*/
 		renderControlsAndEmailLink: function() {
 			var me = this;
-			
+
 			// Conditionally loads controls
 			//if(!me.DeleteCacheButton && !me.isScopedToScrum) me.renderDeleteCache();
 			//if(!me.UpdateCacheButton && !me.isScopedToScrum) me.renderGetLiveDataButton();
@@ -861,14 +861,14 @@
 			}
 			if(!me.EmailLink) me.renderEmailLink();
 		},
-		
+
 		/**
 			Adds the click listener to the expand heatmap button
 		*/
 		initializeExpandHeatmapButton: function() {
 			var me = this;
 			me.isPieHidden = false;
-			
+
 			// Add click listener to button
 			me.down('#expand-heatmap-button').on('click', function() {
 				var heatmap = $('#heatmap'),
@@ -883,23 +883,23 @@
 					me.down('#pie').setWidth(0);
 					button = me.down('#expand-heatmap-button').setText('Show Pie');
 				}
-				
+
 				// Create heat map
 				heatmap.empty();
 				heatmap.highcharts(me.getHeatMapConfig());
-				
+
 				me.isPieHidden = !me.isPieHidden;
 				me.hideHighchartsLinks();
 			});
 		},
-		
+
 		/**
 			Creates and adds the overall indicator of integrity to the app
 		*/
 		buildIntegrityIndicator: function(){
 			var me=this,
-				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
-					return grid.originalConfig.model == 'UserStory'; 
+				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){
+					return grid.originalConfig.model == 'UserStory';
 				}).reverse(),
 				storyNum = {},
 				storyDen = userStoryGrids[0].originalConfig.totalCount,
@@ -909,15 +909,15 @@
 				pointPer;
 			// Sums the point estimates and number of stories
 			_.each(userStoryGrids, function(grid){
-				_.each(grid.originalConfig.data, function(item){ 
-					storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0; 
+				_.each(grid.originalConfig.data, function(item){
+					storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0;
 				});
 			});
 			pointNum = (100*(pointDen - _.reduce(storyNum, function(sum, planEstimate){ return sum + planEstimate; }, 0))>>0)/100;
 			storyNum = storyDen - Object.keys(storyNum).length;
 			storyPer = (storyNum/storyDen*10000>>0)/100;
 			pointPer = (pointNum/pointDen*10000>>0)/100;
-			
+
 			// Creates the integrity scope label
 			// Collective (Release) || Horizontal[/Team] (Release) || ScrumGroup[/Team] (Release) || Team (Release) || ProjectName (Release)
 			var scopeLabel = '';
@@ -937,7 +937,7 @@
 				else scopeLabel = me.ProjectRecord.data.Name; //some random non-leaf, non-scrum-group project
 			}
 			scopeLabel = scopeLabel.concat(' (' + me.ReleaseRecord.data.Name + ')');
-			
+
 			// Creates and adds the integrity indicator
 			Ext.getCmp('integrityIndicatorContainer').removeAll();
 			me.IntegrityIndicator = Ext.getCmp('integrityIndicatorContainer').add({
@@ -951,15 +951,15 @@
 				},
 				items:[{
 					xtype:'container',
-					html:'<span class="integrity-inticator-title">' + 
+					html:'<span class="integrity-inticator-title">' +
 						scopeLabel +
-						' Integrity <em>(% Correct)</em></span><br/>' + 
+						' Integrity <em>(% Correct)</em></span><br/>' +
 						'<span class="integrity-indicator-value"><b>Stories: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' +
 						'<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'
 				}]
 			});
 		},
-		
+
 		/**
 			Loads all data visuals
 		*/
@@ -972,7 +972,7 @@
 				.then(function(){ return Q.all([me.buildRibbon(), me.buildIntegrityIndicator()]); })
 				.then(function(){ me.setLoading(false);});
 		},
-		
+
 		/**		Loads all controls and visuals		*/
 		loadUI: function() {
 			var me = this;
@@ -980,7 +980,7 @@
 			me.initializeExpandHeatmapButton();
 			return me.renderVisuals();
 		},
-		
+
 		/**************************************** Grids and Charts ********************************/
 		getProjectStoriesForGrid: function(project, grid){
 			return _.filter(grid.originalConfig.data, function(story){
@@ -996,13 +996,13 @@
 			return _.reduce(this.getProjectStoriesForGrid(project, grid), function(sum, story){
 				return sum + story.data.PlanEstimate;
 			}, 0);
-		},		
+		},
 		getProjectPointsForRelease: function(project, grid){
 			return _.reduce(this.getProjectStoriesForRelease(project, grid), function(sum, story){
 				return sum + story.data.PlanEstimate;
 			}, 0);
 		},
-		
+
 		/**
 			This is only necessary when we are scoped to a scrumGroupRootRecord or in horizontalMode, and we have
 			the me.ScopedTeamType set to a value, in which case we need to filter the user stories we have loaded into memory
@@ -1012,9 +1012,9 @@
 			if (!me.isScopedToScrum) {
 				if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
 					if(me.isHorizontalView){
-						var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], function(m, p){ 
-							m[p.data.ObjectID] = true; 
-							return m; 
+						var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], function(m, p){
+							m[p.data.ObjectID] = true;
+							return m;
 						}, {});
 						return _.filter(me.UserStoryStore.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
 					}
@@ -1024,20 +1024,20 @@
 			}
 			else return me.UserStoryStore.getRange();
 		},
-		
+
 		/**
-			if in horizontal mode, it only gets the portfolio items attached to scrumGroups 
+			if in horizontal mode, it only gets the portfolio items attached to scrumGroups
 			that have teams visibile in the DI Dashboard. (e.g.: if two 'H' horizontal teams
 			are showing on the page, but they are in trains "Foo" and "Bar", then the portfolioItems
 			for "Foo" and "Bar" will be returned.
-		
+
 			In Vertical mode, it returns whatever scrumGroup that is scoped to.
 		*/
-		getFilteredLowestPortfolioItems: function(){ 
+		getFilteredLowestPortfolioItems: function(){
 			var me = this,
 				/* portfolioItems = me.PortfolioItemStore.getRange(), */
 				activeScrumGroups, activePortfolioOIDs;
-			
+
 			if(me.isScopedToScrum) return [];
 			else {
 				activeScrumGroups = _.filter(me.ScrumGroupConfig, function(sgc){
@@ -1047,7 +1047,7 @@
 							return item1.data.ObjectID == item2.data.ObjectID;
 						});
 					}).length;
-					
+
 				});
 				activePortfolioOIDs = _.map(activeScrumGroups, function(sgc){
 					return me.getPortfolioOIDForScrumGroupRootProjectRecord(me.createDummyProjectRecord({ObjectID: sgc.ScrumGroupRootProjectOID}));
@@ -1055,12 +1055,12 @@
 				return [].concat.apply([], _.map(activePortfolioOIDs, function(oid){ return me.PortfolioProjectToPortfolioItemMap[oid]; }));
 			}
 		},
-		
+
 		/************************************ Ribbon rendering ************************************/
-		getPieChartConfig: function() { 
+		getPieChartConfig: function() {
 			var me=this,
 				// Create data for the chart using each grid's data
-				chartData = _.map(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid) { 
+				chartData = _.map(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid) {
 					return {
 						name: grid.originalConfig.title,
 						y: grid.originalConfig.data.length,
@@ -1069,7 +1069,7 @@
 						model: grid.originalConfig.model
 					};
 				});
-			
+
 			// Change data if no problem stories are found
 			if(_.every(chartData, function(item){ return item.y === 0; })){
 				chartData = [{
@@ -1080,7 +1080,7 @@
 					model:''
 				}];
 			}
-			
+
 			// Create the chart config
 			return {
 				chart: {
@@ -1104,7 +1104,7 @@
 								var str = '<b>' + this.point.name + '</b>: ' + this.point.y;
 								return str + '/' + this.point.totalCount;
 							},
-							style: { 
+							style: {
 								cursor:'pointer',
 								color: 'black'
 							}
@@ -1131,11 +1131,11 @@
 				}]
 			};
 		},
-		getHeatMapConfig: function() { 
+		getHeatMapConfig: function() {
 			var me=this,
 				highestNum = 0,
-				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){ 
-					return grid.originalConfig.model == 'UserStory'; 
+				userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){
+					return grid.originalConfig.model == 'UserStory';
 				}).reverse(),
 				chartData = [],
 				selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
@@ -1147,14 +1147,14 @@
 					chartData.push([pindex, gindex, gridCount]);
 				});
 			});
-			
+
 			// Function for scrolling to grid
 			window[selectIdFunctionName] = function(gridId){
 				Ext.get(gridId).scrollIntoView(me.el);
 			};
-			
+
 			// Create the map config
-			return {       
+			return {
 				chart: {
 					type: 'heatmap',
 					height:370,
@@ -1165,7 +1165,7 @@
 				colors: ['#AAAAAA'],
 				title: { text: null },
 				xAxis: {
-					categories: _.sortBy(_.map(me.FilteredLeafProjects, 
+					categories: _.sortBy(_.map(me.FilteredLeafProjects,
 						function(project){ return project.data.Name; }),
 						function(p){ return p; }),
 					labels: {
@@ -1187,7 +1187,7 @@
 								index = _.indexOf(this.axis.categories, text),
 								gridID = userStoryGrids[index].originalConfig.id,
 								styleAttr='style="background-color:' + me.chartColors[userStoryGrids.length - index - 1] + '"';
-							return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' + 
+							return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
 												selectIdFunctionName + '(\'' + gridID +  '\')">' + text + '</div>';
 						},
 						useHTML:true
@@ -1225,11 +1225,11 @@
 							textShadow: 'none'
 						}
 					}
-				}]  
+				}]
 			};
 		},
-		hideHighchartsLinks: function(){ 
-			$('.highcharts-container > svg > text:last-child').hide(); 
+		hideHighchartsLinks: function(){
+			$('.highcharts-container > svg > text:last-child').hide();
 		},
 		buildRibbon: function() {
 			var me = this;
@@ -1237,7 +1237,7 @@
 			$('#heatmap').highcharts(me.getHeatMapConfig());
 			me.hideHighchartsLinks();
 		},
-		
+
 		/**
 			Creates a Rally grid based on the given configuration
 		*/
@@ -1245,14 +1245,14 @@
 			var me=this,
 				lowestPortfolioItemType = me.PortfolioItemTypes[0],
 				randFunctionName = '_scrollToTop' + (Math.random()*10000>>0);
-				
+
 			window[randFunctionName] = function(){ Ext.get('controlsContainer').scrollIntoView(me.el); };
-			
+
 			var getGridTitleLink = function(data, model){
 					var hasData = !!data,
 						countNum = data && data.length,
 						countDen = gridConfig.totalCount,
-						pointNum = data && (100*_.reduce(data, function(sum, item){ 
+						pointNum = data && (100*_.reduce(data, function(sum, item){
 							item = item.data || item;//having issue due to caching so hacking it
 							return sum + (item.PlanEstimate || 0); }, 0)>>0)/100,
 						pointDen = gridConfig.totalPoints,
@@ -1270,7 +1270,7 @@
 					randFunctionName);
 				},
 				storeModel = (gridConfig.model == 'UserStory') ? me.UserStoryStore.model : me.PortfolioItemStore.model,
-				grid = Ext.getCmp('grids' + gridConfig.side).add(gridConfig.data.length ? 
+				grid = Ext.getCmp('grids' + gridConfig.side).add(gridConfig.data.length ?
 					Ext.create('Rally.ui.grid.Grid', {
 						title: getGridTitleLink(gridConfig.data, gridConfig.model),
 						id: gridConfig.id,
@@ -1306,7 +1306,7 @@
 							data: gridConfig.data,
 							autoLoad: false
 						})
-					}) : 
+					}) :
 					Ext.create('Rally.ui.grid.Grid', {
 						title: getGridTitleLink(),
 						id: gridConfig.id,
@@ -1322,18 +1322,18 @@
 				);
 			return grid;
 		},
-		
-		isUserStoryInRelease: function(userStoryRecord, releaseRecord){ 
+
+		isUserStoryInRelease: function(userStoryRecord, releaseRecord){
 			var me=this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0];
-			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) || 
+			return ((userStoryRecord.data.Release || {}).Name === releaseRecord.data.Name) ||
 				(!userStoryRecord.data.Release && ((userStoryRecord.data[lowestPortfolioItem] || {}).Release || {}).Name === releaseRecord.data.Name);
-		},	
-		
+		},
+
 		/**
 			Creates grids with filtered results for the user stories/Portfolio items and adds them to the screen
 		*/
-		buildGrids: function() { 
+		buildGrids: function() {
 			var me = this,
 				filteredStories = me.getFilteredStories(),
 				filteredLowestPortfolioItems = me.getFilteredLowestPortfolioItems(),
@@ -1344,14 +1344,14 @@
 				now = new Date(),
 				defaultUserStoryColumns = [{
 						text:'FormattedID',
-						dataIndex:'FormattedID', 
+						dataIndex:'FormattedID',
 						editor:false
 					},{
 						text:'Name',
-						dataIndex:'Name', 
+						dataIndex:'Name',
 						editor:false
 					}].concat(!me.CurrentScrum ? [{
-						text: 'Scrum', 
+						text: 'Scrum',
 						dataIndex: 'Project',
 						editor:false
 					}] : []).concat([{
@@ -1361,15 +1361,15 @@
 					}]),
 				defaultLowestPortfolioItemColumns = [{
 						text:'FormattedID',
-						dataIndex:'FormattedID', 
+						dataIndex:'FormattedID',
 						editor:false
 					},{
 						text:'Name',
-						dataIndex:'Name', 
+						dataIndex:'Name',
 						editor:false
 					},{
 						text:'PlannedEndDate',
-						dataIndex:'PlannedEndDate', 
+						dataIndex:'PlannedEndDate',
 						editor:false
 					}],
 				gridConfigs = [{
@@ -1392,9 +1392,9 @@
 						}
 					}]),
 					side: 'Left',
-					filterFn:function(item){ 
+					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
-						return item.data.Blocked; 
+						return item.data.Blocked;
 					}
 				},{
 					showIfLeafProject:true,
@@ -1410,7 +1410,7 @@
 					side: 'Left',
 					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
-						return item.data.PlanEstimate === null; 
+						return item.data.PlanEstimate === null;
 					}
 				},{
                     showIfLeafProject:true,
@@ -1442,11 +1442,11 @@
 						tdCls:'editor-cell'
 					}]),
 					side: 'Left',
-					filterFn:function(item){ 
+					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
-						return !item.data.Iteration; 
+						return !item.data.Iteration;
 					}
-				},{
+				},/*{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Stories in Iteration not attached to Release',
@@ -1467,7 +1467,7 @@
 						return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
 							(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
 					}
-				},{
+				},*/{
 					showIfLeafProject:true,
 					showIfHorizontalMode:true,
 					title: 'Unaccepted Stories in Past Iterations',
@@ -1510,51 +1510,51 @@
 					side: 'Right',
 					filterFn:function(item){
 						if((item.data.Release || {}).Name !== releaseName) return false;
-						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] || 
+						if(!item.data.Iteration || !item.data[lowestPortfolioItemType] ||
 							!item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
 						if(item.data.ScheduleState == 'Accepted') return false;
 						return item.data[lowestPortfolioItemType].PlannedEndDate < item.data.Iteration.StartDate;
 					}
-				},{
-					showIfLeafProject:false,
-					showIfHorizontalMode:false,
-					title: 'Features with No Stories',
-					id: 'grid-features-with-no-stories',
-					model: 'PortfolioItem/' + lowestPortfolioItemType,
-					columns: defaultLowestPortfolioItemColumns,
-					side: 'Right',
-					filterFn:function(item){ 
-						item = item.data || item;//having issue due to caching so hacking it
-						if(!item.Release || item.Release.Name != releaseName) return false;
-						return !me.PortfolioUserStoryCount[item.ObjectID];
-					}
-				} ,{
-					showIfLeafProject:true,
-					showIfHorizontalMode:true,
-					title: 'User Stories with No Description',
-					id: 'grid-features-with-no-description-for-user-stories',
-					model: 'UserStory',
-					columns: defaultUserStoryColumns.concat([{
-						text:'Iteration',
-						dataIndex:'Iteration',
-						editor:false
+				}, {
+						showIfLeafProject:true,
+						showIfHorizontalMode:true,
+						title: 'User Stories with No Description',
+						id: 'grid-features-with-no-description-for-user-stories',
+						model: 'UserStory',
+						columns: defaultUserStoryColumns.concat([{
+							text:'Iteration',
+							dataIndex:'Iteration',
+							editor:false
+						},{
+							text:'ScheduleState',
+							dataIndex:'ScheduleState',
+							tdCls:'editor-cell'
+						},{
+							text:'Description',
+							dataIndex:'Description',
+							tdCls:'editor-cell'
+						}]),
+						side: 'Right',
+						filterFn:function(item){
+							if(!item.data.Release || item.data.Release.Name != releaseName) return false;
+							if(item.data.Description) return false;
+							if(!item.data.Iteration) return false;
+							return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;
+						}
 					},{
-						text:'ScheduleState',
-						dataIndex:'ScheduleState',
-						tdCls:'editor-cell'
-					},{
-						text:'Description',
-						dataIndex:'Description',
-						tdCls:'editor-cell'
-					}]),
-					side: 'Right',
-					filterFn:function(item){
-						if(!item.data.Release || item.data.Release.Name != releaseName) return false;
-						if(item.data.Description) return false;												
-						if(!item.data.Iteration) return false;											
-						return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;						
+						showIfLeafProject:false,
+						showIfHorizontalMode:false,
+						title: 'Features with No Stories',
+						id: 'grid-features-with-no-stories',
+						model: 'PortfolioItem/' + lowestPortfolioItemType,
+						columns: defaultLowestPortfolioItemColumns,
+						side: 'Right',
+						filterFn:function(item){
+							item = item.data || item;//having issue due to caching so hacking it
+							if(!item.Release || item.Release.Name != releaseName) return false;
+							return !me.PortfolioUserStoryCount[item.ObjectID];
+						}
 					}
-				}	 		
 				];
 
 			return Q.all(_.map(gridConfigs, function(gridConfig){

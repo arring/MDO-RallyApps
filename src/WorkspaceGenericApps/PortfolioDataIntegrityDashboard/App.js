@@ -1131,8 +1131,10 @@
             var me=this,
                 highestNum = 0,
                 userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){
-                    return grid.originalConfig.model == 'UserStory';
-                }).reverse(),
+                    if(grid.originalConfig.model == 'PortfolioItem/Epic' || grid.originalConfig.model == 'PortfolioItem/Feature')
+                    return grid.originalConfig.model;
+                });
+                userStoryGrids.reverse();
                 chartData = [],
                 selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
             // Get the data for each scrum from each grid
@@ -1143,6 +1145,7 @@
                     chartData.push([pindex, gindex, gridCount]);
                 });
             });
+
 
             // Function for scrolling to grid
             window[selectIdFunctionName] = function(gridId){
@@ -1331,6 +1334,7 @@
          */
         buildGrids: function() {
             var me = this;
+                midPortfolioItemType= me.PortfolioItemTypes[1],
                 filteredStories = me.getFilteredStories(),
                 filteredLowestPortfolioItems = me.getFilteredLowestPortfolioItems(),
                 lowestPortfolioItemType = me.PortfolioItemTypes[0],
@@ -1377,7 +1381,7 @@
                     showIfHorizontalMode:true,
                     title: 'Epics with No Parent',
                     id: 'grid-epics-with-no-parent',
-                    model: 'UserStory',
+                    model: 'PortfolioItem/' + midPortfolioItemType,
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Parent',
                         dataIndex: 'Parent',
@@ -1404,24 +1408,7 @@
                         if((item.data.Release || {}).Name !== releaseName) return false;
                         return item.data.PlanEstimate === null;
                     }
-                },/*US436545{
-                 showIfLeafProject:true,
-                 showIfHorizontalMode:true,
-                 title: 'Improperly Sized Stories',
-                 id: 'grid-improperly-sized-stories',
-                 model: 'UserStory',
-                 columns: defaultUserStoryColumns.concat([{
-                 text:'PlanEstimate',
-                 dataIndex:'PlanEstimate',
-                 tdCls:'editor-cell'
-                 }]),
-                 side: 'Left',
-                 filterFn:function(item){
-                 if((item.data.Release || {}).Name !== releaseName) return false;
-                 var pe = item.data.PlanEstimate;
-                 return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
-                 }
-                 },*/
+                },/*
                     {
                         showIfLeafProject:true,
                         showIfHorizontalMode:true,
@@ -1438,12 +1425,12 @@
                             if((item.data.Release || {}).Name !== releaseName) return false;
                             return !item.data.Iteration;
                         }
-                    },{
+                    },*/{
                         showIfLeafProject:true,
                         showIfHorizontalMode:true,
                         title: 'Epics with no start and End date',
                         id: 'grid-epics-with-no-start-or-end-date',
-                        model: 'UserStory',
+                        model: 'PortfolioItem/' + midPortfolioItemType,
                         columns: defaultUserStoryColumns.concat([{
                             text:'Actual Start Date',
                             dataIndex:'ActualStartDate',
@@ -1458,7 +1445,7 @@
                             if (item.data.ActualStartDate && item.data.ActualEndDate) return false;
                             return item.data.Name;
                         }
-                    },{
+                    },/*{
                         showIfLeafProject:true,
                         showIfHorizontalMode:true,
                         title: 'Unaccepted Stories in Past Iterations',
@@ -1476,7 +1463,7 @@
                          text:'Description',
                          dataIndex:'Description',
                          tdCls:'editor-cell'
-                         } */]),
+                         } *//*]),
                         side: 'Right',
                         filterFn:function(item){
                             if((item.data.Release || {}).Name !== releaseName) return false;
@@ -1506,7 +1493,7 @@
                             if(item.data.ScheduleState == 'Accepted') return false;
                             return item.data[lowestPortfolioItemType].PlannedEndDate < item.data.Iteration.StartDate;
                         }
-                    },{
+                    },*/{
                         showIfLeafProject:false,
                         showIfHorizontalMode:false,
                         title: 'Features with No Parent',
