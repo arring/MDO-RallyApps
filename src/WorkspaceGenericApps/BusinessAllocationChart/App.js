@@ -743,12 +743,7 @@
 				});
 			var	_6days = 1000 * 60 *60 *24*6;	
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
-              var businessObjectiveArry = [];
-                        for (var j = 0; j < me.TopPortfolioItemRecords.length; j++) {
-                            //businessObjectiveArry.push({ name: me.TopPortfolioItemRecords[j].data.Name, y: 5 });
-                            businessObjectiveArry.push({ name: me.TopPortfolioItemRecords[j].data.Name, y: me.TopPortfolioItemRecords[j].data.PercentDoneByStoryPlanEstimate
-             });
-            }
+         
       
        	/************************************** Scrum Group CHART STUFF *********************************************/
 		
