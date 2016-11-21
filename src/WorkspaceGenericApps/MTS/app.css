@@ -56,7 +56,23 @@
 }
 
 .team-type-cell {
-	border-right: 1px solid black; 
+	border-right: 1px solid black;
+    background-color: #FFFFFF;
+}
+
+.team-type-cell-null{
+    border-right: 1px solid black;
+    background-color: #F2F2F2;
+}
+
+.team-type-cell-violating{
+    border-right: 1px solid black;
+    background-color: #ff8080;
+}
+
+.team-type-cell-not-violating{
+    border-right: 1px solid black;
+    background-color: #99ff99;
 }
 	
 .x-grid-table tbody > tr:last-child > td {
@@ -90,3 +106,33 @@ a:link {
 	align-items: stretch;
 	height: 100% !important;
 } */
+
+.violating {
+    color: #000000;
+    background-color: #ff8080;
+}
+
+.violating a, .not-violating a, .default-null a{
+    color: #000000;
+}
+
+.default-null{
+    color: #000000;
+    background-color: #F2F2F2;
+}
+
+.not-violating{
+    color: #000000;
+    background-color: #99ff99;
+}
+
+.navbox-style{
+    padding:10px;
+}
+
+.show-only-button{
+    float: right;
+    border-radius: 2px;
+    background-color: #00a9e0;
+    border-color: #00a9e0;
+}
