@@ -83,7 +83,7 @@
             // returns a hash used to aggregate the data
             // scrumData may be null for initialization. ScrumData refers
             // to the container set in setScrumDataValue()
-            return scrumData == null ? {total: 0} : {total: scrumData.value};
+            return scrumData === null ? {total: 0} : {total: scrumData.value};
         },
         addScrumTotalDataValue: function (current, scrumData) {
             // OVERLOAD ME //
@@ -171,12 +171,12 @@
                         if (horizontal === horizontal2) {
                             var scrumTeamType = r.teamType + " " + r.number;
                             var projectName = r.projectName;
-                            hash[scrumTeamType] = {
-                                scrumTeamType: scrumTeamType,
+                            hash[projectName] = {
+                                //scrumTeamType: scrumTeamType,
                                 scrumName: projectName,
                                 isViolating: null
                             };
-                            me.setScrumDataValue(hash[scrumTeamType], train.ScrumGroupName, projectName);
+                            me.setScrumDataValue(hash[projectName], train.ScrumGroupName, projectName);
                         }
                         return hash;
                     }, {});
@@ -298,17 +298,20 @@
             var me = this,
                 trainTotals = {},
                 horizontalTotals = {},
-                horizontalTeamTypes = {};
+                horizontalTeamTypes = {},
+                scrumTeamNames = {};
 
             _.each(gridData, function (trainData, trainName) {
                 trainTotals[trainName] = _.merge({TrainName: trainName}, me.getScrumTotalDataValue());
                 _.each(trainData, function (horizontalData, horizontalName) {
                     horizontalTotals[horizontalName] = horizontalTotals[horizontalName] || _.merge({HorizontalName: horizontalName}, me.getScrumTotalDataValue());
                     horizontalTeamTypes[horizontalName] = horizontalTeamTypes[horizontalName] || [];
+                    scrumTeamNames[horizontalName] = scrumTeamNames[horizontalName] || [];
                     _.each(horizontalData, function (scrumData, scrumTeamType) {
                         me.addScrumTotalDataValue(horizontalTotals[horizontalName], scrumData);
                         me.addScrumTotalDataValue(trainTotals[trainName], scrumData);
                         horizontalTeamTypes[horizontalName].push(scrumTeamType);
+                        scrumTeamNames[horizontalName].push(scrumData.scrumName); // + " (" + scrumTeamType + ")");
                     });
                 });
             }, []);
@@ -317,7 +320,7 @@
             var data = _.map(_.keys(horizontalTotals).sort(), function (horizontalTotalName) {
                 return {
                     horizontalData: horizontalTotals[horizontalTotalName],
-                    horizontalTeamTypes: _.uniq(horizontalTeamTypes[horizontalTotalName]).sort()
+                    scrumTeamNames: _.uniq(scrumTeamNames[horizontalTotalName]).sort()
                 };
             });
             //put 'Other' Row last
@@ -331,9 +334,9 @@
             }
             _.each(trainTotals, function (trainTotal, trainName) {
                 _.each(data, function (row) {
-                    row[trainName] = _.map(row.horizontalTeamTypes, function (teamType) {
-                        if ((gridData[trainName][row.horizontalData.HorizontalName] || {})[teamType])
-                            return gridData[trainName][row.horizontalData.HorizontalName][teamType];
+                    row[trainName] = _.map(row.scrumTeamNames, function (scrumTeamName) {
+                        if ((gridData[trainName][row.horizontalData.HorizontalName] || {})[scrumTeamName])
+                            return gridData[trainName][row.horizontalData.HorizontalName][scrumTeamName];
                         else
                             return null;
                     });
@@ -342,8 +345,9 @@
             //build the last row, with the train data
             data.push(_.merge({
                 horizontalData: _.merge({HorizontalName: ''}, me.getScrumTotalDataValue()),
-                horizontalTeamTypes: ['-']
+                scrumTeamNames: ['-']
             }, _.reduce(trainTotals, function (map, trainTotal, trainName) {
+                console.log("trainName = ", trainName);
                 map[trainName] = [
                     _.merge(
                         {scrumName: trainName},
@@ -357,6 +361,7 @@
         },
 
         _buildGridColumns: function (trains) {
+            //console.log("trains in buildGridColumns: ", trains);
             var me = this;
             return [].concat(
                 [{
@@ -371,15 +376,15 @@
                 }, {
                     text: ' ', //Horizontal Team Types Column
                     xtype: 'intelcomponentcolumn',
-                    dataIndex: 'horizontalTeamTypes',
-                    width: 100,
+                    dataIndex: 'scrumTeamNames',
+                    width: 200,
                     tdCls: 'stdci-cell-container',
                     sortable: false,
-                    renderer: function (horizontalTeamTypes) {
+                    renderer: function (scrumTeamNames) {
                         return Ext.create('Ext.container.Container', {
                             layout: {type: 'vbox'},
                             width: '100%',
-                            items: _.map(horizontalTeamTypes, me.teamTypeCellRenderer)
+                            items: _.map(scrumTeamNames, me.teamTypeCellRenderer)
                         });
                     }
                 }],
@@ -393,6 +398,7 @@
                         tdCls: 'stdci-cell-container',
                         sortable: false,
                         renderer: function (scrumDataList) {
+                            //console.log("scrumDataList: ", scrumDataList);
                             return Ext.create('Ext.container.Container', {
                                 layout: {type: 'vbox'},
                                 width: '100%',
@@ -433,8 +439,10 @@
             console.log("Building Data Grid...");
             me.setLoading('Building Data Grid...');
 
+            console.log("me.GridData = ", me.GridData);
             //preprocess the data so we can create the rows for the table
             var data = me._buildDataGrid(me.GridData);
+            console.log("data = ", data);
 
             // get the list of trains
             var trains = _.keys(me.GridData);
@@ -443,7 +451,7 @@
             var gridStore = Ext.create('Ext.data.Store', {
                 fields: [
                     {name: 'horizontalData', type: 'auto'},
-                    {name: 'horizontalTeamTypes', type: 'auto'}
+                    {name: 'scrumTeamNames', type: 'auto'}
                 ]
                     .concat(_.map(trains, function (train) {
                         return {name: train, type: 'auto'};
@@ -458,6 +466,7 @@
 
             //finally build the grid
             console.log("rendering grid...");
+            me.setLoading('Rendering Grid...');
             me.down('#gridContainer').add({
                 xtype: 'grid',
                 scroll: 'both',

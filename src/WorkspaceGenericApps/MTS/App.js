@@ -32,6 +32,10 @@
             ]);
         },
         setScrumDataValue: function (container, scrumGroupName, projectName) {
+            //console.log("setScrumDataBalue for container:", container);
+            //console.log("setScrumDataBalue for scrumGroupName:", scrumGroupName);
+            //console.log("setScrumDataBalue for projectName:", projectName);
+
             // get stories for train/scrum
             // if feature of story belongs to this train then add 1
             var me = this;
@@ -66,8 +70,8 @@
             //Not available in 2.0 SDK and/or lodash 3.10
             //var violatingTeams = _.uniq(
             //    _.flatMapDeep(me.GridData, function(item){
-            //        if(item.scrumTeamType){
-            //            return item.scrumTeamType;
+            //        if(item.scrumName){
+            //            return item.scrumName;
             //        }
             //    })
             //);
@@ -82,8 +86,8 @@
                 _.each(train, function (horizontal) {
                     //go through each of its horizontals and get its teams
                     _.each(horizontal, function (team) {
-                        //go through each of the teams, and push the team type name to a list.
-                        teamList.push(team.scrumTeamType);
+                        //go through each of the teams, and push the team name name to a list.
+                        teamList.push(team.scrumName);
                     });
                 });
             });
@@ -102,8 +106,8 @@
                 _.each(train, function (horizontal) {
                     //go through each of its horizontals and get its teams
                     _.each(horizontal, function (team) {
-                        //go through each of the teams, and push the team type name to a list.
-                        if (violatingTeams.indexOf(team.scrumTeamType) == -1) {
+                        //go through each of the teams, and push the team name name to a list.
+                        if (violatingTeams.indexOf(team.scrumName) == -1) {
                             team.isViolating = false;
                         } else {
                             team.isViolating = true;
@@ -131,8 +135,12 @@
             };
         },
         scrumDataCellRenderer: function (scrumData) {
-            var exists = (scrumData !== null && scrumData.featureCount > 0);
-            var tooltip_text = exists ? scrumData.features.join("\n") : "";
+
+            var exists = (scrumData && scrumData.featureCount > 0);
+
+            //console.log("scrumdata: ", scrumData + " exists: ", exists);
+
+            var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
 
             var className = "default-null";
             if (exists && scrumData.isViolating) {
@@ -158,22 +166,22 @@
                             Ext.QuickTips.register({
                                 target: c.getEl(),
                                 text: c.qtip
-                            })
+                            });
                         }
                     }
                 }
             };
         },
-        teamTypeCellRenderer: function (teamType) {
+        teamTypeCellRenderer: function (scrumName) {
             var me = this;
             if (violatingTeams) {
-                if (violatingTeams.indexOf(teamType) == -1) {
+                if (violatingTeams.indexOf(scrumName) == -1) {
                     return {
                         xtype: 'container',
                         flex: 1,
-                        width: 100,
+                        width: 200,
                         cls: 'team-type-cell-not-violating',
-                        html: teamType
+                        html: scrumName
                     };
                 } else {
                     //Else, this team is found in the list of violating teams so color it red
@@ -181,8 +189,8 @@
                         xtype: 'container',
                         flex: 1,
                         cls: 'team-type-cell-violating',
-                        width: 100,
-                        html: teamType
+                        width: 200,
+                        html: scrumName
                     };
                 }
             } else {
@@ -190,8 +198,8 @@
                     xtype: 'container',
                     flex: 1,
                     cls: 'team-type-cell-null',
-                    width: 100,
-                    html: teamType
+                    width: 200,
+                    html: scrumName
                 };
             }
         },
