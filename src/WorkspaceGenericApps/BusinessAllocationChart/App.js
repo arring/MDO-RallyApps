@@ -183,8 +183,6 @@
 			
 			me.FilteredLeafProjects = filteredProjects;
 			if(!me.FilteredLeafProjects) throw "No leaf projects for userstory filter";
-			
-			//return Q.all(_.map(_.chunk(me.FilteredLeafProjects, 20), function(leafProjects){
                 return Q.all(_.map(_.chunk(me.LeafProjects, 20), function(leafProjects){
 				return me.parallelLoadWsapiStore({
 					model: me.UserStory,
@@ -206,21 +204,9 @@
 					pageSize: 200,
 					data: [].concat.apply([], _.invoke(stores, 'getRange'))
 				});
-
-				// /* US436545: Remove this to get back improperly sized user stories */
-				// _.each(me.UserStoryStore.getRange(), function(item,key){
-				// 	if(key < me.UserStoryStore.count()  && me.UserStoryStore.getAt(key).data) {
-                
-                //         //this can be checked for each portfolioitemnames
-                //        // if(item.data["Feature"])
-                //        if(item.data[lowestPortfolioItem])
-                //         console.log(me.PortfolioItemMap[item.data[lowestPortfolioItem].ObjectID]);
-				// 		var pe = me.UserStoryStore.getAt(key).data.PlanEstimate;
-				// 	}
-				// });
            
-                //WsapiUserStoryMap for DataIntegrity
-                me.TeamStoresDI = _.reduce(me.UserStoryStore.getRange(), function(hash, r,key){
+                //WsapiUserStoryMap 
+                me.TeamStores = _.reduce(me.UserStoryStore.getRange(), function(hash, r,key){
                     var teamName = r.data.Project.Name;
                     hash[r.data.Project.Name] = _.filter(me.UserStoryStore.getRange(),function(f){ return f.data.Project.Name === teamName; });
                     return hash;
@@ -229,161 +215,130 @@
 				me.fixRawUserStoryAttributes();
 			});
 		},
-       
-      
-        
-        BuildTeamArryAndTrainBasedArry: function() {
-            var me = this,
-            teamNoBoArry = [];
-            var totalStoryPlanEstimate = 0;
-            var sum = 0;
-            var noBoSum = 0;       
-            var teamSumofAllB0 = 0;
-            var teamSumofAllNoBO = 0;
-            lowestPortfolioItem = me.PortfolioItemTypes[0];
-            var teamLevelPortFolioItemArry = [];
-            var teamChartArry = [];
-            var TotalSum=0;
-           
-            if (me.teamBoArry.length === 0) {
-                _.each(me.TeamStoresDI, function(records, teamName) {
-                    teamSumofAllB0 = 0;
-                    teamSumofAllNoBO = 0;
-                    for (i = 0; i < me.TopPortfolioItemNames.length; i++) {
-                        var x = "";
-                        sum = 0;
-                       // noBoSum = 0;
-                        //go over user stories within a project/team
-                        for (j = 0; j < records.length; j++) {
-                            if (me.PortfolioItemMap[records[j].raw[lowestPortfolioItem].ObjectID] === me.TopPortfolioItemNames[i].Name) {
-                                sum = sum + records[j].data.PlanEstimate;
-                            }
-                            //Not attached to any feature
-                            if (records[j].raw[lowestPortfolioItem] === 0) {
-                                noBoSum = noBoSum + records[j].data.PlanEstimate;
-                            }
+        PopulateTeamArry: function() {
+            var me = this, 
+            sum = 0,
+            noBoSum = 0,
+            teamSumofAllB0 = 0,
+            teamSumofAllNoBO = 0,
+            teamLevelPortFolioItemArry = [],
+            teamChartArry = [];
+            var lowestPortfolioItem = me.PortfolioItemTypes[0];
+          
+            _.each(me.TeamStores, function(records, teamName) {
+                teamSumofAllB0 = 0;
+                teamSumofAllNoBO = 0;
+                _.forOwn(me.TopPortfolioItemNames, function(portFolioItemName) {
+                    sum = 0;
+                    _.forOwn(records, function(record) {
+                        if (me.PortfolioItemMap[record.raw[lowestPortfolioItem].ObjectID] === portFolioItemName.Name) {
+                            sum = sum + record.data.PlanEstimate;
                         }
-                        teamSumofAllB0 = teamSumofAllB0 + sum;
-                        teamSumofAllNoBO = teamSumofAllNoBO + noBoSum;
-                        //sum of all planestimate and "not attached to plan estimate" per team     
-                        if (sum > 0) {
-                            teamLevelPortFolioItemArry.push({ Name: me.TopPortfolioItemNames[i].Name, BoPlanEstimate: Math.round(sum), NoBOPlanEstimate: Math.round(noBoSum) });
-                            teamChartArry.push({ PortFolios: me.TopPortfolioItemNames[i].Name, y: Math.round(sum) });
+                        //Not attached to any feature
+                        if (record.raw[lowestPortfolioItem] === 0) {
+                            noBoSum = noBoSum + record.data.PlanEstimate;
                         }
+                    });
+                    teamSumofAllB0 = teamSumofAllB0 + sum;
+                    teamSumofAllNoBO = teamSumofAllNoBO + noBoSum;
+                    //sum of all planestimate and "not attached to plan estimate" per team     
+                    if (sum > 0) {
+                        teamLevelPortFolioItemArry.push({ Name: portFolioItemName.Name, BoPlanEstimate: Math.round(sum), NoBOPlanEstimate: Math.round(noBoSum) });
+                        teamChartArry.push({ PortFolios: portFolioItemName.Name, y: Math.round(sum) });
                     }
-                    if (noBoSum > 0)
-                        teamChartArry.push({ PortFolios: "Not attached to BO", y: Math.round(noBoSum) });
-                        
-                        
-                    //contains for each team array of business objectives and gran sum of all total of 
-                    me.teamBoArry.push({ Name: teamLevelPortFolioItemArry, Portfolios: teamChartArry, Team: teamName, TotalPlanEstimate: Math.round(teamSumofAllB0), TotalNoBOPlanEsitmate: Math.round(noBoSum) });
-                    teamLevelPortFolioItemArry = [];
-                    teamChartArry = [];
-                     noBoSum = 0;
-                    //Sum of total of all story plan estimate for entire release
-                    TotalSum = TotalSum + teamSumofAllB0 + teamSumofAllNoBO;
                 });
-            }
-            //For the chart get the percent
-            teamLevelPortFolioItemArry = [];
-        
-            if (me.teamLevelChartData.length === 0) {
-                for (var i = 0; i < me.teamBoArry.length; i++) {
-                    portFolioArry = [];
-                    teamLevelPortFolioItemArry = [];
-                    portFolioArry = me.teamBoArry[i].Portfolios;
-                    TotalPlanEstimateTeamLevel=0;
-                    TotalPlanEstimateTeamLevel = me.teamBoArry[i].TotalPlanEstimate + me.teamBoArry[i].TotalNoBOPlanEsitmate;
-                    for (var j = 0; j < portFolioArry.length; j++) {
-                        percent = (portFolioArry[j].y / TotalPlanEstimateTeamLevel) * 100;
-                        if (percent > 0) {
-                            teamLevelPortFolioItemArry.push({ name: portFolioArry[j].PortFolios, y: Math.round(percent) });
-                        }
-                    }
-                    me.teamLevelChartData.push({ Name: me.teamBoArry[i].Team, Portfolios: teamLevelPortFolioItemArry });
+                if (noBoSum > 0) {
+                    teamChartArry.push({ PortFolios: "Not attached to BO", y: Math.round(noBoSum) });
                 }
+                //contains for each team array of business objectives and gran sum of all total of 
+                me.teamBoArry.push({ Name: teamLevelPortFolioItemArry, Portfolios: teamChartArry, Team: teamName, TotalPlanEstimate: Math.round(teamSumofAllB0), TotalNoBOPlanEsitmate: Math.round(noBoSum) });
+                teamLevelPortFolioItemArry = [];
+                teamChartArry = [];
+                noBoSum = 0;
+                //Sum of total of all story plan estimate for entire release
+                // TotalSum = TotalSum + teamSumofAllB0 + teamSumofAllNoBO;
+            });
+        },
+       GetColors: function() {
+               var me = this,  
+               i=1;
+              getColor= ['#7cb5ec', '#434348', '#90ed7d', '#f7a35c', '#8085e9', 
+                        '#f15c80', '#e4d354', '#2b908f', '#f45b5b', '#91e8e1'];      
+
+              var getColorArry={};        
+             _.forOwn(me.TopPortfolioItemNames,function(portFolioName){
+                 var index= i % getColor.length;
+                 getColorArry[ portFolioName.Name] = getColor[index];                
+                 i++;               
+                 
+             });
+              getColorArry[ "Not attached to BO"] = "#91e8e1";  
+              return getColorArry;
+       },
+        GetChartData: function() {
+            var me = this,           
+            totalStoryPlanEstimate = 0;
+            sum = 0,           
+            teamLevelPortFolioItemArry = [],
+            getColorArry=me.GetColors();   
+               
+            if (me.teamBoArry.length === 0) {                
+                me.PopulateTeamArry();     
             }
-                
-            var percent = 0;
-            var teamsArry = [];
-            teamsArry = me.teamBoArry;
-            teamLevelPortFolioItemArry = [];          
+            //For the chart get the percent teamlevel
+            teamLevelPortFolioItemArry = [];
+            if (me.teamLevelChartData.length === 0) {
+                _.forOwn(me.teamBoArry, function(teamArry) {                  
+                    teamLevelPortFolioItemArry = [];
+                    TotalPlanEstimateTeamLevel = 0;
+                    TotalPlanEstimateTeamLevel = teamArry.TotalPlanEstimate + teamArry.TotalNoBOPlanEsitmate;
+                    _.forOwn(teamArry.Portfolios, function(portfolio) {
+                        percent = (portfolio.y / TotalPlanEstimateTeamLevel) * 100;
+                        if (percent > 0) {
+                            teamLevelPortFolioItemArry.push({ name: portfolio.PortFolios, y: Math.round(percent), color: getColorArry[portfolio.PortFolios] });
+                        }
+                    });
+                    me.teamLevelChartData.push({ Name: teamArry.Team, Portfolios: teamLevelPortFolioItemArry });
+                });
+            }   
+            var noBoEstimate = 0,
+            BoEstimate = 0;
             me.portfolioAllTeamsArry = [];
             sum = 0;
-            var noBoEstimate = 0;
-            var BoEstimate = 0;
-
             //Get Train level
-                for (var i = 0; i < me.TopPortfolioItemNames.length; i++) {
-                sum = 0;      
-                  me.totalStoryPlanEstimate=0;  
-                    BoEstimate = 0;
-                    noBoEstimate=0;
-                for (var j = 0; j < me.teamBoArry.length; j++) {
-                    portfolioArry = me.teamBoArry[j].Portfolios;   
-                                
-                    noBoEstimate = noBoEstimate + me.teamBoArry[j].TotalNoBOPlanEsitmate;
-                    BoEstimate = BoEstimate + me.teamBoArry[j].TotalPlanEstimate;
-                    for (var k = 0; k < portfolioArry.length; k++) {
-                        if (portfolioArry[k].PortFolios === me.TopPortfolioItemNames[i].Name) {
-                            sum = sum + portfolioArry[k].y;
+            _.forOwn(me.TopPortfolioItemNames, function(portfolioName) {
+                sum = 0;
+                me.totalStoryPlanEstimate = 0;
+                BoEstimate = 0;
+                noBoEstimate = 0;
+                _.forOwn(me.teamBoArry, function(teamArry) {               
+                    noBoEstimate = noBoEstimate + teamArry.TotalNoBOPlanEsitmate;
+                    BoEstimate = BoEstimate + teamArry.TotalPlanEstimate;
+                    _.forOwn(teamArry.Portfolios, function(portfolioItem) {
+                        if (portfolioItem.PortFolios === portfolioName.Name) {
+                            sum = sum + portfolioItem.y;
                         }
-                    }
-                }
+                    });
+                });
                 me.totalStoryPlanEstimate = noBoEstimate + BoEstimate;
-              //  BoEstimate = 0;
-
-                velocityPercent = sum > 0 ? (sum / me.totalStoryPlanEstimate) * 100 : 0;
-           //     velocityPercent = BoEstimate > 0 ? (BoEstimate / me.totalStoryPlanEstimate) * 100 : 0;
+                velocityPercent = sum > 0 ? (sum / me.totalStoryPlanEstimate) * 100 : 0;             
                 if (velocityPercent > 0) {
-                    me.portfolioAllTeamsArry.push({ name: me.TopPortfolioItemNames[i].Name, y: velocityPercent });
+                    me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, color: getColorArry[portfolioName.Name]});
                 }
-                
-               
-            }
-
+            });
             noBoEstimatePercent = (noBoEstimate / me.totalStoryPlanEstimate) * 100;
             if (noBoEstimatePercent > 0) {
-                me.portfolioAllTeamsArry.push({ name: "Not attached to BO", y: noBoEstimatePercent });
+                me.portfolioAllTeamsArry.push({ name: "Not attached to BO", y: noBoEstimatePercent, color: getColorArry["Not attached to BO"] });
             }
-            
-        //     for (var i = 0; i < me.TopPortfolioItemNames.length; i++) {
-        //         sum = 0;      
-        //         for (var j = 0; j < me.teamBoArry.length; j++) {
-        //             portfolioArry = me.teamBoArry[j].Portfolios;                  
-        //             noBoEstimate = noBoEstimate + teamsArry[j].TotalNoBOPlanEsitmate;
-        //             BoEstimate = BoEstimate + teamsArry[j].TotalPlanEstimate;
-        //             for (var k = 0; k < portfolioArry.length; k++) {
-        //                 if (portfolioArry[k].PortFolios === me.TopPortfolioItemNames[i].Name) {
-        //                     sum = sum + portfolioArry[k].y;
-        //                 }
-        //             }
-        //         }
-        //         me.totalStoryPlanEstimate = noBoEstimate + BoEstimate;
-        //       //  BoEstimate = 0;
-
-        //         velocityPercent = sum > 0 ? (sum / me.totalStoryPlanEstimate) * 100 : 0;
-        //    //     velocityPercent = BoEstimate > 0 ? (BoEstimate / me.totalStoryPlanEstimate) * 100 : 0;
-        //         if (velocityPercent > 0) {
-        //             me.portfolioAllTeamsArry.push({ name: me.TopPortfolioItemNames[i].Name, y: velocityPercent });
-        //         }
-                
-        //          BoEstimate = 0;
-        //     }
-
-        //     noBoEstimatePercent = (noBoEstimate / me.totalStoryPlanEstimate) * 100;
-        //     if (noBoEstimatePercent > 0) {
-        //         me.portfolioAllTeamsArry.push({ name: "Not attached to BO", y: noBoEstimatePercent });
-        //     }
-
         },
+        
+      
 		
 		redrawEverything: function(){
 			var me=this;
 			me.setLoading('Loading Charts');	
-			// 
             return me.loadUserStories()      
-               .then(function(){ return me.BuildTeamArryAndTrainBasedArry(); })          
+                 .then(function(){ return me.GetChartData(); })
 				.then(function(){
 					$('#scrumCharts-innerCt').empty();
 					//if(!me.DeleteCacheButton) me.renderDeleteCache();
@@ -548,6 +503,10 @@
 			me.CurrentTopPortfolioItemName = null;
 			me.AllSnapshots = payload.AllSnapshots;
 			me.TeamStores = payload.TeamStores;
+            
+            me.teamLevelChartData = payload.teamLevelChartData;
+            me.teamBoArry = payload.teamBoArry;
+            me.portfolioAllTeamsArry = payload.portfolioAllTeamsArry;
 		},
 		setCachePayLoadFn: function(payload){
 			var me = this;
@@ -568,6 +527,9 @@
 				map[key] = _.map(sss, function(ss){ return {raw: ss.raw}; });
 				return map;
 			}, {}); 
+            payload.teamLevelChartData = me.teamLevelChartData;
+            payload.teamBoArry= me.teamBoArry;
+            payload.portfolioAllTeamsArry = me.portfolioAllTeamsArry;
 		},
 		cacheKeyGenerator: function(){
 			var me = this;
@@ -576,7 +538,8 @@
 			//var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			var hasKey = typeof(releaseOID) === 'number';
 			if(hasKey){
-				return 'scrum-group-cfd-' + projectOID + '-' + releaseOID;
+			//	return 'scrum-group-cfd-' + projectOID + '-' + releaseOID;
+            	return 'business-alloc-report-' + projectOID + '-' + releaseOID;
 			}
 			else return undefined; //no release set
 		},
@@ -783,7 +746,7 @@
 				});
 			var	_6days = 1000 * 60 *60 *24*6;	
 			me.changedReleaseStartDate = (typeof(me.changedReleaseStartDate) === "undefined") ? new Date(new Date(me.ReleaseRecord.data.ReleaseStartDate)*1  + _6days) : me.changedReleaseStartDate ;
-         
+      
       
        	/************************************** Scrum Group CHART STUFF *********************************************/
 		
