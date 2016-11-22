@@ -39,13 +39,8 @@
 			layout:'hbox',
 			align: 'left',
 			width: '600px'
-		},{
-			xtype:'container',
-			id:'navBarProductFilter',
-			layout:'hbox',
-			align: 'left',
-			width: '600px'
-		},{
+		},
+        {
 			xtype:'container',
 			width:'100%',
 			layout:{
@@ -69,11 +64,11 @@
 		},	
 		config: {
 			defaultSettings: {
-				cacheUrl:''
+				cacheUrl:'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
 			}
 		},
-		userAppsPref: 'intel-ScrumGroup-CFD',
-		cfdProjPref: 'intel-workspace-admin-cfd-releasedatechange',
+		userAppsPref: 'intel-BusinessAlloc-Chart',
+		cfdProjPref: 'intel-workspace-admin-bachart-releasedatechange',
 		/****************************************************** DATA STORE METHODS ********************************************************/
         loadPortfolioItems: function() {
             var me = this;
@@ -95,7 +90,6 @@
                     me.PortfolioItemMap = me.createBottomPortfolioItemObjectIDToTopPortfolioItemNameMap(portfolioItemStores);
                     me.LowestPortfolioItemRecords = portfolioItemStores[0].getRange();
                     me.TopPortfolioItemRecords = portfolioItemStores.slice(-1)[0].getRange();
-                    //           console.log(" portfolio item map", me.PortfolioItemMap);	
                     me.TopPortfolioItemNames = _.sortBy(_.map(_.union(_.values(me.PortfolioItemMap)),
                         function(name) { return { Name: name }; }),
                         function(name) { return name.Name; });
@@ -103,7 +97,6 @@
                         hash[r.data.ObjectID] = (r.data.Release || {}).Name || 'No Release';
                         return hash;
                     }, {});
-                    //       console.log ("me.LowestPortfolioItemhash ",  me.LowestPortfolioItemsHash);
                 });
 
         },
@@ -250,7 +243,7 @@
                 if (noBoSum > 0) {
                     teamChartArry.push({ PortFolios: "Not attached to BO", y: Math.round(noBoSum) });
                 }
-                //contains for each team array of business objectives and gran sum of all total of 
+                //contains for each team array of business objectives and grand sum of all total of storypoints (planestimate)
                 me.teamBoArry.push({ Name: teamLevelPortFolioItemArry, Portfolios: teamChartArry, Team: teamName, TotalPlanEstimate: Math.round(teamSumofAllB0), TotalNoBOPlanEsitmate: Math.round(noBoSum) });
                 teamLevelPortFolioItemArry = [];
                 teamChartArry = [];
@@ -344,9 +337,7 @@
 					//if(!me.DeleteCacheButton) me.renderDeleteCache();
 					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
-					if(me.TopPortfolioItemPicker) me.TopPortfolioItemPicker.destroy();
 					me._checkToRenderCFDCalendar();
-					me.renderTopPortfolioItemPicker();
 					me.renderCharts();
 					me.hideHighchartsLinks(); 
 					me.setLoading(false);
@@ -535,7 +526,6 @@
 			var me = this;
 			var projectOID = me.getContext().getProject().ObjectID;
 			var releaseOID = me.ReleaseRecord.data.ObjectID;
-			//var hasKey = typeof ((me.AppsPref.projs || {})[projectOID] || {}).Release === 'number';
 			var hasKey = typeof(releaseOID) === 'number';
 			if(hasKey){
 			//	return 'scrum-group-cfd-' + projectOID + '-' + releaseOID;
@@ -706,33 +696,6 @@
 				.done();
 			
 		},
-		/*End: CFD Release Start Date Selection Option Component*/
-		topPortfolioItemPickerSelected: function(combo, records){
-			var me=this, 
-				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1],
-				value = records[0].data.Name;
-			if((value === null && me.CurrentTopPortfolioItemName===null) || (value === me.CurrentTopPortfolioItemName)) return;
-			if(value === 'All Work') me.CurrentTopPortfolioItemName = null;
-			else me.CurrentTopPortfolioItemName = value;
-			me.redrawEverything();
-		},				
-		renderTopPortfolioItemPicker: function(){
-			var me=this,
-				topPiType = me.PortfolioItemTypes.length && me.PortfolioItemTypes[me.PortfolioItemTypes.length-1];
-			me.TopPortfolioItemPicker = Ext.getCmp('navBarProductFilter').add({
-				xtype:'intelfixedcombo',
-				fieldLabel: (topPiType || 'Portfolio') + ' Filter',
-				labelWidth: 80,
-				width: 240,
-				store: Ext.create('Ext.data.Store', {
-					fields:['Name'],
-					data: [{Name:'All Work'}].concat(me.TopPortfolioItemNames)
-				}),
-				displayField: 'Name',
-				value: me.CurrentTopPortfolioItemName || 'All Work',
-				listeners: { select: me.topPortfolioItemPickerSelected.bind(me) }
-			});
-		},		
 		
 		/********************************************** RENDERING CHARTS ***********************************************/
 		renderCharts: function(){
