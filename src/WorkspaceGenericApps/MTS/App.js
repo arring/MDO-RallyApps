@@ -1,7 +1,7 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
     var violatingTeams = [];
-    var violatingTeamsFull = [];
+    var violatingTeamsFull = {};
     var originalGridData = [];
     var filteredTeams = false;
 
@@ -67,20 +67,95 @@
             duplicates = _.uniq(duplicates);
             return duplicates;
         },
+        _createGridDataHash: function(){
+            var me = this;
+            me.superclass._createGridDataHash.call(me);
+            me._updateGridDataHash();
+            me._findViolations();
+        },
+        /**
+         * _updateGridDataHash
+         * Fills in missing features that are owned by a train which the scrum team
+         * is not a member of.
+         * If we do not complete this step, the violations will not show.
+         * @private
+         */
         _updateGridDataHash: function () {
             var me = this;
-            me.superclass._updateGridDataHash.call(me);
 
+            var temp = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
+                var projectNames = _.map(train.Scrums, function (scrum) {
+                    return scrum.data.Name;
+                });
+                var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
+                hash[train.ScrumGroupName] = _.reduce(horizontalMap, function (hash, item, key) {
+                    var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
+                    hash[horizontal] = _.reduce(horizontalMap, function (hash, r, key) {
+                        var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
+                        if (horizontal === horizontal2) {
+                            var scrumTeamType = r.teamType + " " + r.number;
+                            var projectName = r.projectName;
+                            if(!hash[projectName]) {
+                                hash[projectName] = {
+                                    //scrumTeamType: scrumTeamType,
+                                    scrumName: projectName,
+                                    isViolating: null
+                                };
+                            }
+                            //me.insertMissingFeatures(hash[projectName], train.ScrumGroupName, projectName);
+
+                            var featuresInProject = me.projectFeatureMap[train.ScrumGroupName][projectName];
+                            //For each of the features that the scrum team (project) is working on
+                            _.each(featuresInProject, function (featureID) {
+                                //Find that feature by ID in the trainFeatureMap.
+                                var f = me.trainFeatureMap[featureID];
+                                if (f && f.train != train.ScrumGroupName) {
+
+                                    //Check for 'null' or 'undefined' on EVERYTHING
+                                    if(!me.GridData[f.train]) {
+                                        me.GridData[f.train] = {};
+                                    }
+                                    if(!me.GridData[f.train][horizontal]) {
+                                        me.GridData[f.train][horizontal] = {};
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName]) {
+                                        me.GridData[f.train][horizontal][projectName] = {
+                                            scrumName: projectName,
+                                            isViolating: null
+                                        };
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName].features) {
+                                        me.GridData[f.train][horizontal][projectName].features = [];
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName].featureCount) {
+                                        me.GridData[f.train][horizontal][projectName].featureCount = 0;
+                                    }
+                                    //Make sure we don't add duplicates
+                                    if(_.indexOf(me.GridData[f.train][horizontal][projectName].features, f.featureID + ": " + f.feature) == -1) {
+                                        //Finally, push into me.GridData.
+                                        me.GridData[f.train][horizontal][projectName].features.push(f.featureID + ": " + f.feature);
+                                        me.GridData[f.train][horizontal][projectName].featureCount++;
+                                    }
+                                }
+                            });
+                        }
+                        return hash;
+                    }, {});
+                    return hash;
+                }, {});
+                return hash;
+            }, {});
+        },
+        /**
+         * _findViolations
+         * Finds the violating teams in me.GridData object. Saves them to a list.
+         * A team is violating if it is working on features from more than one train.
+         * @private
+         */
+        _findViolations: function () {
+            var me = this;
+            //Save the original
             originalGridData = me.GridData;
-
-            //Not available in 2.0 SDK and/or lodash 3.10
-            //var violatingTeams = _.uniq(
-            //    _.flatMapDeep(me.GridData, function(item){
-            //        if(item.scrumName){
-            //            return item.scrumName;
-            //        }
-            //    })
-            //);
 
             //Search through GridData object to get a list of the teams when they occur
             var teamList = [];
@@ -101,33 +176,41 @@
 
             //Now that we know which are the violating teams, go through and set the isViolating = true
             // for each occurrence in me.GridData
+            var trainKeys = Object.keys(me.GridData);
+            var iteration = 0;
 
             //for the length of me.GridData
             _.each(me.GridData, function (train) {
-                violatingTeamsFull[train] = {};
+                var currentTrain = trainKeys[iteration];
+                violatingTeamsFull[currentTrain] = {};
                 //go through each of the trains and get its horizontals
-                _.each(train, function (horizontal) {
-                    violatingTeamsFull[train][horizontal] = {};
+                _.each(train, function (horizontal, key) {
+                    var currentHorizontal = key;
+                    violatingTeamsFull[currentTrain][currentHorizontal] = {};
                     //go through each of its horizontals and get its teams
                     _.each(horizontal, function (team) {
+                        var currentTeam = team.scrumName;
+                        violatingTeamsFull[currentTrain][currentHorizontal][currentTeam] = {};
                         //go through each of the teams, and push the team name name to a list.
                         if (violatingTeams.indexOf(team.scrumName) == -1) {
                             team.isViolating = false;
+                            delete violatingTeamsFull[currentTrain][currentHorizontal][currentTeam];
                         } else {
                             team.isViolating = true;
                             //this "team" is violating which means this "horizontal" is violating which means this "train" is violating.
-                            violatingTeamsFull[train][horizontal][team.scrumName] = team;
+                            violatingTeamsFull[currentTrain][currentHorizontal][currentTeam] = team;
                         }
                     });
                     //clear all the empty ones out
-                    if (_.isEmpty(violatingTeamsFull[train][horizontal])) {
-                        delete [train][horizontal];
+                    if (_.isEmpty(violatingTeamsFull[currentTrain][currentHorizontal])) {
+                        delete violatingTeamsFull[currentTrain][currentHorizontal];
                     }
                 });
                 //clear all the empty ones out
-                if (_.isEmpty(violatingTeamsFull[train])) {
-                    delete violatingTeamsFull[train];
+                if (_.isEmpty(violatingTeamsFull[currentTrain])) {
+                    delete violatingTeamsFull[currentTrain];
                 }
+                iteration++;
             });
             return;
         },
