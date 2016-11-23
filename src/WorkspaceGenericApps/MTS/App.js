@@ -1,7 +1,8 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
     var violatingTeams = [];
-    var violatingTeamObj = [];
+    var violatingTeamsFull = [];
+    var originalGridData = [];
     var filteredTeams = false;
 
     Ext.define('Intel.MTS', {
@@ -26,25 +27,28 @@
 
         loadReportData: function () {
             var me = this;
+            me.setLoading('Loading Features and User Stories Data...');
             return Q.all([
                 me._loadFeatures(),
                 me._loadUserStories()
             ]);
         },
         setScrumDataValue: function (container, scrumGroupName, projectName) {
-            //console.log("setScrumDataBalue for container:", container);
-            //console.log("setScrumDataBalue for scrumGroupName:", scrumGroupName);
-            //console.log("setScrumDataBalue for projectName:", projectName);
-
             // get stories for train/scrum
             // if feature of story belongs to this train then add 1
             var me = this;
             container.featureCount = 0;
             container.features = [];
+
             var featuresInProject = me.projectFeatureMap[scrumGroupName][projectName];
+
+            //For each of the features that the scrum team (project) is working on
             _.each(featuresInProject, function (featureID) {
+                //Find that feature by ID in the trainFeatureMap.
                 var f = me.trainFeatureMap[featureID];
                 if (f && f.train == scrumGroupName) {
+                    //Train owning the feature is equal to the train which is working on the feature
+                    //add it to this train, horizontal, and scrum combo.
                     container.features.push(f.featureID + ": " + f.feature);
                     container.featureCount++;
                 }
@@ -63,9 +67,11 @@
             duplicates = _.uniq(duplicates);
             return duplicates;
         },
-        _createGridDataHash: function () {
+        _updateGridDataHash: function () {
             var me = this;
-            me.superclass._createGridDataHash.call(me);
+            me.superclass._updateGridDataHash.call(me);
+
+            originalGridData = me.GridData;
 
             //Not available in 2.0 SDK and/or lodash 3.10
             //var violatingTeams = _.uniq(
@@ -76,8 +82,6 @@
             //    })
             //);
 
-            console.log("Iterating through the GridData object to find the violating teams...");
-            console.log("me.GridData = ", me.GridData);
             //Search through GridData object to get a list of the teams when they occur
             var teamList = [];
             //for the length of me.GridData
@@ -98,12 +102,12 @@
             //Now that we know which are the violating teams, go through and set the isViolating = true
             // for each occurrence in me.GridData
 
-            var trainNames = Object.keys(me.GridData);
-
             //for the length of me.GridData
             _.each(me.GridData, function (train) {
+                violatingTeamsFull[train] = {};
                 //go through each of the trains and get its horizontals
                 _.each(train, function (horizontal) {
+                    violatingTeamsFull[train][horizontal] = {};
                     //go through each of its horizontals and get its teams
                     _.each(horizontal, function (team) {
                         //go through each of the teams, and push the team name name to a list.
@@ -112,10 +116,18 @@
                         } else {
                             team.isViolating = true;
                             //this "team" is violating which means this "horizontal" is violating which means this "train" is violating.
-                            violatingTeamObj.push(train);
+                            violatingTeamsFull[train][horizontal][team.scrumName] = team;
                         }
                     });
+                    //clear all the empty ones out
+                    if (_.isEmpty(violatingTeamsFull[train][horizontal])) {
+                        delete [train][horizontal];
+                    }
                 });
+                //clear all the empty ones out
+                if (_.isEmpty(violatingTeamsFull[train])) {
+                    delete violatingTeamsFull[train];
+                }
             });
             return;
         },
@@ -135,9 +147,7 @@
             };
         },
         scrumDataCellRenderer: function (scrumData) {
-
             var exists = (scrumData && scrumData.featureCount > 0);
-
             //console.log("scrumdata: ", scrumData + " exists: ", exists);
 
             var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
@@ -145,7 +155,7 @@
             var className = "default-null";
             if (exists && scrumData.isViolating) {
                 className = "violating";
-            } else if(exists && !scrumData.isViolating){
+            } else if (exists && !scrumData.isViolating) {
                 className = "not-violating";
             }
 
@@ -207,30 +217,38 @@
             var hasData = horizontalData.total > 0;
             return hasData ? '<span>' + horizontalData.total + '</span>' : '-';
         },
-        finalActions: function(){
+        finalActions: function () {
             var me = this;
             me.renderFilterButton();
             return;
         },
-        toggleTeams: function(){
+        toggleTeams: function () {
             var me = this;
-            if(filteredTeams){
+            if (filteredTeams) {
                 //we need to update the grid to show all teams
-                console.log("we need to update the grid to show all teams");
-                me.superclass.reloadEverything.call(me);
+                console.log("We need to update the grid to show all teams");
+
+                //me.superclass.reloadEverything.call(me);
+
+                me.GridData = originalGridData;
+                console.log("originalGridData = ", originalGridData);
+                me.superclass.reloadGrid.call(me);
+
                 //Reset toggle variable
                 filteredTeams = false;
             } else {
                 //we need to update the grid to show only violating teams
-                console.log("we need to update the grid to show only violating teams");
-                me.GridData = violatingTeamObj;
-                console.log("violatingTeamObj = ", violatingTeamObj);
+                console.log("We need to update the grid to show only violating teams");
+
+                me.GridData = violatingTeamsFull;
+                console.log("violatingTeamsFull = ", violatingTeamsFull);
                 me.superclass.reloadGrid.call(me);
+
                 //Reset toggle variable
                 filteredTeams = true;
             }
         },
-        renderFilterButton: function() {
+        renderFilterButton: function () {
             var me = this;
             me.toggleFilterButton = me.down('#navbox').add({
                 xtype: 'button',
@@ -238,8 +256,9 @@
                 cls: 'show-only-button',
                 width: '140',
                 listeners: {
-                    click: function() {
+                    click: function () {
                         console.log("button clicked!");
+                        me.setLoading('Updating Grid...');
                         return me.toggleTeams();
                     }
                 }
@@ -275,6 +294,11 @@
                             featureID: featureRecord.data.ObjectID,
                             train: trainName
                         };
+                        //find where feature = "KBL 23e PRQ [49]" or OID 71354886744
+                        if (featureRecord.data.ObjectID == 71354886744) {
+                            //console.log("trainName: ", trainName);
+                            //console.log("featureRecord.data: ", featureRecord.data);
+                        }
                     });
                     store.destroyStore();
                 });
@@ -313,10 +337,20 @@
                             if (!map[trainName][projectName]) {
                                 map[trainName][projectName] = [];
                             }
+                            //If this user story has a feature
                             if (storyRecord.data.Feature) {
                                 // only track unique occurrences of the feature per train per project
+
                                 if (_.indexOf(map[trainName][projectName], storyRecord.data.Feature.ObjectID) === -1) {
                                     map[trainName][projectName].push(storyRecord.data.Feature.ObjectID);
+                                }
+
+                                //find where feature = "KBL 23e PRQ [49]" or OID 71354886744
+                                if (storyRecord.data.Feature.ObjectID == 71354886744) {
+                                    //console.log("trainName: ", trainName, " and projectName: ", projectName);
+                                    //console.log("storyRecord.data: ", storyRecord.data);
+                                    //19 Echo user stories tied to 71354886744 feature,
+                                    //and 30 Cascade user stories tied to 71354886744 feature
                                 }
                             }
                         });

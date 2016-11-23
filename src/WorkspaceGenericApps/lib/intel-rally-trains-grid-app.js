@@ -22,6 +22,7 @@
 				<ScrumTeamType:MIO CLK 1>: {
 					scrumTeamType:<ScrumTeamType: MIO CLK 1>,
 					scrumName:<projectName>
+					isViolating: <true, false, or null>
 					... Your own ScrumDataValue properties ...
 				}
 			}
@@ -76,6 +77,10 @@
             // OVERLOAD ME //
             // add any property you want to track to 'container'.
             // this will be anything needed to show the value on each cell of the grid
+            container.value = 1;
+        },
+        insertMissingFeatures: function (container, scrumGroupName, projectName) {
+            // OVERLOAD ME //
             container.value = 1;
         },
         getScrumTotalDataValue: function (scrumData) {
@@ -139,6 +144,7 @@
                 .then(function () {
                     me.setLoading('Creating Grid Data Hash...');
                     me._createGridDataHash();
+                    me._updateGridDataHash();
                     if (!me.ReleasePicker) { //only draw the first time
                         me.renderReleasePicker();
                     }
@@ -150,7 +156,7 @@
                     me.setLoading(false);
                 });
         },
-        reloadGrid: function (){
+        reloadGrid: function () {
             var me = this;
             me.setLoading('Loading Data...');
             me.down('#gridContainer').removeAll();
@@ -177,6 +183,72 @@
                                 isViolating: null
                             };
                             me.setScrumDataValue(hash[projectName], train.ScrumGroupName, projectName);
+                        }
+                        return hash;
+                    }, {});
+                    return hash;
+                }, {});
+                return hash;
+            }, {});
+        },
+        _updateGridDataHash: function () {
+            var me = this;
+
+            var temp = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
+                var projectNames = _.map(train.Scrums, function (scrum) {
+                    return scrum.data.Name;
+                });
+                var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
+                hash[train.ScrumGroupName] = _.reduce(horizontalMap, function (hash, item, key) {
+                    var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
+                    hash[horizontal] = _.reduce(horizontalMap, function (hash, r, key) {
+                        var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
+                        if (horizontal === horizontal2) {
+                            var scrumTeamType = r.teamType + " " + r.number;
+                            var projectName = r.projectName;
+                            if(!hash[projectName]) {
+                                hash[projectName] = {
+                                    //scrumTeamType: scrumTeamType,
+                                    scrumName: projectName,
+                                    isViolating: null
+                                };
+                            }
+                            //me.insertMissingFeatures(hash[projectName], train.ScrumGroupName, projectName);
+
+                            var featuresInProject = me.projectFeatureMap[train.ScrumGroupName][projectName];
+                            //For each of the features that the scrum team (project) is working on
+                            _.each(featuresInProject, function (featureID) {
+                                //Find that feature by ID in the trainFeatureMap.
+                                var f = me.trainFeatureMap[featureID];
+                                if (f && f.train != train.ScrumGroupName) {
+
+                                    //Check for 'null' or 'undefined' on EVERYTHING
+                                    if(!me.GridData[f.train]) {
+                                        me.GridData[f.train] = {};
+                                    }
+                                    if(!me.GridData[f.train][horizontal]) {
+                                        me.GridData[f.train][horizontal] = {};
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName]) {
+                                        me.GridData[f.train][horizontal][projectName] = {
+                                            scrumName: projectName,
+                                            isViolating: null
+                                        };
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName].features) {
+                                        me.GridData[f.train][horizontal][projectName].features = [];
+                                    }
+                                    if(!me.GridData[f.train][horizontal][projectName].featureCount) {
+                                        me.GridData[f.train][horizontal][projectName].featureCount = 0;
+                                    }
+                                    //Make sure we don't add duplicates
+                                    if(_.indexOf(me.GridData[f.train][horizontal][projectName].features, f.featureID + ": " + f.feature) == -1) {
+                                        //Finally, push into me.GridData.
+                                        me.GridData[f.train][horizontal][projectName].features.push(f.featureID + ": " + f.feature);
+                                        me.GridData[f.train][horizontal][projectName].featureCount++;
+                                    }
+                                }
+                            });
                         }
                         return hash;
                     }, {});
@@ -347,7 +419,6 @@
                 horizontalData: _.merge({HorizontalName: ''}, me.getScrumTotalDataValue()),
                 scrumTeamNames: ['-']
             }, _.reduce(trainTotals, function (map, trainTotal, trainName) {
-                console.log("trainName = ", trainName);
                 map[trainName] = [
                     _.merge(
                         {scrumName: trainName},
@@ -361,7 +432,6 @@
         },
 
         _buildGridColumns: function (trains) {
-            //console.log("trains in buildGridColumns: ", trains);
             var me = this;
             return [].concat(
                 [{
@@ -434,15 +504,12 @@
 
         renderGrid: function () {
             var me = this;
-
             me.setLoading(false);
             console.log("Building Data Grid...");
             me.setLoading('Building Data Grid...');
 
-            console.log("me.GridData = ", me.GridData);
             //preprocess the data so we can create the rows for the table
             var data = me._buildDataGrid(me.GridData);
-            console.log("data = ", data);
 
             // get the list of trains
             var trains = _.keys(me.GridData);
@@ -491,7 +558,7 @@
             }, 500);
         },
 
-        finalActions: function(){
+        finalActions: function () {
             // OVERLOAD ME //
             // Ext renderer function for each cell.
             // receives the scrumData container
