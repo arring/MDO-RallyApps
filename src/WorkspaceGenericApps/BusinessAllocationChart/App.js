@@ -64,7 +64,7 @@
 		},	
 		config: {
 			defaultSettings: {
-				cacheUrl:'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+				cacheUrl:'https://mdoproceffrpt/api/v1.0/custom/rally-app-cache/'
 			}
 		},
 		userAppsPref: 'intel-BusinessAlloc-Chart',
@@ -337,7 +337,7 @@
 					//if(!me.DeleteCacheButton) me.renderDeleteCache();
 					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
-					me._checkToRenderCFDCalendar();
+				//	me._checkToRenderCFDCalendar();
 					me.renderCharts();
 					me.hideHighchartsLinks(); 
 					me.setLoading(false);
@@ -466,8 +466,8 @@
 						.then(function(scrums){
 							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });						
 						})
-                        .then(function(){ return me.loadScrumGroups(); })
-			            .then(function(){ return me.loadProjects(); })
+                        // .then(function(){ return me.loadScrumGroups(); })
+			            // .then(function(){ return me.loadProjects(); })
 				]);
 			});
 		},
@@ -580,7 +580,7 @@
 						me.cfdProjReleasePref = cfdprojPref;});
 			})
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
-			.then(function(){ return me.redrawEverything(); })
+		//	.then(function(){ return me.redrawEverything(); })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -786,8 +786,9 @@
                     }]
                 })[0];
 
-                me.doLayout(); //or else they don't render initially
+            //    me.doLayout(); //or else they don't render initially
             }
+               me.doLayout(); //or else they don't render initially
         }
 	});
 }());
