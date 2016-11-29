@@ -67,7 +67,7 @@
             duplicates = _.uniq(duplicates);
             return duplicates;
         },
-        _createGridDataHash: function(){
+        _createGridDataHash: function () {
             var me = this;
             me.superclass._createGridDataHash.call(me);
             me._updateGridDataHash();
@@ -95,7 +95,7 @@
                         if (horizontal === horizontal2) {
                             var scrumTeamType = r.teamType + " " + r.number;
                             var projectName = r.projectName;
-                            if(!hash[projectName]) {
+                            if (!hash[projectName]) {
                                 hash[projectName] = {
                                     //scrumTeamType: scrumTeamType,
                                     scrumName: projectName,
@@ -112,26 +112,26 @@
                                 if (f && f.train != train.ScrumGroupName) {
 
                                     //Check for 'null' or 'undefined' on EVERYTHING
-                                    if(!me.GridData[f.train]) {
+                                    if (!me.GridData[f.train]) {
                                         me.GridData[f.train] = {};
                                     }
-                                    if(!me.GridData[f.train][horizontal]) {
+                                    if (!me.GridData[f.train][horizontal]) {
                                         me.GridData[f.train][horizontal] = {};
                                     }
-                                    if(!me.GridData[f.train][horizontal][projectName]) {
+                                    if (!me.GridData[f.train][horizontal][projectName]) {
                                         me.GridData[f.train][horizontal][projectName] = {
                                             scrumName: projectName,
                                             isViolating: null
                                         };
                                     }
-                                    if(!me.GridData[f.train][horizontal][projectName].features) {
+                                    if (!me.GridData[f.train][horizontal][projectName].features) {
                                         me.GridData[f.train][horizontal][projectName].features = [];
                                     }
-                                    if(!me.GridData[f.train][horizontal][projectName].featureCount) {
+                                    if (!me.GridData[f.train][horizontal][projectName].featureCount) {
                                         me.GridData[f.train][horizontal][projectName].featureCount = 0;
                                     }
                                     //Make sure we don't add duplicates
-                                    if(_.indexOf(me.GridData[f.train][horizontal][projectName].features, f.featureID + ": " + f.feature) == -1) {
+                                    if (_.indexOf(me.GridData[f.train][horizontal][projectName].features, f.featureID + ": " + f.feature) == -1) {
                                         //Finally, push into me.GridData.
                                         me.GridData[f.train][horizontal][projectName].features.push(f.featureID + ": " + f.feature);
                                         me.GridData[f.train][horizontal][projectName].featureCount++;
@@ -156,6 +156,7 @@
             var me = this;
             //Save the original
             originalGridData = me.GridData;
+            //console.log("me.GridData = ", me.GridData);
 
             //Search through GridData object to get a list of the teams when they occur
             var teamList = [];
@@ -249,11 +250,11 @@
                 items: {
                     xtype: 'component',
                     cls: "a-style",
+                    qtip: tooltip_text,
                     autoEl: {
                         tag: 'a',
                         html: exists ? '<span style="width:100%" title="' + tooltip_text + '">' + scrumData.featureCount + '</span>' : '-'
                     },
-                    qtip: "This is a tip",
                     listeners: {
                         rendered: function (c) {
                             Ext.QuickTips.register({
@@ -269,6 +270,15 @@
             var me = this;
             if (violatingTeams) {
                 if (violatingTeams.indexOf(scrumName) == -1) {
+                    if(scrumName == "-" || scrumName == ""){
+                        return {
+                            xtype: 'container',
+                            flex: 1,
+                            width: 200,
+                            cls: 'team-type-cell-null',
+                            html: scrumName
+                        };
+                    }
                     return {
                         xtype: 'container',
                         flex: 1,
@@ -277,7 +287,7 @@
                         html: scrumName
                     };
                 } else {
-                    //Else, this team is found in the list of violating teams so color it red
+                    //Else, this team is found in the list of violating teams so color it red, otherwise green
                     return {
                         xtype: 'container',
                         flex: 1,
@@ -303,39 +313,45 @@
         finalActions: function () {
             var me = this;
             me.renderFilterButton();
+            //Set default to show only violating teams.
+            me.toggleTeams();
             return;
         },
         toggleTeams: function () {
             var me = this;
             if (filteredTeams) {
+                me.setLoading('Loading Grid...');
                 //we need to update the grid to show all teams
-                console.log("We need to update the grid to show all teams");
+                console.log("Updating the grid to show all teams...");
 
                 //me.superclass.reloadEverything.call(me);
 
                 me.GridData = originalGridData;
-                console.log("originalGridData = ", originalGridData);
+                //console.log("originalGridData = ", originalGridData);
                 me.superclass.reloadGrid.call(me);
 
                 //Reset toggle variable
                 filteredTeams = false;
+                me.setLoading(false);
             } else {
+                me.setLoading('Loading Grid...');
                 //we need to update the grid to show only violating teams
-                console.log("We need to update the grid to show only violating teams");
+                console.log("Updating the grid to show only violating teams...");
 
                 me.GridData = violatingTeamsFull;
-                console.log("violatingTeamsFull = ", violatingTeamsFull);
+                //console.log("violatingTeamsFull = ", violatingTeamsFull);
                 me.superclass.reloadGrid.call(me);
 
                 //Reset toggle variable
                 filteredTeams = true;
+                me.setLoading(false);
             }
         },
         renderFilterButton: function () {
             var me = this;
             me.toggleFilterButton = me.down('#navbox').add({
                 xtype: 'button',
-                text: 'Toggle Show Violating Only',
+                text: 'Toggle Show All Teams',
                 cls: 'show-only-button',
                 width: '140',
                 listeners: {

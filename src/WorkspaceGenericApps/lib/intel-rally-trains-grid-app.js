@@ -484,7 +484,8 @@
                 },
                 store: gridStore,
                 enableEditing: false,
-                disableSelection: true
+                disableSelection: true,
+                trackMouseOver: false
             });
             setTimeout(function () {
                 me.doLayout();
@@ -494,8 +495,7 @@
 
         finalActions: function () {
             // OVERLOAD ME //
-            // Ext renderer function for each cell.
-            // receives the scrumData container
+            //Any actions you would like done at the end
             return;
         }
 
