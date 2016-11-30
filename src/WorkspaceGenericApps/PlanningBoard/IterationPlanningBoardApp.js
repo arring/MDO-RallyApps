@@ -47,6 +47,12 @@
                             stateful: true,
                             stateId: context.getScopedStateId('iteration-planning-owner-filter')
                         }
+                    }, {
+                        ptype: 'rallygridboardfieldpicker',
+                        headerPosition: 'left',
+                        boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
+                        modelNames: this.modelNames,
+                        boardFieldDefaults: ['PlanEstimate']
                     }
                 ];
 

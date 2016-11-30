@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:70fbed589ee7b7cc5dc75e6449580e62044ce7c0:2016-11-23T20:17:09.118Z --><!DOCTYPE html>
+<!-- Build: taya-dev:6786febd57307635aed0970dd78b55debda3afb8:2016-11-30T17:42:05.731Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Business Allocation Charts</title>
@@ -2626,7 +2626,7 @@
 		},	
 		config: {
 			defaultSettings: {
-				cacheUrl:'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+				cacheUrl:'https://mdoproceffrpt/api/v1.0/custom/rally-app-cache/'
 			}
 		},
 		userAppsPref: 'intel-BusinessAlloc-Chart',
@@ -2899,7 +2899,7 @@
 					//if(!me.DeleteCacheButton) me.renderDeleteCache();
 					if(!me.UpdateCacheButton) me.renderUpdateCache();
 					if(!me.ReleasePicker) me.renderReleasePicker();
-					me._checkToRenderCFDCalendar();
+				//	me._checkToRenderCFDCalendar();
 					me.renderCharts();
 					me.hideHighchartsLinks(); 
 					me.setLoading(false);
@@ -3028,8 +3028,8 @@
 						.then(function(scrums){
 							me.LeafProjects = _.filter(scrums, function(s){ return s.data.TeamMembers.Count > 0; });						
 						})
-                        .then(function(){ return me.loadScrumGroups(); })
-			            .then(function(){ return me.loadProjects(); })
+                        // .then(function(){ return me.loadScrumGroups(); })
+			            // .then(function(){ return me.loadProjects(); })
 				]);
 			});
 		},
@@ -3142,7 +3142,7 @@
 						me.cfdProjReleasePref = cfdprojPref;});
 			})
 			.then(function(){ return me.loadDataFromCacheOrRally(); })
-			.then(function(){ return me.redrawEverything(); })
+		//	.then(function(){ return me.redrawEverything(); })
 			.fail(function(reason){
 				me.setLoading(false);
 				me.alert('ERROR', reason);
@@ -3348,8 +3348,9 @@
                     }]
                 })[0];
 
-                me.doLayout(); //or else they don't render initially
+            //    me.doLayout(); //or else they don't render initially
             }
+               me.doLayout(); //or else they don't render initially
         }
 	});
 }());

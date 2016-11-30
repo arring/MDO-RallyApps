@@ -270,7 +270,7 @@
             var me = this;
             if (violatingTeams) {
                 if (violatingTeams.indexOf(scrumName) == -1) {
-                    if(scrumName == "-" || scrumName == ""){
+                    if(scrumName == "-" || scrumName === ""){
                         return {
                             xtype: 'container',
                             flex: 1,
