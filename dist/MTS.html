@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:ec67d55b873ad682b811940c89ffd8d4b55a88a5:2016-11-30T18:30:59.176Z --><!DOCTYPE html>
+<!-- Build: taya-dev:1ba51057646bcc6df6cc85a14602457f70a8b72b:2016-12-01T21:59:43.119Z --><!DOCTYPE html>
 <html>
 <head>
     <title>MTS</title>
@@ -1249,7 +1249,7 @@
                 value: trainTotal.total
             };
         },
-        scrumDataCellRenderer: function (scrumData) {
+        scrumDataCellRenderer: function (scrumData, flag) {
             // OVERLOAD ME //
             // Ext renderer function for each cell.
             // receives the scrumData container
@@ -1280,7 +1280,6 @@
             var hasData = horizontalData.total > 0;
             return hasData ? '<span id="" title="' + horizontalData.HorizontalName + '">' + horizontalData.total + '</span>' : '-';
         },
-
 
         /**___________________________________ LOADING AND RELOADING ___________________________________*/
         reloadEverything: function () {
@@ -1381,7 +1380,6 @@
                 return;
             }
 
-            me.setLoading('Configuring Rally App...');
             console.log("Configuring Rally App...");
 
             me.configureIntelRallyApp()
@@ -1514,12 +1512,15 @@
 
         _buildGridColumns: function (trains) {
             var me = this;
+            var currentTrain = null;
+            var trainNumber = 0;
+            var oscar = 0;
             return [].concat(
                 [{
                     text: ' ', //Horizontal Name Column
                     dataIndex: 'horizontalData',
                     tdCls: 'horizontal-name-cell',
-                    width: 100,
+                    width: 80,
                     sortable: false,
                     renderer: function (horizontalData, meta) {
                         return horizontalData.HorizontalName;
@@ -1544,19 +1545,36 @@
                         text: trainName, //Train Columns
                         xtype: 'intelcomponentcolumn',
                         dataIndex: trainName,
-                        width: 100,
+                        width: 90,
                         cls: 'train-header-cls',
                         tdCls: 'stdci-cell-container',
                         sortable: false,
                         renderer: function (scrumDataList) {
-                            //console.log("scrumDataList: ", scrumDataList);
+                            oscar++;
+                            console.log("oscar = ", oscar);
+                            var flag = false;
+                            if(currentTrain != trainName){
+                                //if train changes
+                                trainNumber++;
+                            }
+                            if((currentTrain != trainName) && (scrumDataList.length  % 2 != 0) && (trainNumber % 2 == 0)){
+                                //we are changing to another train, and this an odd number of rows in this horizontal
+                                flag = true;
+                            }
+                            var currentTrain = trainName;
+                            console.log("scrumDataList: ", scrumDataList);
+
+                            var itemResult = _.map(scrumDataList, function(scrumDataItem){
+                                return me.scrumDataCellRenderer(scrumDataItem, flag);
+                            });
+                            console.log("itemResult.length = ", itemResult.length);
                             return Ext.create('Ext.container.Container', {
                                 layout: {type: 'vbox'},
                                 width: '100%',
                                 padding: 0,
                                 margin: 0,
                                 flex: 1,
-                                items: _.map(scrumDataList, me.scrumDataCellRenderer)
+                                items: itemResult
                             });
                         }
                     };
@@ -1565,13 +1583,12 @@
                     text: ' ', //Horizontal % column
                     dataIndex: 'horizontalData',
                     tdCls: '',
-                    width: 100,
+                    width: 90,
                     sortable: false,
                     renderer: me.horizontalTotalCellRenderer
                 }]
             );
         },
-
         _getGridWidth: function (columns) {
             var me = this;
 
@@ -1620,7 +1637,7 @@
                 scroll: 'both',
                 resizable: false,
                 viewConfig: {
-                    stripeRows: false,
+                    stripeRows: true,
                     preserveScrollOnRefresh: true
                 },
                 width: me._getGridWidth(columns),
@@ -1630,9 +1647,9 @@
                     items: columns
                 },
                 store: gridStore,
-                enableEditing: false,
-                disableSelection: true,
-                trackMouseOver: false
+                enableEditing: false
+                //disableSelection: true,
+                //trackMouseOver: true
             });
             setTimeout(function () {
                 me.doLayout();
@@ -3188,6 +3205,7 @@
     var violatingTeamsFull = {};
     var originalGridData = [];
     var filteredTeams = false;
+    var rowStripeTracker = 0;
 
     Ext.define('Intel.MTS', {
         extend: 'Intel.lib.IntelRallyTrainsGridApp',
@@ -3414,13 +3432,34 @@
                 featureCount: trainTotal.total
             };
         },
-        scrumDataCellRenderer: function (scrumData) {
+        scrumDataCellRenderer: function (scrumData, flag) {
+            rowStripeTracker++;
+
             var exists = (scrumData && scrumData.featureCount > 0);
             //console.log("scrumdata: ", scrumData + " exists: ", exists);
 
             var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
 
-            var className = "default-null";
+            console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
+
+            if(flag){
+                //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+            }
+
+            var className = "blank-unknown";
+            if(rowStripeTracker % 2 == 0){
+                className = "default-null-even";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    className = "default-null-odd";
+                }
+            } else{
+                className = "default-null-odd";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    className = "default-null-even";
+                }
+            }
             if (exists && scrumData.isViolating) {
                 className = "violating";
             } else if (exists && !scrumData.isViolating) {
@@ -3434,22 +3473,36 @@
                 items: {
                     xtype: 'component',
                     cls: "a-style",
-                    qtip: tooltip_text,
+                    //qtip: tooltip_text,
                     autoEl: {
                         tag: 'a',
                         html: exists ? '<span style="width:100%" title="' + tooltip_text + '">' + scrumData.featureCount + '</span>' : '-'
-                    },
-                    listeners: {
-                        rendered: function (c) {
-                            Ext.QuickTips.register({
-                                target: c.getEl(),
-                                text: c.qtip
-                            });
-                        }
-                    }
+                    }//,
+                    //listeners: {
+                    //    rendered: function (c) {
+                    //        Ext.QuickTips.register({
+                    //            target: c.getEl(),
+                    //            text: c.qtip
+                    //        });
+                    //    }
+                    //}
                 }
             };
         },
+        //scrumDataContainerRenderer: function(scrumDataList){
+        //    var me = this;
+        //    console.log("scrumDataList.length: ", scrumDataList.length);
+        //    var flag = scrumDataList.length;
+        //    var itemResult =  _.map(scrumDataList,  me.scrumDataCellRenderer);
+        //    return Ext.create('Ext.container.Container', {
+        //        layout: {type: 'vbox'},
+        //        width: '100%',
+        //        padding: 0,
+        //        margin: 0,
+        //        flex: 1,
+        //        items: itemResult
+        //    });
+        //},
         teamTypeCellRenderer: function (scrumName) {
             var me = this;
             if (violatingTeams) {
@@ -3814,9 +3867,13 @@ a:link {
 .default-null a {
   color: #000000;
 }
-.default-null {
+.default-null-even {
   color: #000000;
   background-color: #F2F2F2;
+}
+.default-null-odd {
+  color: #000000;
+  background-color: #BFBFBF;
 }
 .not-violating {
   color: #000000;
