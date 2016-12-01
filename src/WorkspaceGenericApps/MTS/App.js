@@ -241,11 +241,23 @@
 
             console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
 
+            if(flag){
+                //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+            }
+
             var className = "blank-unknown";
             if(rowStripeTracker % 2 == 0){
                 className = "default-null-even";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    className = "default-null-odd";
+                }
             } else{
                 className = "default-null-odd";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    className = "default-null-even";
+                }
             }
             if (exists && scrumData.isViolating) {
                 className = "violating";

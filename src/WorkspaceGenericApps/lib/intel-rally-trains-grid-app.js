@@ -365,6 +365,9 @@
 
         _buildGridColumns: function (trains) {
             var me = this;
+            var currentTrain = null;
+            var trainNumber = 0;
+            var oscar = 0;
             return [].concat(
                 [{
                     text: ' ', //Horizontal Name Column
@@ -400,8 +403,20 @@
                         tdCls: 'stdci-cell-container',
                         sortable: false,
                         renderer: function (scrumDataList) {
+                            oscar++;
+                            console.log("oscar = ", oscar);
+                            var flag = false;
+                            if(currentTrain != trainName){
+                                //if train changes
+                                trainNumber++;
+                            }
+                            if((currentTrain != trainName) && (scrumDataList.length  % 2 != 0) && (trainNumber % 2 == 0)){
+                                //we are changing to another train, and this an odd number of rows in this horizontal
+                                flag = true;
+                            }
+                            var currentTrain = trainName;
                             console.log("scrumDataList: ", scrumDataList);
-                            var flag = scrumDataList.length;
+
                             var itemResult = _.map(scrumDataList, function(scrumDataItem){
                                 return me.scrumDataCellRenderer(scrumDataItem, flag);
                             });
