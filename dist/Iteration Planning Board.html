@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:6786febd57307635aed0970dd78b55debda3afb8:2016-11-30T17:42:05.731Z --><!DOCTYPE html>
+<!-- Build: taya-dev:ec67d55b873ad682b811940c89ffd8d4b55a88a5:2016-11-30T18:30:59.176Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Iteration Planning Board</title>
@@ -27,7 +27,7 @@
         helpId: 272,
         config: {
             defaultSettings: {
-                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate'
+                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate,ScheduleState'
             }
         },
 
@@ -61,7 +61,7 @@
                         headerPosition: 'left',
                         boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
                         modelNames: this.modelNames,
-                        boardFieldDefaults: ['PlanEstimate']
+                        boardFieldDefaults: ['Parent','Tasks','Defects','Discussion','PlanEstimate','ScheduleState']
                     }
                 ];
 

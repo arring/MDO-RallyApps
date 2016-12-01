@@ -4,6 +4,7 @@
     var violatingTeamsFull = {};
     var originalGridData = [];
     var filteredTeams = false;
+    var rowStripeTracker = 0;
 
     Ext.define('Intel.MTS', {
         extend: 'Intel.lib.IntelRallyTrainsGridApp',
@@ -230,13 +231,22 @@
                 featureCount: trainTotal.total
             };
         },
-        scrumDataCellRenderer: function (scrumData) {
+        scrumDataCellRenderer: function (scrumData, flag) {
+            rowStripeTracker++;
+
             var exists = (scrumData && scrumData.featureCount > 0);
             //console.log("scrumdata: ", scrumData + " exists: ", exists);
 
             var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
 
-            var className = "default-null";
+            console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
+
+            var className = "blank-unknown";
+            if(rowStripeTracker % 2 == 0){
+                className = "default-null-even";
+            } else{
+                className = "default-null-odd";
+            }
             if (exists && scrumData.isViolating) {
                 className = "violating";
             } else if (exists && !scrumData.isViolating) {
@@ -250,22 +260,36 @@
                 items: {
                     xtype: 'component',
                     cls: "a-style",
-                    qtip: tooltip_text,
+                    //qtip: tooltip_text,
                     autoEl: {
                         tag: 'a',
                         html: exists ? '<span style="width:100%" title="' + tooltip_text + '">' + scrumData.featureCount + '</span>' : '-'
-                    },
-                    listeners: {
-                        rendered: function (c) {
-                            Ext.QuickTips.register({
-                                target: c.getEl(),
-                                text: c.qtip
-                            });
-                        }
-                    }
+                    }//,
+                    //listeners: {
+                    //    rendered: function (c) {
+                    //        Ext.QuickTips.register({
+                    //            target: c.getEl(),
+                    //            text: c.qtip
+                    //        });
+                    //    }
+                    //}
                 }
             };
         },
+        //scrumDataContainerRenderer: function(scrumDataList){
+        //    var me = this;
+        //    console.log("scrumDataList.length: ", scrumDataList.length);
+        //    var flag = scrumDataList.length;
+        //    var itemResult =  _.map(scrumDataList,  me.scrumDataCellRenderer);
+        //    return Ext.create('Ext.container.Container', {
+        //        layout: {type: 'vbox'},
+        //        width: '100%',
+        //        padding: 0,
+        //        margin: 0,
+        //        flex: 1,
+        //        items: itemResult
+        //    });
+        //},
         teamTypeCellRenderer: function (scrumName) {
             var me = this;
             if (violatingTeams) {

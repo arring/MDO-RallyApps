@@ -129,9 +129,14 @@ a:link {
     color: #000000;
 }
 
-.default-null {
+.default-null-even {
     color: #000000;
     background-color: #F2F2F2;
+}
+
+.default-null-odd {
+    color: #000000;
+    background-color: #BFBFBF;
 }
 
 .not-violating {

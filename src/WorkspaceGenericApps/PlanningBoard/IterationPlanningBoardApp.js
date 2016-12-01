@@ -18,7 +18,7 @@
         helpId: 272,
         config: {
             defaultSettings: {
-                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate'
+                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate,ScheduleState'
             }
         },
 
@@ -52,7 +52,7 @@
                         headerPosition: 'left',
                         boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
                         modelNames: this.modelNames,
-                        boardFieldDefaults: ['PlanEstimate']
+                        boardFieldDefaults: ['Parent','Tasks','Defects','Discussion','PlanEstimate','ScheduleState']
                     }
                 ];
 
