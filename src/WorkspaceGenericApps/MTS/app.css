@@ -84,7 +84,7 @@
 }
 
 .x-grid-table tbody > tr:last-child > td {
-    border-top: 1px solid black;
+    /*border-top: 1px solid black;*/
 }
 
 .x-grid-table tbody > tr:not(:last-child):not(:first-child) > td {
@@ -92,7 +92,7 @@
 }
 
 .x-grid-table tbody > tr > td:last-child {
-    border-left: 1px solid black;
+    /*border-left: 1px solid black;*/
 }
 
 .grid-container > span > div {

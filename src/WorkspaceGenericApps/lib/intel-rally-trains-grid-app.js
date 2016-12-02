@@ -434,14 +434,16 @@
                         }
                     };
                 }),
-                [{
-                    text: ' ', //Horizontal % column
-                    dataIndex: 'horizontalData',
-                    tdCls: '',
-                    width: 90,
-                    sortable: false,
-                    renderer: me.horizontalTotalCellRenderer
-                }]
+                [
+                //{
+                //    text: ' ', //Horizontal % column
+                //    dataIndex: 'horizontalData',
+                //    tdCls: '',
+                //    width: 90,
+                //    sortable: false,
+                //    renderer: me.horizontalTotalCellRenderer
+                //}
+                ]
             );
         },
         _getGridWidth: function (columns) {
