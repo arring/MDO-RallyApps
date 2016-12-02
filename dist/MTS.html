@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:1ba51057646bcc6df6cc85a14602457f70a8b72b:2016-12-01T21:59:43.119Z --><!DOCTYPE html>
+<!-- Build: taya-dev:abfd5b980f19a33adc208efa394cd10e2c472177:2016-12-02T01:04:37.230Z --><!DOCTYPE html>
 <html>
 <head>
     <title>MTS</title>
@@ -1311,6 +1311,7 @@
         },
         _createGridDataHash: function () {
             var me = this;
+            var rowTrackingNumber = 0;
             me.GridData = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                 var projectNames = _.map(train.Scrums, function (scrum) {
                     return scrum.data.Name;
@@ -1326,7 +1327,8 @@
                             hash[projectName] = {
                                 scrumTeamType: scrumTeamType,
                                 scrumName: projectName,
-                                isViolating: null
+                                isViolating: null,
+                                rowNumber: rowTrackingNumber++
                             };
                             me.setScrumDataValue(hash[projectName], train.ScrumGroupName, projectName);
                         }
@@ -3432,7 +3434,9 @@
                 featureCount: trainTotal.total
             };
         },
+        cellCSSClass: "this-class-does-not-exist",
         scrumDataCellRenderer: function (scrumData, flag) {
+            var me = this;
             rowStripeTracker++;
 
             var exists = (scrumData && scrumData.featureCount > 0);
@@ -3442,34 +3446,53 @@
 
             console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
 
-            if(flag){
-                //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+            //Keep track of what it was last time it ran through this funtion.
+            var opposite = "";
+            if(me.cellCSSClass === "default-null-odd"){
+                opposite = "default-null-odd";
+            } else {
+                opposite = "default-null-even";
             }
 
-            var className = "blank-unknown";
+            if(flag && (rowStripeTracker % 2 == 0)){
+                me.cellCSSClass = "default-null-odd";
+            }
+            else if(flag && ((rowStripeTracker % 2 != 0))){
+                me.cellCSSClass = "default-null-even";
+            }
+            else if(!flag && (rowStripeTracker % 2 == 0)){
+                me.cellCSSClass = "default-null-even";
+            }
+            else { //!flag and (rowStripeTracker % 2 != 0)
+                me.cellCSSClass = "default-null-odd";
+            }
+
+
             if(rowStripeTracker % 2 == 0){
-                className = "default-null-even";
+                me.cellCSSClass = "default-null-even";
                 if(flag){
                     //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
-                    className = "default-null-odd";
+                    me.cellCSSClass = "default-null-odd";
                 }
             } else{
-                className = "default-null-odd";
+                me.cellCSSClass = "default-null-odd";
                 if(flag){
                     //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
-                    className = "default-null-even";
+                    me.cellCSSClass = "default-null-even";
+                } else {
+
                 }
             }
             if (exists && scrumData.isViolating) {
-                className = "violating";
+                me.cellCSSClass = "violating";
             } else if (exists && !scrumData.isViolating) {
-                className = "not-violating";
+                me.cellCSSClass = "not-violating";
             }
 
             return {
                 xtype: 'container',
                 width: 100,
-                cls: className,
+                cls: me.cellCSSClass,
                 items: {
                     xtype: 'component',
                     cls: "a-style",
@@ -3869,11 +3892,12 @@ a:link {
 }
 .default-null-even {
   color: #000000;
-  background-color: #F2F2F2;
+  background-color: #FFFFFF;
 }
 .default-null-odd {
   color: #000000;
-  background-color: #BFBFBF;
+  background-color: #cce4ff;
+  /*#d9ebff; #e6f3ff;*/
 }
 .not-violating {
   color: #000000;

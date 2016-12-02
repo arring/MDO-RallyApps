@@ -18,7 +18,7 @@
         helpId: 272,
         config: {
             defaultSettings: {
-                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate,ScheduleState'
+                cardFields: 'Parent,Tasks,PlanEstimate,ScheduleState'
             }
         },
 
@@ -52,7 +52,7 @@
                         headerPosition: 'left',
                         boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
                         modelNames: this.modelNames,
-                        boardFieldDefaults: ['Parent','Tasks','Defects','Discussion','PlanEstimate','ScheduleState']
+                        boardFieldDefaults: ['Tasks']
                     }
                 ];
 
@@ -93,7 +93,7 @@
 
         getSettingsFields: function () {
             var fields = this.callParent(arguments);
-            this.appendCardFieldPickerSetting(fields);
+            //this.appendCardFieldPickerSetting(fields);
             return fields;
         },
 

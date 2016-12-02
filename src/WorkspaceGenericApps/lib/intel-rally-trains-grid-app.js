@@ -164,6 +164,7 @@
         },
         _createGridDataHash: function () {
             var me = this;
+            var rowTrackingNumber = 0;
             me.GridData = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                 var projectNames = _.map(train.Scrums, function (scrum) {
                     return scrum.data.Name;
@@ -179,7 +180,8 @@
                             hash[projectName] = {
                                 scrumTeamType: scrumTeamType,
                                 scrumName: projectName,
-                                isViolating: null
+                                isViolating: null,
+                                rowNumber: rowTrackingNumber++
                             };
                             me.setScrumDataValue(hash[projectName], train.ScrumGroupName, projectName);
                         }
