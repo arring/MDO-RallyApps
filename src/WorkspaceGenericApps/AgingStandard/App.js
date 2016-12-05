@@ -57,19 +57,19 @@ The “age” of a standard has to do with the time it has been in the current c
 				},{
 					name: 'IE3',
 					xtype: 'rallytextfield'								
-				},{
+				}/*,{
 					name: 'IE4',
 					xtype: 'rallytextfield'								
-				}
+				}*/
 			];
 		},
     config: {
 			defaultSettings: {
-				IE0: '',
-				IE1: '28',
-				IE2: '28',
-				IE3: '84',
-				IE4: '84'
+				IE0: '14',
+				IE1: '14',
+				IE2: '42',
+				IE3: '42'
+			//	IE4: '42'
 			}
     },		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
@@ -78,14 +78,38 @@ The “age” of a standard has to do with the time it has been in the current c
 			*/
 		getStandardizationKBriefQuery: function(){
 			var me=this;
-			return Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!=' , value: null });
+			return Ext.create('Rally.data.wsapi.Filter', {
+				filters: [{
+					property: 'c_StdsKanban',
+					operator: '!contains',
+					value: 'IE4'
+				},{
+					property:'c_StdsKanban',
+					operator: '!contains',
+					value:'Backlog'
+				}
+				]
+			});
+		//	return (Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!contains' , value: 'IE4' }));//&&
+			//(Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!contains' , value: 'Backlog' }));
+
+
 		},		
 		_loadStandardizationKBrief: function(){
 			var me = this,
 				config = {
 					model: 'HierarchicalRequirement',
 					compact:false,
-					filters: me.getStandardizationKBriefQuery() ,
+					//filters: me.getStandardizationKBriefQuery() ,
+					filters: [{
+						property: 'c_StdsKanban',
+						operator: '!contains',
+						value: 'IE4'
+					},{
+						property: 'c_StdsKanban',
+						operator: '!contains',
+						value: 'Backlog'
+					}],
 					fetch:['ObjectID', 'Name', 'c_StdsKanban','c_KBrief','c_StdsKanbanOrg','Iteration','Owner','c_NextIEWW'],
 					context: {
 						workspace:null,
@@ -180,7 +204,7 @@ The “age” of a standard has to do with the time it has been in the current c
 							return window.btoa(unescape(encodeURIComponent(s)));
 					};
 					var format = function (s, c) {
-						return s.replace(/{(\w+)}/g, function (m, p) {//TODO: fix Error in App.js on line 183: Unescaped '{'.
+						return s.replace(/{(\w+)}/g, function (m, p) {/*TODO: fix Error in App.js on line 183: Unescaped '{'.*/
 							return c[p];
 						});
 					};
@@ -358,7 +382,17 @@ The “age” of a standard has to do with the time it has been in the current c
 				},{//nextReview
 					text: 'nextReview', 
 					dataIndex: 'nextReview',
-					flex:1
+					flex:1,
+					editor: {
+						xtype: 'textfield',
+						allowBlank: false
+					},
+					items:[
+						{
+							xtype:'intelgridcolumnfilter'
+						}
+					]
+
 				},{//nextReview
 					text: 'Owning Division', 
 					dataIndex: 'OwningGroup',
@@ -382,9 +416,14 @@ The “age” of a standard has to do with the time it has been in the current c
 			var g = Ext.create('Rally.ui.grid.Grid', {
 				/* itemId:'mygrid123', */
 				id: 'mygrid',
-				enableEditing:false,
+				enableEditing:true,
 				disableSelection: true,
 				store: gridStore,
+				plugins: [
+					Ext.create('Ext.grid.plugin.CellEditing', {
+						clicksToEdit: 1
+					})
+				],
 				columnCfgs:me.gridColumns 
 			});
 			Ext.getCmp('gridKbriefs').add(g);

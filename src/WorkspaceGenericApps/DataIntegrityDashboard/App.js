@@ -181,7 +181,7 @@
 			var me = this,
 				lowestPortfolioItem = me.PortfolioItemTypes[0],
 				userStoryFields = ['Name', 'ObjectID', 'Project', 'Iteration', 
-					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner',
+					'Release',  'PlanEstimate', 'FormattedID', 'ScheduleState','Owner','Description',
 					'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem,'_p','_ref',
 					'_refObjectUUID','_type','_objectVersion','_CreatedAt'],			
 				portfolioItemFields = ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate', 
