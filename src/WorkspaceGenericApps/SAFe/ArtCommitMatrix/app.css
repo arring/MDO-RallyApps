@@ -1,70 +1,112 @@
 /************************************************ NAVBAR/CONTAINERS *****************************************/
-#navbar { padding:0 10px 0 10px; }
-#releasePicker { margin: 4px 0 0 0; }
-#modePicker { margin:0; }
-#viewPicker { margin:0; }
-#manualRefreshButton { margin: 5px 0 5px 0; }
+#navbar {
+    padding: 0 10px 0 10px;
+}
+
+#releasePicker {
+    margin: 4px 0 0 0;
+}
+
+#modePicker {
+    margin: 0;
+}
+
+#viewPicker {
+    margin: 0;
+}
+
+#manualRefreshButton {
+    margin: 5px 0 5px 0;
+}
 
 .intel-legend-dot {
-	width:12px;
-	height:12px;
-	border-radius:6px;
-	border:1px solid black;
-	display:inline-block;
-	vertical-align:middle; }
-	
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    border: 1px solid black;
+    display: inline-block;
+    vertical-align: middle;
+}
+
 .intel-legend-item {
-	font-size:1em;
-	text-align:right; }
+    font-size: 1em;
+    text-align: right;
+}
 
 /************************************************ TEAM COMMITS MATRIX STUFF *****************************************/
 .x-grid-header-ct .matrix-subheader-cell {
-	display:flex;
-	flex-direction:column; }
-	.x-grid-header-ct .matrix-subheader-cell .x-column-header-inner {
-		flex:1; }
-	.x-grid-header-ct .matrix-subheader-cell > .project-percentage-complete {
-		display:block !important;
-		font-size:0.7rem;
-		border-bottom:1px solid black;
-		line-height:20px !important;
-		height:20px !important; }
-		
+    display: flex;
+    flex-direction: column;
+}
+
+.x-grid-header-ct .matrix-subheader-cell .x-column-header-inner {
+    flex: 1;
+}
+
+.x-grid-header-ct .matrix-subheader-cell > .project-percentage-complete {
+    display: block !important;
+    font-size: 0.7rem;
+    border-bottom: 1px solid black;
+    line-height: 20px !important;
+    height: 20px !important;
+}
+
 .x-grid-header-ct .not-dispositioned-project .x-column-header-inner,
-.x-grid-body .x-grid-row .not-committed-portfolio-item.x-grid-cell { background-color:rgba(255, 0, 0, 0.50) !important; }
+.x-grid-body .x-grid-row .not-committed-portfolio-item.x-grid-cell {
+    background-color: rgba(255, 0, 0, 0.50) !important;
+}
 
 .x-grid-header-ct .not-dispositioned-project .x-column-header-inner.x-column-header-over,
 .x-grid-body .x-grid-row-selected .not-committed-portfolio-item.x-grid-cell,
-.x-grid-body .x-grid-row-over .not-committed-portfolio-item.x-grid-cell { 
-	/* background-image:none !important; commented it for purple traingle: Revisit*/
-	background-image:none !important;;
-	background-color:rgba(255, 0, 0, 0.70) !important; }
+.x-grid-body .x-grid-row-over .not-committed-portfolio-item.x-grid-cell {
+    /* background-image:none !important; commented it for purple traingle: Revisit*/
+    background-image: none !important;;
+    background-color: rgba(255, 0, 0, 0.70) !important;
+}
 
-.x-grid-header-ct .dispositioned-project .x-column-header-inner { background-color:rgba(0, 255, 0, 0.50) !important; }
-.x-grid-header-ct .dispositioned-project .x-column-header-inner.x-column-header-over { 
-	background-image:none !important;
-	background-color:rgba(0, 255, 0, 0.70) !important; }
+.x-grid-header-ct .dispositioned-project .x-column-header-inner {
+    background-color: rgba(0, 255, 0, 0.50) !important;
+}
 
-.matrix-hidden-grid-row { display:none !important; }
+.x-grid-header-ct .dispositioned-project .x-column-header-inner.x-column-header-over {
+    background-image: none !important;
+    background-color: rgba(0, 255, 0, 0.70) !important;
+}
+
+.matrix-hidden-grid-row {
+    display: none !important;
+}
 
 .x-column-header-inner .x-column-header-text {
-	white-space: normal !important;
-	line-height: 15px; }
+    white-space: normal !important;
+    line-height: 15px;
+}
 
 .x-column-header-inner {
-	text-align: center;
-	height:100 !important; }
-.feature-porfolio-items{
-	position: relative;}
-.feature-help{
-  color: white;
-	font-size: 0.6rem;
-	position: absolute;
-	left: -3px;
-	top: 6px;}
-.porfolio-items{
-	float:right;}
-.modified-date{
-	color: green;
+    text-align: center;
+    height: 100 !important;
 }
-.cacheContainer {text-align: center;}
+
+.feature-porfolio-items {
+    position: relative;
+}
+
+.feature-help {
+    color: white;
+    font-size: 0.6rem;
+    position: absolute;
+    left: -3px;
+    top: 6px;
+}
+
+.porfolio-items {
+    float: right;
+}
+
+.modified-date {
+    color: green;
+}
+
+.cacheContainer {
+    text-align: center;
+}
