@@ -110,3 +110,7 @@
 .cacheContainer {
     text-align: center;
 }
+
+.x-box-layout-ct{
+    overflow: hidden !important;
+}
