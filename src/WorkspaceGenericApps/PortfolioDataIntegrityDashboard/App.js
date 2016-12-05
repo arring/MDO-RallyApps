@@ -251,7 +251,7 @@
 
         loadNonConfigDataFromCacheOrRally: function(){
             var me = this;
-                    return me.loadData().then(function(){
+            return me.loadData().then(function(){
             });
         },
         loadDataFromCacheOrRally: function(){
@@ -260,7 +260,7 @@
             if(me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
             return me.loadRemainingConfiguration()
-                        .then(function(){return me.loadData(); });
+                .then(function(){return me.loadData(); });
         },
         loadCacheIndependentConfig: function(){
             var me = this;
@@ -340,6 +340,7 @@
                 })
                 .then(function(){ return me.loadScrumGroups(); })
                 .then(function(){ return me.loadProjects(); })
+                .then(function(){return me.loadEpicProjects();})
                 .then(function(){ me.applyScopingOverrides(); });
         },
 
@@ -386,6 +387,10 @@
             me.LeafProjectsByScrumGroup = {};
             me.LeafProjectsByHorizontal = {};
             me.LeafProjectsByTeamTypeComponent = {};
+            //    me.LeafProjectsByEpicComponent = {};
+            //    me.AllProjects = {};
+
+
 
             return Q.all(_.map(me.ScrumGroupRootRecords, function(scrumGroupRootRecord){
                 return me.loadAllLeafProjects(scrumGroupRootRecord).then(function(leafProjects){
@@ -402,8 +407,21 @@
                             me.LeafProjectsByTeamTypeComponent[cmp].push(teamTypes[i].projectRecord);
                         }
                     }
+
                 });
             }));
+        },
+
+
+        loadEpicProjects: function(){
+            var me = this;
+            me.AllProjects = {};
+            me.LeafProjectsByEpicComponent = {};
+
+            return me.loadAllProjects().then(function(projects){
+                me.AllProjects = projects;
+
+            });
         },
 
         applyScopingOverrides: function(){
@@ -457,7 +475,9 @@
                     else filteredProjects = me.LeafProjectsByScrumGroup[me.ScrumGroupRootRecords[0].data.ObjectID] || [];
                 }
             }
+            filteredProjects.push(me.ProjectRecord);
             me.FilteredLeafProjects = filteredProjects;
+
             return Q();
         },
 
@@ -476,6 +496,27 @@
             return releaseFilter;
         },
 
+        /**************************************** Data Loading ************************************/
+        /**
+         Filters only apply if we are in horizontal-mode OR we are scoped to a train in vertical mode
+         */
+        applyEpicProjectFilters: function(){
+            var me = this, tempProjects;
+            console.log(me.ScopedTeamType);
+            console.log(me.LeafProjectsByEpicComponent);
+            var projects =[];
+            if(me.PortfolioEpicStore.data.items){
+
+                for(var i=0; i<me.PortfolioEpicStore.data.items.length; i++){
+                    projects[i] = [_.find(me.AllProjects, function(leafProject){ return leafProject.data.Name === me.PortfolioEpicStore.data.items[i].data.Project.Name; })];
+                }
+            }
+            tempProjects = (_.uniq(projects, function(p){ return p[0].data.Name; }));
+            me.LeafProjectsByEpicComponent = tempProjects;
+            console.log(me.LeafProjectsByEpicComponent);
+            return Q();
+        },
+
         /**
          Gets portfolio items in the current release associated with the scrum groups (if there are any)
          Also: creates a map of portfolioOID to the portfolioItems loaded under it
@@ -488,7 +529,7 @@
             return Q.all(_.map(me.ScrumGroupPortfolioOIDs, function(portfolioOID){
                 var store = Ext.create('Rally.data.wsapi.Store', {
                     model: me['PortfolioItem/' + lowestPortfolioItemType],
-                    filters: [me.createPortfolioItemFilter()],
+                    // filters: [me.createPortfolioItemFilter()],
                     autoLoad: false,
                     pageSize: 200,
                     fetch:['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate',
@@ -613,7 +654,7 @@
                     /* US436545: Remove this to get back improperly sized user stories */
                     _.each(me.UserStoryStore.getRange(), function(item,key){
                         if(key < me.UserStoryStore.count()  && me.UserStoryStore.getAt(key).data) {
-                            var pe = me.UserStoryStore.getAt(key).data.PlanEstimate;
+                            var pe = me.UserStoryStore.getAt(key).data.LeafStoryPlanEstimateTotal;
                             if (pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16) {
                                 me.UserStoryStore.removeAt(key);
                             }
@@ -649,6 +690,7 @@
                 .then(function(){ return me.loadPortfolioItems(); })
                 .then(function(){ return me.loadPortfolioEpics(); })
                 .then(function() { return me.loadUserStories(); })
+                .then(function() {return me.applyEpicProjectFilters(); })
                 .then(function() {
                     me.setLoading(false);
                     return me.countPortfolioItemStories();
@@ -905,7 +947,7 @@
             // Sums the point estimates and number of stories
             _.each(userStoryGrids, function(grid){
                 _.each(grid.originalConfig.data, function(item){
-                    storyNum[item.data.ObjectID] = item.data.PlanEstimate || 0;
+                    storyNum[item.data.ObjectID] = item.data.LeafStoryPlanEstimateTotal || 0;
                 });
             });
             pointNum = (100*(pointDen - _.reduce(storyNum, function(sum, planEstimate){ return sum + planEstimate; }, 0))>>0)/100;
@@ -949,8 +991,8 @@
                     html:'<span class="integrity-inticator-title">' +
                     scopeLabel +
                     ' Integrity <em>(% Correct)</em></span><br/>' +
-                    '<span class="integrity-indicator-value"><b>Stories: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' +
-                    '<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'
+                    '<span class="integrity-indicator-value"><b>Epics: </b>' + storyNum + '/' + storyDen + ' <em>(' + storyPer + '%)</em></span><br/>' /*+
+                     '<span class="integrity-indicator-value"><b>Points: </b>' + pointNum + '/' + pointDen + ' <em>(' + pointPer + '%)<em/></span>'*/
                 }]
             });
         },
@@ -979,22 +1021,22 @@
         /**************************************** Grids and Charts ********************************/
         getProjectStoriesForGrid: function(project, grid){
             return _.filter(grid.originalConfig.data, function(story){
-                return story.data.Project.ObjectID == project.data.ObjectID;
+                return story.data.Project.ObjectID == project[0].data.ObjectID;
             });
         },
         getProjectStoriesForRelease: function(project, grid){
             return _.filter(grid.originalConfig.totalStories, function(story){
-                return story.data.Project.ObjectID == project.data.ObjectID;
+                return story.data.Project.ObjectID == project[0]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          .data.ObjectID;
             });
         },
         getProjectPointsForGrid: function(project, grid){
             return _.reduce(this.getProjectStoriesForGrid(project, grid), function(sum, story){
-                return sum + story.data.PlanEstimate;
+                return sum + story.data.LeafStoryPlanEstimateTotal;
             }, 0);
         },
         getProjectPointsForRelease: function(project, grid){
             return _.reduce(this.getProjectStoriesForRelease(project, grid), function(sum, story){
-                return sum + story.data.PlanEstimate;
+                return sum + story.data.LeafStoryPlanEstimateTotal;
             }, 0);
         },
 
@@ -1005,18 +1047,18 @@
         getFilteredStories: function(){
             var me = this;
             if (!me.isScopedToScrum) {
-               /* if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
-                    if(me.isHorizontalView){
-                        var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], function(m, p){
-                            m[p.data.ObjectID] = true;
-                            return m;
-                        }, {});
-                        console.log("me.PortfolioEpicStore.data inside getFilteredSotries = ", me.PortfolioEpicStore.data);
-                        return _.filter(me.PortfolioEpicStore.data.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
-                    }
-                    else return _.filter(me.UserStoryStore.getRange(), function(story){ return story.data.Project.Name === me.ScopedTeamType; });
-                }
-                else*/ return me.PortfolioEpicStore.data.getRange();
+                /* if (me.ScopedTeamType !== '' && me.ScopedTeamType !== 'All') {
+                 if(me.isHorizontalView){
+                 var validProjectOidMap = _.reduce(me.LeafProjectsByTeamTypeComponent[me.ScopedTeamType], function(m, p){
+                 m[p.data.ObjectID] = true;
+                 return m;
+                 }, {});
+                 console.log("me.PortfolioEpicStore.data inside getFilteredSotries = ", me.PortfolioEpicStore.data);
+                 return _.filter(me.PortfolioEpicStore.data.getRange(), function(story){ return validProjectOidMap[story.data.Project.ObjectID]; });
+                 }
+                 else return _.filter(me.UserStoryStore.getRange(), function(story){ return story.data.Project.Name === me.ScopedTeamType; });
+                 }
+                 else*/ return me.PortfolioEpicStore.data.getRange();
             }
             else return me.PortfolioEpicStore.data.getRange();
         },
@@ -1030,9 +1072,9 @@
          In Vertical mode, it returns whatever scrumGroup that is scoped to.
          */
         getFilteredLowestPortfolioItems: function(){
-            var me = this,
-                /* portfolioItems = me.PortfolioItemStore.getRange(), */
-                activeScrumGroups, activePortfolioOIDs;
+            var me = this,activeScrumGroups, activePortfolioOIDs;
+            var portfolioItems = me.PortfolioItemStore.getRange();
+            //console.log("Portfolio Items"+portfolioItems);
 
             if(me.isScopedToScrum) return [];
             else {
@@ -1131,15 +1173,15 @@
             var me=this,
                 highestNum = 0,
                 userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function(grid){
-                    if(grid.originalConfig.model == 'PortfolioItem/Epic' || grid.originalConfig.model == 'PortfolioItem/Feature')
-                    return grid.originalConfig.model;
+                    if(grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic' || grid.originalConfig.model == 'PortfolioItem/Feature')
+                        return grid.originalConfig.model;
                 });
-                userStoryGrids.reverse();
-                chartData = [],
+            userStoryGrids.reverse();
+            chartData = [],
                 selectIdFunctionName = '_selectId' + (Math.random()*10000>>0);
             // Get the data for each scrum from each grid
             _.each(userStoryGrids, function(grid, gindex) {
-                _.each(_.sortBy(me.FilteredLeafProjects, function(p){ return p.data.Name; }), function(project, pindex){
+                _.each(_.sortBy(me.LeafProjectsByEpicComponent, function(p){ return p[0].data.Name; }), function(project, pindex){
                     var gridCount = me.getProjectStoriesForGrid(project, grid).length;
                     highestNum = Math.max(gridCount, highestNum);
                     chartData.push([pindex, gindex, gridCount]);
@@ -1164,8 +1206,8 @@
                 colors: ['#AAAAAA'],
                 title: { text: null },
                 xAxis: {
-                    categories: _.sortBy(_.map(me.FilteredLeafProjects,
-                        function(project){ return project.data.Name; }),
+                    categories: _.sortBy(_.map(me.LeafProjectsByEpicComponent,
+                        function(project){ return project[0].data.Name; }),
                         function(p){ return p; }),
                     labels: {
                         style: { width:100 },
@@ -1203,7 +1245,7 @@
                             events: {
                                 click: function(e){
                                     var point = this,
-                                        scrum = _.sortBy(me.FilteredLeafProjects, function(p){ return p.data.Name; })[point.x],
+                                        scrum = _.sortBy(me.LeafProjectsByEpicComponent, function(p){ return p[0].data.Name; })[point.x],
                                         grid = userStoryGrids[point.y];
                                     me.onHeatmapClick(point, scrum, grid);
                                 }
@@ -1253,9 +1295,9 @@
                         countDen = gridConfig.totalCount,
                         pointNum = data && (100*_.reduce(data, function(sum, item){
                                 item = item.data || item;//having issue due to caching so hacking it
-                                return sum + (item.PlanEstimate || 0); }, 0)>>0)/100,
+                                return sum + (item.LeafStoryPlanEstimateTotal || 0); }, 0)>>0)/100,
                         pointDen = gridConfig.totalPoints,
-                        type = (model==='UserStory' ? 'Stories' : lowestPortfolioItemType + 's');
+                        type = (model==='UserStory' ? 'Epics' : lowestPortfolioItemType + 's');
                     return sprintf([
                             '<span class="data-integrity-grid-header-left">',
                             '%s',
@@ -1265,7 +1307,7 @@
                         ].join(''),
                         gridConfig.title + (hasData ? '<br>' : ''),
                         hasData ? sprintf('<b>%s:</b> %s/%s (%s%%)', type, countNum, countDen, (countNum/countDen*10000>>0)/100) : '',
-                        (hasData && model=='UserStory') ? sprintf('<b>Points:</b> %s/%s (%s%%)', pointNum, pointDen, (pointNum/pointDen*10000>>0)/100) : '',
+                        (hasData && model=='Epics') ? sprintf('<b>Points:</b> %s/%s (%s%%)', pointNum, pointDen, (pointNum/pointDen*10000>>0)/100) : '',
                         randFunctionName);
                 },
                 storeModel = (gridConfig.model == 'UserStory') ? me.PortfolioEpicStore.model : me.PortfolioItemStore.model,
@@ -1334,7 +1376,7 @@
          */
         buildGrids: function() {
             var me = this;
-                midPortfolioItemType= me.PortfolioItemTypes[1],
+            midPortfolioItemType= me.PortfolioItemTypes[1],
                 filteredStories = me.getFilteredStories(),
                 filteredLowestPortfolioItems = me.getFilteredLowestPortfolioItems(),
                 lowestPortfolioItemType = me.PortfolioItemTypes[0],
@@ -1351,7 +1393,7 @@
                     dataIndex:'Name',
                     editor:false
                 }].concat(!me.CurrentScrum ? [{
-                    text: 'Scrum',
+                    text: 'Portfolio',
                     dataIndex: 'Project',
                     editor:false
                 }] : []).concat([{
@@ -1381,7 +1423,7 @@
                     showIfHorizontalMode:true,
                     title: 'Epics with No Parent',
                     id: 'grid-epics-with-no-parent',
-                    model: 'PortfolioItem/' + midPortfolioItemType,
+                    model: 'UserStory', //+ midPortfolioItemType,
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Parent',
                         dataIndex: 'Parent',
@@ -1390,116 +1432,135 @@
                     side: 'Left',
                     filterFn:function(item){
                         if(!item.data.Parent)
+                            return item.data.Name;
+                    }
+                },/*{
+                 showIfLeafProject:true,
+                 showIfHorizontalMode:true,
+                 title: 'Unsized Stories',
+                 id: 'grid-unsized-stories',
+                 model: 'UserStory',
+                 columns: defaultUserStoryColumns.concat([{
+                 text:'PlanEstimate',
+                 dataIndex:'PlanEstimate',
+                 tdCls:'editor-cell'
+                 }]),
+                 side: 'Left',
+                 filterFn:function(item){
+                 if((item.data.Release || {}).Name !== releaseName) return false;
+                 return item.data.PlanEstimate === null;
+                 }
+                 },/*
+                 {
+                 showIfLeafProject:true,
+                 showIfHorizontalMode:true,
+                 title: 'Stories in Release without Iteration',
+                 id: 'grid-stories-in-release-without-iteration',
+                 model: 'UserStory',
+                 columns: defaultUserStoryColumns.concat([{
+                 text:'Iteration',
+                 dataIndex:'Iteration',
+                 tdCls:'editor-cell'
+                 }]),
+                 side: 'Left',
+                 filterFn:function(item){
+                 if((item.data.Release || {}).Name !== releaseName) return false;
+                 return !item.data.Iteration;
+                 }
+                 },*/{
+                    showIfLeafProject:true,
+                    showIfHorizontalMode:true,
+                    title: 'Epics with no start and End date',
+                    id: 'grid-epics-with-no-start-or-end-date',
+                    model: 'UserStory',
+                    columns: defaultUserStoryColumns.concat([{
+                        text:'Actual Start Date',
+                        dataIndex:'ActualStartDate',
+                        tdCls:'editor-cell'
+                    },{
+                        text:'Actual End Date',
+                        dataIndex:'ActualEndDate',
+                        tdCls:'editor-cell'
+                    }]),
+                    side: 'Left',
+                    filterFn:function(item){
+                        if(item.data.FormattedID == "E3716"){
+                            console.log(item.data.FormattedID);
+                        }
+                        if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
                         return item.data.Name;
                     }
                 },{
                     showIfLeafProject:true,
                     showIfHorizontalMode:true,
-                    title: 'Unsized Stories',
-                    id: 'grid-unsized-stories',
+                    title: 'Unaccepted Epics Past End Date',
+                    id: 'grid-unaccepted-epics-past-end_date',
                     model: 'UserStory',
-                    columns: defaultUserStoryColumns.concat([{
-                        text:'PlanEstimate',
-                        dataIndex:'PlanEstimate',
-                        tdCls:'editor-cell'
-                    }]),
-                    side: 'Left',
-                    filterFn:function(item){
-                        if((item.data.Release || {}).Name !== releaseName) return false;
-                        return item.data.PlanEstimate === null;
-                    }
-                },/*
-                    {
-                        showIfLeafProject:true,
-                        showIfHorizontalMode:true,
-                        title: 'Stories in Release without Iteration',
-                        id: 'grid-stories-in-release-without-iteration',
-                        model: 'UserStory',
-                        columns: defaultUserStoryColumns.concat([{
-                            text:'Iteration',
-                            dataIndex:'Iteration',
-                            tdCls:'editor-cell'
-                        }]),
-                        side: 'Left',
-                        filterFn:function(item){
-                            if((item.data.Release || {}).Name !== releaseName) return false;
-                            return !item.data.Iteration;
-                        }
-                    },*/{
-                        showIfLeafProject:true,
-                        showIfHorizontalMode:true,
-                        title: 'Epics with no start and End date',
-                        id: 'grid-epics-with-no-start-or-end-date',
-                        model: 'PortfolioItem/' + midPortfolioItemType,
-                        columns: defaultUserStoryColumns.concat([{
-                            text:'Actual Start Date',
-                            dataIndex:'ActualStartDate',
-                            tdCls:'editor-cell'
-                        },{
-                            text:'Actual End Date',
-                            dataIndex:'ActualEndDate',
-                            tdCls:'editor-cell'
-                        }]),
-                        side: 'Right',
-                        filterFn:function(item){
-                            if (item.data.ActualStartDate && item.data.ActualEndDate) return false;
-                            return item.data.Name;
-                        }
-                    },/*{
-                        showIfLeafProject:true,
-                        showIfHorizontalMode:true,
-                        title: 'Unaccepted Stories in Past Iterations',
-                        id: 'grid-unaccepted-stories-in-past-iterations',
-                        model: 'UserStory',
-                        columns: defaultUserStoryColumns.concat([{
-                            text:'Iteration',
-                            dataIndex:'Iteration',
-                            editor:false
-                        },{
+                    columns: defaultUserStoryColumns.concat([
+                        {
                             text:'ScheduleState',
                             dataIndex:'ScheduleState',
                             tdCls:'editor-cell'
-                        }/* ,{
-                         text:'Description',
-                         dataIndex:'Description',
-                         tdCls:'editor-cell'
-                         } *//*]),
-                        side: 'Right',
-                        filterFn:function(item){
-                            if((item.data.Release || {}).Name !== releaseName) return false;
-                            if(!item.data.Iteration) return false;
-                            return new Date(item.data.Iteration.EndDate) < now && item.data.ScheduleState != 'Accepted';
-                        }
-                    },{
-                        showIfLeafProject:true,
-                        showIfHorizontalMode:true,
-                        title: 'Stories Scheduled After ' + lowestPortfolioItemType + ' End Date',
-                        id: 'grid-stories-scheduled-after-' + lowestPortfolioItemType + '-end',
-                        model: 'UserStory',
-                        columns: defaultUserStoryColumns.concat([{
-                            text:'Iteration',
-                            dataIndex:'Iteration',
-                            editor:false
-                        },{
-                            text: lowestPortfolioItemType,
-                            dataIndex: lowestPortfolioItemType,
-                            editor:false
-                        }]),
-                        side: 'Right',
-                        filterFn:function(item){
-                            if((item.data.Release || {}).Name !== releaseName) return false;
-                            if(!item.data.Iteration || !item.data[lowestPortfolioItemType] ||
-                                !item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
-                            if(item.data.ScheduleState == 'Accepted') return false;
-                            return item.data[lowestPortfolioItemType].PlannedEndDate < item.data.Iteration.StartDate;
-                        }
-                    },*/{
+                        } ]),
+                    side: 'Left',
+                    filterFn:function(item){
+                        return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
+                    }
+                },/*{
+                 showIfLeafProject:true,
+                 showIfHorizontalMode:true,
+                 title: 'Stories Scheduled After ' + lowestPortfolioItemType + ' End Date',
+                 id: 'grid-stories-scheduled-after-' + lowestPortfolioItemType + '-end',
+                 model: 'UserStory',
+                 columns: defaultUserStoryColumns.concat([{
+                 text:'Iteration',
+                 dataIndex:'Iteration',
+                 editor:false
+                 },{
+                 text: lowestPortfolioItemType,
+                 dataIndex: lowestPortfolioItemType,
+                 editor:false
+                 }]),
+                 side: 'Right',
+                 filterFn:function(item){
+                 if((item.data.Release || {}).Name !== releaseName) return false;
+                 if(!item.data.Iteration || !item.data[lowestPortfolioItemType] ||
+                 !item.data[lowestPortfolioItemType].PlannedEndDate || !item.data.Iteration.StartDate) return false;
+                 if(item.data.ScheduleState == 'Accepted') return false;
+                 return item.data[lowestPortfolioItemType].PlannedEndDate < item.data.Iteration.StartDate;
+                 }
+                 },*/{
+                    showIfLeafProject:true,
+                    showIfHorizontalMode:true,
+                    title: 'Unaccepted Features Past End Date',
+                    id: 'grid-unaccepted-features-past-end_date',
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat([
+                        {
+                            text:'ScheduleState',
+                            dataIndex:'ScheduleState',
+                            tdCls:'editor-cell'
+                        } ]).concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor:false
+                    }] : []),
+                    side: 'Right',
+                    filterFn:function(item){
+                        return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
+                    }
+                },
+                    {
                         showIfLeafProject:false,
                         showIfHorizontalMode:false,
                         title: 'Features with No Parent',
                         id: 'grid-features-with-no-parent',
                         model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns,
+                        columns: defaultLowestPortfolioItemColumns.concat(!me.CurrentScrum ? [{
+                            text: 'Portfolio',
+                            dataIndex: 'Project',
+                            editor:false
+                        }] : []),
                         side: 'Right',
                         filterFn:function(item){
                             if(!item.data.Parent)
@@ -1511,10 +1572,19 @@
                         title: 'Features with No Start Date or End Date',
                         id: 'grid-features-with-no-start-or-end-date',
                         model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns,
+                        columns: defaultLowestPortfolioItemColumns.concat([
+                            {
+                                text:'ScheduleState',
+                                dataIndex:'ScheduleState',
+                                tdCls:'editor-cell'
+                            } ]).concat(!me.CurrentScrum ? [{
+                            text: 'Portfolio',
+                            dataIndex: 'Project',
+                            editor:false
+                        }] : []),
                         side: 'Right',
                         filterFn:function(item){
-                            if (item.data.ActualStartDate && item.data.ActualEndDate) return false;
+                            if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
                             return item.data.Name;
                         }
                     },{
@@ -1523,7 +1593,16 @@
                         title: 'Features with No Stories',
                         id: 'grid-features-with-no-stories',
                         model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns,
+                        columns: defaultLowestPortfolioItemColumns.concat([
+                            {
+                                text:'ScheduleState',
+                                dataIndex:'ScheduleState',
+                                tdCls:'editor-cell'
+                            } ]).concat(!me.CurrentScrum ? [{
+                            text: 'Portfolio',
+                            dataIndex: 'Project',
+                            editor:false
+                        }] : []),
                         side: 'Right',
                         filterFn:function(item){
                             item = item.data || item;//having issue due to caching so hacking it
@@ -1566,11 +1645,11 @@
                 else {
                     var list = gridConfig.model == 'UserStory' ? filteredStories : filteredLowestPortfolioItems;
                     gridConfig.data = _.filter(list, gridConfig.filterFn);
-                    gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Stories' : lowestPortfolioItemType + 's')] = list;
+                    gridConfig['total' + (gridConfig.model == 'UserStory' ? 'Epics' : lowestPortfolioItemType + 's')] = list;
                     gridConfig.totalCount = list.length;
-                    gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){
-                            item = item.data || item; //having issue with cache
-                            return sum + item.PlanEstimate; }, 0)>>0)/100;
+                    /*gridConfig.totalPoints = (100*_.reduce(list, function(sum, item){
+                     item = item.data || item; //having issue with cache
+                     return sum + item.LeafStoryPlanEstimateTotal; }, 0)>>0)/100;*/
                     return me.addGrid(gridConfig);
                 }
             }));
@@ -1666,7 +1745,7 @@
                             flex:1,
                             items:[{
                                 xtype:'rallygrid',
-                                title: scrum.data.Name,
+                                title: scrum[0].data.Name,
                                 columnCfgs:[{
                                     dataIndex:'Label',
                                     width:60,
@@ -1701,16 +1780,16 @@
                                 }],
                                 store: Ext.create('Rally.data.custom.Store', {
                                     data:[{
-                                        Label:'Stories',
+                                        Label:(grid.config.originalConfig.model == 'UserStory' ? 'Epics' : lowestPortfolioItemType + 's'),
                                         Outstanding:storyNum,
                                         Total:storyDen,
                                         Percent:storyPer + '%'
-                                    },{
-                                        Label:'Points',
-                                        Outstanding:pointNum,
-                                        Total:pointDen,
-                                        Percent:pointPer + '%'
-                                    }]
+                                    }/*,{
+                                     Label:'Points',
+                                     Outstanding:pointNum,
+                                     Total:pointDen,
+                                     Percent:pointPer + '%'
+                                     }*/]
                                 }),
                                 showPagingToolbar: false,
                                 showRowActionsColumn: false
