@@ -18,7 +18,7 @@
         helpId: 272,
         config: {
             defaultSettings: {
-                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate'
+                cardFields: 'Parent,Tasks,PlanEstimate,ScheduleState'
             }
         },
 
@@ -47,6 +47,12 @@
                             stateful: true,
                             stateId: context.getScopedStateId('iteration-planning-owner-filter')
                         }
+                    }, {
+                        ptype: 'rallygridboardfieldpicker',
+                        headerPosition: 'left',
+                        boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
+                        modelNames: this.modelNames,
+                        boardFieldDefaults: ['Tasks']
                     }
                 ];
 
@@ -87,7 +93,7 @@
 
         getSettingsFields: function () {
             var fields = this.callParent(arguments);
-            this.appendCardFieldPickerSetting(fields);
+            //this.appendCardFieldPickerSetting(fields);
             return fields;
         },
 

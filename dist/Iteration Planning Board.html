@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:70fbed589ee7b7cc5dc75e6449580e62044ce7c0:2016-11-23T20:17:09.118Z --><!DOCTYPE html>
+<!-- Build: taya-dev:b913744b715be0a0e3f1e0f0853f27aeda8d33b8:2016-12-02T21:11:13.358Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Iteration Planning Board</title>
@@ -27,7 +27,7 @@
         helpId: 272,
         config: {
             defaultSettings: {
-                cardFields: 'Parent,Tasks,Defects,Discussion,PlanEstimate'
+                cardFields: 'Parent,Tasks,PlanEstimate,ScheduleState'
             }
         },
 
@@ -56,6 +56,12 @@
                             stateful: true,
                             stateId: context.getScopedStateId('iteration-planning-owner-filter')
                         }
+                    }, {
+                        ptype: 'rallygridboardfieldpicker',
+                        headerPosition: 'left',
+                        boardFieldBlackList: ['Successors', 'Predecessors', 'DisplayColor'],
+                        modelNames: this.modelNames,
+                        boardFieldDefaults: ['Tasks']
                     }
                 ];
 
@@ -96,7 +102,7 @@
 
         getSettingsFields: function () {
             var fields = this.callParent(arguments);
-            this.appendCardFieldPickerSetting(fields);
+            //this.appendCardFieldPickerSetting(fields);
             return fields;
         },
 

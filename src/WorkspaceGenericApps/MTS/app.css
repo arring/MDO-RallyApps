@@ -84,7 +84,7 @@
 }
 
 .x-grid-table tbody > tr:last-child > td {
-    border-top: 1px solid black;
+    /*border-top: 1px solid black;*/
 }
 
 .x-grid-table tbody > tr:not(:last-child):not(:first-child) > td {
@@ -92,7 +92,7 @@
 }
 
 .x-grid-table tbody > tr > td:last-child {
-    border-left: 1px solid black;
+    /*border-left: 1px solid black;*/
 }
 
 .grid-container > span > div {
@@ -129,9 +129,14 @@ a:link {
     color: #000000;
 }
 
-.default-null {
+.default-null-even {
     color: #000000;
-    background-color: #F2F2F2;
+    background-color: #FFFFFF;
+}
+
+.default-null-odd {
+    color: #000000;
+    background-color: #cce4ff; /*#d9ebff; #e6f3ff;*/
 }
 
 .not-violating {

@@ -102,7 +102,7 @@
                 value: trainTotal.total
             };
         },
-        scrumDataCellRenderer: function (scrumData) {
+        scrumDataCellRenderer: function (scrumData, flag) {
             // OVERLOAD ME //
             // Ext renderer function for each cell.
             // receives the scrumData container
@@ -134,7 +134,6 @@
             return hasData ? '<span id="" title="' + horizontalData.HorizontalName + '">' + horizontalData.total + '</span>' : '-';
         },
 
-
         /**___________________________________ LOADING AND RELOADING ___________________________________*/
         reloadEverything: function () {
             var me = this;
@@ -165,6 +164,7 @@
         },
         _createGridDataHash: function () {
             var me = this;
+            var rowTrackingNumber = 0;
             me.GridData = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                 var projectNames = _.map(train.Scrums, function (scrum) {
                     return scrum.data.Name;
@@ -180,7 +180,8 @@
                             hash[projectName] = {
                                 scrumTeamType: scrumTeamType,
                                 scrumName: projectName,
-                                isViolating: null
+                                isViolating: null,
+                                rowNumber: rowTrackingNumber++
                             };
                             me.setScrumDataValue(hash[projectName], train.ScrumGroupName, projectName);
                         }
@@ -234,7 +235,6 @@
                 return;
             }
 
-            me.setLoading('Configuring Rally App...');
             console.log("Configuring Rally App...");
 
             me.configureIntelRallyApp()
@@ -367,12 +367,15 @@
 
         _buildGridColumns: function (trains) {
             var me = this;
+            var currentTrain = null;
+            var trainNumber = 0;
+            var oscar = 0;
             return [].concat(
                 [{
                     text: ' ', //Horizontal Name Column
                     dataIndex: 'horizontalData',
                     tdCls: 'horizontal-name-cell',
-                    width: 100,
+                    width: 80,
                     sortable: false,
                     renderer: function (horizontalData, meta) {
                         return horizontalData.HorizontalName;
@@ -397,34 +400,52 @@
                         text: trainName, //Train Columns
                         xtype: 'intelcomponentcolumn',
                         dataIndex: trainName,
-                        width: 100,
+                        width: 90,
                         cls: 'train-header-cls',
                         tdCls: 'stdci-cell-container',
                         sortable: false,
                         renderer: function (scrumDataList) {
-                            //console.log("scrumDataList: ", scrumDataList);
+                            oscar++;
+                            console.log("oscar = ", oscar);
+                            var flag = false;
+                            if(currentTrain != trainName){
+                                //if train changes
+                                trainNumber++;
+                            }
+                            if((currentTrain != trainName) && (scrumDataList.length  % 2 != 0) && (trainNumber % 2 == 0)){
+                                //we are changing to another train, and this an odd number of rows in this horizontal
+                                flag = true;
+                            }
+                            var currentTrain = trainName;
+                            console.log("scrumDataList: ", scrumDataList);
+
+                            var itemResult = _.map(scrumDataList, function(scrumDataItem){
+                                return me.scrumDataCellRenderer(scrumDataItem, flag);
+                            });
+                            console.log("itemResult.length = ", itemResult.length);
                             return Ext.create('Ext.container.Container', {
                                 layout: {type: 'vbox'},
                                 width: '100%',
                                 padding: 0,
                                 margin: 0,
                                 flex: 1,
-                                items: _.map(scrumDataList, me.scrumDataCellRenderer)
+                                items: itemResult
                             });
                         }
                     };
                 }),
-                [{
-                    text: ' ', //Horizontal % column
-                    dataIndex: 'horizontalData',
-                    tdCls: '',
-                    width: 100,
-                    sortable: false,
-                    renderer: me.horizontalTotalCellRenderer
-                }]
+                [
+                //{
+                //    text: ' ', //Horizontal % column
+                //    dataIndex: 'horizontalData',
+                //    tdCls: '',
+                //    width: 90,
+                //    sortable: false,
+                //    renderer: me.horizontalTotalCellRenderer
+                //}
+                ]
             );
         },
-
         _getGridWidth: function (columns) {
             var me = this;
 
@@ -473,7 +494,7 @@
                 scroll: 'both',
                 resizable: false,
                 viewConfig: {
-                    stripeRows: false,
+                    stripeRows: true,
                     preserveScrollOnRefresh: true
                 },
                 width: me._getGridWidth(columns),
@@ -483,9 +504,9 @@
                     items: columns
                 },
                 store: gridStore,
-                enableEditing: false,
-                disableSelection: true,
-                trackMouseOver: false
+                enableEditing: false
+                //disableSelection: true,
+                //trackMouseOver: true
             });
             setTimeout(function () {
                 me.doLayout();

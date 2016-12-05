@@ -4,6 +4,7 @@
     var violatingTeamsFull = {};
     var originalGridData = [];
     var filteredTeams = false;
+    var rowStripeTracker = 0;
 
     Ext.define('Intel.MTS', {
         extend: 'Intel.lib.IntelRallyTrainsGridApp',
@@ -230,47 +231,103 @@
                 featureCount: trainTotal.total
             };
         },
-        scrumDataCellRenderer: function (scrumData) {
+        cellCSSClass: "this-class-does-not-exist",
+        scrumDataCellRenderer: function (scrumData, flag) {
+            var me = this;
+            rowStripeTracker++;
+
             var exists = (scrumData && scrumData.featureCount > 0);
             //console.log("scrumdata: ", scrumData + " exists: ", exists);
 
             var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
 
-            var className = "default-null";
+            console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
+
+            //Keep track of what it was last time it ran through this funtion.
+            var opposite = "";
+            if(me.cellCSSClass === "default-null-odd"){
+                opposite = "default-null-odd";
+            } else {
+                opposite = "default-null-even";
+            }
+
+            if(flag && (rowStripeTracker % 2 == 0)){
+                me.cellCSSClass = "default-null-odd";
+            }
+            else if(flag && ((rowStripeTracker % 2 != 0))){
+                me.cellCSSClass = "default-null-even";
+            }
+            else if(!flag && (rowStripeTracker % 2 == 0)){
+                me.cellCSSClass = "default-null-even";
+            }
+            else { //!flag and (rowStripeTracker % 2 != 0)
+                me.cellCSSClass = "default-null-odd";
+            }
+
+
+            if(rowStripeTracker % 2 == 0){
+                me.cellCSSClass = "default-null-even";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    me.cellCSSClass = "default-null-odd";
+                }
+            } else{
+                me.cellCSSClass = "default-null-odd";
+                if(flag){
+                    //this is a column switch time (we are starting a new column) and this horizontal has an odd number of rows
+                    me.cellCSSClass = "default-null-even";
+                } else {
+
+                }
+            }
             if (exists && scrumData.isViolating) {
-                className = "violating";
+                me.cellCSSClass = "violating";
             } else if (exists && !scrumData.isViolating) {
-                className = "not-violating";
+                me.cellCSSClass = "not-violating";
             }
 
             return {
                 xtype: 'container',
                 width: 100,
-                cls: className,
+                cls: me.cellCSSClass,
                 items: {
                     xtype: 'component',
                     cls: "a-style",
-                    qtip: tooltip_text,
+                    //qtip: tooltip_text,
                     autoEl: {
                         tag: 'a',
                         html: exists ? '<span style="width:100%" title="' + tooltip_text + '">' + scrumData.featureCount + '</span>' : '-'
-                    },
-                    listeners: {
-                        rendered: function (c) {
-                            Ext.QuickTips.register({
-                                target: c.getEl(),
-                                text: c.qtip
-                            });
-                        }
-                    }
+                    }//,
+                    //listeners: {
+                    //    rendered: function (c) {
+                    //        Ext.QuickTips.register({
+                    //            target: c.getEl(),
+                    //            text: c.qtip
+                    //        });
+                    //    }
+                    //}
                 }
             };
         },
+        //scrumDataContainerRenderer: function(scrumDataList){
+        //    var me = this;
+        //    console.log("scrumDataList.length: ", scrumDataList.length);
+        //    var flag = scrumDataList.length;
+        //    var itemResult =  _.map(scrumDataList,  me.scrumDataCellRenderer);
+        //    return Ext.create('Ext.container.Container', {
+        //        layout: {type: 'vbox'},
+        //        width: '100%',
+        //        padding: 0,
+        //        margin: 0,
+        //        flex: 1,
+        //        items: itemResult
+        //    });
+        //},
         teamTypeCellRenderer: function (scrumName) {
             var me = this;
             if (violatingTeams) {
                 if (violatingTeams.indexOf(scrumName) == -1) {
-                    if(scrumName == "-" || scrumName == ""){
+                    if(scrumName == "-" || scrumName === ""){
                         return {
                             xtype: 'container',
                             flex: 1,
