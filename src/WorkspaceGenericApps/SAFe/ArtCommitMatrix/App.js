@@ -65,24 +65,23 @@
                 items: [{
                     xtype: 'container',
                     id: 'cacheMessageContainer'
+                }, {
+                    xtype: 'container',
+                    id: 'cacheButtonsContainer'
                 }]
             }, {
                 xtype: 'container',
                 flex: 2,
                 itemId: 'navboxRight',
-                items: [
-                    {
-                        xtype: 'container',
-                        itemId: 'navboxRightVert',
-                        layout: {
-                            type: 'hbox',
-                            pack: 'end'
-                        },
-                        items: [{
-                            xtype: 'container',
-                            id: 'cacheButtonsContainer'
-                        }]
-                    }]
+                layout: 'hbox',
+                items: [{
+                    xtype: 'container',
+                    itemId: 'navboxRightVert',
+                    layout: {
+                        type: 'vbox',
+                        pack: 'end'
+                    }
+                }]
             }]
         }],
         minWidth: 910,
@@ -251,19 +250,21 @@
 
         /**___________________________________ EVENT HANDLING ___________________________________*/
         getGridHeight: function () {
-            /*var me = this,
-             iframe = Ext.get(window.frameElement);
-             return iframe.getHeight() - me.down('#navbox').getHeight() - 20;*/
-            return 800;
+            var me = this,
+                iframe = Ext.get(window.frameElement);
+            return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+            //return 800;
         },
         getGridWidth: function (columnCfgs) {
-            /*var me = this;
-             if(!me.MatrixGrid) return;
-             else return Math.min(
-             _.reduce(columnCfgs, function(item, sum){ return sum + item.width; }, 20),
-             window.innerWidth - 20
-             );*/
-            return 800;
+            var me = this;
+            if (!me.MatrixGrid) return;
+            else return Math.min(
+                _.reduce(columnCfgs, function (item, sum) {
+                    return sum + item.width;
+                }, 20),
+                window.innerWidth - 20
+            );
+            //return 800;
         },
         changeGridSize: function () {
             var me = this;
@@ -565,13 +566,13 @@
             var me = this;
             me.setLoading(' Loading matrix');
             me.clearEverything();
+            //if(!me.UpdateCacheButton) me.renderUpdateCache();
             if (!me.ReleasePicker) {
                 me.renderReleasePicker();
                 me.renderClickModePicker();
                 me.renderRefreshIntervalCombo();
                 me.renderViewModePicker();
                 me.renderClearFiltersButton();
-                if (!me.UpdateCacheButton) me.renderUpdateCache();
                 me.renderMatrixLegend();
             }
             me.showGrids();
@@ -585,6 +586,7 @@
                 return me.reloadStores()
                     .then(function () {
                         me.clearEverything();
+                        //if(!me.UpdateCacheButton) me.renderUpdateCache();
                         if (!me.ReleasePicker) {
                             me.renderReleasePicker();
                             me.renderClickModePicker();
@@ -624,7 +626,7 @@
         },
         renderRefreshIntervalCombo: function () {
             var me = this;
-            me.down('#cacheButtonsContainer').add({
+            me.down('#navboxRightVert').add({
                 xtype: 'intelfixedcombo',
                 store: Ext.create('Ext.data.Store', {
                     fields: ['Rate'],
@@ -684,7 +686,7 @@
                 }, me.AppRefresh * 1000 * 60);
             } else {
                 me.IsDataRefresh = false;
-                if(Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
+                if (Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
                 if (Ext.getCmp('cacheMessageContainer').hidden === true) {
                     me.setLoading("Loading Data");
                     return me.loadDataCacheorRally()
@@ -806,7 +808,7 @@
                             return me.reloadEverything();
                         });
                 } else {
-                    me.renderCacheMessage();
+                    //me.renderCacheMessage();
                     me.redrawEverything();
                 }
             });
@@ -915,7 +917,7 @@
             var me = this;
             Ext.getCmp('cacheMessageContainer').removeAll();
             if (Ext.getCmp('cacheMessageContainer').hidden === true) Ext.getCmp('cacheMessageContainer').show();
-            if(Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
+            if (Ext.getCmp('cacheButtonsContainer').hidden === true) Ext.getCmp('cacheButtonsContainer').show();
             Ext.getCmp('cacheMessageContainer').add({
                 xtype: 'label',
                 width: '100%',
@@ -924,14 +926,14 @@
         },
         renderUpdateCache: function () {
             var me = this;
-            me.UpdateCacheButton = me.down('#cacheButtonsContainer').add({
+            me.UpdateCacheButton = me.down('#navboxRightVert').add({//Ext.getCmp('cacheButtonsContainer').add({
                 xtype: 'button',
                 text: 'Get Live Data',
                 cls: 'intel-button',
                 width: '110',
                 listeners: {
                     click: function () {
-                        me.setLoading(' Getting live data, please wait...');
+                        me.setLoading(' Getting live data, please wait');
                         Ext.getCmp('cacheMessageContainer').removeAll();
                         return me.loadConfiguration()
                             .then(function () {
@@ -1054,7 +1056,7 @@
         },
         renderMatrixLegend: function () {
             var me = this;
-            me.MatrixLegend = me.down('#navboxRightVert').add({
+            me.MatrixLegend = me.down('#navboxRight').add({
                 xtype: 'container',
                 width: 150,
                 layout: {
