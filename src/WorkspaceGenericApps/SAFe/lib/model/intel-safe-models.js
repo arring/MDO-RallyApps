@@ -109,9 +109,23 @@
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
 			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'MoSCoW', type: 'string'}
+            {name: 'MoSCoW', type: 'string'}
 		]
 	});
+
+    /************************* USED FOR ART COMMIT MATRIX ONLY *********************************************/
+    Ext.define('CommitsMatrixPortfolioItem2', {
+        extend: 'Ext.data.Model',
+        fields: [
+            {name: 'PortfolioItemObjectID', type: 'number'},
+            {name: 'PortfolioItemRank', type: 'number'},
+            {name: 'PortfolioItemName', type: 'string'},
+            {name: 'PortfolioItemFormattedID', type:'string'},
+            {name: 'PortfolioItemPlannedEnd', type:'number'},
+            {name: 'TopPortfolioItemName', type:'string'},
+            {name: 'FeatureOwner', type:'string'}
+        ]
+    });
 	
 	/************************* USED FOR CUSTOM-FIELD EDITOR *********************************************/
 	Ext.define('SAFeCustomFieldsEditorModel', {

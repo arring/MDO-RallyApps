@@ -102,7 +102,7 @@
         /**___________________________________ DATA STORE METHODS ___________________________________*/
         loadPortfolioItems: function () {
             var me = this, deferred = Q.defer();
-            me.portfolioItemFields = ["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", /* "c_MoSCoW", */ "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate", "DragAndDropRank"];
+            me.portfolioItemFields = ["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", /* "c_MoSCoW", */ "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate", "DragAndDropRank", "Owner"];
             me.enqueue(function (done) {
                 Q.all(_.map(me.PortfolioItemTypes, function (type, ordinal) {
                     return (ordinal ? //only load lowest portfolioItems in Release (upper porfolioItems don't need to be in a release)
@@ -250,10 +250,15 @@
 
         /**___________________________________ EVENT HANDLING ___________________________________*/
         getGridHeight: function () {
-            var me = this,
-                iframe = Ext.get(window.frameElement);
-            return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
-            //return 800;
+            var me = this;
+            //------------------- FOR PROD / DEV / RALLY / CHECKING IN -------------------
+            //var iframe = Ext.get(window.frameElement);
+            //return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+            // ---------------------------------------------------------------------------
+
+            //-------- FOR RUNNING LOCALLY ONLY ----------
+            return 800;
+            //--------------------------------------------
         },
         getGridWidth: function (columnCfgs) {
             var me = this;
@@ -264,7 +269,6 @@
                 }, 20),
                 window.innerWidth - 20
             );
-            //return 800;
         },
         changeGridSize: function () {
             var me = this;
@@ -747,7 +751,7 @@
         setCachePayLoadFn: function (payload) {
             var me = this;
             projectFields = ['Children', 'Name', 'ObjectID', 'Parent'];
-            portfolioItemFields = ["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", "c_MoSCoW", "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate", "DragAndDropRank", "Rank",
+            portfolioItemFields = ["Name", "ObjectID", "FormattedID", "Release", "c_TeamCommits", /*"c_MoSCoW",*/ "c_Risks", "Project", "PlannedEndDate", "Parent", "Children", "PortfolioItemType", "Ordinal", "PercentDoneByStoryPlanEstimate", "DragAndDropRank", "Rank", "Owner",
                 '_p', '_ref', '_refObjectUUID', '_type', '_objectVersion', '_CreatedAt'];
             function filterProjectData(projectData) {
                 var data = _.pick(projectData, projectFields);
@@ -1102,8 +1106,9 @@
                         PortfolioItemName: portfolioItemRecord.data.Name,
                         PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
                         PortfolioItemPlannedEnd: portfolioItemRecord.data.PlannedEndDate * 1,
-                        TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID]/* ,
-                         MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined' */
+                        TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
+                        FeatureOwner: portfolioItemRecord.data.Owner ? portfolioItemRecord.data.Owner["_refObjectName"] : "no owner"
+                        //, MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined'
                     };
                 }),
                 makeDoSortFn = function (fn) {
@@ -1117,9 +1122,11 @@
                     };
                 };
 
+            console.log(">>> matrixRecords = ", matrixRecords);
+
             var matrixStore = Ext.create('Intel.lib.component.Store', {
                 data: matrixRecords,
-                model: 'CommitsMatrixPortfolioItem',
+                model: 'CommitsMatrixPortfolioItem2',
                 autoSync: true,
                 limit: Infinity,
                 proxy: {
@@ -1149,6 +1156,8 @@
                     matrixStore.fireEvent('refresh', matrixStore);
                 }
             });
+
+            console.log(">>> matrixStore = ", matrixStore);
 
             var lockedColumns = [/* {
              text:'MoSCoW',
@@ -1221,7 +1230,7 @@
                         xtype: 'intelgriduncommittedfeaturefilter'
                     }, {
                         xtype: 'intelgridcolumntextareafilter',
-                        style: {marginRight: '5px'}
+                        style:  {margin: '3px'}
                     }],
                 renderer: function (value, metaData) {
                     metaData.tdAttr = 'title="' + value + '"';
@@ -1249,6 +1258,32 @@
                         return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined;
                     }
                 }]
+            }, {
+                text: 'Owner',
+                dataIndex: 'FeatureOwner',
+                width: 150,
+                locked: true,
+                sortable: true,
+                //renderer: function (date) {
+                //    return (date ? 'ww' + me.getWorkweek(date) : '-');
+                //},
+                renderer: function (value, metaData) {
+                    //console.log(">>> metaData = ", metaData);
+                    //console.log(">>> value = ", value);
+                    //var ownerName = metaData.record.raw["FeatureOwner"];
+                    return value;
+                },
+                items: [
+                    {
+                        xtype: 'intelgridcolumntextareafilter',
+                        style: {margin: '3px'}
+                    }
+                    //{
+                    //    xtype: 'intelgridcolumnfilter',
+                    //    convertDisplayFn: function (dateVal) {
+                    //        return dateVal ? 'ww' + me.getWorkweek(dateVal) : undefined;
+                    //    }
+                ]
             }, {
                 text: 'Total % Done',
                 dataIndex: 'PortfolioItemObjectID',
@@ -1456,7 +1491,7 @@
                             me.loadPortfolioItemByOrdinal(matrixRecord.data.PortfolioItemObjectID, 0)
                                 .then(function (portfolioItemRecord) {
                                     var deferred = Q.defer();
-                                    portfolioItemRecord.set('c_MoSCoW', value);
+                                    //portfolioItemRecord.set('c_MoSCoW', value);
                                     portfolioItemRecord.save({
                                         callback: function (record, operation, success) {
                                             if (!success) deferred.reject('Failed to modify PortfolioItem: ' + portfolioItemRecord.data.FormattedID);
@@ -1464,7 +1499,7 @@
                                                 var storePortfolioItemRecord = _.find(me.PortfolioItemStore.getRange(), function (item) {
                                                     return item.data.ObjectID == matrixRecord.data.PortfolioItemObjectID;
                                                 });
-                                                storePortfolioItemRecord.data.c_MoSCoW = portfolioItemRecord.data.c_MoSCoW;
+                                                //storePortfolioItemRecord.data.c_MoSCoW = portfolioItemRecord.data.c_MoSCoW;
                                                 //	matrixRecord.data.MoSCoW = portfolioItemRecord.data.c_MoSCoW; //need this in case intelUpdate gets called while in queue
                                                 me.MatrixGrid.view.refreshNode(matrixStore.indexOf(matrixRecord));
                                                 deferred.resolve();
