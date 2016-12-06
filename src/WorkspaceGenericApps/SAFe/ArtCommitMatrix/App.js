@@ -573,6 +573,7 @@
                 me.renderRefreshIntervalCombo();
                 me.renderViewModePicker();
                 me.renderClearFiltersButton();
+                if (!me.UpdateCacheButton) me.renderUpdateCache();
                 me.renderMatrixLegend();
             }
             me.showGrids();
