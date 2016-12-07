@@ -905,8 +905,8 @@
             }
             return Q.all([me.loadReleases()])
                 .then(function () {
-                me.setRefreshInterval();
-            })
+                    me.setRefreshInterval();
+                })
                 .then(function () {
                     return me.loadDataCacheorRally();
                 })
@@ -1107,7 +1107,7 @@
                         PortfolioItemFormattedID: portfolioItemRecord.data.FormattedID,
                         PortfolioItemPlannedEnd: portfolioItemRecord.data.PlannedEndDate * 1,
                         TopPortfolioItemName: me.PortfolioItemMap[portfolioItemRecord.data.ObjectID],
-                        FeatureOwner: portfolioItemRecord.data.Owner ? portfolioItemRecord.data.Owner["_refObjectName"] : "no owner"
+                        FeatureOwner: portfolioItemRecord.data.Owner ? portfolioItemRecord.data.Owner["_refObjectName"] : "" //leave blank if there is no owner.
                         //, MoSCoW: portfolioItemRecord.data.c_MoSCoW || 'Undefined'
                     };
                 }),
@@ -1230,7 +1230,7 @@
                         xtype: 'intelgriduncommittedfeaturefilter'
                     }, {
                         xtype: 'intelgridcolumntextareafilter',
-                        style:  {margin: '3px'}
+                        style: {margin: '3px'}
                     }],
                 renderer: function (value, metaData) {
                     metaData.tdAttr = 'title="' + value + '"';
@@ -1261,7 +1261,7 @@
             }, {
                 text: 'Owner',
                 dataIndex: 'FeatureOwner',
-                width: 150,
+                width: 120,
                 locked: true,
                 sortable: true,
                 //renderer: function (date) {
