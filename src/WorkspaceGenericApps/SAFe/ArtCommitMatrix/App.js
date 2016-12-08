@@ -51,6 +51,9 @@
                 xtype: 'container',
                 flex: 1,
                 itemId: 'navboxLeft',
+                style:{
+                    margin: '5px'
+                },
                 layout: 'hbox',
                 items: [{
                     xtype: 'container',
@@ -251,14 +254,14 @@
         /**___________________________________ EVENT HANDLING ___________________________________*/
         getGridHeight: function () {
             var me = this;
-            //------------------- FOR PROD / DEV / RALLY / CHECKING IN -------------------
-            //var iframe = Ext.get(window.frameElement);
-            //return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
-            // ---------------------------------------------------------------------------
-
-            //-------- FOR RUNNING LOCALLY ONLY ----------
-            return 800;
-            //--------------------------------------------
+            var iframe = Ext.get(window.frameElement);
+            if(iframe){
+                //FOR PROD / DEV / RALLY
+                return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
+            } else {
+                //FOR RUNNING LOCALLY ONLY
+                return 800;
+            }
         },
         getGridWidth: function (columnCfgs) {
             var me = this;
@@ -931,25 +934,52 @@
         },
         renderUpdateCache: function () {
             var me = this;
-            me.UpdateCacheButton = me.down('#navboxRightVert').add({//Ext.getCmp('cacheButtonsContainer').add({
-                xtype: 'button',
-                text: 'Get Live Data',
-                cls: 'intel-button',
-                width: '110',
-                listeners: {
-                    click: function () {
-                        me.setLoading(' Getting live data, please wait');
-                        Ext.getCmp('cacheMessageContainer').removeAll();
-                        return me.loadConfiguration()
-                            .then(function () {
-                                return me.reloadEverything();
-                            })
-                            .then(function () {
-                                return me.updateCache();
-                            });
+            me.UpdateCacheButton = me.down('#navboxRightVert').add(
+                {
+                    xtype: 'button',
+                    text: 'Get Live Data',
+                    cls: 'intel-button',
+                    style:{margin: '3px'},
+                    width: '110',
+                    listeners: {
+                        click: function () {
+                            me.setLoading(' Getting live data, please wait');
+                            Ext.getCmp('cacheMessageContainer').removeAll();
+                            return me.loadConfiguration()
+                                .then(function () {
+                                    return me.reloadEverything();
+                                })
+                                .then(function () {
+                                    return me.updateCache();
+                                });
+                        }
+                    }
+                },
+                {
+                    xtype: 'button',
+                    text: 'Show/Hide Owner',
+                    id: 'additionalColumnsButton',
+                    cls: 'intel-button',
+                    width: '120',
+                    style:{
+                        'background-color': 'green',
+                        margin: '3px'
+                    },
+                    listeners: {
+                        click: function () {
+                            if (me.hideAdditionalColumns) {
+                                me.MatrixGrid.columns[5].hide();
+                                me.hideAdditionalColumns = false;
+                                //document.getElementById('additionalColumnsButton').text = 'Hide Additional Columns';
+                            } else {
+                                me.MatrixGrid.columns[5].show();
+                                me.hideAdditionalColumns = true;
+                                //document.getElementById('additionalColumnsButton').text = 'Show Additional Columns';
+                            }
+                        }
                     }
                 }
-            });
+            );
         },
         releasePickerSelected: function (combo, records) {
             var me = this, pid = me.ProjectRecord.data.ObjectID;
@@ -1038,7 +1068,7 @@
         },
         clearFiltersButtonClicked: function () {
             var me = this;
-            me.setLoading("removing filters");
+            me.setLoading("Removing filters");
             if (me.MatrixGrid) {
                 me.clearToolTip();
                 _.invoke(Ext.ComponentQuery.query('intelgridcolumnfilter', me.MatrixGrid), 'clearFilters');
@@ -1050,14 +1080,16 @@
         },
         renderClearFiltersButton: function () {
             var me = this;
-            me.ClearFiltersButton = me.down('#navboxLeftVert').add({
-                xtype: 'button',
-                text: 'Remove Filters',
-                id: 'manualRefreshButton',
-                cls: 'intel-button',
-                width: 110,
-                listeners: {click: me.clearFiltersButtonClicked.bind(me)}
-            });
+            me.ClearFiltersButton = me.down('#navboxLeftVert').add(
+                {
+                    xtype: 'button',
+                    text: 'Remove Filters',
+                    id: 'manualRefreshButton',
+                    cls: 'intel-button',
+                    width: 110,
+                    listeners: {click: me.clearFiltersButtonClicked.bind(me)}
+                }
+            );
         },
         renderMatrixLegend: function () {
             var me = this;
@@ -1278,6 +1310,11 @@
                         xtype: 'intelgridcolumntextareafilter',
                         style: {margin: '3px'}
                     }
+                    //{
+                    //    xtype: 'button',
+                    //    //
+                    //    style: {margin: '3px'}
+                    //}
                     //{
                     //    xtype: 'intelgridcolumnfilter',
                     //    convertDisplayFn: function (dateVal) {
@@ -1519,6 +1556,9 @@
                         }, 'PortfolioItemQueue'); //Race condition avoided between me.PortfolioItemStore and the User's actions
                     },
                     afterrender: function (grid) {
+
+                        //Default is Owner column starts hidden
+                        grid.columns[5].hide();
 
                         var view = grid.view.normalView; //lockedView and normalView
 

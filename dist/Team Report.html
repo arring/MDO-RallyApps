@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:aa585736c1aae1b0b7b4561bc56f92ee4ce1d384:2016-12-06T00:46:20.408Z --><!DOCTYPE html>
+<!-- Build: taya-dev:110c29e6e02d5d57b07eb3f3fb842291d8e37249:2016-12-08T22:48:34.149Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Team Report</title>
@@ -3606,9 +3606,23 @@
 			{name: 'PortfolioItemFormattedID', type:'string'},
 			{name: 'PortfolioItemPlannedEnd', type:'number'},
 			{name: 'TopPortfolioItemName', type:'string'},
-			{name: 'MoSCoW', type: 'string'}
+            {name: 'MoSCoW', type: 'string'}
 		]
 	});
+
+    /************************* USED FOR ART COMMIT MATRIX ONLY *********************************************/
+    Ext.define('CommitsMatrixPortfolioItem2', {
+        extend: 'Ext.data.Model',
+        fields: [
+            {name: 'PortfolioItemObjectID', type: 'number'},
+            {name: 'PortfolioItemRank', type: 'number'},
+            {name: 'PortfolioItemName', type: 'string'},
+            {name: 'PortfolioItemFormattedID', type:'string'},
+            {name: 'PortfolioItemPlannedEnd', type:'number'},
+            {name: 'TopPortfolioItemName', type:'string'},
+            {name: 'FeatureOwner', type:'string'}
+        ]
+    });
 	
 	/************************* USED FOR CUSTOM-FIELD EDITOR *********************************************/
 	Ext.define('SAFeCustomFieldsEditorModel', {

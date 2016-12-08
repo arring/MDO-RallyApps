@@ -114,3 +114,7 @@
 .x-box-layout-ct{
     overflow: hidden !important;
 }
+
+/*.x-grid-view .x-fit-item .x-grid-view-default .x-unselectable{*/
+    /*height: 200px !important;*/
+/*}*/
