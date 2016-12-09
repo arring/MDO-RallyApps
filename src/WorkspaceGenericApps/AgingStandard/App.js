@@ -57,10 +57,7 @@ The “age” of a standard has to do with the time it has been in the current c
 				},{
 					name: 'IE3',
 					xtype: 'rallytextfield'								
-				}/*,{
-					name: 'IE4',
-					xtype: 'rallytextfield'								
-				}*/
+				}
 			];
 		},
     config: {
@@ -69,38 +66,15 @@ The “age” of a standard has to do with the time it has been in the current c
 				IE1: '14',
 				IE2: '42',
 				IE3: '42'
-			//	IE4: '42'
 			}
     },		
 		/**___________________________________ DATA STORE METHODS ___________________________________*/	
-		/**
-			get all the standardization K-briefs
-			*/
-		getStandardizationKBriefQuery: function(){
-			var me=this;
-			return Ext.create('Rally.data.wsapi.Filter', {
-				filters: [{
-					property: 'c_StdsKanban',
-					operator: '!contains',
-					value: 'IE4'
-				},{
-					property:'c_StdsKanban',
-					operator: '!contains',
-					value:'Backlog'
-				}
-				]
-			});
-		//	return (Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!contains' , value: 'IE4' }));//&&
-			//(Ext.create('Rally.data.wsapi.Filter', {property: 'c_StdsKanban', operator:'!contains' , value: 'Backlog' }));
-
-
-		},		
+	
 		_loadStandardizationKBrief: function(){
 			var me = this,
 				config = {
 					model: 'HierarchicalRequirement',
 					compact:false,
-					//filters: me.getStandardizationKBriefQuery() ,
 					filters: [{
 						property: 'c_StdsKanban',
 						operator: '!contains',
