@@ -384,7 +384,9 @@
 							'Blocked', 'BlockedReason', 'Blocker', 'CreationDate', lowestPortfolioItem],
 					context:{ 
 						workspace:me.getContext().getWorkspace()._ref, 
-						project: me.ProjectRecord.data._ref 
+						project: me.ProjectRecord.data._ref,
+						projectScopeUp:false,
+						projectScopeDown:true
 					}
 				};
 			return me.parallelLoadWsapiStore(config).then(function(store){
