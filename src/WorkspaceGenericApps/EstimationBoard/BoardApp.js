@@ -111,6 +111,8 @@ Ext.define('EstimationBoardApp', {
         };
         if(this.getEl()) {
             config.height = this.getHeight();
+        } else {
+            config.height = 800;
         }
         return config;
     },

@@ -256,10 +256,12 @@
             var me = this;
             var iframe = Ext.get(window.frameElement);
             if(iframe){
-                //FOR PROD / DEV / RALLY
+                //IMPORTANT: The iframe is defined when deployed in Rally
+                //This should always be the case it hits in Rally in Prod
                 return iframe.getHeight() - me.down('#navbox').getHeight() - 20;
             } else {
-                //FOR RUNNING LOCALLY ONLY
+                //IMPORTANT: This case for local development and running locally only!
+                // If you return a fixed height when deployed in rally, it will cause scroll bar issues.
                 return 800;
             }
         },
