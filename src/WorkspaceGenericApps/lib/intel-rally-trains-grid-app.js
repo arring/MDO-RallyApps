@@ -329,6 +329,7 @@
                     scrumTeamNames: _.uniq(scrumTeamNames[horizontalTotalName]).sort()
                 };
             });
+
             //put 'Other' Row last
             var otherRow = _.find(data, function (row) {
                 return row.horizontalData.HorizontalName == 'Other';
