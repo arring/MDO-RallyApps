@@ -185,9 +185,11 @@
 
         _createGridDataHash: function () {
             var me = this;
+            console.log("creating grid data hash");
+            me.setLoading('Building Grid Data...');
 
             //FILTER FOR ONE TRAIN: Current scoped train
-            if(me.scopeProject) {
+            if (me.scopeProject) {
                 me.GridData = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                     if (train.ScrumGroupRootProjectOID == me.scopeProject.ObjectID) {
                         var projectNames = _.map(train.Scrums, function (scrum) {
@@ -216,42 +218,40 @@
                     }
                 }, {});
             } else {
-                //Show all trains: update me.ScrumGroupConfig first
-                me.ScrumGroupConfig = _.filter(me.savedScrumConfig, function (item) {
-                    return item.IsTrain;
-                });
+                console.log("ELSE");
+                console.log("me.ScrumGroupConfig: ", me.ScrumGroupConfig);
+
                 //DO NOT FILTER FOR ONE TRAIN: Show all trains
                 me.GridData = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
-                    //if (train.ScrumGroupRootProjectOID == me.scopeProject.ObjectID) {
-                        var projectNames = _.map(train.Scrums, function (scrum) {
-                            return scrum.data.Name;
-                        });
-                        var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
-                        hash[train.ScrumGroupName] = _.reduce(horizontalMap, function (hash, item, key) {
-                            var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
-                            hash[horizontal] = _.reduce(horizontalMap, function (hash, r, key) {
-                                var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
-                                if (horizontal === horizontal2) {
-                                    var scrumTeamType = r.teamType + " " + r.number;
-                                    var projectName = r.projectName;
-                                    hash[projectName] = {
-                                        scrumTeamType: scrumTeamType,
-                                        scrumName: projectName,
-                                        totalPoints: me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0,
-                                        stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0
-                                    };
-                                }
-                                return hash;
-                            }, {});
+                    var projectNames = _.map(train.Scrums, function (scrum) {
+                        return scrum.data.Name;
+                    });
+                    var horizontalMap = me.getAllHorizontalTeamTypeInfosFromProjectNames(projectNames);
+                    hash[train.ScrumGroupName] = _.reduce(horizontalMap, function (hash, item, key) {
+                        var horizontal = (item.horizontal === null) ? "Other" : item.horizontal;
+                        hash[horizontal] = _.reduce(horizontalMap, function (hash, r, key) {
+                            var horizontal2 = (r.horizontal === null) ? "Other" : r.horizontal;
+                            if (horizontal === horizontal2) {
+                                var scrumTeamType = r.teamType + " " + r.number;
+                                var projectName = r.projectName;
+                                hash[projectName] = {
+                                    scrumTeamType: scrumTeamType,
+                                    scrumName: projectName,
+                                    totalPoints: me.ProjectUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0,
+                                    stdciPoints: me.StdnCIUserStoryPlanEstimateMap[train.ScrumGroupName][projectName] || 0
+                                };
+                            }
                             return hash;
                         }, {});
                         return hash;
-                    //}
+                    }, {});
+                    return hash;
                 }, {});
+
+                console.log("check");
 
             }
         },
-
         /**___________________________________ LOADING AND RELOADING ___________________________________*/
         reloadStores: function () {
             var me = this;
@@ -260,21 +260,47 @@
                 me._loadUserStories()
             ]);
         },
+        loadAllTrainsData: function(){
+            var me = this;
+            console.log("load all trains data...");
+            me.setLoading('Getting all Scrum Teams data for all Trains...');
+            //Show all trains: update me.ScrumGroupConfig first
+            me.ScrumGroupConfig = _.filter(me.savedScrumConfig, function (item) {
+                return item.IsTrain;
+            });
+            //Now me.ScrumGroupConfig has all the trains, but not the trains scrums inside each train.
+            //Now we need to get the leaf scums for each of the trains
+            return Q.all(_.map(me.ScrumGroupConfig, function (cfg) {
+                console.log("map");
+                return me.loadAllLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}}).then(function (leafProjects) {
+                    console.log("scrums...");
+                    cfg.Scrums = leafProjects;
+                });
+            }));
+        },
         reloadEverything: function () {
             var me = this;
+            console.log("Reload everything:");
 
-            me.setLoading('Loading Data');
+            me.setLoading('Loading Data...');
             return me.reloadStores().then(function () {
+                console.log("loading stores is done. Now creating hash.");
                 me._createGridDataHash();
+                console.log("loading hash is done. me.GridData: ", me.GridData);
+
                 if (!me.ReleasePicker) { //only draw the first time
                     me.renderReleasePicker();
                 }
+                me.setLoading('Rendering Grid...');
+                console.log("before remove all grid container");
                 me.down('#gridContainer').removeAll();
+                console.log("after remove all grid container");
                 me.renderGrid();
-            })
-                .then(function () {
-                    me.setLoading(false);
-                });
+
+            }).then(function () {
+                console.log("setting loading false");
+                me.setLoading(false);
+            });
         },
 
         /**___________________________________ LAUNCH ___________________________________*/
@@ -296,11 +322,13 @@
                     me.savedScrumConfig = me.ScrumGroupConfig;
                     //Filter to only the current train
                     if (me.scopeProject) {
+                        console.log("There is a scoped project");
                         me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function (item) {
                             return item.ScrumGroupRootProjectOID == me.scopeProject.ObjectID;
                         });
                     } else {
                         //Show all trains
+                        console.log("show all trains");
                         me.ScrumGroupConfig = _.filter(me.ScrumGroupConfig, function (item) {
                             return item.IsTrain;
                         });
@@ -397,21 +425,30 @@
                     listeners: {
                         click: function () {
                             if (me.scopeProject) {
-                                console.log("scopedProject is defined");
+                                console.log("SHOW ALL TRAINS: scopedProject is defined. Settting it to null and reloading everything.");
                                 me.scopeProject = null;
-                                me.reloadEverything();
+                                return me.loadAllTrainsData().then(function(){
+                                    console.log("in the then function");
+                                    console.log(">>>> me.ScrumGroupConfig: ", me.ScrumGroupConfig);
+                                    me.setLoading('Loading Data');
+                                    me.reloadEverything();
+                                });//.then(function () {
+                                //    console.log("set loading false. end of reload everything.");
+                                //    me.setLoading(false);
+                                //});
                             } else {
-                                console.log("scopedProject is NOT defined");
+                                console.log("SHOW ALL TRAINS: scopedProject is NOT defined. All trains must already be showing");
+                                me.scopeProject = me.getContext().getProject();
+                                me.reloadEverything();
+                                //me._createGridDataHash();
+                                //console.log("next.");
+                                //me.down('#gridContainer').removeAll();
+                                //me.setLoading('Rendering Grid...');
+                                //me.renderGrid().then(function () {
+                                //    console.log("set loading false. end of render grid.");
+                                //    me.setLoading(false);
+                                //});
                             }
-                            //if (me.hideAdditionalColumns) {
-                            //    me.MatrixGrid.columns[5].hide();
-                            //    me.hideAdditionalColumns = false;
-                            //    //document.getElementById('additionalColumnsButton').text = 'Hide Additional Columns';
-                            //} else {
-                            //    me.MatrixGrid.columns[5].show();
-                            //    me.hideAdditionalColumns = true;
-                            //    //document.getElementById('additionalColumnsButton').text = 'Show Additional Columns';
-                            //}
                         }
                     }
                 }
@@ -434,6 +471,7 @@
         /************************************************************* RENDER ********************************************************************/
 
         renderGrid: function () {
+            console.log("render grid function called.");
             var me = this,
                 trainTotals = {},
                 horizontalTotals = {},
@@ -442,6 +480,7 @@
 
             //preprocess the data so we can create the rows for the table
             _.each(me.GridData, function (trainData, trainName) {
+                //console.log("trainName: ", trainName);
                 trainTotals[trainName] = {TrainName: trainName, Total: 0, STDCI: 0};
                 _.each(trainData, function (horizontalData, horizontalName) {
                     horizontalTotals[horizontalName] = horizontalTotals[horizontalName] || {
@@ -452,6 +491,7 @@
                     horizontalTeamTypes[horizontalName] = horizontalTeamTypes[horizontalName] || [];
                     scrumTeamNames[horizontalName] = scrumTeamNames[horizontalName] || [];
                     _.each(horizontalData, function (scrumData, scrumTeamType) {
+                        console.log("scrumData");
                         horizontalTotals[horizontalName].STDCI += scrumData.stdciPoints;
                         horizontalTotals[horizontalName].Total += scrumData.totalPoints;
                         trainTotals[trainName].STDCI += scrumData.stdciPoints;
@@ -624,6 +664,8 @@
                 }]
             );
 
+            console.log("building grid...");
+
             //finally build the grid
             me.down('#gridContainer').add({
                 xtype: 'grid',
@@ -661,6 +703,8 @@
             setTimeout(function () {
                 me.doLayout();
             }, 500);
+
+            console.log("done building grid");
         }
     });
 }());
