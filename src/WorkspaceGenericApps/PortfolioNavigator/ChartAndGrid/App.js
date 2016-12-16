@@ -134,9 +134,15 @@
 			return new Date(piData.PlannedStartDate || piData.ActualStartDate || new Date().toString());
 		},
 		getChartEndDate: function(){
-			var me=this,
-				piData = me.CurrentPortfolioItem.data;
-			return new Date(piData.PlannedEndDate || piData.ActualEndDate || new Date().toString());
+            var me=this;
+            var piData = me.CurrentPortfolioItem.data;
+            //The original end date
+            var date = new Date(piData.PlannedEndDate || piData.ActualEndDate || new Date().toString());
+            if(me.CurrentPortfolioItem.data.chartTitle && me.CurrentPortfolioItem.data.chartTitle === "Portfolio Item Chart") {
+                //Add 5 weeks to the original end date
+                date.setDate(date.getDate() + 35);
+            }
+            return date;
 		},
 		getChartTitle: function(){
 			var me=this,
@@ -145,6 +151,7 @@
 				totalCharacters = (me.getWidth()-20)/widthPerCharacter>>0,
 				title = "Portfolio Item Chart",
 				align = "center";
+            me.CurrentPortfolioItem.data.chartTitle = title;
 			if(piData) title = piData.FormattedID + ": " + piData.Name;
 			if(totalCharacters < title.length){
 				title = title.substring(0, totalCharacters) + "...";
@@ -167,11 +174,15 @@
 					'<tpl>' +
 						'<span>{startDateString}</span>' +
 						'<tpl if="tooBig">' +
-						'	<br/>' +
+						    '	<br/>' +
 						'<tpl else>' +
-						'	&nbsp;&nbsp;&nbsp;' +
+						    '	&nbsp;&nbsp;&nbsp;' +
 						'</tpl>' +
 						'<span>{endDateString}</span>' +
+                        '<tpl if="portfolioNav">' +
+                            '	&nbsp;&nbsp;&nbsp;' +
+                            '<span>' + " Projected End: " + me.projectedEndDate + '</span>' +
+                        '</tpl>' +
 					'</tpl>'
 				);
 			if(piData){
@@ -190,7 +201,8 @@
 			var formattedTitle = template.apply({
 				startDateString: startDateString,
 				endDateString: endDateString,
-				tooBig: totalCharacters < startDateString.length + endDateString.length + 60
+				tooBig: totalCharacters < startDateString.length + endDateString.length + 60,
+                portfolioNav: (me.CurrentPortfolioItem.data.chartTitle && me.CurrentPortfolioItem.data.chartTitle === "Portfolio Item Chart") ? true : false
 			});
 			return {
 				text: formattedTitle,
