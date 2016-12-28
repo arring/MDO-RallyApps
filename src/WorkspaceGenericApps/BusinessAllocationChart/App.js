@@ -28,6 +28,7 @@
 			items:[{
 				xtype:'container',
 				id: 'cacheButtonsContainer'
+               
 			},{
 				xtype:'container',
 				id: 'cacheMessageContainer',
@@ -37,12 +38,12 @@
 			xtype:'container',
 			id:'navBar',
 			layout:'hbox',
-            style: {
-            padding: '20px'
-        },
+        //     style: {
+        //     padding: '20px'
+        // },
 			align: 'left',
-			width: '900px'
-            //height: '100px'
+			width: '900px',
+            margin: '10 0 0 0'            //height: '100px'
 		},
         {
 			xtype:'container',
@@ -626,8 +627,8 @@
 			var me = this;
 			Ext.getCmp('cacheMessageContainer').add({
 				xtype: 'label',
-				width:'100%',
-				html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
+				width:'100%',                
+				html: 'You are looking at the cached data, updated on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
 		},			
 		/******************************************************* LAUNCH ********************************************************/		

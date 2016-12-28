@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:9e97d69c18010b55346b2b26819941da93ec0b57:2016-12-23T20:19:28.551Z --><!DOCTYPE html>
+<!-- Build: dev-rallyapps:cdf07eb6cf855965cd3ee078448991687a26e22a:2016-12-28T04:54:11.920Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Business Allocation Charts</title>
@@ -2684,6 +2684,7 @@
 			items:[{
 				xtype:'container',
 				id: 'cacheButtonsContainer'
+               
 			},{
 				xtype:'container',
 				id: 'cacheMessageContainer',
@@ -2693,12 +2694,12 @@
 			xtype:'container',
 			id:'navBar',
 			layout:'hbox',
-            style: {
-            padding: '20px'
-        },
+        //     style: {
+        //     padding: '20px'
+        // },
 			align: 'left',
-			width: '900px'
-            //height: '100px'
+			width: '900px',
+            margin: '10 0 0 0'            //height: '100px'
 		},
         {
 			xtype:'container',
@@ -3282,8 +3283,8 @@
 			var me = this;
 			Ext.getCmp('cacheMessageContainer').add({
 				xtype: 'label',
-				width:'100%',
-				html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
+				width:'100%',                
+				html: 'You are looking at the cached data, updated on: ' + '<span class = "modified-date">' + me.lastCacheModified +  '</span>'
 			});
 		},			
 		/******************************************************* LAUNCH ********************************************************/		
