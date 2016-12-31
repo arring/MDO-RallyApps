@@ -364,7 +364,7 @@
                         percent = (portfolio.y / TotalPlanEstimateTeamLevel) * 100;
                         if (percent > 0) {
                             console.log("TeamName", teamArry.Team,"Portfolio name", portfolio.PortFolios,"y",portfolio.y,"Total", TotalPlanEstimateTeamLevel);
-                            teamLevelPortFolioItemArry.push({ name: portfolio.PortFolios, y: Math.round(percent), id:portfolio.y+" / "+TotalPlanEstimateTeamLevel, color: getColorArry[portfolio.PortFolios] });
+                            teamLevelPortFolioItemArry.push({ name: portfolio.PortFolios, y: Math.round(percent), id:portfolio.y+"/"+TotalPlanEstimateTeamLevel, color: getColorArry[portfolio.PortFolios] });
                         }
                     });
                     me.teamLevelChartData.push({ Name: teamArry.Team, Portfolios: teamLevelPortFolioItemArry });
@@ -394,16 +394,17 @@
                 //console.log("Alltrain", "***portfolio name", portfolioName.Name," totalplanstimate= ",sum,"Total", me.totalStoryPlanEstimate);
                 console.log("Alltrain", "***portfolio name", portfolioName.Name," totalplanstimate= ",sum,"Total", me.totalStoryPlanEstimate);
                 velocityPercent = sum > 0 ? (sum / me.totalStoryPlanEstimate) * 100 : 0; 
-                var stringval =  sum +" / "+ me.totalStoryPlanEstimate
+                var stringval =  sum +"/"+ me.totalStoryPlanEstimate
                 if (velocityPercent > 0) {
-                    me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, color: getColorArry[portfolioName.Name]});
+                    //me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, color: getColorArry[portfolioName.Name]});
+                    me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, id: stringval, color: getColorArry[portfolioName.Name]});
                 }
             });
             noBoEstimatePercent = (noBoEstimate / me.totalStoryPlanEstimate) * 100;
             if (noBoEstimatePercent > 0) {
-                stringval= noBoEstimate+" / "+ me.totalStoryPlanEstimate;
+                stringval= noBoEstimate+"/"+ me.totalStoryPlanEstimate;
                  console.log("Alltrain", "portfolio name", "Not attached to BO"," Noplanstimate= ",noBoEstimate,"Total", me.totalStoryPlanEstimate);
-                me.portfolioAllTeamsArry.push({ name: "Not attached to BO", y: noBoEstimatePercent, color: getColorArry["Not attached to BO"] });
+                me.portfolioAllTeamsArry.push({ name: "Not attached to BO", y: noBoEstimatePercent, id: stringval, color: getColorArry["Not attached to BO"] });
             }
         },
         
@@ -1128,7 +1129,8 @@
                     text: 'Percent allocated in terms of Plan Estimate for each  Business Objectives for ' + me.ScrumGroupRootRecord.data.Name
                 },
                 tooltip: {
-                    pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
+                    //pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'                    
+                    pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b> represents ({point.id}) storypoints'
                 },
                 plotOptions: {
                     pie: {
@@ -1174,8 +1176,9 @@
                     title: {
                         text: 'Percent allocated for each Business Objectives for ' + me.teamLevelChartData[i].Name
                     },
-                    tooltip: {
-                        pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
+                    tooltip: {                      
+                    //pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
+                    pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b> represents ({point.id}) storypoints'
                     },
                     plotOptions: {
                         pie: {
