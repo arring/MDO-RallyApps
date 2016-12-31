@@ -748,7 +748,7 @@
        	renderAcceptedStoriesCheckbox: function() {
             var me = this;
             var pid = me.ProjectRecord.data.ObjectID;
-            me.OnlyAcceptedStories = me.AppsPref.projs[pid].OnlyAcceptedStories;
+            //me.OnlyAcceptedStories = me.AppsPref.projs[pid].OnlyAcceptedStories;
             if (me.AcceptedStoriesCheckbox) me.AcceptedStoriesCheckbox.destroy();
             me.AcceptedStoriesCheckbox = Ext.getCmp('navBar').add({
                 xtype: 'rallycheckboxfield',
@@ -1125,6 +1125,9 @@
                     type: 'pie',
                     "renderTo": "container"
                 },
+                legend: {
+                    enabled: true
+                },
                 title: {
                     text: 'Percent allocated in terms of Plan Estimate for each  Business Objectives for ' + me.ScrumGroupRootRecord.data.Name
                 },
@@ -1148,6 +1151,7 @@
                 series: [{
                     name: 'chartData',
                     colorByPoint: true,
+                    showInLegend: true,
                     data: me.portfolioAllTeamsArry,
                     point: {
                         events: {
