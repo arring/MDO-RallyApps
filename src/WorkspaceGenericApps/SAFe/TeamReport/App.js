@@ -353,7 +353,7 @@
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
-	
+			    now = new Date(),
 			me.miniDataIntegrityRecord =  [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
