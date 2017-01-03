@@ -371,7 +371,14 @@
 			var me = this;
 			me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
 			//for horizontal view you want to make sure that projects from all the trains are loaded not just that project
-			me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);
+			if(me.ProjectRecord.data.Children){
+				me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);
+			}
+			else{
+				//Change to true if you want to run it scoped to a team locally.
+				me.isScopedToScrum = false;
+			}
+			
 			return me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
