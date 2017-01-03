@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:7b6ec7ffd7da968f3d0e18bbc51ae1fbdba2c2ed:2017-01-03T18:57:29.511Z --><!DOCTYPE html>
+<!-- Build: dev-rallyapps:945b71412489d16a2858a5be5d0d4c92c9f0c15e:2017-01-03T21:07:18.375Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Team Report</title>
@@ -5507,7 +5507,7 @@
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
-				})
+				}).length || 0
 			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
