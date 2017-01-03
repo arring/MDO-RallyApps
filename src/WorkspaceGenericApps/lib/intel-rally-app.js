@@ -866,6 +866,41 @@
 				});				
 			}
 		},
+        loadAllLeafProjectsForPortfolioDI:function(rootProjectRecord){
+            //rootProjectRecord is optional
+            var me = this,
+                leafProjects = {};
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: me.projectFields,
+                        //filters: filter ? [filter] : [],
+                        compact: false,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
+
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me = this,

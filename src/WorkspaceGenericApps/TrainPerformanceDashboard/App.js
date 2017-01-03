@@ -417,16 +417,17 @@
 				var pe = userStories.data.PlanEstimate;
 				return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 				}));
+			//Stories with no description
+			storiesWithNoDescription = _.size(_.filter(projectStoreMap, function(userStories){
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				if(userStories.data.Description) return false;
+				if(!userStories.data.Iteration) return false;
+				return new Date(userStories.data.Iteration.StartDate) <= now && new Date(userStories.data.Iteration.EndDate) >= now && !userStories.data.Description;
+			}));
 			//stories in release without iteration 
 			storyWithoutIteration = _.size(_.filter(projectStoreMap, function(userStories){
 				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
 				return !userStories.data.Iteration; 
-			}));
-			//stories in iteration not attached to release
-			storyinIterationNotAttachedToRelease = _.size(_.filter(projectStoreMap, function(userStories){
-				if (!userStories.data.Iteration) return false;
-				return (new Date(userStories.data.Iteration.StartDate) < releaseDate && new Date(userStories.data.Iteration.EndDate) > releaseStartDate) &&
-				(!userStories.data.Release || userStories.data.Release.Name.indexOf(releaseName) < 0);
 			}));
 			//unaccepted stories in past iteration
 			unacceptedStoriesinPastIteration = _.size(_.filter(projectStoreMap, function(userStories){
@@ -443,7 +444,7 @@
 				if(userStories.data.ScheduleState == 'Accepted') return false;
 				return userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate;
 				}));
-				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyinIterationNotAttachedToRelease + unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
+				return unsizedStoires + improperlySizedStoires + storiesWithNoDescription + storyWithoutIteration +  unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
 		},
 		_calcTrainMetric: function(aggregateChartData){
 			var me = this,	totalinitial = 0,	finalCommit = 0, finalAccepted = 0,	totalProjected = 0,	totalideal = 0,

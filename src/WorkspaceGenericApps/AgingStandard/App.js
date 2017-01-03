@@ -142,7 +142,7 @@ The “age” of a standard has to do with the time it has been in the current c
 					}
 				}
 			});	
-		return deferred.promise;					
+		return deferred.promise;
 		},			
 		/**___________________________________ EXPORTING GRID ___________________________________*/	
 		/**
@@ -210,6 +210,7 @@ The “age” of a standard has to do with the time it has been in the current c
 					//if(item.get('c_StdsKanban').replace("<br />"," ") === "IE4 Pending (Deploy All)" /* && item.get('c_StdsKanbanOrg') === "DCD" */){
 					var kbriefDescription =  item.get('c_StdsKanban').replace("<br />"," ");
 					var ageDays = me._getStageAgeDays(item.get('c_StdsKanban'),item.get('c_StdsKanbanOrg'),item.get('ObjectID'));
+					var numDays = me._getAgeDaysFromIE0Stage(item.get('c_StdsKanban').replace("<br />"," "),item.get('ObjectID'));
 					var defaultAgeDays = me._getAppSetting(item.get('c_StdsKanban'));
 					var owner = item.get('Owner')._refObjectName;
 					var owningGroup = item.get('Iteration')? item.get('Iteration')._refObjectName : "-";
@@ -239,6 +240,7 @@ The “age” of a standard has to do with the time it has been in the current c
 								TimeLimitFlag: timeLimitFlag ,
 								c_StdsKanbanOrg: item.get('c_StdsKanbanOrg'),
 								Age: age,
+			                    NumDays: numDays,
 								Owner: owner,
 								OwningGroup:owningGroup,
 								nextReview:nextReview
@@ -250,6 +252,21 @@ The “age” of a standard has to do with the time it has been in the current c
 			var me = this;
 			/* console.log(c_StdsKanban,c_StdsKanban.substr(0,3),me.getSetting(c_StdsKanban.substr(0,3))); */
 			return me.getSetting(c_StdsKanban.substr(0,3));
+		},
+
+		_getAgeDaysFromIE0Stage : function(c_StdsKanban, ObjectID){
+			var me = this;
+			var validFrom;
+			var testFiltered = _.filter(me.UserStoryKbriefSnapShot[ObjectID],function(d){if(d.data.c_StdsKanban.indexOf('IE0') !== -1){return d.data.c_StdsKanban;}});
+			if(testFiltered.length !== 0) {
+				var testFilteredSortDesc = _.sortBy(testFiltered, '_ValidFrom').reverse();
+				validFrom = testFilteredSortDesc[testFilteredSortDesc.length - 1].data._ValidFrom;
+			}
+			else{
+				var userStorySnapShotSortDesc = _.sortBy(me.UserStoryKbriefSnapShot[ObjectID], '_ValidFrom').reverse();
+				validFrom = userStorySnapShotSortDesc[userStorySnapShotSortDesc.length - 1].data._ValidFrom;
+			}
+			return  Rally.util.DateTime.getDifference(new Date(), new Date(validFrom), 'day');
 		},
 		_getStageAgeDays : function(c_StdsKanban,c_StdsKanbanOrg,ObjectID) {
 			var me = this;
@@ -334,6 +351,12 @@ The “age” of a standard has to do with the time it has been in the current c
 						}else{
 							return value;
 						}						
+					}
+				},{
+					text: 'Number of Days from IE0 or Origination',
+					dataIndex:'NumDays',
+					renderer: function(value){
+						return value;
 					}
 				},{
 					text: 'Checkpoint (Days)', 

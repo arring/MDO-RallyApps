@@ -378,7 +378,7 @@
 				//Change to true if you want to run it scoped to a team locally.
 				me.isScopedToScrum = false;
 			}
-			
+
 			return me.configureIntelRallyApp()
 			.then(function(){ 
 				//things that need to be done immediately after configuraing app
