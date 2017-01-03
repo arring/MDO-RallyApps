@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:736a69d5f0ccf5a8528ae829ed84d6e074e612cf:2017-01-03T18:32:52.376Z --><!DOCTYPE html>
+<!-- Build: dev-rallyapps:7b6ec7ffd7da968f3d0e18bbc51ae1fbdba2c2ed:2017-01-03T18:57:29.511Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Team Report</title>
@@ -5492,7 +5492,7 @@
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
-	
+			    now = new Date(),
 			me.miniDataIntegrityRecord =  [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
