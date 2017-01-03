@@ -1,11 +1,11 @@
-<!-- Build: dev-rallyapps:594170ef96de02233c23500a3128587faa4de180:2016-12-31T04:32:14.732Z --><!DOCTYPE html>
+<!-- Build: taya-dev:736a69d5f0ccf5a8528ae829ed84d6e074e612cf:2017-01-03T18:43:20.718Z --><!DOCTYPE html>
 <html>
 	<head>
 		<title>Portfolio Hierarchy</title>
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy255765";
+	var smAppID = "Portfolio_Hierarchy870498";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy255765";	
+					var smAppID = "Portfolio_Hierarchy870498";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2291,6 +2291,41 @@
 				});				
 			}
 		},
+        loadAllLeafProjectsForPortfolioDI:function(rootProjectRecord){
+            //rootProjectRecord is optional
+            var me = this,
+                leafProjects = {};
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: me.projectFields,
+                        //filters: filter ? [filter] : [],
+                        compact: false,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
+
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me = this,
@@ -2566,7 +2601,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/**  
 	DESCRIPTION:
@@ -2644,7 +2679,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	given named queues, only allows one function at a time in each queue to execute. 
@@ -2698,7 +2733,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY: 
@@ -2754,7 +2789,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2803,7 +2838,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2838,7 +2873,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2890,7 +2925,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2957,7 +2992,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy255765";			
+						var smAppID = "Portfolio_Hierarchy870498";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
@@ -3086,7 +3121,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy255765").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy870498").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -3425,11 +3460,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy255765";			
+				var smAppID = "Portfolio_Hierarchy870498";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("Intel.PortfolioNavigator.IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy255765"
+						smAppID: "Portfolio_Hierarchy870498"
 					});
 				}
 			}());

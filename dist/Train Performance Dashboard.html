@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:594170ef96de02233c23500a3128587faa4de180:2016-12-31T04:32:14.732Z --><!DOCTYPE html>
+<!-- Build: taya-dev:736a69d5f0ccf5a8528ae829ed84d6e074e612cf:2017-01-03T18:43:20.718Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Train Performance Dashboard</title>
@@ -878,6 +878,41 @@
 				});				
 			}
 		},
+        loadAllLeafProjectsForPortfolioDI:function(rootProjectRecord){
+            //rootProjectRecord is optional
+            var me = this,
+                leafProjects = {};
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: me.projectFields,
+                        //filters: filter ? [filter] : [],
+                        compact: false,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
+
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me = this,
@@ -3566,16 +3601,17 @@
 				var pe = userStories.data.PlanEstimate;
 				return pe && pe !== 0 && pe !== 1 && pe !== 2 && pe !== 4 && pe !== 8 && pe !== 16;
 				}));
+			//Stories with no description
+			storiesWithNoDescription = _.size(_.filter(projectStoreMap, function(userStories){
+				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
+				if(userStories.data.Description) return false;
+				if(!userStories.data.Iteration) return false;
+				return new Date(userStories.data.Iteration.StartDate) <= now && new Date(userStories.data.Iteration.EndDate) >= now && !userStories.data.Description;
+			}));
 			//stories in release without iteration 
 			storyWithoutIteration = _.size(_.filter(projectStoreMap, function(userStories){
 				if(!userStories.data.Release || userStories.data.Release.Name != releaseName) return false;
 				return !userStories.data.Iteration; 
-			}));
-			//stories in iteration not attached to release
-			storyinIterationNotAttachedToRelease = _.size(_.filter(projectStoreMap, function(userStories){
-				if (!userStories.data.Iteration) return false;
-				return (new Date(userStories.data.Iteration.StartDate) < releaseDate && new Date(userStories.data.Iteration.EndDate) > releaseStartDate) &&
-				(!userStories.data.Release || userStories.data.Release.Name.indexOf(releaseName) < 0);
 			}));
 			//unaccepted stories in past iteration
 			unacceptedStoriesinPastIteration = _.size(_.filter(projectStoreMap, function(userStories){
@@ -3592,7 +3628,7 @@
 				if(userStories.data.ScheduleState == 'Accepted') return false;
 				return userStories.data[lowestPortfolioItemType].PlannedEndDate < userStories.data.Iteration.StartDate;
 				}));
-				return unsizedStoires + improperlySizedStoires + storyWithoutIteration + storyinIterationNotAttachedToRelease + unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
+				return unsizedStoires + improperlySizedStoires + storiesWithNoDescription + storyWithoutIteration +  unacceptedStoriesinPastIteration + storiesScheduleAfterPortfolioItemEndDate;
 		},
 		_calcTrainMetric: function(aggregateChartData){
 			var me = this,	totalinitial = 0,	finalCommit = 0, finalAccepted = 0,	totalProjected = 0,	totalideal = 0,

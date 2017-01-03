@@ -8,6 +8,20 @@
 (function(){
     var Ext = window.Ext4 || window.Ext;
 
+    /*
+    This is the hard-coded list of rule checks for the DI dashboard.
+    Each train can have their own list of which of these rules are the default rule checks selected, which can be set under "Edit App Settings" menu.
+     */
+    var ruleCategories = [
+        "Features with No Stories",
+        "Features with No Start or End Date",
+        "Features with No Parent",
+        "Unaccepted Features Past End Date",
+        "Unaccepted Epics Past End Date",
+        "Epics with No Start or End date",
+        "Epics with No Parent"
+    ];
+
     /************************** Data Integrity Dashboard *****************************/
     Ext.define('Intel.PortfolioDataIntegrityDashboard', {
         extend: 'Intel.lib.IntelRallyApp',
@@ -103,13 +117,37 @@
         /**************************************** Settings ***************************************/
         settingsScope: 'workspace',
         getSettingsFields: function() {
-            return [{
-                name: 'Horizontal',
-                xtype: 'rallycheckboxfield'
-            },{
-                name: 'cacheUrl',
-                xtype: 'rallytextfield'
-            }];
+            return [
+                {
+                    name: 'Horizontal',
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: 'cacheUrl',
+                    xtype: 'rallytextfield'
+                },
+                {
+                    name: ruleCategories[0],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[1],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[2],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[3],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[4],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[5],
+                    xtype: 'rallycheckboxfield'
+                },{
+                    name: ruleCategories[6],
+                    xtype: 'rallycheckboxfield'
+                }
+            ];
         },
         config: {
             defaultSettings: {
@@ -279,7 +317,16 @@
         launch: function() {
             var me = this;
 
-            me.isHorizontalView = false;//me.getSetting('Horizontal');
+            me.getSettingsFields();
+
+            if(me.getSetting('Horizontal')){
+                //For production/rally official
+                me.isHorizontalView = me.getSetting('Horizontal');
+            } else {
+                //For local development/http-server localhost
+                me.isHorizontalView = false;
+            }
+
             // me.initDisableResizeHandle();
             // me.initFixRallyDashboard();
             me.initRemoveTooltipOnScroll();
@@ -330,7 +377,13 @@
             var me = this;
             me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
             //for horizontal view you want to make sure that projects from all the trains are loaded not just that project
-            me.isScopedToScrum = false;//me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);
+            if(me.ProjectRecord.data.Children){
+                me.isScopedToScrum = me.isHorizontalView ? false :( me.ProjectRecord.data.Children.Count === 0);
+            } else {
+                //for Local development/http-server localhost
+                me.isScopedToScrum = false;//set this to true for team scoping in local dev, and false for train scoping.
+            }
+
             return me.configureIntelRallyApp()
                 .then(function(){
                     //things that need to be done immediately after configuraing app
@@ -590,14 +643,14 @@
                 });
             }))
                 .then(function (stores) {
-                    console.log("stores = ", stores); // This has data
+                    //console.log("stores = ", stores); // This has data
                     me.PortfolioEpicStore = Ext.create('Rally.data.custom.Store', {
                         autoLoad: false,
                         model: me['PortfolioItem/' + epicPortfolioItemType],
                         pageSize: 200,
                         data: [].concat.apply([], _.invoke(stores, 'getRange'))
                     });
-                    console.log("me.PortfolioEpicStore.data = ", me.PortfolioEpicStore.data);
+                    //console.log("me.PortfolioEpicStore.data = ", me.PortfolioEpicStore.data);
                 });
         },
 

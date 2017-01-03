@@ -1,4 +1,4 @@
-<!-- Build: dev-rallyapps:594170ef96de02233c23500a3128587faa4de180:2016-12-31T04:32:14.732Z --><!DOCTYPE html>
+<!-- Build: taya-dev:736a69d5f0ccf5a8528ae829ed84d6e074e612cf:2017-01-03T18:43:20.718Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Team Report</title>
@@ -878,6 +878,41 @@
 				});				
 			}
 		},
+        loadAllLeafProjectsForPortfolioDI:function(rootProjectRecord){
+            //rootProjectRecord is optional
+            var me = this,
+                leafProjects = {};
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: me.projectFields,
+                        //filters: filter ? [filter] : [],
+                        compact: false,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
+
 		loadAllLeafProjects: function(rootProjectRecord){
 			//rootProjectRecord is optional
 			var me = this,
@@ -5465,7 +5500,7 @@
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					return item.data.PlanEstimate === null; 
 				}).length || 0
-			},/* {
+			}, {
 				title: 'Improperly Sized Stories',
 				userStories: _.filter(totalUserStories,function(item){
 					if((item.data.Release || {}).Name !== releaseName) return false;
@@ -5473,7 +5508,7 @@
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
 				})
-			}, */{
+			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 
 					if((item.data.Release || {}).Name !== releaseName) return false;
@@ -5481,14 +5516,15 @@
 					return !item.data.Iteration; 
 				}).length || 0
 			},{
-				title: 'Stories in Iteration not attached to Release',
-				userStories: _.filter(totalUserStories,function(item){ 
-					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
+				title: 'Stories with No Description',
+				userStories: _.filter(totalUserStories,function(item){
+					if((item.data.Release || {}).Name !== releaseName) return false;
+					if(item.data.Description) return false;
 					if(!item.data.Iteration) return false;
-					return (new Date(item.data.Iteration.StartDate) < releaseDate && new Date(item.data.Iteration.EndDate) > releaseStartDate) &&
-						(!item.data.Release || item.data.Release.Name.indexOf(releaseName) < 0);
+					return new Date(item.data.Iteration.StartDate) <= now && new Date(item.data.Iteration.EndDate) >= now && !item.data.Description;
 				}).length || 0
-			},{
+			},
+			{
 				title: 'Stories Scheduled After ' + lowestPortfolioItem + ' End Date',
 				userStories: _.filter(totalUserStories, function(item){		
 					if((item.data.Release || {}).Name !== releaseName) return false;
