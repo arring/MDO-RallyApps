@@ -225,9 +225,10 @@
 
             // if( me.AppsPref)
             //  {
-            //     me.OnlyAcceptedStories =  me.AppsPref.projs[pid].OnlyAcceptedStories;
-            //     startdate=new Date(me.AppsPref.projs[pid].AcceptedStartDate);
-            //     enddate=new Date(me.AppsPref.projs[pid].AcceptedEndDate);
+            //       me.AppsPref.projs[pid].OnlyAcceptedStories=me.OnlyAcceptedStories;
+                  
+            //     // startdate=new Date(me.AppsPref.projs[pid].AcceptedStartDate);
+            //     // enddate=new Date(me.AppsPref.projs[pid].AcceptedEndDate);
 
             //  }
 
@@ -760,9 +761,12 @@
                 listeners: {
                     change: {
                         fn: function(checkbox) {
-                            me.OnlyAcceptedStories = checkbox.getValue();
+                            me.OnlyAcceptedStories = checkbox.getValue();                          	
+                            if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
                             me.AppsPref.projs[pid].OnlyAcceptedStories = me.OnlyAcceptedStories;
-                            me.saveAppsPreference(me.AppsPref);
+                            me.saveAppsPreference(me.AppsPref) 
+                            // me.AppsPref.projs[pid].OnlyAcceptedStories = me.OnlyAcceptedStories;
+                            // me.saveAppsPreference(me.AppsPref);
                             me.renderUpdateCache();
                             me.setLoading('Pulling Live Data, please wait');
                             Ext.getCmp('cacheMessageContainer').removeAll();
