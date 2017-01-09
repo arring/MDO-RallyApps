@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:cea19b67c8af528a71ba734879b89e078d29f863:2017-01-03T23:41:16.881Z --><!DOCTYPE html>
+<!-- Build: taya-dev:1cbbdb62572d70ed10f218e6cb921ca2c0c7c249:2017-01-09T23:44:36.111Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Portfolio Data Integrity Dashboard</title>
@@ -3534,6 +3534,7 @@
                 }), function (project, pindex) {
                     var gridCount = me.getProjectStoriesForGrid(project, grid).length;
                     highestNum = Math.max(gridCount, highestNum);
+                    //only push the rows (rule categories) which are selected in the "Edit App Settings"
                     if (me.rules[gindex]) {
                         chartData.push([pindex, gindex, gridCount]);
                     }
@@ -3554,7 +3555,7 @@
                 }
             }
             //set height based on number of rows (rule categories)
-            var height = 53 * rowCount;
+            var height = (53 * rowCount) + 60;
 
             // Create the map config
             return {
