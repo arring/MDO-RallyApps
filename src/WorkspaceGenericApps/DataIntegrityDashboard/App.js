@@ -320,7 +320,14 @@
 		launch: function() {
 			var me = this;
 
-			me.isHorizontalView = me.getSetting('Horizontal');
+            if(me.getSetting('Horizontal')){
+                //For production/rally official
+                me.isHorizontalView = me.getSetting('Horizontal');
+            } else {
+                //For local development/http-server localhost
+                me.isHorizontalView = false;
+            }
+
 			// me.initDisableResizeHandle();
 			// me.initFixRallyDashboard();
 			me.initRemoveTooltipOnScroll();
