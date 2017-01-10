@@ -353,7 +353,7 @@
 				releaseDate = new Date(me.ReleaseRecord.data.ReleaseDate),
 				releaseStartDate = new Date(me.ReleaseRecord.data.ReleaseStartDate),
 				totalUserStories = me.UserStoryStore.getRange().concat(me.ExtraDataIntegrityUserStoriesStore.getRange());
-	
+			    now = new Date(),
 			me.miniDataIntegrityRecord =  [{
 				title: 'Unsized Stories',
 				userStories: _.filter(totalUserStories, function(item){ 
@@ -368,7 +368,7 @@
 					if(item.data.DirectChildrenCount !== 0) return false; //only care about leaf stories here
 					var pe = item.data.PlanEstimate;
 					return pe!==0 && pe!==1 && pe!==2 && pe!==4 && pe!==8 && pe!==16;
-				})
+				}).length || 0
 			},{
 				title: 'Stories in Release without Iteration',
 				userStories: _.filter(totalUserStories,function(item){ 

@@ -221,16 +221,7 @@
             }
             me.FilteredLeafProjects = filteredProjects;
             pid = me.ProjectRecord.data.ObjectID;
-            if (typeof me.cfdProjReleasePref.releases[pid] !== 'object') me.cfdProjReleasePref.releases[pid] = {};
-
-            // if( me.AppsPref)
-            //  {
-            //     me.OnlyAcceptedStories =  me.AppsPref.projs[pid].OnlyAcceptedStories;
-            //     startdate=new Date(me.AppsPref.projs[pid].AcceptedStartDate);
-            //     enddate=new Date(me.AppsPref.projs[pid].AcceptedEndDate);
-
-            //  }
-
+            if (typeof me.cfdProjReleasePref.releases[pid] !== 'object') me.cfdProjReleasePref.releases[pid] = {};   
             if (!me.FilteredLeafProjects) throw "No leaf projects for userstory filter";
             return Q.all(_.map(_.chunk(me.LeafProjects, 20), function(leafProjects) {
 
@@ -394,7 +385,7 @@
                 //console.log("Alltrain", "***portfolio name", portfolioName.Name," totalplanstimate= ",sum,"Total", me.totalStoryPlanEstimate);
                 console.log("Alltrain", "***portfolio name", portfolioName.Name," totalplanstimate= ",sum,"Total", me.totalStoryPlanEstimate);
                 velocityPercent = sum > 0 ? (sum / me.totalStoryPlanEstimate) * 100 : 0; 
-                var stringval =  sum +"/"+ me.totalStoryPlanEstimate
+                var stringval =  sum +"/"+ me.totalStoryPlanEstimate;
                 if (velocityPercent > 0) {
                     //me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, color: getColorArry[portfolioName.Name]});
                     me.portfolioAllTeamsArry.push({ name: portfolioName.Name, y: velocityPercent, id: stringval, color: getColorArry[portfolioName.Name]});
@@ -760,9 +751,10 @@
                 listeners: {
                     change: {
                         fn: function(checkbox) {
-                            me.OnlyAcceptedStories = checkbox.getValue();
+                            me.OnlyAcceptedStories = checkbox.getValue();                          	
+                            if(typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
                             me.AppsPref.projs[pid].OnlyAcceptedStories = me.OnlyAcceptedStories;
-                            me.saveAppsPreference(me.AppsPref);
+                            me.saveAppsPreference(me.AppsPref);                           
                             me.renderUpdateCache();
                             me.setLoading('Pulling Live Data, please wait');
                             Ext.getCmp('cacheMessageContainer').removeAll();
@@ -970,9 +962,7 @@
                     acceptedStartDate =me.acceptedStartDt? new Date(me.acceptedStartDt).toISOString():null,
 				    acceptedEndDate = me.acceptedEndDt? new Date(me.acceptedEndDt).toISOString():null,
                     me.cfdProjAcceptedEndPref= acceptedEndDate;
-                    me.cfdProjAcceptedStartPref = dateSelected;
-			//		me.cfdProjReleasePref.releases[rid] = me.cfdProjReleasePref.releases[rid] || {};
-			//		me.cfdProjReleasePref.releases[rid].ReleaseStartDate = dateSelected; 
+                    me.cfdProjAcceptedStartPref = dateSelected;			
                     if(acceptedStartDate)
                     {
 					    me.fireEvent('acceptedStartDateChanged',acceptedStartDate,  me.cfdProjAcceptedStartPref);
