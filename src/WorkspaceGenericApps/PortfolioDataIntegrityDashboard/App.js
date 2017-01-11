@@ -318,7 +318,6 @@
             return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
         },
         getCacheTimeoutDate: function () {
-            /******************************************************* LAUNCH ********************************************************/
             return new Date(new Date() * 1 + 1000 * 60 * 60);
         },
 
@@ -329,7 +328,6 @@
         },
         loadDataFromCacheOrRally: function () {
             var me = this;
-
             if (me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
             return me.loadRemainingConfiguration()
@@ -351,18 +349,18 @@
                     }
                 });
         },
+        /******************************************************* LAUNCH ********************************************************/
         launch: function () {
             var me = this;
-
             me.rules = [];
-
+            //For production/rally official
             if (!isLocalDev) {
-                //For production/rally official
                 me.isHorizontalView = me.getSetting('Horizontal');
+                console.log("Rally: ruleCategories: ", ruleCategories);
                 _.each(ruleCategories, function (item, index) {
                     //for each of the rule categories, get the checkbox value
                     me.rules[index] = me.getSetting(ruleCategories[index]);
-                    console.log("me.rules[" + index + "]: " + me.rules[index]);
+                    console.log("Rally: me.rules[" + index + "]: " + me.rules[index]);
                 });
             } else {
                 //For local development/http-server localhost
@@ -431,8 +429,8 @@
             var me = this;
             me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
             //for horizontal view you want to make sure that projects from all the trains are loaded not just that project
-            if (!isLocalDev) {
-                me.isScopedToScrum = me.isHorizontalView ? false : ( me.ProjectRecord.data.Children.Count === 0);
+            if (!isLocalDev && me.ProjectRecord.data.Children) {
+                me.isScopedToScrum = me.isHorizontalView ? false : ( me.ProjectRecord.data.Children.count === 0);
             } else {
                 //for Local development/http-server localhost
                 me.isScopedToScrum = false;//set this to true for team scoping in local dev, and false for train scoping.

@@ -51,6 +51,7 @@
 		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+        MTSFields:['Name', 'ObjectId'],
 		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
@@ -160,9 +161,15 @@
 				workspace: me.getContext().getWorkspace()._ref,
 				filterByName: ScrumGroupConfigPrefName,
 				success: function(prefs) {
+                    console.log("prefs: ", prefs);
 					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
-					try{ scrumGroupConfig = JSON.parse(configString); }
-					catch(e){ scrumGroupConfig = []; }
+					try{
+                        scrumGroupConfig = JSON.parse(configString);
+                    }
+					catch(e){
+                        console.error(e);
+                        scrumGroupConfig = [];
+                    }
 					me.ScrumGroupConfig = scrumGroupConfig;
 					deferred.resolve();
 				},

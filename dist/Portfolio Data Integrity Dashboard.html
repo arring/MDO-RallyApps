@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:1cbbdb62572d70ed10f218e6cb921ca2c0c7c249:2017-01-09T23:44:36.111Z --><!DOCTYPE html>
+<!-- Build: taya-dev:e4edee18c02d3acc011b3d6ebf8e452cf1b009be:2017-01-10T19:38:21.561Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Portfolio Data Integrity Dashboard</title>
@@ -2151,7 +2151,7 @@
      Change isLocalDev variable to true if you are running locally (http-server localhost)
      IMPORTANT: Make sure to set it to false before checking in to prod/rally/dev-rallyapps
      */
-    var isLocalDev = false;
+    var isLocalDev = true;
 
     /*
      This is the hard-coded list of rule checks for the DI dashboard.
@@ -2495,13 +2495,14 @@
 
             me.rules = [];
 
+            //For production/rally official
             if (!isLocalDev) {
-                //For production/rally official
                 me.isHorizontalView = me.getSetting('Horizontal');
+                console.log("Rally: ruleCategories: ", ruleCategories);
                 _.each(ruleCategories, function (item, index) {
                     //for each of the rule categories, get the checkbox value
                     me.rules[index] = me.getSetting(ruleCategories[index]);
-                    console.log("me.rules[" + index + "]: " + me.rules[index]);
+                    console.log("Rally: me.rules[" + index + "]: " + me.rules[index]);
                 });
             } else {
                 //For local development/http-server localhost
@@ -2570,8 +2571,8 @@
             var me = this;
             me.ProjectRecord = me.createDummyProjectRecord(me.getContext().getProject());
             //for horizontal view you want to make sure that projects from all the trains are loaded not just that project
-            if (!isLocalDev) {
-                me.isScopedToScrum = me.isHorizontalView ? false : ( me.ProjectRecord.data.Children.Count === 0);
+            if (!isLocalDev && me.ProjectRecord.data.Children) {
+                me.isScopedToScrum = me.isHorizontalView ? false : ( me.ProjectRecord.data.Children.count === 0);
             } else {
                 //for Local development/http-server localhost
                 me.isScopedToScrum = false;//set this to true for team scoping in local dev, and false for train scoping.
@@ -2644,10 +2645,8 @@
             me.LeafProjectsByHorizontal = {};
             me.LeafProjectsByTeamTypeComponent = {};
 
-
             return Q.all(_.map(me.ScrumGroupRootRecords, function (scrumGroupRootRecord) {
                 return me.loadAllLeafProjectsForPortfolioDI(scrumGroupRootRecord).then(function (leafProjects) {
-
                     me.LeafProjects = me.LeafProjects.concat(_.values(leafProjects));
                     me.LeafProjectsByScrumGroup[scrumGroupRootRecord.data.ObjectID] = _.values(leafProjects);
 
@@ -2757,9 +2756,9 @@
          */
         applyEpicProjectFilters: function () {
             var me = this, tempProjects;
-
             var projects = [];
             if (me.PortfolioEpicStore.data.items) {
+
                 for (var i = 0; i < me.PortfolioEpicStore.data.items.length; i++) {
                     projects[i] = [_.find(me.AllProjects, function (leafProject) {
                         return leafProject.data.Name === me.PortfolioEpicStore.data.items[i].data.Project.Name;
@@ -2776,17 +2775,14 @@
         /**
          Filters only apply if we are in horizontal-mode OR we are scoped to a train in vertical mode
          */
-
         applyAllProjectFilters: function () {
             var me = this, tempProjects;
             var allProjectsForDI = [];
-
             //Add all the Feature Projects
             for (var i = 0; i < me.FilteredLeafProjects.length; i++) {
                 allProjectsForDI.push(me.FilteredLeafProjects[i]);
             }
             //Add all the Epic Projects
-
             for (var j = 0; j < me.LeafProjectsByEpicComponent.length; j++) {
                 allProjectsForDI.push(me.LeafProjectsByEpicComponent[j][0]);
             }
@@ -2794,7 +2790,6 @@
             tempProjects = (_.uniq(allProjectsForDI, function (p) {
                 return p.data.Name;
             }));
-
             me.FilteredAllProjectsAndEpicProjects = tempProjects;
             return Q();
         },
@@ -2806,7 +2801,6 @@
         loadPortfolioItems: function () {
             var me = this,
                 lowestPortfolioItemType = me.PortfolioItemTypes[0];
-
             var pageSize = 0;
 
             me.PortfolioProjectToPortfolioItemMap = {};
@@ -2815,7 +2809,6 @@
                     model: me['PortfolioItem/' + lowestPortfolioItemType],
                     autoLoad: false,
                     pageSize: 600,
-
                     fetch: ['Name', 'ObjectID', 'Project', 'PlannedEndDate', 'ActualEndDate',
                         'Release', 'Description', 'FormattedID', 'UserStories', 'Parent'],
                     context: {
@@ -2993,13 +2986,22 @@
             var me = this;
             me.setLoading('Loading Data');
             return me.applyProjectFilters()
-
-                .then(function(){ return me.loadPortfolioItems(); })
-                .then(function(){ return me.loadPortfolioEpics(); })
-                .then(function() { return me.loadUserStories(); })
-                .then(function() {return me.applyEpicProjectFilters(); })
-                .then(function(){return me.applyAllProjectFilters();})
-                .then(function() {
+                .then(function () {
+                    return me.loadPortfolioItems();
+                })
+                .then(function () {
+                    return me.loadPortfolioEpics();
+                })
+                .then(function () {
+                    return me.loadUserStories();
+                })
+                .then(function () {
+                    return me.applyEpicProjectFilters();
+                })
+                .then(function () {
+                    return me.applyAllProjectFilters();
+                })
+                .then(function () {
                     me.setLoading(false);
                     return me.countPortfolioItemStories();
                 });
@@ -3265,11 +3267,9 @@
         /**
          Creates and adds the overall indicator of integrity to the app
          */
-
         buildIntegrityIndicator: function () {
             var me = this,
                 userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
-
                     return grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic';
                 }).reverse(),
 
@@ -3360,7 +3360,6 @@
         },
 
         /**************************************** Grids and Charts ********************************/
-
         getProjectStoriesForGrid: function (project, grid) {
             return _.filter(grid.originalConfig.data, function (story) {
                 return story.data.Project.ObjectID == project.data.ObjectID;
@@ -3368,7 +3367,6 @@
         },
         getProjectStoriesForRelease: function (project, grid) {
             return _.filter(grid.originalConfig.totalStories, function (story) {
-
                 return story.data.Project.ObjectID == project.data.ObjectID;
             });
         },
@@ -3387,7 +3385,6 @@
          This is only necessary when we are scoped to a scrumGroupRootRecord or in horizontalMode, and we have
          the me.ScopedTeamType set to a value, in which case we need to filter the user stories we have loaded into memory
          */
-
         getEpicsForReport: function () {
             var me = this;
             return me.PortfolioEpicStore.data.getRange();
@@ -3404,6 +3401,7 @@
         getFilteredLowestPortfolioItems: function () {
             var me = this, activeScrumGroups, activePortfolioOIDs;
             var portfolioItems = me.PortfolioItemStore.getRange();
+
 
             if (me.isScopedToScrum) return [];
             else {
@@ -3502,19 +3500,16 @@
                 }]
             };
         },
-
         getHeatMapConfig: function () {
             var me = this, finalProjects;
             highestNum = 0,
                 userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
                     if (grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic' || grid.originalConfig.model == 'PortfolioItem/Feature')
-
                         return grid.originalConfig.model;
                 });
             userStoryGrids.reverse();
             chartData = [],
                 tempProjects = [];
-
             selectIdFunctionName = '_selectId' + (Math.random() * 10000 >> 0);
 
             //Filter the projects to make a list of the project with feature or Epic count. Remove the projects with zero count
@@ -3538,7 +3533,6 @@
                 _.each(_.sortBy(me.finalProjects, function (p) {
                     return p.data.Name;
                 }), function (project, pindex) {
-
                     var gridCount = me.getProjectStoriesForGrid(project, grid).length;
                     highestNum = Math.max(gridCount, highestNum);
                     //only push the rows (rule categories) which are selected in the "Edit App Settings"
@@ -3577,7 +3571,6 @@
                 title: {text: null},
                 xAxis: {
                     categories: _.sortBy(_.map(me.finalProjects,
-
                             //function(project){ return project[0].data.Name; }),
                             function (project) {
                                 return project.data.Name;
@@ -3585,7 +3578,6 @@
                         function (p) {
                             return p;
                         }),
-
                     labels: {
                         style: {width: 100},
                         formatter: function () {
@@ -3634,11 +3626,9 @@
                             events: {
                                 click: function (e) {
                                     var point = this,
-
                                         scrum = _.sortBy(me.finalProjects, function (p) {
                                             return p.data.Name;
                                         })[point.x],
-
                                         grid = userStoryGrids[point.y];
                                     me.onHeatmapClick(point, scrum, grid);
                                 }
@@ -3772,9 +3762,7 @@
          */
         buildGrids: function () {
             var me = this;
-
             midPortfolioItemType = me.PortfolioItemTypes[1],
-
                 filteredEpics = me.getEpicsForReport(),
                 filteredLowestPortfolioItems = me.getFilteredLowestPortfolioItems(),
                 lowestPortfolioItemType = me.PortfolioItemTypes[0],
@@ -3810,7 +3798,6 @@
                 }, {
                     text: 'PlannedEndDate',
                     dataIndex: 'PlannedEndDate',
-
                     editor: false
                 }, {
                     text: 'PlannedStartDate',
@@ -3837,11 +3824,9 @@
                         if (!item.data.Parent)
                             return item.data.Name;
                     }
-
                 }, {
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-
                     title: 'Epics with No Start or End date',
                     id: 'grid-epics-with-no-start-or-end-date',
                     model: 'UserStory',
@@ -3853,7 +3838,6 @@
                         text: 'Planned End Date',
                         dataIndex: 'PlannedEndDate',
                         tdCls: 'editor-cell'
-
                     }]),
                     side: 'Left',
                     filterFn: function (item) {
@@ -3879,11 +3863,9 @@
                     filterFn: function (item) {
                         return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
                     }
-
                 }, {
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-
                     title: 'Unaccepted Features Past End Date',
                     id: 'grid-unaccepted-features-past-end_date',
                     model: 'PortfolioItem/' + lowestPortfolioItemType,
@@ -3918,11 +3900,9 @@
                             if (!item.data.Parent)
                                 return item.data.Name;
                         }
-
                     }, {
                         showIfLeafProject: false,
                         showIfHorizontalMode: false,
-
                         title: 'Features with No Start or End Date',
                         id: 'grid-features-with-no-start-or-end-date',
                         model: 'PortfolioItem/' + lowestPortfolioItemType,

@@ -147,6 +147,7 @@
                         me.renderReleasePicker();
                     }
                     me.down('#gridContainer').removeAll();
+                    console.log("calling render grid from reload everything");
                     me.renderGrid();
                 })
                 .then(function () {
@@ -159,6 +160,7 @@
             var me = this;
             me.setLoading('Loading Grid...');
             me.down('#gridContainer').removeAll();
+            console.log("calling render grid from reload grid");
             me.renderGrid();
             me.setLoading(false);
         },
@@ -191,6 +193,7 @@
                 }, {});
                 return hash;
             }, {});
+            console.log("me.GridData: ", me.GridData);
         },
         _loadTrainsAndScrums: function (me) {
             // load all Trains and their scrums
@@ -203,6 +206,7 @@
                     return me.loadAllLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}})
                         .then(function (leafProjects) {
                             cfg.Scrums = leafProjects;
+                            //Only need Scrum Names. We do not need the whole object
                         });
                 })
             );
@@ -234,7 +238,6 @@
                 me.alert('ERROR', 'You do not have permissions to edit this project');
                 return;
             }
-
             console.log("Configuring Rally App...");
 
             me.configureIntelRallyApp()
@@ -334,7 +337,7 @@
             var otherRow = _.find(data, function (row) {
                 return row.horizontalData.HorizontalName == 'Other';
             });
-            if (otherRow !== null) {
+            if (otherRow !== undefined) {
                 data = _.filter(data, function (row) {
                     return row.horizontalData.HorizontalName !== 'Other';
                 }).concat(otherRow);
@@ -407,23 +410,21 @@
                         sortable: false,
                         renderer: function (scrumDataList) {
                             oscar++;
-                            console.log("oscar = ", oscar);
                             var flag = false;
-                            if(currentTrain != trainName){
+                            if (currentTrain != trainName) {
                                 //if train changes
                                 trainNumber++;
                             }
-                            if((currentTrain != trainName) && (scrumDataList.length  % 2 != 0) && (trainNumber % 2 == 0)){
+                            if ((currentTrain != trainName) && (scrumDataList.length % 2 != 0) && (trainNumber % 2 == 0)) {
                                 //we are changing to another train, and this an odd number of rows in this horizontal
                                 flag = true;
                             }
                             var currentTrain = trainName;
-                            console.log("scrumDataList: ", scrumDataList);
 
-                            var itemResult = _.map(scrumDataList, function(scrumDataItem){
+                            var itemResult = _.map(scrumDataList, function (scrumDataItem) {
                                 return me.scrumDataCellRenderer(scrumDataItem, flag);
                             });
-                            console.log("itemResult.length = ", itemResult.length);
+                            //console.log("itemResult.length = ", itemResult.length);
                             return Ext.create('Ext.container.Container', {
                                 layout: {type: 'vbox'},
                                 width: '100%',
@@ -436,14 +437,14 @@
                     };
                 }),
                 [
-                //{
-                //    text: ' ', //Horizontal % column
-                //    dataIndex: 'horizontalData',
-                //    tdCls: '',
-                //    width: 90,
-                //    sortable: false,
-                //    renderer: me.horizontalTotalCellRenderer
-                //}
+                    //{
+                    //    text: ' ', //Horizontal % column
+                    //    dataIndex: 'horizontalData',
+                    //    tdCls: '',
+                    //    width: 90,
+                    //    sortable: false,
+                    //    renderer: me.horizontalTotalCellRenderer
+                    //}
                 ]
             );
         },
@@ -463,6 +464,7 @@
             me.setLoading(false);
             console.log("Building Data Grid...");
             me.setLoading('Building Data Grid...');
+            console.log("me.GridData: ", me.GridData);
 
             //preprocess the data so we can create the rows for the table
             var data = me._buildDataGrid(me.GridData);

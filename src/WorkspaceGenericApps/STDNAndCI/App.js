@@ -514,7 +514,7 @@
             var otherRow = _.find(data, function (row) {
                 return row.horizontalData.HorizontalName == 'Other';
             });
-            if (otherRow !== null) {
+            if (otherRow !== undefined) {
                 data = _.filter(data, function (row) {
                     return row.horizontalData.HorizontalName !== 'Other';
                 }).concat(otherRow);
