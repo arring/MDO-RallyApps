@@ -38,22 +38,26 @@
         },
         getCachePayloadFn: function (payload) {
             var me = this;
-            me.trainFeatureMap = payload.trainFeatureMap;
-            me.projectFeatureMap = payload.projectFeatureMap;
+            //me.trainFeatureMap = payload.trainFeatureMap;
+            //me.projectFeatureMap = payload.projectFeatureMap;
+            me.GridData = payload.GridData;
         },
         setCachePayLoadFn: function (payload) {
             var me = this;
             //payload.ScrumGroupConfig = null;
-            payload.trainFeatureMap = me.trainFeatureMap;
-            payload.projectFeatureMap = me.projectFeatureMap;
+            //payload.trainFeatureMap = me.trainFeatureMap;
+            //payload.projectFeatureMap = me.projectFeatureMap;
+            console.log("-----------setting payload: ", me.GridData);
+            payload.GridData = me.GridData;
         },
         cacheKeyGenerator: function () {
             var me = this;
-            var projectOID = me.getContext().getProject().ObjectID;
+            //var projectOID = me.getContext().getProject().ObjectID;
+            var workspaceOID = me.getContext().getWorkspace().ObjectID;
             var releaseOID = me.ReleaseRecord.data.ObjectID;
             var releaseName = me.ReleaseRecord.data.Name;
-            console.log('MTS-' + projectOID + '-' + releaseOID);
-            return 'MTS-' + (projectOID) + '-' + releaseOID;
+            console.log('MTS-' + workspaceOID + '-' + releaseOID);
+            return 'MTS-' + workspaceOID + '-' + releaseOID;
         },
         getCacheTimeoutDate: function () {
             return new Date(new Date() * 1 + 1000 * 60 * 60);
@@ -68,20 +72,20 @@
          - Given a train and scrum team, show the number of features (from user stories) that belong to that train
          */
         loadReportData: function () {
+            console.log("loadReportData");
             var me = this;
             //Do we have cache? If not, then load features and use stories
-            return me.getCache().then(function (cacheHit) {
-                if (!cacheHit) {
+            //return me.getCache().then(function (cacheHit) {
+            //    if (!cacheHit) {
+                    me.setLoading('Loading Features and User Stories Data...');
                     //console.log("loadReportData: We don't have cache");
                     //We do not have cache data, so get live data
-                    me.setLoading('Loading Features and User Stories Data...');
                     return Q.all([
-                        me._loadFeatures(),
-                        me._loadUserStories()
+                        me._loadFeatures(), //me.trainFeatureMap
+                        me._loadUserStories() //me.projectFeatureMap
                     ]);
-                }
-            });
-
+            //    }
+            //});
         },
         setScrumDataValue: function (container, scrumGroupName, projectName) {
             // get stories for train/scrum
@@ -119,6 +123,9 @@
         },
         _createGridDataHash: function () {
             var me = this;
+            me.superclass._createGridDataHash.call(me);
+            me._updateGridDataHash();
+            me._findViolations();
 
             /**
              * Process:
@@ -131,29 +138,33 @@
              * we just loaded into the cache file, so that next time it loads it will be able
              * to load it from the cached file, enabling a much faster report.
              */
-            return me.getCache().then(function (cacheHit) {
-                if (!cacheHit) {
-                    //console.log("_createGridDataHash in MTS: We do not have cache.");
-                    //We do not have cache data, so get live data...
-            //        //Q.all([
-                        me.superclass._createGridDataHash.call(me);
-                        me._updateGridDataHash();
-            //        //]).then(function () {
-                        me._findViolations();
-            //        //}).then(function () {
-                        me.updateCache("MTS").fail(function (e) {
-                            alert(e);
-                            console.error(e);
-                        });
-            //        //});
-                } else {
-                    //console.log("_createGridDataHash: We have cache.");
-                    me.renderCacheMessage();
-                    me.renderGetLiveDataButton();
-                }
-            }).catch(function (e) {
-                console.error(e);
-            });
+
+            //return me.getCache().then(function (cacheHit) {
+            //    if (!cacheHit) {
+            //        console.log(">>>> _createGridDataHash in MTS: We do not have cache.");
+            //        //We do not have cache data, so get live data...
+            //        Q.all([
+            //            me.superclass._createGridDataHash.call(me),
+            //            me._updateGridDataHash()
+            //        ]).then(function () {
+            //            console.log("--finding violations");
+            //            me._findViolations()
+            //        }).then(function () {
+            //            console.log("--updating cache file");
+            //            me.updateCache().fail(function (e) {
+            //                alert(e);
+            //                console.error(e);
+            //            });
+            //        });
+            //    } else {
+            //        console.log(">>>> _createGridDataHash: We have cache.");
+            //        me.renderCacheMessage();
+            //        me.renderGetLiveDataButton();
+            //    }
+            //}).catch(function (e) {
+            //    console.error(e);
+            //});
+
         },
         /**
          * _updateGridDataHash
@@ -164,8 +175,6 @@
          */
         _updateGridDataHash: function () {
             var me = this;
-
-            //console.log("_updateGridDataHash me.ScrumGroupConfig: ", me.ScrumGroupConfig);
 
             var temp = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                 var projectNames = _.map(train.Scrums, function (scrum) {
@@ -239,7 +248,7 @@
          */
         _findViolations: function () {
             var me = this;
-            //console.log("findViolations me.GridData: ", me.GridData);
+            console.log("findViolations me.GridData: ", me.GridData);
             //Save the original
             originalGridData = me.GridData;
 
@@ -454,7 +463,16 @@
             var me = this;
             me.renderFilterButton();
             //Set default to show only violating teams.
-            me.toggleTeams();
+            //me.toggleTeams();
+
+            //save the contents of me.GridData to the cache file.
+            //console.log("Saving the contents of me.GridData to the cache file.");
+            ////Update the Cached Data
+            //me.updateCache().fail(function (e) {
+            //    alert(e);
+            //    console.error(e);
+            //});
+
             return;
         },
         toggleTeams: function () {
@@ -493,7 +511,7 @@
          */
         renderCacheMessage: function () {
             var me = this;
-            if(!me.cacheMessage) {
+            if (!me.cacheMessage) {
                 me.cacheMessage = me.down('#navbox').add({
                     xtype: 'label',
                     width: '100%',
@@ -507,7 +525,7 @@
          */
         renderGetLiveDataButton: function () {
             var me = this;
-            if(!me.UpdateCacheButton) {
+            if (!me.UpdateCacheButton) {
                 me.UpdateCacheButton = me.down('#navbox').add({
                     xtype: 'button',
                     text: 'Get Live Data',
@@ -520,7 +538,7 @@
                             me._findViolations();
 
                             //Update the Cached Data
-                            me.updateCache("MTS").fail(function (e) {
+                            me.updateCache().fail(function (e) {
                                 alert(e);
                                 console.error(e);
                             });
@@ -531,7 +549,7 @@
         },
         renderFilterButton: function () {
             var me = this;
-            if(!me.toggleFilterButton) {
+            if (!me.toggleFilterButton) {
                 me.toggleFilterButton = me.down('#navbox').add({
                     xtype: 'button',
                     text: 'Toggle Show All Teams',
@@ -547,7 +565,35 @@
                 });
             }
         },
+        /**
+         * Overloaded from intel rally grid trains app
+         * @param combo
+         * @param records
+         */
+        releasePickerSelected: function (combo, records) {
+            var me = this, pid = me.ProjectRecord.ScrumGroupRootProjectOID;
+            if (me.ReleaseRecord.data.Name === records[0].data.Name) return;
+            me.setLoading("Saving Preference");
+            me.ReleaseRecord = _.find(me.ReleaseRecords, function (rr) {
+                return rr.data.Name == records[0].data.Name;
+            });
+            if (typeof me.AppsPref.projs[pid] !== 'object') me.AppsPref.projs[pid] = {};
+            me.AppsPref.projs[pid].Release = me.ReleaseRecord.data.ObjectID;
+            me.saveAppsPreference(me.AppsPref)
+                .then(function () {
+                    return me.reloadEverything();
+                })
+                .fail(function (reason) {
+                    me.setLoading(false);
+                    me.alert('ERROR', reason);
+                })
+                .then(function () {
+                    me.setLoading(false);
+                })
+                .done();
+        },
         _loadFeatures: function () {
+            console.log("MTS: Loading Features");
             var me = this,
                 map = {},
                 releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -590,8 +636,8 @@
                     me.trainFeatureMap = map;
                 });
         },
-
         _loadUserStories: function () {
+            console.log("MTS: Loading User Stories");
             var me = this,
                 map = {};
 

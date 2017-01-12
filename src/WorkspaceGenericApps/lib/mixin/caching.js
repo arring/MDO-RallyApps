@@ -76,7 +76,7 @@
 
             return deferred.promise;
         },
-        updateCache: function (appName) {
+        updateCache: function () {
             var me = this;
             var payload = {};
             var key = me.cacheKeyGenerator(); //generate key for the app

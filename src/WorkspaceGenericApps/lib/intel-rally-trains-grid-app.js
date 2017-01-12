@@ -201,28 +201,32 @@
                 return item.IsTrain;
             });
             return Q.all(
+                //for each train
                 _.map(me.ScrumGroupConfig, function (cfg) {
-                    return me.loadMinimalLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}})
+                    //load all scrum data
+                    return me.loadAllLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}})
                         .then(function (leafProjects) {
-
-                            console.log("leafProjects: ", leafProjects);
-                            throw new Error("Stopping JavaScript Execution here");
-
-                            var dataObj = {};
-                            var keysList = Object.keys(leafProjects);
-                            //console.log("leafProjects: ", leafProjects, " and keys:", keysList);
-                            _.filter(leafProjects, function (scrumObj, index) {
-                                var key = keysList[index];
-                                if (!cfg.Scrums) {
-                                    cfg.Scrums = [];
-                                }
-                                //Only need Scrum Names. We do not need the whole object
-                                dataObj[key] = {Name: scrumObj.data.Name};
-                                cfg.Scrums.push(dataObj);
-                                console.log("cfg.Scrums: ", cfg.Scrums);
-                                //cfg.Scrums = leafProjects;
-
+                            //For each scrum that is in this train
+                            var keys = Object.keys(leafProjects);
+                            //Store only the necessary data object. Rremove all the other junk that cannot be cached.
+                            var minimalLeafProjects = _.mapValues(leafProjects, function(lp){
+                                return {data: lp.data};
                             });
+
+                            /*
+                                Object format:
+
+                                Scrums -->
+                                    "25907808672":-->
+                                        data-->
+                                            Name: ""
+                                            ...
+                                    "25907808672":-->
+                                        data-->
+                                            Name: ""
+                                            ...
+                            */
+                            cfg.Scrums = minimalLeafProjects;
                         });
                 })
             );
@@ -480,7 +484,14 @@
             me.setLoading(false);
             console.log("Building Data Grid...");
             me.setLoading('Building Data Grid...');
-            console.log("me.GridData: ", me.GridData);
+
+            console.log("me.GridData after data massaging is done and its ready for the grid: ", me.GridData);
+
+            console.log("--updating cache file");
+            me.updateCache().fail(function (e) {
+                alert(e);
+                console.error(e);
+            });
 
             //preprocess the data so we can create the rows for the table
             var data = me._buildDataGrid(me.GridData);

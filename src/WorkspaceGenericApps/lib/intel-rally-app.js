@@ -941,16 +941,18 @@
 					});					
 				});
 		},
-        loadMinimalLeafProjects: function(rootProjectRecord){
-            console.log("loadingMinimalLeafProjects");
-            //rootProjectRecord is optional
-            var me = this,
-                leafProjects = {};
+        loadMinimalLeafProjects: function(rootProjectRecord, fetchFields){
+            //rootProjectRecord and fetchFields parameters are optional
+            var me = this;
+            var leafProjects = {};
+            if(!fetchFields){
+                fetchFields = me.projectFields;
+            }
             return me.getPorfolioProjectFilterQuery(rootProjectRecord)
                 .then(function(filter){
                     var store = Ext.create('Rally.data.wsapi.Store', {
                         model: "Project",
-                        fetch: ['Name'], //me.projectFields,
+                        fetch: fetchFields,
                         filters: filter ? [filter] : [],
                         compact: true,
                         limit:Infinity,
@@ -961,10 +963,8 @@
                         }
                     });
                     return me.reloadStore(store).then(function(store){
-                        console.log("store.getRange(): ", store.getRange());
                         if(rootProjectRecord){
                             var projTree = me._storeItemsToProjTree(store.getRange());
-                            console.log("projTree: ", projTree);
                             me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
                             return leafProjects;
                         } else {
