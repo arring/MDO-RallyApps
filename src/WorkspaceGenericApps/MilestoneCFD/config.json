@@ -1,12 +1,33 @@
 {
-    "name": "MilestoneCFD",
-    "className": "MilestoneCumulativeFlow",
-    "server": "https://rally1.rallydev.com",
-    "sdk": "2.1",
-    "javascript": [
-        "App.js"
-    ],
-    "css": [
-        "app.css"
-    ]
+   "name": "MilestoneCFD",
+   "className": "Intel.MilestoneCumulativeFlow",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.1",
+   "javascript": [
+      "https://cdnjs.cloudflare.com/ajax/libs/sylvester/0.1.3/sylvester.js",
+      "https://code.jquery.com/jquery-2.1.1.js",
+      "https://code.highcharts.com/highcharts.src.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.0.1/q.js",
+      "../lib/intel-rally-app.js",
+      "../lib/mixin/window-listener.js",
+      "../lib/mixin/iframe-resize.js",
+      "../lib/mixin/pretty-alert.js",
+      "../lib/mixin/intel-workweek.js",
+      "../lib/mixin/cumulative-flow-chart-mixin.js",
+      "../lib/mixin/parallel-loader.js",
+      "../lib/mixin/cfd-project-preference.js",
+      "../lib/mixin/user-apps-preference.js",
+      "../lib/component/intel-fixed-combobox.js",
+      "../lib/component/intel-release-picker.js",
+      "../lib/component/intel-release-date-change-picker.js",
+      "../lib/chart/fast-cumulative-flow-calculator.js",
+      "../lib/component/intel-table-view.js",
+      "../lib/component/intel-cell-editing.js",
+      "../lib/component/intel-textarea.js",
+      "../lib/component/intel-grid-column-textarea-filter.js",
+      "App.js"
+   ],
+   "css": [
+      "app.css"
+   ]
 }
