@@ -72,7 +72,7 @@
             //Do we have cache? If not, then load features and use stories
             return me.getCache().then(function (cacheHit) {
                 if (!cacheHit) {
-                    console.log("loadReportData: We don't have cache");
+                    //console.log("loadReportData: We don't have cache");
                     //We do not have cache data, so get live data
                     me.setLoading('Loading Features and User Stories Data...');
                     return Q.all([
@@ -133,7 +133,7 @@
              */
             return me.getCache().then(function (cacheHit) {
                 if (!cacheHit) {
-                    console.log("_createGridDataHash in MTS: We do not have cache.");
+                    //console.log("_createGridDataHash in MTS: We do not have cache.");
                     //We do not have cache data, so get live data...
             //        //Q.all([
                         me.superclass._createGridDataHash.call(me);
@@ -147,7 +147,7 @@
                         });
             //        //});
                 } else {
-                    console.log("_createGridDataHash: We have cache.");
+                    //console.log("_createGridDataHash: We have cache.");
                     me.renderCacheMessage();
                     me.renderGetLiveDataButton();
                 }
@@ -165,7 +165,7 @@
         _updateGridDataHash: function () {
             var me = this;
 
-            console.log("_updateGridDataHash me.ScrumGroupConfig: ", me.ScrumGroupConfig);
+            //console.log("_updateGridDataHash me.ScrumGroupConfig: ", me.ScrumGroupConfig);
 
             var temp = _.reduce(me.ScrumGroupConfig, function (hash, train, key) {
                 var projectNames = _.map(train.Scrums, function (scrum) {
@@ -239,7 +239,7 @@
          */
         _findViolations: function () {
             var me = this;
-            console.log("findViolations me.GridData: ", me.GridData);
+            //console.log("findViolations me.GridData: ", me.GridData);
             //Save the original
             originalGridData = me.GridData;
 
@@ -467,7 +467,7 @@
                 //me.superclass.reloadEverything.call(me);
 
                 me.GridData = originalGridData;
-                console.log(">>>> originalGridData = ", originalGridData);
+                //console.log(">>>> originalGridData = ", originalGridData);
                 me.superclass.reloadGrid.call(me);
 
                 //Reset toggle variable
@@ -479,7 +479,7 @@
                 //console.log("Updating the grid to show only violating teams...");
 
                 me.GridData = violatingTeamsFull;
-                console.log(">>>>> violatingTeamsFull = ", violatingTeamsFull);
+                //console.log(">>>>> violatingTeamsFull = ", violatingTeamsFull);
                 me.superclass.reloadGrid.call(me);
 
                 //Reset toggle variable
@@ -548,7 +548,6 @@
             }
         },
         _loadFeatures: function () {
-            console.log("Loading features MTS");
             var me = this,
                 map = {},
                 releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -593,7 +592,6 @@
         },
 
         _loadUserStories: function () {
-            console.log("Loading user stories MTS");
             var me = this,
                 map = {};
 

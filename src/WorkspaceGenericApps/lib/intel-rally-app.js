@@ -51,7 +51,7 @@
 		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
-        MTSFields:['Name', 'ObjectId'],
+        minimalFields: ['ObjectID', 'Name', 'TeamMembers'],
 		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
@@ -161,7 +161,6 @@
 				workspace: me.getContext().getWorkspace()._ref,
 				filterByName: ScrumGroupConfigPrefName,
 				success: function(prefs) {
-                    console.log("prefs: ", prefs);
 					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
 					try{
                         scrumGroupConfig = JSON.parse(configString);
@@ -942,6 +941,43 @@
 					});					
 				});
 		},
+        loadMinimalLeafProjects: function(rootProjectRecord){
+            console.log("loadingMinimalLeafProjects");
+            //rootProjectRecord is optional
+            var me = this,
+                leafProjects = {};
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: ['Name'], //me.projectFields,
+                        filters: filter ? [filter] : [],
+                        compact: true,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        console.log("store.getRange(): ", store.getRange());
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            console.log("projTree: ", projTree);
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                    function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
 			var me=this,

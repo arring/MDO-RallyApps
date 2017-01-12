@@ -193,7 +193,6 @@
                 }, {});
                 return hash;
             }, {});
-            console.log("me.GridData: ", me.GridData);
         },
         _loadTrainsAndScrums: function (me) {
             // load all Trains and their scrums
@@ -203,10 +202,27 @@
             });
             return Q.all(
                 _.map(me.ScrumGroupConfig, function (cfg) {
-                    return me.loadAllLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}})
+                    return me.loadMinimalLeafProjects({data: {ObjectID: cfg.ScrumGroupRootProjectOID}})
                         .then(function (leafProjects) {
-                            cfg.Scrums = leafProjects;
-                            //Only need Scrum Names. We do not need the whole object
+
+                            console.log("leafProjects: ", leafProjects);
+                            throw new Error("Stopping JavaScript Execution here");
+
+                            var dataObj = {};
+                            var keysList = Object.keys(leafProjects);
+                            //console.log("leafProjects: ", leafProjects, " and keys:", keysList);
+                            _.filter(leafProjects, function (scrumObj, index) {
+                                var key = keysList[index];
+                                if (!cfg.Scrums) {
+                                    cfg.Scrums = [];
+                                }
+                                //Only need Scrum Names. We do not need the whole object
+                                dataObj[key] = {Name: scrumObj.data.Name};
+                                cfg.Scrums.push(dataObj);
+                                console.log("cfg.Scrums: ", cfg.Scrums);
+                                //cfg.Scrums = leafProjects;
+
+                            });
                         });
                 })
             );
