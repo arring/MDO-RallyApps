@@ -44,10 +44,9 @@
         },
         setCachePayLoadFn: function (payload) {
             var me = this;
-            //payload.ScrumGroupConfig = null;
             //payload.trainFeatureMap = me.trainFeatureMap;
             //payload.projectFeatureMap = me.projectFeatureMap;
-            console.log("-----------setting payload: ", me.GridData);
+            console.log("Setting payload: ", me.GridData);
             payload.GridData = me.GridData;
         },
         cacheKeyGenerator: function () {
@@ -171,6 +170,7 @@
          * Fills in missing features that are owned by a train which the scrum team
          * is not a member of.
          * If we do not complete this step, the violations will not show.
+         * (data massaging)
          * @private
          */
         _updateGridDataHash: function () {
@@ -244,6 +244,7 @@
          * _findViolations
          * Finds the violating teams in me.GridData object. Saves them to a list.
          * A team is violating if it is working on features from more than one train.
+         * (data massaging)
          * @private
          */
         _findViolations: function () {
