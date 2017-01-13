@@ -209,24 +209,23 @@
                             //For each scrum that is in this train
                             var keys = Object.keys(leafProjects);
                             //Store only the necessary data object. Rremove all the other junk that cannot be cached.
-                            var minimalLeafProjects = _.mapValues(leafProjects, function(lp){
+                            cfg.Scrums = _.mapValues(leafProjects, function(lp){
                                 return {data: lp.data};
                             });
-
                             /*
                                 Object format:
 
                                 Scrums -->
-                                    "25907808672":-->
+                                    25907808672:-->
                                         data-->
                                             Name: ""
                                             ...
-                                    "25907808672":-->
+                                    25907808673:-->
                                         data-->
                                             Name: ""
                                             ...
                             */
-                            cfg.Scrums = minimalLeafProjects;
+
                         });
                 })
             );

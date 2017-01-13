@@ -8,25 +8,43 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
-    /*
-     Change isLocalDev variable to true if you are running locally (http-server localhost)
-     IMPORTANT: Make sure to set it to false before checking in to prod/rally/dev-rallyapps
-     */
+    /*------------------------------------IMPORTANT--------------------------------------
+     "isLocalDev" variable:
+     - IMPORTANT: Change to true if you are running locally (http-server, localhost)
+     - IMPORTANT: Make sure to set it to false before checking the code or publishing to rally
+     ----------------------------------------------------------------------------------*/
     var isLocalDev = false;
 
-    /*
-     This is the hard-coded list of rule checks for the DI dashboard.
-     Each train can have their own list of which of these rules are the default rule checks selected, which can be set under "Edit App Settings" menu.
-     */
+    /*----------------------------------------------------------------------------------
+     Rule categories are defined here, and used throughout this file.
+     To add or remove a rule, you need to edit it here, and in the gridConfigs array.
+     This also defines a color for each rule.
+     ----------------------------------------------------------------------------------*/
     var ruleCategories = [
-        "Features with No Stories",
-        "Features with No Start or End Date",
-        "Features with No Parent",
-        "Unaccepted Features Past End Date",
-        "Unaccepted Epics Past End Date",
+        "Epics with No Parent",
         "Epics with No Start or End date",
-        "Epics with No Parent"
+        "Unaccepted Epics Past End Date",
+        "Unaccepted Features Past End Date",
+        "Features with No Parent",
+        "Features with No Start or End Date",
+        "Features with No Stories"
     ];
+
+        //["Epics with No Parent",'#AAAAAA'], //GRAY
+        //["Epics with No Start or End date", '#2ECC40'], //GREEN
+        //["Unaccepted Epics Past End Date", '#7FDBFF'], //AQUA
+        //["Unaccepted Features Past End Date",'#DDDDDD'], //SILVER
+        //["Features with No Parent", '#39CCCC'], //TEAL
+        //["Features with No Start or End Date", '#01FF70'], //LIME
+        //["Features with No Stories", '#FFDC00'] //YELLOW
+
+    /*----------------------------------------------------------------------------------
+     Changes each rule category to lower case and replaces spaces with dashes.
+     ----------------------------------------------------------------------------------*/
+    var ruleCategorySelectors = [];
+    _.each(ruleCategories, function (ruleString) {
+        ruleCategorySelectors.push(ruleString.replace(/\s+/g, '-').toLowerCase());
+    });
 
     /************************** Data Integrity Dashboard *****************************/
     Ext.define('Intel.PortfolioDataIntegrityDashboard', {
@@ -42,8 +60,61 @@
             'Intel.lib.mixin.HorizontalTeamTypes',
             'Intel.lib.mixin.Caching'
         ],
+        /**************************************** Settings ***************************************/
+        settingsScope: 'workspace',
+        getSettingsFields: function () {
+            return [
+                {
+                    name: 'Horizontal',
+                    xtype: 'rallycheckboxfield'
+                }, {
+                    name: 'cacheUrl',
+                    xtype: 'rallytextfield'
+                },
+                {
+                    name: ruleCategories[0],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory0'
+                }, {
+                    name: ruleCategories[1],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory1'
+                }, {
+                    name: ruleCategories[2],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory2'
+                }, {
+                    name: ruleCategories[3],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory3'
+                }, {
+                    name: ruleCategories[4],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory4'
+                }, {
+                    name: ruleCategories[5],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory5'
+                }, {
+                    name: ruleCategories[6],
+                    xtype: 'rallycheckboxfield',
+                    id: 'ruleCategory6'
+                }
+            ];
+        },
+        config: {
+            defaultSettings: {
+                //ruleCategory0: true,
+                //ruleCategory1: true,
+                //ruleCategory2: true,
+                //ruleCategory3: true,
+                //ruleCategory4: true,
+                //ruleCategory5: false,
+                //ruleCategory6: true,
+                cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+            }
+        },
         minWidth: 1100,
-
         /**
          This layout consists of:
          Top horizontal bar for controls
@@ -119,62 +190,6 @@
             '#FFDC00', //YELLOW
             '#0074D9' //BLUE
         ],
-
-        /**************************************** Settings ***************************************/
-        settingsScope: 'workspace',
-        getSettingsFields: function () {
-            return [
-                {
-                    name: 'Horizontal',
-                    xtype: 'rallycheckboxfield'
-                }, {
-                    name: 'cacheUrl',
-                    xtype: 'rallytextfield'
-                },
-                {
-                    name: ruleCategories[0],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule1'
-                }, {
-                    name: ruleCategories[1],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule2'
-                }, {
-                    name: ruleCategories[2],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule3'
-                }, {
-                    name: ruleCategories[3],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule4'
-                }, {
-                    name: ruleCategories[4],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule5'
-                }, {
-                    name: ruleCategories[5],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule6'
-                }, {
-                    name: ruleCategories[6],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule7'
-                }
-            ];
-        },
-        config: {
-            defaultSettings: {
-                rule1: true,
-                rule2: true,
-                rule3: true,
-                rule4: true,
-                rule5: true,
-                rule6: true,
-                rule7: true,
-                cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
-            }
-        },
-
         /******************************************************* Caching Mixin operations ********************************************************/
         /**
          NOTE: this requires that me.PortfolioItemTypes is already populated. This is done in
@@ -369,6 +384,8 @@
                 _.each(ruleCategories, function (item, index) {
                     me.rules[index] = true;
                 });
+                //Optional: if you want to change one of the rules to false,
+                // for local dev, do it here.
             }
 
             // me.initDisableResizeHandle();
@@ -1369,7 +1386,6 @@
             chartData = [],
                 tempProjects = [];
             selectIdFunctionName = '_selectId' + (Math.random() * 10000 >> 0);
-
             //Filter the projects to make a list of the project with feature or Epic count. Remove the projects with zero count
             _.each(userStoryGrids, function (grid, gindex) {
                 _.each(_.sortBy(me.FilteredAllProjectsAndEpicProjects, function (p) {
@@ -1394,9 +1410,12 @@
                     var gridCount = me.getProjectStoriesForGrid(project, grid).length;
                     highestNum = Math.max(gridCount, highestNum);
                     //only push the rows (rule categories) which are selected in the "Edit App Settings"
-                    if (me.rules[gindex]) {
+
+                    //if (me.rules[gindex]) {
                         chartData.push([pindex, gindex, gridCount]);
-                    }
+                    //} else {
+                    //    console.log("skipping row index ", gindex);
+                    //}
                 });
             });
 
@@ -1413,14 +1432,17 @@
                     rowCount++;
                 }
             }
+            console.log("rowCount: ", rowCount);
             //set height based on number of rows (rule categories)
             var height = (53 * rowCount) + 60;
 
             // Create the map config
+            console.log("heatmap config is being created");
+            console.log("chartData: ", chartData);
             return {
                 chart: {
                     type: 'heatmap',
-                    height: height,
+                    height: 370, //height
                     marginTop: 10,
                     marginLeft: 140,
                     marginBottom: 80
@@ -1448,6 +1470,7 @@
                 },
                 yAxis: {
                     categories: _.map(userStoryGrids, function (grid) {
+                        console.log("yAxis categories");
                         return grid.originalConfig.title;
                     }),
                     title: null,
@@ -1455,20 +1478,22 @@
                         formatter: function () {
                             var text = this.value;
                             var index = _.indexOf(this.axis.categories, text);
+                            //console.log("index: ", index, " text: ", text);
 
                             //console.log("rules[" + index + "]: " + me.rules[index] + " and ruleCategories:", ruleCategories[index]);
-                            if (me.rules[index]) {
+                            //if (me.rules[index]) {
                                 //The checkbox is checked, so show this rule
                                 var gridID = userStoryGrids[index].originalConfig.id;
-                                var styleAttr = 'style="background-color:' + me.chartColors[userStoryGrids.length - index - 1] + '"';
-                                console.log("index: ", index, " ----- gridID: " + gridID + " ---- text: ", text);
+                                var styleAttr = 'style="background-color:' + me.chartColors[index] + '"';
+                                console.log("index: ", index, " ----- gridID: " + gridID + " ---- text: ", text, " color: "+ me.chartColors[index]);
                                 return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
                                     selectIdFunctionName + '(\'' + gridID + '\')">' + text + '</div>';
-                            } else {
-                                //The checkbox is not checked, so do not show this rule
+                            //} else {
+                                //console.log("The checkbox is not checked, so do not show this rule: ", index);
                                 //skip this rule.
-                                return;
-                            }
+                                //chartData.rows[index].remove();
+                                //return;
+                            //}
                         },
                         useHTML: true
                     }
@@ -1665,12 +1690,21 @@
                         text: 'Parent',
                         dataIndex: 'Parent',
                         editor: false
-                    }]),
-                gridConfigs = [{
+                    }]);
+            var gridConfigs = [];
+            /*
+             To set the grid, check if each rule should be added to the gridConfigs object.
+             This can't be in a loop, because each row has it's own unique properties
+             */
+            console.log("me.rules: ", me.rules);
+
+            if (me.rules[0]) {
+                //The checkbox is checked, so show this rule
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Epics with No Parent',
-                    id: 'grid-epics-with-no-parent',
+                    title: ruleCategories[0],
+                    id: ruleCategorySelectors[0],
                     model: 'UserStory', //+ midPortfolioItemType,
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Parent',
@@ -1682,11 +1716,18 @@
                         if (!item.data.Parent)
                             return item.data.Name;
                     }
-                }, {
+                });
+            }else {
+                console.log("Skipping ", ruleCategories[0]);
+            }
+
+            if (me.rules[1]) {
+                //The checkbox is checked, so show this rule
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Epics with No Start or End date',
-                    id: 'grid-epics-with-no-start-or-end-date',
+                    title: ruleCategories[1],
+                    id: ruleCategorySelectors[1],
                     model: 'UserStory',
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Planned Start Date',
@@ -1705,11 +1746,17 @@
                         if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
                         return item.data.Name;
                     }
-                }, {
+                });
+            } else {
+                console.log("Skipping ", ruleCategories[1]);
+            }
+
+            if (me.rules[2]) {
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Unaccepted Epics Past End Date',
-                    id: 'grid-unaccepted-epics-past-end_date',
+                    title: ruleCategories[2],
+                    id: ruleCategorySelectors[2],
                     model: 'UserStory',
                     columns: defaultUserStoryColumns.concat([
                         {
@@ -1721,11 +1768,17 @@
                     filterFn: function (item) {
                         return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
                     }
-                }, {
+                });
+            } else {
+                console.log("skipping ", ruleCategories[2]);
+            }
+
+            if (me.rules[3]) {
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Unaccepted Features Past End Date',
-                    id: 'grid-unaccepted-features-past-end_date',
+                    title: ruleCategories[3],
+                    id: ruleCategorySelectors[3],
                     model: 'PortfolioItem/' + lowestPortfolioItemType,
                     columns: defaultLowestPortfolioItemColumns.concat([
                         {
@@ -1741,69 +1794,88 @@
                     filterFn: function (item) {
                         return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
                     }
-                },
-                    {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Parent',
-                        id: 'grid-features-with-no-parent',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            if (!item.data.Parent)
-                                return item.data.Name;
-                        }
-                    }, {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Start or End Date',
-                        id: 'grid-features-with-no-start-or-end-date',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat([
-                            {
-                                text: 'ScheduleState',
-                                dataIndex: 'ScheduleState',
-                                tdCls: 'editor-cell'
-                            }]).concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
-                            return item.data.Name;
-                        }
-                    }, {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Stories',
-                        id: 'grid-features-with-no-stories',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat([
-                            {
-                                text: 'ScheduleState',
-                                dataIndex: 'ScheduleState',
-                                tdCls: 'editor-cell'
-                            }]).concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            item = item.data || item;//having issue due to caching so hacking it
-                            if (!item.Release || item.Release.Name != releaseName) return false;
-                            return !me.PortfolioUserStoryCount[item.ObjectID];
-                        }
+                });
+            } else {
+                console.log("skipping ", ruleCategories[3]);
+            }
 
+            if (me.rules[4]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[4],
+                    id: ruleCategorySelectors[4],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        if (!item.data.Parent)
+                            return item.data.Name;
                     }
-                ];
+                });
+            } else {
+                console.log("skipping ", ruleCategories[4]);
+            }
+
+            if (me.rules[5]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[5],
+                    id: ruleCategorySelectors[5],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat([
+                        {
+                            text: 'ScheduleState',
+                            dataIndex: 'ScheduleState',
+                            tdCls: 'editor-cell'
+                        }]).concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
+                        return item.data.Name;
+                    }
+                });
+            } else {
+                console.log("skipping ", ruleCategories[5]);
+            }
+
+            if (me.rules[6]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[6],
+                    id: ruleCategorySelectors[6],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat([
+                        {
+                            text: 'ScheduleState',
+                            dataIndex: 'ScheduleState',
+                            tdCls: 'editor-cell'
+                        }]).concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        item = item.data || item;//having issue due to caching so hacking it
+                        if (!item.Release || item.Release.Name != releaseName) return false;
+                        return !me.PortfolioUserStoryCount[item.ObjectID];
+                    }
+
+                });
+            } else {
+                console.log("skipping ", ruleCategories[6]);
+            }
 
             return Q.all(_.map(gridConfigs, function (gridConfig) {
                 if (!gridConfig.showIfLeafProject && (me.isScopedToScrum || me.ScopedTeamType)) return Q();
@@ -1846,7 +1918,9 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+
+        ,
         releasePickerSelected: function (combo, records) {
             var me = this;
             me.clearTooltip();
@@ -1865,7 +1939,8 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+        ,
         teamPickerSelected: function (combo, records) {
             var me = this;
             me.clearTooltip();
@@ -1883,7 +1958,8 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+        ,
 
         /**
          Displays a tool tip when a point on the heat map is clicked
@@ -2023,7 +2099,8 @@
                     }
                 }
             });
-        },
+        }
+        ,
 
         /**************************************** Tooltip Functions *******************************/
         clearTooltip: function () {
@@ -2035,7 +2112,8 @@
                 me.tooltip.triangle.destroy();
                 me.tooltip = null;
             }
-        },
+        }
+        ,
         initRemoveTooltipOnScroll: function () {
             var me = this;
             setTimeout(function addScrollListener() {
@@ -2044,7 +2122,8 @@
                 });
                 else setTimeout(addScrollListener, 10);
             }, 0);
-        },
+        }
+        ,
 
         /**************************************** Utility Functions *******************************/
         /**
@@ -2065,11 +2144,13 @@
                 me.Overrides.ReleaseName = me.Overrides.decodedUrl.match('release=.*');
                 me.Overrides.ReleaseName = (me.Overrides.ReleaseName ? me.Overrides.ReleaseName[0].slice(8).split('&')[0] : undefined);
             }
-        },
+        }
+        ,
 
         createDummyProjectRecord: function (dataObject) {
             return {data: dataObject};
-        },
+        }
+        ,
 
         /**
          Fixes the stories so that the sync request pulls the correct data.
@@ -2084,7 +2165,8 @@
                     if (!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]] = 0;
                 }
             }
-        },
+        }
+        ,
 
         /**
          Fixes the schedule state editor for grid editing so that bulk editing does
