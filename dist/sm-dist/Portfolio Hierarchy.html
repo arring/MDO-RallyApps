@@ -1,11 +1,11 @@
-<!-- Build: taya-dev:e4edee18c02d3acc011b3d6ebf8e452cf1b009be:2017-01-10T19:38:21.561Z --><!DOCTYPE html>
+<!-- Build: taya-dev:96a5ef540c90c7592a697ba77e1e6e31f7838451:2017-01-13T19:25:16.070Z --><!DOCTYPE html>
 <html>
 	<head>
 		<title>Portfolio Hierarchy</title>
 		
 		<script>
 			(function(){
-	var smAppID = "Portfolio_Hierarchy280842";
+	var smAppID = "Portfolio_Hierarchy50923";
 	window[smAppID] = {stillInIframe: true};
 	
 	function addScriptSync(doc, node, src, text, callback){
@@ -128,7 +128,7 @@
 		
 		<script type="text/javascript" class="sdk-mod">
 			(function(){
-					var smAppID = "Portfolio_Hierarchy280842";	
+					var smAppID = "Portfolio_Hierarchy50923";	
 				if(!window[smAppID].stillInIframe){	
 					(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -1421,7 +1421,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -1476,6 +1476,7 @@
 		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+        minimalFields: ['ObjectID', 'Name', 'TeamMembers'],
 		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
@@ -1586,8 +1587,13 @@
 				filterByName: ScrumGroupConfigPrefName,
 				success: function(prefs) {
 					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
-					try{ scrumGroupConfig = JSON.parse(configString); }
-					catch(e){ scrumGroupConfig = []; }
+					try{
+                        scrumGroupConfig = JSON.parse(configString);
+                    }
+					catch(e){
+                        console.error(e);
+                        scrumGroupConfig = [];
+                    }
 					me.ScrumGroupConfig = scrumGroupConfig;
 					deferred.resolve();
 				},
@@ -2360,6 +2366,43 @@
 					});					
 				});
 		},
+        loadMinimalLeafProjects: function(rootProjectRecord, fetchFields){
+            //rootProjectRecord and fetchFields parameters are optional
+            var me = this;
+            var leafProjects = {};
+            if(!fetchFields){
+                fetchFields = me.projectFields;
+            }
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: fetchFields,
+                        filters: filter ? [filter] : [],
+                        compact: true,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                    function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
 			var me=this,
@@ -2601,7 +2644,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/**  
 	DESCRIPTION:
@@ -2679,7 +2722,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	given named queues, only allows one function at a time in each queue to execute. 
@@ -2733,7 +2776,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY: 
@@ -2789,7 +2832,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2838,7 +2881,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** 
 	SUMMARY:
@@ -2873,7 +2916,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2925,7 +2968,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							(function(){
 	var Ext = window.Ext4 || window.Ext;
@@ -2992,7 +3035,7 @@
 			
 				<script type="text/javascript">
 					(function(){
-						var smAppID = "Portfolio_Hierarchy280842";			
+						var smAppID = "Portfolio_Hierarchy50923";			
 						if(!window[smAppID].stillInIframe){	
 							/** this is an app that makes portfolio hierarchies more customizable and stateful for each person **/
 (function(){
@@ -3121,7 +3164,7 @@
 						else{
 							field.show();
 							setTimeout(function(){
-								var fieldVal = Rally.getApp("Portfolio_Hierarchy280842").getSetting(field.name);
+								var fieldVal = Rally.getApp("Portfolio_Hierarchy50923").getSetting(field.name);
 								if(fieldVal) field.setValue(fieldVal);
 							}, 50);
 						}
@@ -3460,11 +3503,11 @@
 		
 		<script type="text/javascript">
 			(function(){
-				var smAppID = "Portfolio_Hierarchy280842";			
+				var smAppID = "Portfolio_Hierarchy50923";			
 				if(!window[smAppID].stillInIframe){	
 					Rally.launchApp("Intel.PortfolioNavigator.IntelPortfolioHierarchy", {
 						name: "Portfolio Hierarchy",
-						smAppID: "Portfolio_Hierarchy280842"
+						smAppID: "Portfolio_Hierarchy50923"
 					});
 				}
 			}());

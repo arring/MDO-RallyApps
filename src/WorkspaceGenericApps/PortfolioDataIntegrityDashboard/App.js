@@ -15,6 +15,15 @@
      ----------------------------------------------------------------------------------*/
     var isLocalDev = false;
 
+    //You can only get the Rally environment in Rally, not in local dev.
+    if (Rally.environment) {
+        var context = Rally.environment.getContext();
+        var SETTINGS_TOKEN = context.getProject().ObjectID.toString();
+    } else {
+        console.log("Rally.environment is undefined. Setting Settings token to 59951441366.");
+        var SETTINGS_TOKEN = "59951441366";
+    }
+
     /*----------------------------------------------------------------------------------
      Rule categories are defined here, and used throughout this file.
      To add or remove a rule, you need to edit it here, and in the gridConfigs array.
@@ -29,14 +38,6 @@
         "Features with No Start or End Date",
         "Features with No Stories"
     ];
-
-        //["Epics with No Parent",'#AAAAAA'], //GRAY
-        //["Epics with No Start or End date", '#2ECC40'], //GREEN
-        //["Unaccepted Epics Past End Date", '#7FDBFF'], //AQUA
-        //["Unaccepted Features Past End Date",'#DDDDDD'], //SILVER
-        //["Features with No Parent", '#39CCCC'], //TEAL
-        //["Features with No Start or End Date", '#01FF70'], //LIME
-        //["Features with No Stories", '#FFDC00'] //YELLOW
 
     /*----------------------------------------------------------------------------------
      Changes each rule category to lower case and replaces spaces with dashes.
@@ -72,45 +73,66 @@
                     xtype: 'rallytextfield'
                 },
                 {
-                    name: ruleCategories[0],
+                    name: ruleCategories[0] + SETTINGS_TOKEN,
+                    label: ruleCategories[0],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory0'
                 }, {
-                    name: ruleCategories[1],
+                    name: ruleCategories[1] + SETTINGS_TOKEN,
+                    label: ruleCategories[1],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory1'
                 }, {
-                    name: ruleCategories[2],
+                    name: ruleCategories[2] + SETTINGS_TOKEN,
+                    label: ruleCategories[2],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory2'
                 }, {
-                    name: ruleCategories[3],
+                    name: ruleCategories[3] + SETTINGS_TOKEN,
+                    label: ruleCategories[3],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory3'
                 }, {
-                    name: ruleCategories[4],
+                    name: ruleCategories[4] + SETTINGS_TOKEN,
+                    label: ruleCategories[4],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory4'
                 }, {
-                    name: ruleCategories[5],
+                    name: ruleCategories[5] + SETTINGS_TOKEN,
+                    label: ruleCategories[5],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory5'
                 }, {
-                    name: ruleCategories[6],
+                    name: ruleCategories[6] + SETTINGS_TOKEN,
+                    label: ruleCategories[6],
                     xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
                     id: 'ruleCategory6'
                 }
             ];
         },
         config: {
             defaultSettings: {
-                //ruleCategory0: true,
-                //ruleCategory1: true,
-                //ruleCategory2: true,
-                //ruleCategory3: true,
-                //ruleCategory4: true,
-                //ruleCategory5: false,
-                //ruleCategory6: true,
+                ruleCategory0: true,
+                ruleCategory1: true,
+                ruleCategory2: true,
+                ruleCategory3: true,
+                ruleCategory4: true,
+                ruleCategory5: true,
+                ruleCategory6: true,
                 cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
             }
         },
@@ -181,6 +203,14 @@
             }]
         }],
         chartColors: [
+            '#AAAAAA', //GRAY
+            '#2ECC40', //GREEN
+            '#7FDBFF', //AQUA
+            '#DDDDDD', //SILVER
+            '#39CCCC', //TEAL
+            '#01FF70', //LIME
+            '#FFDC00', //YELLOW
+            '#0074D9', //BLUE
             '#AAAAAA', //GRAY
             '#2ECC40', //GREEN
             '#7FDBFF', //AQUA
@@ -368,24 +398,31 @@
         launch: function () {
             var me = this;
             me.rules = [];
-            //For production/rally official
+
+            /*----------------------------------------------------------------------------------
+             For production/rally official only. Not for local dev/localhost.
+             ----------------------------------------------------------------------------------*/
             if (!isLocalDev) {
                 me.isHorizontalView = me.getSetting('Horizontal');
-                console.log("Rally: ruleCategories: ", ruleCategories);
+                //For each of the rule categories, get the setting checkbox value
                 _.each(ruleCategories, function (item, index) {
-                    //for each of the rule categories, get the checkbox value
-                    me.rules[index] = me.getSetting(ruleCategories[index]);
-                    console.log("Rally: me.rules[" + index + "]: " + me.rules[index]);
+                    var ruleSetting = (ruleCategories[index] + SETTINGS_TOKEN);
+                    //me.rules[index] = me.getSetting(ruleCategories[index]);
+                    me.rules[index] = me.getSetting(ruleSetting);
+                    //console.log(">> ", index, ": ruleSetting: ", ruleSetting);
+                    //console.log(">> ",index, ": me.getSetting(ruleSetting): ", me.getSetting(ruleSetting));
+                    //console.log(">> me.rules[" + index + "]: " + me.rules[index]);
                 });
             } else {
-                //For local development/http-server localhost
+                /*----------------------------------------------------------------------------------
+                 For local development/http-server localhost. Not for Rally/production
+                 ----------------------------------------------------------------------------------*/
                 me.isHorizontalView = false;
                 //for each of the rule categories, set the checkbox value to true
                 _.each(ruleCategories, function (item, index) {
                     me.rules[index] = true;
                 });
-                //Optional: if you want to change one of the rules to false,
-                // for local dev, do it here.
+                //Optional: if you want to change one of the rules to false, for local dev, do it here.
             }
 
             // me.initDisableResizeHandle();
@@ -1143,29 +1180,32 @@
          Creates and adds the overall indicator of integrity to the app
          */
         buildIntegrityIndicator: function () {
-            var me = this,
-                userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
-                    return grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic';
-                }).reverse(),
+            var me = this;
+            var userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
+                return grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic';
+            }).reverse();
 
-                storyNum = {},
-                storyDen = userStoryGrids[0].originalConfig.totalCount,
-                pointNum,
-                pointDen = userStoryGrids[0].originalConfig.totalPoints,
-                storyPer,
-                pointPer;
+            var storyNum = {};
+            var storyDen = 0;
+            var pointDen = 0;
+
+            if (userStoryGrids.length > 0) {
+                storyDen = userStoryGrids[0].originalConfig.totalCount;
+                pointDen = userStoryGrids[0].originalConfig.totalPoints;
+            }
+
             // Sums the point estimates and number of stories
             _.each(userStoryGrids, function (grid) {
                 _.each(grid.originalConfig.data, function (item) {
                     storyNum[item.data.ObjectID] = item.data.LeafStoryPlanEstimateTotal || 0;
                 });
             });
-            pointNum = (100 * (pointDen - _.reduce(storyNum, function (sum, planEstimate) {
-                return sum + planEstimate;
-            }, 0)) >> 0) / 100;
+            var pointNum = (100 * (pointDen - _.reduce(storyNum, function (sum, planEstimate) {
+                    return sum + planEstimate;
+                }, 0)) >> 0) / 100;
             storyNum = storyDen - Object.keys(storyNum).length;
-            storyPer = (storyNum / storyDen * 10000 >> 0) / 100;
-            pointPer = (pointNum / pointDen * 10000 >> 0) / 100;
+            var storyPer = (storyNum / storyDen * 10000 >> 0) / 100;
+            var pointPer = (pointNum / pointDen * 10000 >> 0) / 100;
 
             // Creates the integrity scope label
             // Collective (Release) || Horizontal[/Team] (Release) || ScrumGroup[/Team] (Release) || Team (Release) || ProjectName (Release)
@@ -1412,7 +1452,7 @@
                     //only push the rows (rule categories) which are selected in the "Edit App Settings"
 
                     //if (me.rules[gindex]) {
-                        chartData.push([pindex, gindex, gridCount]);
+                    chartData.push([pindex, gindex, gridCount]);
                     //} else {
                     //    console.log("skipping row index ", gindex);
                     //}
@@ -1432,17 +1472,14 @@
                     rowCount++;
                 }
             }
-            console.log("rowCount: ", rowCount);
             //set height based on number of rows (rule categories)
-            var height = (53 * rowCount) + 60;
+            var height = (55 * rowCount) + 60;
 
             // Create the map config
-            console.log("heatmap config is being created");
-            console.log("chartData: ", chartData);
             return {
                 chart: {
                     type: 'heatmap',
-                    height: 370, //height
+                    height: height,
                     marginTop: 10,
                     marginLeft: 140,
                     marginBottom: 80
@@ -1470,7 +1507,6 @@
                 },
                 yAxis: {
                     categories: _.map(userStoryGrids, function (grid) {
-                        console.log("yAxis categories");
                         return grid.originalConfig.title;
                     }),
                     title: null,
@@ -1478,22 +1514,17 @@
                         formatter: function () {
                             var text = this.value;
                             var index = _.indexOf(this.axis.categories, text);
-                            //console.log("index: ", index, " text: ", text);
-
-                            //console.log("rules[" + index + "]: " + me.rules[index] + " and ruleCategories:", ruleCategories[index]);
-                            //if (me.rules[index]) {
-                                //The checkbox is checked, so show this rule
-                                var gridID = userStoryGrids[index].originalConfig.id;
-                                var styleAttr = 'style="background-color:' + me.chartColors[index] + '"';
-                                console.log("index: ", index, " ----- gridID: " + gridID + " ---- text: ", text, " color: "+ me.chartColors[index]);
-                                return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
-                                    selectIdFunctionName + '(\'' + gridID + '\')">' + text + '</div>';
-                            //} else {
-                                //console.log("The checkbox is not checked, so do not show this rule: ", index);
-                                //skip this rule.
-                                //chartData.rows[index].remove();
-                                //return;
-                            //}
+                            var gridID = userStoryGrids[index].originalConfig.id;
+                            var rowCount = 0;
+                            _.each(me.rules, function (rule) {
+                                if (rule) {
+                                    rowCount++;
+                                }
+                            });
+                            var reverseIndex = rowCount - index - 1;
+                            var styleAttr = 'style="background-color:' + me.chartColors[reverseIndex] + '"';
+                            return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
+                                selectIdFunctionName + '(\'' + gridID + '\')">' + text + '</div>';
                         },
                         useHTML: true
                     }
@@ -1696,8 +1727,6 @@
              To set the grid, check if each rule should be added to the gridConfigs object.
              This can't be in a loop, because each row has it's own unique properties
              */
-            console.log("me.rules: ", me.rules);
-
             if (me.rules[0]) {
                 //The checkbox is checked, so show this rule
                 gridConfigs.push({
@@ -1717,8 +1746,8 @@
                             return item.data.Name;
                     }
                 });
-            }else {
-                console.log("Skipping ", ruleCategories[0]);
+            } else {
+                //console.log("Skipping ", ruleCategories[0]);
             }
 
             if (me.rules[1]) {
@@ -1748,7 +1777,7 @@
                     }
                 });
             } else {
-                console.log("Skipping ", ruleCategories[1]);
+                //console.log("Skipping ", ruleCategories[1]);
             }
 
             if (me.rules[2]) {
@@ -1770,7 +1799,7 @@
                     }
                 });
             } else {
-                console.log("skipping ", ruleCategories[2]);
+                //console.log("skipping ", ruleCategories[2]);
             }
 
             if (me.rules[3]) {
@@ -1796,7 +1825,7 @@
                     }
                 });
             } else {
-                console.log("skipping ", ruleCategories[3]);
+                //console.log("skipping ", ruleCategories[3]);
             }
 
             if (me.rules[4]) {
@@ -1818,7 +1847,7 @@
                     }
                 });
             } else {
-                console.log("skipping ", ruleCategories[4]);
+                //console.log("skipping ", ruleCategories[4]);
             }
 
             if (me.rules[5]) {
@@ -1845,7 +1874,7 @@
                     }
                 });
             } else {
-                console.log("skipping ", ruleCategories[5]);
+                //console.log("skipping ", ruleCategories[5]);
             }
 
             if (me.rules[6]) {
@@ -1874,7 +1903,7 @@
 
                 });
             } else {
-                console.log("skipping ", ruleCategories[6]);
+                //console.log("skipping ", ruleCategories[6]);
             }
 
             return Q.all(_.map(gridConfigs, function (gridConfig) {

@@ -1,4 +1,4 @@
-<!-- Build: taya-dev:e4edee18c02d3acc011b3d6ebf8e452cf1b009be:2017-01-10T19:38:21.561Z --><!DOCTYPE html>
+<!-- Build: taya-dev:96a5ef540c90c7592a697ba77e1e6e31f7838451:2017-01-13T19:25:16.070Z --><!DOCTYPE html>
 <html>
 <head>
     <title>Portfolio Data Integrity Dashboard</title>
@@ -66,6 +66,7 @@
 		userStoryFields: ['Name', 'ObjectID', 'Release', 'Project', 'PortfolioItem', 'PlannedEndDate', 'ActualEndDate',
 			'FormattedID', 'Predecessors', 'Successors', 'c_Dependencies', 'Iteration', 'PlanEstimate'],
 		releaseFields: ['Name', 'ObjectID', 'ReleaseDate', 'ReleaseStartDate', 'Project', 'TeamMembers'],
+        minimalFields: ['ObjectID', 'Name', 'TeamMembers'],
 		
 		/********************************************** APP CONFIGURATION **************************************/
 		_loadScheduleStates: function(){ 
@@ -176,8 +177,13 @@
 				filterByName: ScrumGroupConfigPrefName,
 				success: function(prefs) {
 					var configString = prefs[ScrumGroupConfigPrefName], scrumGroupConfig;
-					try{ scrumGroupConfig = JSON.parse(configString); }
-					catch(e){ scrumGroupConfig = []; }
+					try{
+                        scrumGroupConfig = JSON.parse(configString);
+                    }
+					catch(e){
+                        console.error(e);
+                        scrumGroupConfig = [];
+                    }
 					me.ScrumGroupConfig = scrumGroupConfig;
 					deferred.resolve();
 				},
@@ -950,6 +956,43 @@
 					});					
 				});
 		},
+        loadMinimalLeafProjects: function(rootProjectRecord, fetchFields){
+            //rootProjectRecord and fetchFields parameters are optional
+            var me = this;
+            var leafProjects = {};
+            if(!fetchFields){
+                fetchFields = me.projectFields;
+            }
+            return me.getPorfolioProjectFilterQuery(rootProjectRecord)
+                .then(function(filter){
+                    var store = Ext.create('Rally.data.wsapi.Store', {
+                        model: "Project",
+                        fetch: fetchFields,
+                        filters: filter ? [filter] : [],
+                        compact: true,
+                        limit:Infinity,
+                        disableMetaChangeEvent: true,
+                        context:{
+                            workspace: me.getContext().getWorkspace()._ref,
+                            project:null
+                        }
+                    });
+                    return me.reloadStore(store).then(function(store){
+                        if(rootProjectRecord){
+                            var projTree = me._storeItemsToProjTree(store.getRange());
+                            me._allLeafProjectsToList(projTree[rootProjectRecord.data.ObjectID], leafProjects);
+                            return leafProjects;
+                        } else {
+                            return _.reduce(_.filter(store.getRange(),
+                                    function(project){ return project.data.Children.Count === 0; }),
+                                function(map, project){
+                                    map[project.data.ObjectID] = project;
+                                    return map;
+                                }, {});
+                        }
+                    });
+                });
+        },
 		loadProjectByName: function(projectName){
 			if(!projectName) return Q.reject('Invalid arguments: LPBN');
 			var me=this,
@@ -1980,162 +2023,203 @@
 	});
 }());
 
-                /** 
-	SUMMARY:
-	
-	------------------------------------------------ RALLY APP REQUIREMENTS ---------------------------------------------------------------------
-	app MUST impelement the following functions:
-		
-		- cacheKeyGenerator() -> string										(return the 'key' the cache mixin should store/load/delete the data under)
-		- getCacheTimeoutDate() -> Date										(returns the date the cache should timeout from relative to NOW)
-		- getCachePayloadFn(payload)											(JSON data that was returned from the cache is passed to this function after a cache-hit)
-		- setCachePayLoadFn(payload)											(add fields to the json payload to be stored in the cache)
-		- getCacheUrlSetting()														(add app setting for the cacheUrl)
+                /**
+ SUMMARY:
 
-	the app has the following cache functions added to it:
-	
-		- getCache() -> Promise(cacheHit)                 (cacheHit === true if successfully got cache from server)
-		- updateCache() -> Promise()                      (returns when the cache has been successfully updated)
-		- deleteCache() -> Promise()                      (returns when the cache has been successfully delete)
-	
-	------------------------------------------------ SERVER REQUIREMENTS ---------------------------------------------------------------------
-	This mixin is used to enable caching for large apps that pull lots of data. This requires that you also
-	set up a server to handle the key/value database. The server should support timeouts and it should 
-	gzip the PUTted cache JSON payloads for faster transmission times for the cache hits (35 MB takes a while
-	to send, gzip can take a 35 MB JSON down to 1 MB). Since the server should gzip, it should also set the 
-	Content-Encoding = gzip when it returns cached data. Lastly, you should also have an updater script that
-	runs periodically and updates the cache. This cache mixin and the updater script should agree to the following
-	terms:
-	
-		the script loads the page with the following query parameter:
-			rally/projectId/stuff/data-ingrity-oibjectid?cache-update-script=true
+ ------------------------------------------------ RALLY APP REQUIREMENTS ---------------------------------------------------------------------
+ app MUST impelement the following functions:
 
-		the app adds an invisible div with id="cache-mixin-update-complete" 
+ - cacheKeyGenerator() -> string                                        (return the 'key' the cache mixin should store/load/delete the data under)
+ - getCacheTimeoutDate() -> Date                                        (returns the date the cache should timeout from relative to NOW)
+ - getCachePayloadFn(payload)                                            (JSON data that was returned from the cache is passed to this function after a cache-hit)
+ - setCachePayLoadFn(payload)                                            (add fields to the json payload to be stored in the cache)
+ - getCacheUrlSetting()                                                        (add app setting for the cacheUrl)
 
-		The script (phantomjs probably), should wait for the above <div> to be placed to know it is finished. There 
-		should be a 5 minute timeout for errors on loading as well:
-*/
+ the app has the following cache functions added to it:
 
-(function(){
-	var Ext = window.Ext4 || window.Ext;
+ - getCache() -> Promise(cacheHit)                 (cacheHit === true if successfully got cache from server)
+ - updateCache() -> Promise()                      (returns when the cache has been successfully updated)
+ - deleteCache() -> Promise()                      (returns when the cache has been successfully delete)
 
-	Ext.define('Intel.lib.mixin.Caching', {
-		getCache: function(){
-			var me = this;
-			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me.getCacheUrlSetting();
-			var isUpdateScript = me._isCacheUpdateScript();
-			var url = cacheUrl + key ;
-			var deferred = Q.defer();
-			$('#cache-mixin-update-complete', window.parent.document).remove();//remove and add each time			
-			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript){
-				return Q.resolve(false); //pretend there was cache miss		
-			}
-			$.ajax({
-				url: url,
-				method: 'GET',
-				processData: false,
-				dataType: 'text',
-				success: function(requestData, status, xhr){ 
-					try { 
-						me.lastCacheModified = Rally.util.DateTime.format(new Date(xhr.getResponseHeader('Last-Modified')), 'D M d Y h:i:s a') + " (Pacific Daylight Time)";
-						payload = JSON.parse(requestData);
-						me._getCacheIntelRallyAppSettings(payload);
-						Q(me.getCachePayloadFn(payload)).then(function(){ 
-							deferred.resolve(true); 
-						});
-					}             
-					catch(e){ 
-						console.log('corrupt cache payload'); 
-						deferred.resolve(false);
-					}
-				},
-				error: function(reason){ 
-					console.log('cache GET error', reason); 
-					deferred.resolve(false); 
-				}
-			});
-			
-			return deferred.promise;
-		},
-		updateCache: function(){
-			var me = this;
-			var payload = {};
-			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me.getCacheUrlSetting();
-			var timeoutDate = me.getCacheTimeoutDate();
-			var isUpdateScript = me._isCacheUpdateScript();
-			var url = cacheUrl + key;
-			var deferred = Q.defer();
-			
-			if (typeof key === 'undefined' || _.isEmpty(cacheUrl) ){
-				return Q.reject('cannot PUT to cache, invalid key');	
-			}
-			
-			if(timeoutDate){
-				url += '?timeout=' + timeoutDate.toISOString();
-			}
-            
-			me._setIntelRallyAppSettings(payload);
-			me.setCachePayLoadFn(payload);		
-			$.ajax({
-				url: url,
-				method: 'PUT',
-				headers: {'Content-Type': 'text/plain'},
-				data: JSON.stringify(payload),
-				processData: false,
-				success: function(){
-					if(isUpdateScript){
-						$(window.parent.document.body).append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
-					}
-					deferred.resolve(); 
-				},
-				error: function(reason){ deferred.reject(reason); }
-			});
+ ------------------------------------------------ SERVER REQUIREMENTS ---------------------------------------------------------------------
+ This mixin is used to enable caching for large apps that pull lots of data. This requires that you also
+ set up a server to handle the key/value database. The server should support timeouts and it should
+ gzip the PUTted cache JSON payloads for faster transmission times for the cache hits (35 MB takes a while
+ to send, gzip can take a 35 MB JSON down to 1 MB). Since the server should gzip, it should also set the
+ Content-Encoding = gzip when it returns cached data. Lastly, you should also have an updater script that
+ runs periodically and updates the cache. This cache mixin and the updater script should agree to the following
+ terms:
 
-			return deferred.promise;
-		},
-		deleteCache: function(keyGenerator){
-			var me = this;
-			var key = me.cacheKeyGenerator(); //generate key for the app
-			var cacheUrl = me.getCacheUrlSetting();
-			var deferred = Q.defer();
-			var url = cacheUrl + key;
-			
-			if (typeof key === 'undefined' || _.isEmpty(cacheUrl)){
-				return Q.reject('cannot DELETE from cache, invalid key');	
-			}			
-			
-			$.ajax({
-				url: url,
-				type: 'DELETE',
-				success: function(data) { deferred.resolve(data); },
-				error: function(xhr, status, reason){ deferred.reject(reason); }
-			});
-			
-			return deferred.promise;
-		},
-		_isCacheUpdateScript: function(){
-			return decodeURI(window.parent.location.href).indexOf('cache-update-script=true') > -1;
-		},
-		_getCacheIntelRallyAppSettings: function(payload){
-			var me = this;
-			//intel-rally-app sets these (copy these for each app that uses the cache!)
-			me.BaseUrl = Rally.environment.getServer().getBaseUrl();
-			me.PortfolioItemTypes = payload.PortfolioItemTypes;
-			me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
-			me.ScrumGroupConfig = payload.ScrumGroupConfig;
-			me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
-			me.ScheduleStates = payload.ScheduleStates;
-		},
-		_setIntelRallyAppSettings: function(payload){
-			var me = this;
-			payload.PortfolioItemTypes = me.PortfolioItemTypes;
-			payload.ScrumGroupConfig = me.ScrumGroupConfig;
-			payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
-			payload.ScheduleStates = me.ScheduleStates;
-		}
-	});
+ the script loads the page with the following query parameter:
+ rally/projectId/stuff/data-ingrity-oibjectid?cache-update-script=true
+
+ the app adds an invisible div with id="cache-mixin-update-complete"
+
+ The script (phantomjs probably), should wait for the above <div> to be placed to know it is finished. There
+ should be a 5 minute timeout for errors on loading as well:
+ */
+
+(function () {
+    var Ext = window.Ext4 || window.Ext;
+
+    Ext.define('Intel.lib.mixin.Caching', {
+        getCache: function () {
+            var me = this;
+            var key = me.cacheKeyGenerator(); //generate key for the app
+            var cacheUrl = me.getCacheUrlSetting();
+            var isUpdateScript = me._isCacheUpdateScript();
+            var url = cacheUrl + key;
+            var deferred = Q.defer();
+            $('#cache-mixin-update-complete', window.parent.document).remove();//remove and add each time
+            if (typeof key === 'undefined' || _.isEmpty(cacheUrl) || isUpdateScript) {
+                return Q.resolve(false); //pretend there was cache miss
+            }
+            $.ajax({
+                url: url,
+                method: 'GET',
+                processData: false,
+                dataType: 'text',
+                success: function (requestData, status, xhr) {
+                    try {
+                        me.lastCacheModified = Rally.util.DateTime.format(new Date(xhr.getResponseHeader('Last-Modified')), 'D M d Y h:i:s a') + " (Pacific Daylight Time)";
+                        payload = JSON.parse(requestData);
+                        me._getCacheIntelRallyAppSettings(payload);
+                        Q(me.getCachePayloadFn(payload)).then(function () {
+                            deferred.resolve(true);
+                        });
+                    }
+                    catch (e) {
+                        console.log('corrupt cache payload');
+                        deferred.resolve(false);
+                    }
+                },
+                error: function (reason) {
+                    console.log('Cache GET error: cache data could not be retrieved. This could mean either it failed to get the cache, or maybe the cache file does not exist.', reason);
+                    deferred.resolve(false);
+                }
+            });
+
+            return deferred.promise;
+        },
+        updateCache: function () {
+            var me = this;
+            var payload = {};
+            var key = me.cacheKeyGenerator(); //generate key for the app
+            var cacheUrl = me.getCacheUrlSetting();
+            console.log("cacheUrl: ", cacheUrl);
+            var timeoutDate = me.getCacheTimeoutDate();
+            var isUpdateScript = me._isCacheUpdateScript();
+            var url = cacheUrl + key;
+            var deferred = Q.defer();
+
+            if (typeof key === 'undefined' || _.isEmpty(cacheUrl)) {
+                return Q.reject('Cannot PUT to cache, invalid key or invalid cacheUrl');
+            }
+
+            if (timeoutDate) {
+                url += '?timeout=' + timeoutDate.toISOString();
+            }
+
+            me._setIntelRallyAppSettings(payload);
+            me.setCachePayLoadFn(payload);
+            console.log("cache payload: ", payload);
+
+            //var jsonData = payload;
+
+            //// payload.ScrumGroupConfig from MTS app results in:
+            //// "TypeError: Converting circular structure to JSON". to avoid this error:
+            //if(appName == "MTS"){
+            //    var hold = [];
+            //    jsonData.ScrumGroupConfig = JSON.stringify(payload.ScrumGroupConfig, function(key, value) {
+            //        if (typeof value === 'object' && value !== null) {
+            //            if (hold.indexOf(value) !== -1) {
+            //                console.log("Circular reference found");
+            //                // Circular reference found, discard key
+            //                return;
+            //            }
+            //            // Store value in our collection
+            //            hold.push(value);
+            //        }
+            //        return value;
+            //    });
+            //    hold = null; // Enable garbage collection
+            //}
+
+            var jsonData = JSON.stringify(payload);
+            console.log("parsing payload");
+
+            $.ajax({
+                url: url,
+                method: 'PUT',
+                headers: {'Content-Type': 'text/plain'},
+                data: jsonData,
+                processData: false,
+                success: function () {
+                    console.log("cache update success");
+                    if (isUpdateScript) {
+                        $(window.parent.document.body).append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
+                    }
+                    deferred.resolve();
+                },
+                error: function (reason) {
+                    console.log("cache update error");
+                    deferred.reject(reason);
+                }
+            });
+
+            console.log("after ajax");
+
+            return deferred.promise;
+        },
+        deleteCache: function (keyGenerator) {
+            var me = this;
+            var key = me.cacheKeyGenerator(); //generate key for the app
+            var cacheUrl = me.getCacheUrlSetting();
+            var deferred = Q.defer();
+            var url = cacheUrl + key;
+
+            if (typeof key === 'undefined' || _.isEmpty(cacheUrl)) {
+                return Q.reject('cannot DELETE from cache, invalid key');
+            }
+
+            $.ajax({
+                url: url,
+                type: 'DELETE',
+                success: function (data) {
+                    deferred.resolve(data);
+                },
+                error: function (xhr, status, reason) {
+                    deferred.reject(reason);
+                }
+            });
+
+            return deferred.promise;
+        },
+        _isCacheUpdateScript: function () {
+            return decodeURI(window.parent.location.href).indexOf('cache-update-script=true') > -1;
+        },
+        _getCacheIntelRallyAppSettings: function (payload) {
+            var me = this;
+            //intel-rally-app sets these (copy these for each app that uses the cache!)
+            me.BaseUrl = Rally.environment.getServer().getBaseUrl();
+            me.PortfolioItemTypes = payload.PortfolioItemTypes || [];
+            if(me.PortfolioItemTypes.length) {
+                me.userStoryFields.push(me.PortfolioItemTypes[0]);  //userStoryFields supposed to be lowercase, dont worry
+            } else {
+                me.userStoryFields = [];
+            }
+            me.ScrumGroupConfig = payload.ScrumGroupConfig;
+            me.HorizontalGroupingConfig = payload.HorizontalGroupingConfig;
+            me.ScheduleStates = payload.ScheduleStates;
+        },
+        _setIntelRallyAppSettings: function (payload) {
+            var me = this;
+            payload.PortfolioItemTypes = me.PortfolioItemTypes;
+            payload.ScrumGroupConfig = me.ScrumGroupConfig;
+            payload.HorizontalGroupingConfig = me.HorizontalGroupingConfig;
+            payload.ScheduleStates = me.ScheduleStates;
+        }
+    });
 }());		
                 /**
  This is the hyper-optimized version of the Data Integrity Dashboard. It is capable of viewing
@@ -2147,25 +2231,44 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
-    /*
-     Change isLocalDev variable to true if you are running locally (http-server localhost)
-     IMPORTANT: Make sure to set it to false before checking in to prod/rally/dev-rallyapps
-     */
-    var isLocalDev = true;
+    /*------------------------------------IMPORTANT--------------------------------------
+     "isLocalDev" variable:
+     - IMPORTANT: Change to true if you are running locally (http-server, localhost)
+     - IMPORTANT: Make sure to set it to false before checking the code or publishing to rally
+     ----------------------------------------------------------------------------------*/
+    var isLocalDev = false;
 
-    /*
-     This is the hard-coded list of rule checks for the DI dashboard.
-     Each train can have their own list of which of these rules are the default rule checks selected, which can be set under "Edit App Settings" menu.
-     */
+    //You can only get the Rally environment in Rally, not in local dev.
+    if (Rally.environment) {
+        var context = Rally.environment.getContext();
+        var SETTINGS_TOKEN = context.getProject().ObjectID.toString();
+    } else {
+        console.log("Rally.environment is undefined. Setting Settings token to 59951441366.");
+        var SETTINGS_TOKEN = "59951441366";
+    }
+
+    /*----------------------------------------------------------------------------------
+     Rule categories are defined here, and used throughout this file.
+     To add or remove a rule, you need to edit it here, and in the gridConfigs array.
+     This also defines a color for each rule.
+     ----------------------------------------------------------------------------------*/
     var ruleCategories = [
-        "Features with No Stories",
-        "Features with No Start or End Date",
-        "Features with No Parent",
-        "Unaccepted Features Past End Date",
-        "Unaccepted Epics Past End Date",
+        "Epics with No Parent",
         "Epics with No Start or End date",
-        "Epics with No Parent"
+        "Unaccepted Epics Past End Date",
+        "Unaccepted Features Past End Date",
+        "Features with No Parent",
+        "Features with No Start or End Date",
+        "Features with No Stories"
     ];
+
+    /*----------------------------------------------------------------------------------
+     Changes each rule category to lower case and replaces spaces with dashes.
+     ----------------------------------------------------------------------------------*/
+    var ruleCategorySelectors = [];
+    _.each(ruleCategories, function (ruleString) {
+        ruleCategorySelectors.push(ruleString.replace(/\s+/g, '-').toLowerCase());
+    });
 
     /************************** Data Integrity Dashboard *****************************/
     Ext.define('Intel.PortfolioDataIntegrityDashboard', {
@@ -2181,8 +2284,82 @@
             'Intel.lib.mixin.HorizontalTeamTypes',
             'Intel.lib.mixin.Caching'
         ],
+        /**************************************** Settings ***************************************/
+        settingsScope: 'workspace',
+        getSettingsFields: function () {
+            return [
+                {
+                    name: 'Horizontal',
+                    xtype: 'rallycheckboxfield'
+                }, {
+                    name: 'cacheUrl',
+                    xtype: 'rallytextfield'
+                },
+                {
+                    name: ruleCategories[0] + SETTINGS_TOKEN,
+                    label: ruleCategories[0],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory0'
+                }, {
+                    name: ruleCategories[1] + SETTINGS_TOKEN,
+                    label: ruleCategories[1],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory1'
+                }, {
+                    name: ruleCategories[2] + SETTINGS_TOKEN,
+                    label: ruleCategories[2],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory2'
+                }, {
+                    name: ruleCategories[3] + SETTINGS_TOKEN,
+                    label: ruleCategories[3],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory3'
+                }, {
+                    name: ruleCategories[4] + SETTINGS_TOKEN,
+                    label: ruleCategories[4],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory4'
+                }, {
+                    name: ruleCategories[5] + SETTINGS_TOKEN,
+                    label: ruleCategories[5],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory5'
+                }, {
+                    name: ruleCategories[6] + SETTINGS_TOKEN,
+                    label: ruleCategories[6],
+                    xtype: 'rallycheckboxfield',
+                    labelWidth: 120,
+                    width: '100%',
+                    id: 'ruleCategory6'
+                }
+            ];
+        },
+        config: {
+            defaultSettings: {
+                ruleCategory0: true,
+                ruleCategory1: true,
+                ruleCategory2: true,
+                ruleCategory3: true,
+                ruleCategory4: true,
+                ruleCategory5: true,
+                ruleCategory6: true,
+                cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+            }
+        },
         minWidth: 1100,
-
         /**
          This layout consists of:
          Top horizontal bar for controls
@@ -2256,64 +2433,16 @@
             '#39CCCC', //TEAL
             '#01FF70', //LIME
             '#FFDC00', //YELLOW
+            '#0074D9', //BLUE
+            '#AAAAAA', //GRAY
+            '#2ECC40', //GREEN
+            '#7FDBFF', //AQUA
+            '#DDDDDD', //SILVER
+            '#39CCCC', //TEAL
+            '#01FF70', //LIME
+            '#FFDC00', //YELLOW
             '#0074D9' //BLUE
         ],
-
-        /**************************************** Settings ***************************************/
-        settingsScope: 'workspace',
-        getSettingsFields: function () {
-            return [
-                {
-                    name: 'Horizontal',
-                    xtype: 'rallycheckboxfield'
-                }, {
-                    name: 'cacheUrl',
-                    xtype: 'rallytextfield'
-                },
-                {
-                    name: ruleCategories[0],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule1'
-                }, {
-                    name: ruleCategories[1],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule2'
-                }, {
-                    name: ruleCategories[2],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule3'
-                }, {
-                    name: ruleCategories[3],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule4'
-                }, {
-                    name: ruleCategories[4],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule5'
-                }, {
-                    name: ruleCategories[5],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule6'
-                }, {
-                    name: ruleCategories[6],
-                    xtype: 'rallycheckboxfield',
-                    id: 'rule7'
-                }
-            ];
-        },
-        config: {
-            defaultSettings: {
-                rule1: true,
-                rule2: true,
-                rule3: true,
-                rule4: true,
-                rule5: true,
-                rule6: true,
-                rule7: true,
-                cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
-            }
-        },
-
         /******************************************************* Caching Mixin operations ********************************************************/
         /**
          NOTE: this requires that me.PortfolioItemTypes is already populated. This is done in
@@ -2457,7 +2586,6 @@
             return 'DI-' + (me.isHorizontalView ? horizontalName : projectOID) + '-' + (me.isHorizontalView ? releaseName : releaseOID);
         },
         getCacheTimeoutDate: function () {
-            /******************************************************* LAUNCH ********************************************************/
             return new Date(new Date() * 1 + 1000 * 60 * 60);
         },
 
@@ -2468,7 +2596,6 @@
         },
         loadDataFromCacheOrRally: function () {
             var me = this;
-
             if (me.isHorizontalView) me.applyProjectFilters();
             else me.applyScopingOverrides();
             return me.loadRemainingConfiguration()
@@ -2490,27 +2617,35 @@
                     }
                 });
         },
+        /******************************************************* LAUNCH ********************************************************/
         launch: function () {
             var me = this;
-
             me.rules = [];
 
-            //For production/rally official
+            /*----------------------------------------------------------------------------------
+             For production/rally official only. Not for local dev/localhost.
+             ----------------------------------------------------------------------------------*/
             if (!isLocalDev) {
                 me.isHorizontalView = me.getSetting('Horizontal');
-                console.log("Rally: ruleCategories: ", ruleCategories);
+                //For each of the rule categories, get the setting checkbox value
                 _.each(ruleCategories, function (item, index) {
-                    //for each of the rule categories, get the checkbox value
-                    me.rules[index] = me.getSetting(ruleCategories[index]);
-                    console.log("Rally: me.rules[" + index + "]: " + me.rules[index]);
+                    var ruleSetting = (ruleCategories[index] + SETTINGS_TOKEN);
+                    //me.rules[index] = me.getSetting(ruleCategories[index]);
+                    me.rules[index] = me.getSetting(ruleSetting);
+                    //console.log(">> ", index, ": ruleSetting: ", ruleSetting);
+                    //console.log(">> ",index, ": me.getSetting(ruleSetting): ", me.getSetting(ruleSetting));
+                    //console.log(">> me.rules[" + index + "]: " + me.rules[index]);
                 });
             } else {
-                //For local development/http-server localhost
+                /*----------------------------------------------------------------------------------
+                 For local development/http-server localhost. Not for Rally/production
+                 ----------------------------------------------------------------------------------*/
                 me.isHorizontalView = false;
                 //for each of the rule categories, set the checkbox value to true
                 _.each(ruleCategories, function (item, index) {
                     me.rules[index] = true;
                 });
+                //Optional: if you want to change one of the rules to false, for local dev, do it here.
             }
 
             // me.initDisableResizeHandle();
@@ -3268,29 +3403,32 @@
          Creates and adds the overall indicator of integrity to the app
          */
         buildIntegrityIndicator: function () {
-            var me = this,
-                userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
-                    return grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic';
-                }).reverse(),
+            var me = this;
+            var userStoryGrids = _.filter(Ext.getCmp('gridsContainer').query('rallygrid'), function (grid) {
+                return grid.originalConfig.model == 'UserStory' || grid.originalConfig.model == 'PortfolioItem/Epic';
+            }).reverse();
 
-                storyNum = {},
-                storyDen = userStoryGrids[0].originalConfig.totalCount,
-                pointNum,
-                pointDen = userStoryGrids[0].originalConfig.totalPoints,
-                storyPer,
-                pointPer;
+            var storyNum = {};
+            var storyDen = 0;
+            var pointDen = 0;
+
+            if (userStoryGrids.length > 0) {
+                storyDen = userStoryGrids[0].originalConfig.totalCount;
+                pointDen = userStoryGrids[0].originalConfig.totalPoints;
+            }
+
             // Sums the point estimates and number of stories
             _.each(userStoryGrids, function (grid) {
                 _.each(grid.originalConfig.data, function (item) {
                     storyNum[item.data.ObjectID] = item.data.LeafStoryPlanEstimateTotal || 0;
                 });
             });
-            pointNum = (100 * (pointDen - _.reduce(storyNum, function (sum, planEstimate) {
-                return sum + planEstimate;
-            }, 0)) >> 0) / 100;
+            var pointNum = (100 * (pointDen - _.reduce(storyNum, function (sum, planEstimate) {
+                    return sum + planEstimate;
+                }, 0)) >> 0) / 100;
             storyNum = storyDen - Object.keys(storyNum).length;
-            storyPer = (storyNum / storyDen * 10000 >> 0) / 100;
-            pointPer = (pointNum / pointDen * 10000 >> 0) / 100;
+            var storyPer = (storyNum / storyDen * 10000 >> 0) / 100;
+            var pointPer = (pointNum / pointDen * 10000 >> 0) / 100;
 
             // Creates the integrity scope label
             // Collective (Release) || Horizontal[/Team] (Release) || ScrumGroup[/Team] (Release) || Team (Release) || ProjectName (Release)
@@ -3511,7 +3649,6 @@
             chartData = [],
                 tempProjects = [];
             selectIdFunctionName = '_selectId' + (Math.random() * 10000 >> 0);
-
             //Filter the projects to make a list of the project with feature or Epic count. Remove the projects with zero count
             _.each(userStoryGrids, function (grid, gindex) {
                 _.each(_.sortBy(me.FilteredAllProjectsAndEpicProjects, function (p) {
@@ -3536,9 +3673,12 @@
                     var gridCount = me.getProjectStoriesForGrid(project, grid).length;
                     highestNum = Math.max(gridCount, highestNum);
                     //only push the rows (rule categories) which are selected in the "Edit App Settings"
-                    if (me.rules[gindex]) {
-                        chartData.push([pindex, gindex, gridCount]);
-                    }
+
+                    //if (me.rules[gindex]) {
+                    chartData.push([pindex, gindex, gridCount]);
+                    //} else {
+                    //    console.log("skipping row index ", gindex);
+                    //}
                 });
             });
 
@@ -3556,7 +3696,7 @@
                 }
             }
             //set height based on number of rows (rule categories)
-            var height = (53 * rowCount) + 60;
+            var height = (55 * rowCount) + 60;
 
             // Create the map config
             return {
@@ -3597,20 +3737,17 @@
                         formatter: function () {
                             var text = this.value;
                             var index = _.indexOf(this.axis.categories, text);
-
-                            //console.log("rules[" + index + "]: " + me.rules[index] + " and ruleCategories:", ruleCategories[index]);
-                            if (me.rules[index]) {
-                                //The checkbox is checked, so show this rule
-                                var gridID = userStoryGrids[index].originalConfig.id;
-                                var styleAttr = 'style="background-color:' + me.chartColors[userStoryGrids.length - index - 1] + '"';
-                                console.log("index: ", index, " ----- gridID: " + gridID + " ---- text: ", text);
-                                return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
-                                    selectIdFunctionName + '(\'' + gridID + '\')">' + text + '</div>';
-                            } else {
-                                //The checkbox is not checked, so do not show this rule
-                                //skip this rule.
-                                return;
-                            }
+                            var gridID = userStoryGrids[index].originalConfig.id;
+                            var rowCount = 0;
+                            _.each(me.rules, function (rule) {
+                                if (rule) {
+                                    rowCount++;
+                                }
+                            });
+                            var reverseIndex = rowCount - index - 1;
+                            var styleAttr = 'style="background-color:' + me.chartColors[reverseIndex] + '"';
+                            return '<div class="heatmap-ylabel"' + styleAttr + ' onclick="' +
+                                selectIdFunctionName + '(\'' + gridID + '\')">' + text + '</div>';
                         },
                         useHTML: true
                     }
@@ -3807,12 +3944,19 @@
                         text: 'Parent',
                         dataIndex: 'Parent',
                         editor: false
-                    }]),
-                gridConfigs = [{
+                    }]);
+            var gridConfigs = [];
+            /*
+             To set the grid, check if each rule should be added to the gridConfigs object.
+             This can't be in a loop, because each row has it's own unique properties
+             */
+            if (me.rules[0]) {
+                //The checkbox is checked, so show this rule
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Epics with No Parent',
-                    id: 'grid-epics-with-no-parent',
+                    title: ruleCategories[0],
+                    id: ruleCategorySelectors[0],
                     model: 'UserStory', //+ midPortfolioItemType,
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Parent',
@@ -3824,11 +3968,18 @@
                         if (!item.data.Parent)
                             return item.data.Name;
                     }
-                }, {
+                });
+            } else {
+                //console.log("Skipping ", ruleCategories[0]);
+            }
+
+            if (me.rules[1]) {
+                //The checkbox is checked, so show this rule
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Epics with No Start or End date',
-                    id: 'grid-epics-with-no-start-or-end-date',
+                    title: ruleCategories[1],
+                    id: ruleCategorySelectors[1],
                     model: 'UserStory',
                     columns: defaultUserStoryColumns.concat([{
                         text: 'Planned Start Date',
@@ -3847,11 +3998,17 @@
                         if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
                         return item.data.Name;
                     }
-                }, {
+                });
+            } else {
+                //console.log("Skipping ", ruleCategories[1]);
+            }
+
+            if (me.rules[2]) {
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Unaccepted Epics Past End Date',
-                    id: 'grid-unaccepted-epics-past-end_date',
+                    title: ruleCategories[2],
+                    id: ruleCategorySelectors[2],
                     model: 'UserStory',
                     columns: defaultUserStoryColumns.concat([
                         {
@@ -3863,11 +4020,17 @@
                     filterFn: function (item) {
                         return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
                     }
-                }, {
+                });
+            } else {
+                //console.log("skipping ", ruleCategories[2]);
+            }
+
+            if (me.rules[3]) {
+                gridConfigs.push({
                     showIfLeafProject: true,
                     showIfHorizontalMode: true,
-                    title: 'Unaccepted Features Past End Date',
-                    id: 'grid-unaccepted-features-past-end_date',
+                    title: ruleCategories[3],
+                    id: ruleCategorySelectors[3],
                     model: 'PortfolioItem/' + lowestPortfolioItemType,
                     columns: defaultLowestPortfolioItemColumns.concat([
                         {
@@ -3883,69 +4046,88 @@
                     filterFn: function (item) {
                         return new Date(item.data.PlannedEndDate) < now && item.data.ScheduleState != 'Accepted';
                     }
-                },
-                    {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Parent',
-                        id: 'grid-features-with-no-parent',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            if (!item.data.Parent)
-                                return item.data.Name;
-                        }
-                    }, {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Start or End Date',
-                        id: 'grid-features-with-no-start-or-end-date',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat([
-                            {
-                                text: 'ScheduleState',
-                                dataIndex: 'ScheduleState',
-                                tdCls: 'editor-cell'
-                            }]).concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
-                            return item.data.Name;
-                        }
-                    }, {
-                        showIfLeafProject: false,
-                        showIfHorizontalMode: false,
-                        title: 'Features with No Stories',
-                        id: 'grid-features-with-no-stories',
-                        model: 'PortfolioItem/' + lowestPortfolioItemType,
-                        columns: defaultLowestPortfolioItemColumns.concat([
-                            {
-                                text: 'ScheduleState',
-                                dataIndex: 'ScheduleState',
-                                tdCls: 'editor-cell'
-                            }]).concat(!me.CurrentScrum ? [{
-                            text: 'Portfolio',
-                            dataIndex: 'Project',
-                            editor: false
-                        }] : []),
-                        side: 'Right',
-                        filterFn: function (item) {
-                            item = item.data || item;//having issue due to caching so hacking it
-                            if (!item.Release || item.Release.Name != releaseName) return false;
-                            return !me.PortfolioUserStoryCount[item.ObjectID];
-                        }
+                });
+            } else {
+                //console.log("skipping ", ruleCategories[3]);
+            }
 
+            if (me.rules[4]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[4],
+                    id: ruleCategorySelectors[4],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        if (!item.data.Parent)
+                            return item.data.Name;
                     }
-                ];
+                });
+            } else {
+                //console.log("skipping ", ruleCategories[4]);
+            }
+
+            if (me.rules[5]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[5],
+                    id: ruleCategorySelectors[5],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat([
+                        {
+                            text: 'ScheduleState',
+                            dataIndex: 'ScheduleState',
+                            tdCls: 'editor-cell'
+                        }]).concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        if (item.data.PlannedStartDate && item.data.PlannedEndDate) return false;
+                        return item.data.Name;
+                    }
+                });
+            } else {
+                //console.log("skipping ", ruleCategories[5]);
+            }
+
+            if (me.rules[6]) {
+                gridConfigs.push({
+                    showIfLeafProject: false,
+                    showIfHorizontalMode: false,
+                    title: ruleCategories[6],
+                    id: ruleCategorySelectors[6],
+                    model: 'PortfolioItem/' + lowestPortfolioItemType,
+                    columns: defaultLowestPortfolioItemColumns.concat([
+                        {
+                            text: 'ScheduleState',
+                            dataIndex: 'ScheduleState',
+                            tdCls: 'editor-cell'
+                        }]).concat(!me.CurrentScrum ? [{
+                        text: 'Portfolio',
+                        dataIndex: 'Project',
+                        editor: false
+                    }] : []),
+                    side: 'Right',
+                    filterFn: function (item) {
+                        item = item.data || item;//having issue due to caching so hacking it
+                        if (!item.Release || item.Release.Name != releaseName) return false;
+                        return !me.PortfolioUserStoryCount[item.ObjectID];
+                    }
+
+                });
+            } else {
+                //console.log("skipping ", ruleCategories[6]);
+            }
 
             return Q.all(_.map(gridConfigs, function (gridConfig) {
                 if (!gridConfig.showIfLeafProject && (me.isScopedToScrum || me.ScopedTeamType)) return Q();
@@ -3988,7 +4170,9 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+
+        ,
         releasePickerSelected: function (combo, records) {
             var me = this;
             me.clearTooltip();
@@ -4007,7 +4191,8 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+        ,
         teamPickerSelected: function (combo, records) {
             var me = this;
             me.clearTooltip();
@@ -4025,7 +4210,8 @@
                     me.setLoading(false);
                 })
                 .done();
-        },
+        }
+        ,
 
         /**
          Displays a tool tip when a point on the heat map is clicked
@@ -4165,7 +4351,8 @@
                     }
                 }
             });
-        },
+        }
+        ,
 
         /**************************************** Tooltip Functions *******************************/
         clearTooltip: function () {
@@ -4177,7 +4364,8 @@
                 me.tooltip.triangle.destroy();
                 me.tooltip = null;
             }
-        },
+        }
+        ,
         initRemoveTooltipOnScroll: function () {
             var me = this;
             setTimeout(function addScrollListener() {
@@ -4186,7 +4374,8 @@
                 });
                 else setTimeout(addScrollListener, 10);
             }, 0);
-        },
+        }
+        ,
 
         /**************************************** Utility Functions *******************************/
         /**
@@ -4207,11 +4396,13 @@
                 me.Overrides.ReleaseName = me.Overrides.decodedUrl.match('release=.*');
                 me.Overrides.ReleaseName = (me.Overrides.ReleaseName ? me.Overrides.ReleaseName[0].slice(8).split('&')[0] : undefined);
             }
-        },
+        }
+        ,
 
         createDummyProjectRecord: function (dataObject) {
             return {data: dataObject};
-        },
+        }
+        ,
 
         /**
          Fixes the stories so that the sync request pulls the correct data.
@@ -4226,7 +4417,8 @@
                     if (!stories[i].raw[me.UserStoryFetchFields[j]]) stories[i].raw[me.UserStoryFetchFields[j]] = 0;
                 }
             }
-        },
+        }
+        ,
 
         /**
          Fixes the schedule state editor for grid editing so that bulk editing does
