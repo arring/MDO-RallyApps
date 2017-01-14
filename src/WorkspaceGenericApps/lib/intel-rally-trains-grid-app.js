@@ -54,7 +54,52 @@
         items: [{
             xtype: 'container',
             itemId: 'navbox',
-            cls: "navbox-style"
+            layout: {
+                type: 'hbox',
+                align: 'stretch',
+                pack: 'start'
+            },
+            items: [{
+                xtype: 'container',
+                flex: 1,
+                itemId: 'navboxLeft',
+                cls: "navboxLeft",
+                style: {
+                    margin: '5px'
+                },
+                layout: 'hbox',
+                items: [{
+                    xtype: 'container',
+                    flex: 1,
+                    itemId: 'navboxLeftVert',
+                    layout: 'vbox'
+                }]
+            }, {
+                xtype: 'container',
+                flex: 2,
+                cls: 'cacheContainer',
+                items: [{
+                    xtype: 'container',
+                    id: 'cacheMessageContainer'
+                }, {
+                    xtype: 'container',
+                    id: 'cacheButtonsContainer'
+                }]
+            }, {
+                xtype: 'container',
+                flex: 2,
+                itemId: 'navboxRight',
+                cls: "navboxRight",
+                layout: 'hbox',
+                items: [{
+                    xtype: 'container',
+                    itemId: 'navboxRightVert',
+                    layout: {
+                        type: 'vbox',
+                        pack: 'end'
+                    }
+                }]
+            }]
         }, {
             xtype: 'container',
             itemId: 'gridContainer',
@@ -141,28 +186,26 @@
             me.setLoading('Loading Data...');
             return me.loadReportData()
                 .then(function () {
-                    me.setLoading('Creating Grid Data Hash...');
-                    me._createGridDataHash();
-                    if (!me.ReleasePicker) { //only draw the first time
+                    if (!me.ReleasePicker) {
                         me.renderReleasePicker();
                     }
-                    me.down('#gridContainer').removeAll();
-                    console.log("calling render grid from reload everything");
-                    me.renderGrid();
+                    //We don't have cache, so go ahead and load the data & perform data massaging/formatting.
+                    if (!me.cacheHit) {
+                        me.setLoading('Creating Grid Data Hash...');
+                        me._createGridDataHash();
+                        /*
+                         For MTS App Dev:
+                         The _createGridDataHash function is called first in intel-rally-trains-grid-app.js
+                         Next, it calls _createGridDataHash function from MTS\app.js
+                         In that function, the cache is updated.
+                         */
+                    }
                 })
                 .then(function () {
-                    me.finalActions();
+                    me.down('#gridContainer').removeAll();
+                    me.finalRenderGrid();
                     me.setLoading(false);
                 });
-        },
-        reloadGrid: function () {
-            console.log("Reload Grid...");
-            var me = this;
-            me.setLoading('Loading Grid...');
-            me.down('#gridContainer').removeAll();
-            console.log("calling render grid from reload grid");
-            me.renderGrid();
-            me.setLoading(false);
         },
         _createGridDataHash: function () {
             var me = this;
@@ -209,22 +252,22 @@
                             //For each scrum that is in this train
                             var keys = Object.keys(leafProjects);
                             //Store only the necessary data object. Rremove all the other junk that cannot be cached.
-                            cfg.Scrums = _.mapValues(leafProjects, function(lp){
+                            cfg.Scrums = _.mapValues(leafProjects, function (lp) {
                                 return {data: lp.data};
                             });
                             /*
-                                Object format:
+                             Object format:
 
-                                Scrums -->
-                                    25907808672:-->
-                                        data-->
-                                            Name: ""
-                                            ...
-                                    25907808673:-->
-                                        data-->
-                                            Name: ""
-                                            ...
-                            */
+                             Scrums -->
+                             25907808672:-->
+                             data-->
+                             Name: ""
+                             ...
+                             25907808673:-->
+                             data-->
+                             Name: ""
+                             ...
+                             */
 
                         });
                 })
@@ -258,20 +301,16 @@
                 return;
             }
             console.log("Configuring Rally App...");
-
             me.configureIntelRallyApp()
                 .then(function () {
                     me.setLoading('Loading Trains and Scrums...');
-                    console.log("Loading Trains and Scrums...");
                     return me._loadTrainsAndScrums(me);
                 })
                 .then(function () {
                     me.setLoading('Loading Current Release...');
-                    console.log("Loading Current Release...");
                     return me._loadCurrentRelease(me);
                 })
                 .then(function () {
-                    console.log("loading data...");
                     return me.reloadEverything();
                 })
                 .fail(function (reason) {
@@ -286,6 +325,7 @@
         /**___________________________________ NAVIGATION AND STATE ___________________________________*/
         releasePickerSelected: function (combo, records) {
             var me = this, pid = me.ProjectRecord.ScrumGroupRootProjectOID;
+            Ext.getCmp('cacheMessageContainer').removeAll();
             if (me.ReleaseRecord.data.Name === records[0].data.Name) return;
             me.setLoading("Saving Preference");
             me.ReleaseRecord = _.find(me.ReleaseRecords, function (rr) {
@@ -308,7 +348,7 @@
         },
         renderReleasePicker: function () {
             var me = this;
-            me.ReleasePicker = me.down('#navbox').add({
+            me.ReleasePicker = me.down('#navboxLeft').add({
                 xtype: 'intelreleasepicker',
                 id: 'releasePicker',
                 labelWidth: 70,
@@ -443,7 +483,6 @@
                             var itemResult = _.map(scrumDataList, function (scrumDataItem) {
                                 return me.scrumDataCellRenderer(scrumDataItem, flag);
                             });
-                            //console.log("itemResult.length = ", itemResult.length);
                             return Ext.create('Ext.container.Container', {
                                 layout: {type: 'vbox'},
                                 width: '100%',
@@ -483,21 +522,10 @@
             me.setLoading(false);
             console.log("Building Data Grid...");
             me.setLoading('Building Data Grid...');
-
-            console.log("me.GridData after data massaging is done and its ready for the grid: ", me.GridData);
-
-            console.log("--updating cache file");
-            me.updateCache().fail(function (e) {
-                alert(e);
-                console.error(e);
-            });
-
             //preprocess the data so we can create the rows for the table
             var data = me._buildDataGrid(me.GridData);
-
             // get the list of trains
             var trains = _.keys(me.GridData);
-
             //create the store that will hold the rows in the table
             var gridStore = Ext.create('Ext.data.Store', {
                 fields: [
@@ -509,14 +537,11 @@
                     })),
                 data: data
             });
-
             //create the column definitions and renderers
             me.setLoading('Building Grid Columns...');
-            console.log("building grid columns...");
             var columns = me._buildGridColumns(trains);
-
             //finally build the grid
-            console.log("rendering grid...");
+            console.log("Rendering Grid...");
             me.setLoading('Rendering Grid...');
             me.down('#gridContainer').add({
                 xtype: 'grid',
@@ -537,15 +562,18 @@
                 //disableSelection: true,
                 //trackMouseOver: true
             });
+            me.setLoading(false);
             setTimeout(function () {
                 me.doLayout();
-                console.log("done");
+                console.log("Done");
             }, 500);
         },
 
-        finalActions: function () {
+        finalRenderGrid: function () {
             // OVERLOAD ME //
             //Any actions you would like done at the end
+            me.setLoading('Building Grid...');
+            me.renderGrid();
             return;
         }
 

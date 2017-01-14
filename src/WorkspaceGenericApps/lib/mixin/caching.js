@@ -65,11 +65,12 @@
                     }
                     catch (e) {
                         console.log('corrupt cache payload');
+                        console.error(e);
                         deferred.resolve(false);
                     }
                 },
                 error: function (reason) {
-                    console.log('Cache GET error: cache data could not be retrieved. This could mean either it failed to get the cache, or maybe the cache file does not exist.', reason);
+                    console.log('Cache GET error: This could mean either it failed to get the cache, or the cache file does not exist.', reason);
                     deferred.resolve(false);
                 }
             });
@@ -81,7 +82,6 @@
             var payload = {};
             var key = me.cacheKeyGenerator(); //generate key for the app
             var cacheUrl = me.getCacheUrlSetting();
-            console.log("cacheUrl: ", cacheUrl);
             var timeoutDate = me.getCacheTimeoutDate();
             var isUpdateScript = me._isCacheUpdateScript();
             var url = cacheUrl + key;
@@ -97,31 +97,7 @@
 
             me._setIntelRallyAppSettings(payload);
             me.setCachePayLoadFn(payload);
-            console.log("cache payload: ", payload);
-
-            //var jsonData = payload;
-
-            //// payload.ScrumGroupConfig from MTS app results in:
-            //// "TypeError: Converting circular structure to JSON". to avoid this error:
-            //if(appName == "MTS"){
-            //    var hold = [];
-            //    jsonData.ScrumGroupConfig = JSON.stringify(payload.ScrumGroupConfig, function(key, value) {
-            //        if (typeof value === 'object' && value !== null) {
-            //            if (hold.indexOf(value) !== -1) {
-            //                console.log("Circular reference found");
-            //                // Circular reference found, discard key
-            //                return;
-            //            }
-            //            // Store value in our collection
-            //            hold.push(value);
-            //        }
-            //        return value;
-            //    });
-            //    hold = null; // Enable garbage collection
-            //}
-
             var jsonData = JSON.stringify(payload);
-            console.log("parsing payload");
 
             $.ajax({
                 url: url,
@@ -130,20 +106,15 @@
                 data: jsonData,
                 processData: false,
                 success: function () {
-                    console.log("cache update success");
                     if (isUpdateScript) {
                         $(window.parent.document.body).append('<div id="cache-mixin-update-complete"></div>'); //signal to update script that we are finished
                     }
                     deferred.resolve();
                 },
                 error: function (reason) {
-                    console.log("cache update error");
                     deferred.reject(reason);
                 }
             });
-
-            console.log("after ajax");
-
             return deferred.promise;
         },
         deleteCache: function (keyGenerator) {

@@ -3,7 +3,7 @@
     var violatingTeams = [];
     var violatingTeamsFull = {};
     var originalGridData = [];
-    var filteredTeams = false;
+    var showAllTeams = false;
     var rowStripeTracker = 0;
 
     Ext.define('Intel.MTS', {
@@ -26,7 +26,7 @@
         },
         config: {
             defaultSettings: {
-                cacheUrl: 'https://localhost:45557/api/v1.0/custom/rally-app-cache/'
+                cacheUrl: ''
                 //https://localhost:45557/api/v1.0/custom/rally-app-cache/'
                 //https://proceffrpt-test.intel.com/api/v1.0/custom/rally-app-cache/
                 //https://proceffrpt.intel.com/api/v1.0/custom/rally-app-cache/
@@ -38,16 +38,17 @@
         },
         getCachePayloadFn: function (payload) {
             var me = this;
-            //me.trainFeatureMap = payload.trainFeatureMap;
-            //me.projectFeatureMap = payload.projectFeatureMap;
             me.GridData = payload.GridData;
+            violatingTeamsFull = payload.violatingTeamsFull;
+            violatingTeams = payload.violatingTeams;
+            originalGridData = payload.originalGridData;
         },
         setCachePayLoadFn: function (payload) {
             var me = this;
-            //payload.trainFeatureMap = me.trainFeatureMap;
-            //payload.projectFeatureMap = me.projectFeatureMap;
-            console.log("Setting payload: ", me.GridData);
             payload.GridData = me.GridData;
+            payload.violatingTeamsFull = violatingTeamsFull;
+            payload.violatingTeams = violatingTeams;
+            payload.originalGridData = originalGridData;
         },
         cacheKeyGenerator: function () {
             var me = this;
@@ -55,7 +56,7 @@
             var workspaceOID = me.getContext().getWorkspace().ObjectID;
             var releaseOID = me.ReleaseRecord.data.ObjectID;
             var releaseName = me.ReleaseRecord.data.Name;
-            console.log('MTS-' + workspaceOID + '-' + releaseOID);
+            //console.log('MTS-' + workspaceOID + '-' + releaseOID);
             return 'MTS-' + workspaceOID + '-' + releaseOID;
         },
         getCacheTimeoutDate: function () {
@@ -71,20 +72,21 @@
          - Given a train and scrum team, show the number of features (from user stories) that belong to that train
          */
         loadReportData: function () {
-            console.log("loadReportData");
             var me = this;
-            //Do we have cache? If not, then load features and use stories
-            //return me.getCache().then(function (cacheHit) {
-            //    if (!cacheHit) {
-                    me.setLoading('Loading Features and User Stories Data...');
-                    //console.log("loadReportData: We don't have cache");
+            me.cacheHit = false;
+            return me.getCache().then(function (cacheHit) {
+                if (!cacheHit) {
                     //We do not have cache data, so get live data
                     return Q.all([
                         me._loadFeatures(), //me.trainFeatureMap
                         me._loadUserStories() //me.projectFeatureMap
                     ]);
-            //    }
-            //});
+                } else {
+                    me.renderCacheMessage();
+                    me.renderGetLiveDataButton();
+                    me.cacheHit = true;
+                }
+            });
         },
         setScrumDataValue: function (container, scrumGroupName, projectName) {
             // get stories for train/scrum
@@ -125,45 +127,10 @@
             me.superclass._createGridDataHash.call(me);
             me._updateGridDataHash();
             me._findViolations();
-
-            /**
-             * Process:
-             * _createGridDataHash in the MTS/App.js first calls _createGridDataHash from
-             * lib/intel-rally-trains-grid-app.js. Next, it runs _updateGridDataHash here,
-             * and then _findViolations, which both do data manipulation and formatting.
-             * They edit and perfect me.GridData so that when the grid is loaded it will
-             * be correct.
-             * Lastly, it calls updateCache, from caching.js. This will save the data
-             * we just loaded into the cache file, so that next time it loads it will be able
-             * to load it from the cached file, enabling a much faster report.
-             */
-
-            //return me.getCache().then(function (cacheHit) {
-            //    if (!cacheHit) {
-            //        console.log(">>>> _createGridDataHash in MTS: We do not have cache.");
-            //        //We do not have cache data, so get live data...
-            //        Q.all([
-            //            me.superclass._createGridDataHash.call(me),
-            //            me._updateGridDataHash()
-            //        ]).then(function () {
-            //            console.log("--finding violations");
-            //            me._findViolations()
-            //        }).then(function () {
-            //            console.log("--updating cache file");
-            //            me.updateCache().fail(function (e) {
-            //                alert(e);
-            //                console.error(e);
-            //            });
-            //        });
-            //    } else {
-            //        console.log(">>>> _createGridDataHash: We have cache.");
-            //        me.renderCacheMessage();
-            //        me.renderGetLiveDataButton();
-            //    }
-            //}).catch(function (e) {
-            //    console.error(e);
-            //});
-
+            me.updateCache().fail(function (e) {
+                alert(e);
+                console.error(e);
+            });
         },
         /**
          * _updateGridDataHash
@@ -249,7 +216,7 @@
          */
         _findViolations: function () {
             var me = this;
-            console.log("findViolations me.GridData: ", me.GridData);
+
             //Save the original
             originalGridData = me.GridData;
 
@@ -328,13 +295,8 @@
         scrumDataCellRenderer: function (scrumData, flag) {
             var me = this;
             rowStripeTracker++;
-
             var exists = (scrumData && scrumData.featureCount > 0);
-            //console.log("scrumdata: ", scrumData + " exists: ", exists);
-
             var tooltip_text = exists ? scrumData.scrumName + "\n " + scrumData.features.join("\n") : "";
-
-            //console.log("rowStripeTracker = ", rowStripeTracker, " ----- flag: ", flag);
 
             //Keep track of what it was last time it ran through this funtion.
             var opposite = "";
@@ -460,51 +422,19 @@
             var hasData = horizontalData.total > 0;
             return hasData ? '<span>' + horizontalData.total + '</span>' : '-';
         },
-        finalActions: function () {
+        finalRenderGrid: function () {
             var me = this;
             me.renderFilterButton();
-            //Set default to show only violating teams.
-            //me.toggleTeams();
-
-            //save the contents of me.GridData to the cache file.
-            //console.log("Saving the contents of me.GridData to the cache file.");
-            ////Update the Cached Data
-            //me.updateCache().fail(function (e) {
-            //    alert(e);
-            //    console.error(e);
-            //});
-
-            return;
-        },
-        toggleTeams: function () {
-            var me = this;
-            if (filteredTeams) {
-                me.setLoading('Loading Grid...');
-                //we need to update the grid to show all teams
-                //console.log("Updating the grid to show all teams...");
-
-                //me.superclass.reloadEverything.call(me);
-
+            //Set default to show only violating teams
+            if (showAllTeams) {
                 me.GridData = originalGridData;
-                //console.log(">>>> originalGridData = ", originalGridData);
-                me.superclass.reloadGrid.call(me);
-
-                //Reset toggle variable
-                filteredTeams = false;
-                me.setLoading(false);
             } else {
-                me.setLoading('Loading Grid...');
-                //we need to update the grid to show only violating teams
-                //console.log("Updating the grid to show only violating teams...");
-
                 me.GridData = violatingTeamsFull;
-                //console.log(">>>>> violatingTeamsFull = ", violatingTeamsFull);
-                me.superclass.reloadGrid.call(me);
-
-                //Reset toggle variable
-                filteredTeams = true;
-                me.setLoading(false);
             }
+            me.setLoading('Building Data Grid...');
+            me.renderGrid();
+            me.setLoading(false);
+            return;
         },
         /**
          * Creates a message to the user to let them know that they are
@@ -512,36 +442,43 @@
          */
         renderCacheMessage: function () {
             var me = this;
-            if (!me.cacheMessage) {
-                me.cacheMessage = me.down('#navbox').add({
+            if (!me.CacheMessage) {
+                me.CacheMessage = me.down('#cacheMessageContainer').add({
                     xtype: 'label',
                     width: '100%',
+                    style: {
+                        'padding': '5px'
+                    },
                     html: 'You are looking at the cached version of the data, update last on: ' + '<span class = "modified-date">' + me.lastCacheModified + '</span>'
                 });
             }
         },
         /**
          * Creates the "Get Live Data" button which will be used to reload
-         * the page data and refresh/udpate the cache
+         * the page data and refresh/update the cache
          */
         renderGetLiveDataButton: function () {
             var me = this;
             if (!me.UpdateCacheButton) {
-                me.UpdateCacheButton = me.down('#navbox').add({
+                me.UpdateCacheButton = me.down('#cacheButtonsContainer').add({
                     xtype: 'button',
                     text: 'Get Live Data',
+                    style: {
+                        'padding': '5px'
+                    },
                     listeners: {
                         click: function () {
                             me.setLoading('Pulling Live Data, please wait...');
-
-                            me.superclass._createGridDataHash.call(me);
-                            me._updateGridDataHash();
-                            me._findViolations();
-
-                            //Update the Cached Data
-                            me.updateCache().fail(function (e) {
-                                alert(e);
-                                console.error(e);
+                            Ext.getCmp('cacheMessageContainer').removeAll();
+                            Ext.getCmp('cacheButtonsContainer').removeAll();
+                            me.cacheHit = false;
+                            return Q.all([
+                                me._loadFeatures(), //me.trainFeatureMap
+                                me._loadUserStories() //me.projectFeatureMap
+                            ]).then(function(){
+                                me._createGridDataHash();
+                                me.down('#gridContainer').removeAll();
+                                me.finalRenderGrid();
                             });
                         }
                     }
@@ -551,16 +488,16 @@
         renderFilterButton: function () {
             var me = this;
             if (!me.toggleFilterButton) {
-                me.toggleFilterButton = me.down('#navbox').add({
+                me.toggleFilterButton = me.down('#navboxRight').add({
                     xtype: 'button',
-                    text: 'Toggle Show All Teams',
+                    text: 'Toggle Show All/Only Violating Teams',
                     cls: 'show-only-button',
                     width: '140',
                     listeners: {
                         click: function () {
-                            //console.log("button clicked!");
-                            me.setLoading('Updating Grid...');
-                            return me.toggleTeams();
+                            me.down('#gridContainer').removeAll();
+                            me.finalRenderGrid();
+                            showAllTeams = !showAllTeams;
                         }
                     }
                 });
@@ -594,7 +531,6 @@
                 .done();
         },
         _loadFeatures: function () {
-            console.log("MTS: Loading Features");
             var me = this,
                 map = {},
                 releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
@@ -624,11 +560,11 @@
                             featureID: featureRecord.data.ObjectID,
                             train: trainName
                         };
-                        //find where feature = "KBL 23e PRQ [49]" or OID 71354886744
-                        if (featureRecord.data.ObjectID == 71354886744) {
-                            //console.log("trainName: ", trainName);
-                            //console.log("featureRecord.data: ", featureRecord.data);
-                        }
+                        ////find where feature = "KBL 23e PRQ [49]" or OID 71354886744
+                        //if (featureRecord.data.ObjectID == 71354886744) {
+                        //    //console.log("trainName: ", trainName);
+                        //    //console.log("featureRecord.data: ", featureRecord.data);
+                        //}
                     });
                     store.destroyStore();
                 });
@@ -638,7 +574,6 @@
                 });
         },
         _loadUserStories: function () {
-            console.log("MTS: Loading User Stories");
             var me = this,
                 map = {};
 

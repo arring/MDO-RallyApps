@@ -144,7 +144,12 @@ a:link {
     background-color: #99ff99;
 }
 
-.navbox-style {
+.navboxRight {
+    padding: 10px;
+    float: right;
+}
+
+.navboxLeft {
     padding: 10px;
 }
 
@@ -153,4 +158,12 @@ a:link {
     border-radius: 2px;
     background-color: #00a9e0;
     border-color: #00a9e0;
+}
+
+.cacheContainer{
+    padding: 10px;
+}
+
+#cacheButtonsContainer{
+    padding: 10px;
 }
